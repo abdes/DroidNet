@@ -47,8 +47,8 @@ auto BuildGeometryDescriptorRequest(
     document->text, descriptor_path, identity, mounts, diagnostics);
   for (const auto& diagnostic : diagnostics) {
     error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
-    if (!diagnostic.object_path.empty()) {
-      error_stream << " (" << diagnostic.object_path << ")";
+    if (!diagnostic.json_pointer.empty()) {
+      error_stream << " (at '" << diagnostic.json_pointer << "')";
     }
     error_stream << '\n';
   }
@@ -86,7 +86,7 @@ auto BuildGeometryDescriptorRequest(
     = settings.job_name.empty() ? source->name : settings.job_name;
 
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
-    .normalized_descriptor_json = std::move(document->text),
+    .descriptor_json = std::move(document->text),
   };
 
   return request;

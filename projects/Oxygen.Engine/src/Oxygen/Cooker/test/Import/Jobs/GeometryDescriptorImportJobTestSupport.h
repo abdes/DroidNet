@@ -94,7 +94,7 @@ inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
   request.source_mounts = oxygen::cooker::test::ContentMountTable(
     request.source_path.parent_path());
   request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
-    .normalized_descriptor_json = descriptor_doc.dump(),
+    .descriptor_json = descriptor_doc.dump(),
   };
   return request;
 }

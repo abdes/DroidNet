@@ -28,7 +28,7 @@ namespace internal {
   struct TextureReferenceRequest {
     //! The reference as written in the job's authored file.
     std::string text;
-    std::string object_path;
+    std::string json_pointer;
     std::string diagnostic_prefix;
     //! A texture whose descriptor no longer exists, for example after it was
     //! deleted, is reported as a warning and resolved as missing instead of

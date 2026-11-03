@@ -278,7 +278,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = cooked_root;
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = descriptor.Text(),
+      .descriptor_json = descriptor.Text(),
     };
     return request;
   }
@@ -303,7 +303,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = descriptor.Text(),
+          .descriptor_json = descriptor.Text(),
         };
     return request;
   }
@@ -345,7 +345,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
-          .normalized_descriptor_json = descriptor.Text(),
+          .descriptor_json = descriptor.Text(),
         };
     return request;
   }

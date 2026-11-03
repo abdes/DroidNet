@@ -7,6 +7,6 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>A native output or logical reference.</summary>
 /// <param name="VirtualPath">The native logical identity.</param>
 /// <param name="Kind">The schema-defined asset/resource kind.</param>
-/// <param name="ObjectPath">The source field that declared it.</param>
+/// <param name="JsonPointer">The RFC 6901 pointer to the source field that declared it; empty when no field of the analyzed source did.</param>
 /// <param name="Required">Whether native cooking requires this dependency/output.</param>
-public sealed record NativeLogicalDependency(string VirtualPath, string Kind, string ObjectPath, bool Required);
+public sealed record NativeLogicalDependency(string VirtualPath, string Kind, string JsonPointer, bool Required);

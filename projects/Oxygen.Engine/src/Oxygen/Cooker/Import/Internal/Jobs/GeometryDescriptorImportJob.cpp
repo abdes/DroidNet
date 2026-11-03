@@ -62,6 +62,8 @@ namespace oxygen::content::import::detail {
 
 namespace {
 
+  using JsonPointer = nlohmann::json::json_pointer;
+
   // Copying the sidecar strings and maps can only fail on allocation.
   // NOLINTNEXTLINE(bugprone-exception-escape)
   struct ResolvedBufferSidecar final {
@@ -83,14 +85,14 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    const JsonPointer& pointer = JsonPointer {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = pointer.to_string(),
     });
   }
 
@@ -154,13 +156,13 @@ namespace {
    grammar refuses.
   */
   auto ResolveReferenceText(GeometryExecutionContext& context,
-    const std::string_view text, std::string object_path)
+    const std::string_view text, const JsonPointer& pointer)
     -> std::optional<internal::ResolvedReference>
   {
     auto reference = internal::ResolveJobReference(context.request, text);
     if (!reference.has_value()) {
       context.session.AddDiagnostic(internal::RefuseReference(
-        context.request, text, reference.error(), std::move(object_path)));
+        context.request, text, reference.error(), pointer.to_string()));
       return std::nullopt;
     }
     return std::move(*reference);
@@ -168,10 +170,10 @@ namespace {
 
   // The caller awaits each resolution inline while it owns `context`.
   auto ResolveBufferSidecar(GeometryExecutionContext& context,
-    const std::string_view text, std::string object_path)
+    const std::string_view text, const JsonPointer& pointer)
     -> co::Co<std::optional<ResolvedBufferSidecar>>
   {
-    const auto reference = ResolveReferenceText(context, text, object_path);
+    const auto reference = ResolveReferenceText(context, text, pointer);
     if (!reference.has_value()) {
       co_return std::nullopt;
     }
@@ -185,14 +187,14 @@ namespace {
     if (!internal::TryVirtualPathToRelPath(
           context.request, reference->resolved, relpath)) {
       context.session.AddDiagnostic(internal::RefuseUnmountedReference(
-        context.request, *reference, std::move(object_path)));
+        context.request, *reference, pointer.to_string()));
       co_return std::nullopt;
     }
 
     if (context.reader == nullptr) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.reader_unavailable",
-        "Async file reader is not available", std::move(object_path));
+        "Async file reader is not available", pointer);
       co_return std::nullopt;
     }
 
@@ -218,7 +220,7 @@ namespace {
         "sidecars; provide a single canonical source: "
       } + reference->resolved;
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.sidecar_ambiguous", std::move(message), object_path);
+        "geometry.buffer.sidecar_ambiguous", std::move(message), pointer);
       co_return std::nullopt;
     }
 
@@ -232,12 +234,15 @@ namespace {
           "Raw geometry buffers must belong to the geometry's cooked root. "
           "Reference the other root's geometry asset, or import the buffer "
           "source into this root.",
-          std::move(object_path));
+          pointer);
         co_return std::nullopt;
       }
       // The file its index lists, under its content name.
-      const auto descriptor_path
-        = matched.content->FindSidecar(reference->resolved)->stored.file;
+      const auto* sidecar = matched.content.has_value()
+        ? matched.content->FindSidecar(reference->resolved)
+        : nullptr;
+      CHECK_NOTNULL_F(sidecar, "A matched cooked root lists the sidecar");
+      const auto descriptor_path = sidecar->stored.file;
       const auto read_start = std::chrono::steady_clock::now();
       const auto read_result
         = co_await context.reader->ReadFile(descriptor_path);
@@ -252,7 +257,7 @@ namespace {
             ImportSeverity::kError, "geometry.buffer.sidecar_read_failed",
             "Failed reading buffer descriptor '" + descriptor_path.string()
               + "': " + read_result.error().message(),
-            object_path);
+            pointer);
         }
         co_return std::nullopt;
       }
@@ -261,8 +266,7 @@ namespace {
         = data::DecodeBufferResourceDescriptor(read_result.value().Bytes());
       if (!decoded) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.sidecar_invalid", decoded.error().what(),
-          object_path);
+          "geometry.buffer.sidecar_invalid", decoded.error().what(), pointer);
         co_return std::nullopt;
       }
 
@@ -284,7 +288,7 @@ namespace {
             .found_type = std::nullopt,
             .looked_up = std::move(looked_up),
           }),
-      std::move(object_path));
+      pointer);
     co_return std::nullopt;
   }
 
@@ -304,11 +308,11 @@ namespace {
    `import.reference_unmounted` for a reference in no mounted cooked root.
   */
   auto LookupAssetKey(GeometryExecutionContext& context,
-    const std::string_view text, std::string object_path,
+    const std::string_view text, const JsonPointer& pointer,
     const std::optional<data::AssetType> expected_type,
     const AssetReferenceCodes& codes) -> std::optional<data::AssetKey>
   {
-    const auto reference = ResolveReferenceText(context, text, object_path);
+    const auto reference = ResolveReferenceText(context, text, pointer);
     if (!reference.has_value()) {
       return std::nullopt;
     }
@@ -327,14 +331,14 @@ namespace {
     switch (refused.reason) {
     case internal::AssetReferenceRefusal::kUnmounted:
       context.session.AddDiagnostic(internal::RefuseUnmountedReference(
-        context.request, *reference, std::move(object_path)));
+        context.request, *reference, pointer.to_string()));
       break;
     case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         std::string(codes.missing),
         std::string(codes.noun)
           + " was not found: " + internal::DescribeLookup(*reference, refused),
-        std::move(object_path));
+        pointer);
       break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
@@ -343,7 +347,7 @@ namespace {
           + std::string(data::to_string(
             refused.found_type.value_or(data::AssetType::kUnknown)))
           + " asset instead: " + internal::DescribeLookup(*reference, refused),
-        std::move(object_path));
+        pointer);
       break;
     }
     return std::nullopt;
@@ -351,12 +355,12 @@ namespace {
 
   auto CheckedU32(const uint64_t value, ImportSession& session,
     const ImportRequest& request, std::string_view code,
-    std::string_view message, std::string object_path)
+    std::string_view message, const JsonPointer& pointer)
     -> std::optional<uint32_t>
   {
     if (value > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(session, request, ImportSeverity::kError, std::string(code),
-        std::string(message), std::move(object_path));
+        std::string(message), pointer);
       return std::nullopt;
     }
     return static_cast<uint32_t>(value);
@@ -375,7 +379,7 @@ namespace {
   auto ResolveMeshViewPair(GeometryExecutionContext& context,
     const ResolvedBufferSidecar& vb_sidecar,
     const ResolvedBufferSidecar& ib_sidecar, std::string_view view_ref,
-    const std::string& object_path,
+    const JsonPointer& view_pointer,
     data::pak::geometry::MeshViewDesc& out_view_desc) -> bool
   {
     const auto* const vb_view = FindBufferView(vb_sidecar, view_ref);
@@ -383,7 +387,7 @@ namespace {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.view_missing",
         "Vertex buffer view_ref was not found: " + std::string(view_ref),
-        object_path + ".view_ref");
+        view_pointer / "view_ref");
       return false;
     }
 
@@ -392,26 +396,26 @@ namespace {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.buffer.view_missing",
         "Index buffer view_ref was not found: " + std::string(view_ref),
-        object_path + ".view_ref");
+        view_pointer / "view_ref");
       return false;
     }
 
     const auto first_index = CheckedU32(ib_view->element_offset,
       context.session, context.request, "geometry.buffer.view_overflow",
       "Mesh view first_index exceeds supported range",
-      object_path + ".view_ref");
+      view_pointer / "view_ref");
     const auto index_count = CheckedU32(ib_view->element_count, context.session,
       context.request, "geometry.buffer.view_overflow",
       "Mesh view index_count exceeds supported range",
-      object_path + ".view_ref");
+      view_pointer / "view_ref");
     const auto first_vertex = CheckedU32(vb_view->element_offset,
       context.session, context.request, "geometry.buffer.view_overflow",
       "Mesh view first_vertex exceeds supported range",
-      object_path + ".view_ref");
+      view_pointer / "view_ref");
     const auto vertex_count = CheckedU32(vb_view->element_count,
       context.session, context.request, "geometry.buffer.view_overflow",
       "Mesh view vertex_count exceeds supported range",
-      object_path + ".view_ref");
+      view_pointer / "view_ref");
 
     if (!first_index.has_value() || !index_count.has_value()
       || !first_vertex.has_value() || !vertex_count.has_value()) {
@@ -428,7 +432,7 @@ namespace {
   auto EnsureBufferUsageFlags(GeometryExecutionContext& context,
     const ResolvedBufferSidecar& sidecar,
     const data::BufferResource::UsageFlags required_flag,
-    std::string_view object_path, std::string_view logical_name) -> bool
+    const JsonPointer& pointer, std::string_view logical_name) -> bool
   {
     const auto usage_flags = static_cast<data::BufferResource::UsageFlags>(
       sidecar.descriptor.usage_flags);
@@ -439,7 +443,7 @@ namespace {
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,
       "geometry.buffer.usage_mismatch",
       std::string(logical_name) + " does not advertise required usage flag",
-      std::string(object_path));
+      pointer);
     return false;
   }
 
@@ -470,7 +474,7 @@ namespace {
 
   auto GenerateLod(GeometryExecutionContext& context,
     const internal::GeometrySource::Procedural& procedural,
-    const std::string& lod_path) -> std::optional<LodGeometry>
+    const JsonPointer& lod_pointer) -> std::optional<LodGeometry>
   {
     const auto generated = data::GenerateMeshBuffers(
       procedural.name, std::span<const std::byte>(procedural.parameters));
@@ -478,18 +482,18 @@ namespace {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.procedural.generation_failed",
         "Procedural mesh generator rejected descriptor parameters",
-        lod_path + ".procedural");
+        lod_pointer / "procedural");
       return std::nullopt;
     }
     const auto& [vertices, indices] = *generated;
     const auto vertex_count = CheckedU32(vertices.size(), context.session,
       context.request, "geometry.procedural.mesh_too_large",
       "Generated procedural vertex count exceeds supported range",
-      lod_path + ".procedural");
+      lod_pointer / "procedural");
     const auto index_count = CheckedU32(indices.size(), context.session,
       context.request, "geometry.procedural.mesh_too_large",
       "Generated procedural index count exceeds supported range",
-      lod_path + ".procedural");
+      lod_pointer / "procedural");
     if (!vertex_count.has_value() || !index_count.has_value()) {
       return std::nullopt;
     }
@@ -517,8 +521,8 @@ namespace {
         lods.push_back({ .bounds = lod.bounds.value_or(Bounds {}) });
         continue;
       }
-      auto generated = GenerateLod(
-        context, *procedural, "lods[" + std::to_string(lod_i) + "]");
+      auto generated
+        = GenerateLod(context, *procedural, JsonPointer { "/lods" } / lod_i);
       if (!generated.has_value()) {
         return std::nullopt;
       }
@@ -544,7 +548,7 @@ namespace {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.descriptor.bounds_invalid",
         "Geometry bounds must be ordered and contain every LOD's bounds",
-        "bounds");
+        JsonPointer { "/bounds" });
       return std::nullopt;
     }
     return source.bounds;
@@ -606,7 +610,7 @@ namespace {
 
     for (size_t lod_i = 0; lod_i < lod_count; ++lod_i) {
       const auto& lod = source.lods.at(lod_i);
-      const auto lod_path = "lods[" + std::to_string(lod_i) + "]";
+      const auto lod_pointer = JsonPointer { "/lods" } / lod_i;
       const auto& geometry = lod_geometry->at(lod_i);
       const auto& lod_bounds = geometry.bounds;
       auto mesh_desc = data::pak::geometry::MeshDesc {};
@@ -627,19 +631,19 @@ namespace {
         const auto& ib_ref = buffers->index;
 
         auto vb_sidecar_opt = co_await ResolveBufferSidecar(
-          context, vb_ref, lod_path + ".buffers.vb_ref");
+          context, vb_ref, lod_pointer / "buffers" / "vb_ref");
         auto ib_sidecar_opt = co_await ResolveBufferSidecar(
-          context, ib_ref, lod_path + ".buffers.ib_ref");
+          context, ib_ref, lod_pointer / "buffers" / "ib_ref");
         if (!vb_sidecar_opt.has_value() || !ib_sidecar_opt.has_value()) {
           co_return std::nullopt;
         }
 
         if (!EnsureBufferUsageFlags(context, *vb_sidecar_opt,
               data::BufferResource::UsageFlags::kVertexBuffer,
-              lod_path + ".buffers.vb_ref", "Vertex buffer")
+              lod_pointer / "buffers" / "vb_ref", "Vertex buffer")
           || !EnsureBufferUsageFlags(context, *ib_sidecar_opt,
             data::BufferResource::UsageFlags::kIndexBuffer,
-            lod_path + ".buffers.ib_ref", "Index buffer")) {
+            lod_pointer / "buffers" / "ib_ref", "Index buffer")) {
           co_return std::nullopt;
         }
 
@@ -652,13 +656,15 @@ namespace {
           mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kSkinned);
 
           auto joint_index_sidecar = co_await ResolveBufferSidecar(context,
-            skinned->joint_index, lod_path + ".skinning.joint_index_ref");
-          auto joint_weight_sidecar = co_await ResolveBufferSidecar(context,
-            skinned->joint_weight, lod_path + ".skinning.joint_weight_ref");
-          auto inverse_bind_sidecar = co_await ResolveBufferSidecar(context,
-            skinned->inverse_bind, lod_path + ".skinning.inverse_bind_ref");
+            skinned->joint_index, lod_pointer / "skinning" / "joint_index_ref");
+          auto joint_weight_sidecar
+            = co_await ResolveBufferSidecar(context, skinned->joint_weight,
+              lod_pointer / "skinning" / "joint_weight_ref");
+          auto inverse_bind_sidecar
+            = co_await ResolveBufferSidecar(context, skinned->inverse_bind,
+              lod_pointer / "skinning" / "inverse_bind_ref");
           auto joint_remap_sidecar = co_await ResolveBufferSidecar(context,
-            skinned->joint_remap, lod_path + ".skinning.joint_remap_ref");
+            skinned->joint_remap, lod_pointer / "skinning" / "joint_remap_ref");
           if (!joint_index_sidecar.has_value()
             || !joint_weight_sidecar.has_value()
             || !inverse_bind_sidecar.has_value()
@@ -692,7 +698,7 @@ namespace {
           if (skinned->skeleton.has_value()) {
             const auto& skeleton_ref = *skinned->skeleton;
             const auto skeleton_key = LookupAssetKey(context, skeleton_ref,
-              lod_path + ".skinning.skeleton_ref", std::nullopt,
+              lod_pointer / "skinning" / "skeleton_ref", std::nullopt,
               {
                 .missing = "geometry.asset.missing",
                 .type_mismatch = {},
@@ -702,7 +708,7 @@ namespace {
               AddDiagnostic(context.session, context.request,
                 ImportSeverity::kError, "geometry.skinning.skeleton_missing",
                 "skeleton_ref could not be resolved",
-                lod_path + ".skinning.skeleton_ref");
+                lod_pointer / "skinning" / "skeleton_ref");
               co_return std::nullopt;
             }
             mesh_desc.info.skinned.skeleton_asset_key = *skeleton_key;
@@ -745,7 +751,7 @@ namespace {
       }
       const auto mesh_view_count = CheckedU32(total_mesh_views, context.session,
         context.request, "geometry.descriptor.view_count_overflow",
-        "Mesh view count exceeds supported range", lod_path + ".submeshes");
+        "Mesh view count exceeds supported range", lod_pointer / "submeshes");
       if (!mesh_view_count.has_value()) {
         co_return std::nullopt;
       }
@@ -754,7 +760,7 @@ namespace {
       if (!WritePod(writer, mesh_desc)) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "geometry.descriptor.serialize_failed",
-          "Failed writing mesh descriptor", lod_path);
+          "Failed writing mesh descriptor", lod_pointer);
         co_return std::nullopt;
       }
 
@@ -764,15 +770,14 @@ namespace {
           AddDiagnostic(context.session, context.request,
             ImportSeverity::kError, "geometry.descriptor.serialize_failed",
             "Failed writing procedural parameter blob",
-            lod_path + ".procedural.params");
+            lod_pointer / "procedural" / "params");
           co_return std::nullopt;
         }
       }
 
       for (size_t submesh_i = 0; submesh_i < submeshes.size(); ++submesh_i) {
         const auto& submesh = submeshes.at(submesh_i);
-        const auto submesh_path
-          = lod_path + ".submeshes[" + std::to_string(submesh_i) + "]";
+        const auto submesh_pointer = lod_pointer / "submeshes" / submesh_i;
         auto submesh_desc = data::pak::geometry::SubMeshDesc {};
         submesh_desc.surface_id = submesh.surface_id;
         const auto& submesh_name = submesh.name;
@@ -780,7 +785,7 @@ namespace {
 
         const auto& material_ref = submesh.material;
         const auto material_key = LookupAssetKey(context, material_ref,
-          submesh_path + ".material_ref", data::AssetType::kMaterial,
+          submesh_pointer / "material_ref", data::AssetType::kMaterial,
           {
             .missing = "geometry.material.missing",
             .type_mismatch = "geometry.material.type_mismatch",
@@ -803,14 +808,13 @@ namespace {
         if (!WritePod(writer, submesh_desc)) {
           AddDiagnostic(context.session, context.request,
             ImportSeverity::kError, "geometry.descriptor.serialize_failed",
-            "Failed writing submesh descriptor", submesh_path);
+            "Failed writing submesh descriptor", submesh_pointer);
           co_return std::nullopt;
         }
 
         for (size_t view_i = 0; view_i < submesh.views.size(); ++view_i) {
           const auto& view = submesh.views.at(view_i);
-          const auto view_path
-            = submesh_path + ".views[" + std::to_string(view_i) + "]";
+          const auto view_pointer = submesh_pointer / "views" / view_i;
           auto view_desc = data::pak::geometry::MeshViewDesc {};
 
           if (mesh_desc.IsProcedural()) {
@@ -824,7 +828,7 @@ namespace {
             }
 
             if (!ResolveMeshViewPair(context, *resolved_vb, *resolved_ib,
-                  view.view_ref, view_path, view_desc)) {
+                  view.view_ref, view_pointer, view_desc)) {
               co_return std::nullopt;
             }
           }
@@ -837,7 +841,7 @@ namespace {
           if (!WritePod(writer, view_desc)) {
             AddDiagnostic(context.session, context.request,
               ImportSeverity::kError, "geometry.descriptor.serialize_failed",
-              "Failed writing mesh view descriptor", view_path);
+              "Failed writing mesh view descriptor", view_pointer);
             co_return std::nullopt;
           }
         }
@@ -849,7 +853,7 @@ namespace {
     if (!writer.WriteBlob(std::as_bytes(std::span(surface_table)))) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "geometry.descriptor.serialize_failed",
-        "Failed writing the surface table", "surfaces");
+        "Failed writing the surface table", JsonPointer { "/surfaces" });
       co_return std::nullopt;
     }
 
@@ -905,7 +909,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   CHECK_NOTNULL_F(Request().source_mounts.get(),
     "A geometry descriptor locates its buffers through the job's mounts");
   const auto source = internal::GeometrySource::FromDescriptor(
-    descriptor->normalized_descriptor_json, Request().source_path,
+    descriptor->descriptor_json, Request().source_path,
     Request().OutputIdentity(), *Request().source_mounts, diagnostics);
   AddDiagnostics(session, std::move(diagnostics));
   if (!source.has_value()) {

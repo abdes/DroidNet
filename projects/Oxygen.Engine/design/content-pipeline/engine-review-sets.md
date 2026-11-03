@@ -527,8 +527,9 @@ the editor complete, located diagnostics without cooking.
 - `ImportOptions`: no `content_hashing` option or manifest key remains; every
   option has a manifest key and a CLI flag or is documented as API-only.
 - Request builders: one per descriptor family, each normalizing the document
-  the same way (references, names, defaults); the normalized JSON they hash
-  for change detection is canonical (key order, numbers).
+  the same way (references, names, defaults). Change detection hashes the
+  bytes a job reads (`ImportSourceSnapshot`, `CapturedInputSet`, the model
+  record's source fingerprint), never a re-serialized document.
 - `ImportSourceAnalysis.cpp`: every diagnostic carries `source_path` and,
   where applicable, `object_path`; analysis and cook report the same code for
   the same defect.

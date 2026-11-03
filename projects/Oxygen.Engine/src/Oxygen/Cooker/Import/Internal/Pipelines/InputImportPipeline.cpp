@@ -108,6 +108,8 @@ namespace {
     std::string name;
     int32_t default_priority = 0;
     std::vector<MappingSource> mappings;
+    //! Where the context is in the input document.
+    std::string json_pointer;
   };
 
   struct BuiltContextAsset final {
@@ -132,18 +134,16 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
-
-  constexpr size_t kMaxSchemaDiagnostics = 12;
 
   //! The last extension of an input source's identity (`Player.input`).
   constexpr std::string_view kInputSourceSuffix = ".input";
@@ -162,18 +162,15 @@ namespace {
       .validation_failed_code = "input.schema.validation_failed",
       .validation_failed_prefix
       = "Schema validation failed (oxygen.input.schema.json): ",
-      .validation_overflow_prefix
-      = "Schema validation (oxygen.input.schema.json) reported ",
       .validator_failure_code = "input.schema.validator_failure",
       .validator_failure_prefix = "Input schema validator failure: ",
-      .max_issues = kMaxSchemaDiagnostics,
     };
     return internal::ValidateJsonSchemaWithDiagnostics(InputSchemaValidator(),
       doc, config,
       [&](const std::string_view code, std::string message,
-        std::string object_path) -> void {
+        std::string json_pointer) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(code), std::move(message), std::move(object_path));
+          std::string(code), std::move(message), std::move(json_pointer));
       });
   }
 
@@ -370,13 +367,13 @@ namespace {
     out.context_sources.clear();
 
     const auto parse_action
-      = [&](const json& node, const std::string& path) -> bool {
+      = [&](const json& node, const json::json_pointer& path) -> bool {
       auto action = DeclaredAction {};
       action.name = node.at("name").get<std::string>();
       action.virtual_path = container.ProductVirtualPath(
         action.name, data::kInputActionDescriptorExtension);
       if (auto refused = internal::CheckAssetVirtualPath(
-            request, action.virtual_path, path + ".name")) {
+            request, action.virtual_path, (path / "name").to_string())) {
         session.AddDiagnostic(std::move(*refused));
         return false;
       }
@@ -387,7 +384,7 @@ namespace {
           "input.schema.contract_mismatch",
           "Unsupported action type '" + node.at("type").get<std::string>()
             + "'",
-          path + ".type");
+          (path / "type").to_string());
         return false;
       }
       action.value_type = *parsed_type;
@@ -398,7 +395,7 @@ namespace {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.schema.contract_mismatch",
           "Unsupported action accumulation '" + accumulation + "'",
-          path + ".accumulation");
+          (path / "accumulation").to_string());
         return false;
       }
       action.cumulative = accumulation == "cumulative";
@@ -406,7 +403,8 @@ namespace {
       if (out.local_action_keys.contains(action.name)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "input.asset.action_conflict",
-          "Duplicate action declaration '" + action.name + "'", path + ".name");
+          "Duplicate action declaration '" + action.name + "'",
+          (path / "name").to_string());
         return false;
       }
 
@@ -420,12 +418,12 @@ namespace {
     };
 
     const auto parse_trigger_aux_array
-      = [&](const json& node, const std::string& path,
+      = [&](const json& node, const json::json_pointer& path,
           std::vector<TriggerAuxSource>& trigger_aux) -> bool {
       bool ok = true;
       for (size_t i = 0; i < node.size(); ++i) {
         const auto& entry = node[i];
-        const auto entry_path = path + "[" + std::to_string(i) + "]";
+        const auto entry_path = path / i;
         bool entry_ok = true;
         auto aux = TriggerAuxSource {};
         aux.action_name = entry.at("action").get<std::string>();
@@ -440,7 +438,7 @@ namespace {
             AddDiagnostic(session, request, ImportSeverity::kError,
               "input.context.trigger_invalid",
               "'time_to_complete' exceeds supported range",
-              entry_path + ".time_to_complete");
+              (entry_path / "time_to_complete").to_string());
             ok = false;
             entry_ok = false;
           }
@@ -453,8 +451,9 @@ namespace {
       return ok;
     };
 
-    const auto parse_trigger = [&](const json& node, const std::string& path,
-                                 TriggerSource& out_trigger) -> bool {
+    const auto parse_trigger
+      = [&](const json& node, const json::json_pointer& path,
+          TriggerSource& out_trigger) -> bool {
       const auto parsed_type
         = ParseTriggerType(node.at("type").get<std::string>());
       if (!parsed_type.has_value()) {
@@ -462,7 +461,7 @@ namespace {
           "input.schema.contract_mismatch",
           "Unsupported trigger type '" + node.at("type").get<std::string>()
             + "'",
-          path + ".type");
+          (path / "type").to_string());
         return false;
       }
       out_trigger.type = *parsed_type;
@@ -475,7 +474,7 @@ namespace {
             "input.schema.contract_mismatch",
             "Unsupported trigger behavior '"
               + node.at("behavior").get<std::string>() + "'",
-            path + ".behavior");
+            (path / "behavior").to_string());
           return false;
         }
         out_trigger.behavior = *parsed_behavior;
@@ -499,13 +498,13 @@ namespace {
       }
       if (node.contains("combo_actions")
         && (!parse_trigger_aux_array(
-          node["combo_actions"], path + ".combo_actions", out_trigger.aux))) {
+          node["combo_actions"], path / "combo_actions", out_trigger.aux))) {
         return false;
       }
 
       if (node.contains("aux")
         && (!parse_trigger_aux_array(
-          node["aux"], path + ".aux", out_trigger.aux))) {
+          node["aux"], path / "aux", out_trigger.aux))) {
         return false;
       }
 
@@ -513,14 +512,15 @@ namespace {
         && !out_trigger.aux.empty()) {
         AddDiagnostic(session, request, ImportSeverity::kWarning,
           "input.context.trigger_aux_ignored",
-          "Aux records are ignored for non-combo triggers", path);
+          "Aux records are ignored for non-combo triggers", path.to_string());
         out_trigger.aux.clear();
       }
       return true;
     };
 
-    const auto parse_mapping = [&](const json& node, const std::string& path,
-                                 MappingSource& out_mapping) -> bool {
+    const auto parse_mapping
+      = [&](const json& node, const json::json_pointer& path,
+          MappingSource& out_mapping) -> bool {
       out_mapping.action_name = node.at("action").get<std::string>();
       // The schema admits only the slot names the platform registers.
       out_mapping.slot_name = node.at("slot").get<std::string>();
@@ -545,7 +545,7 @@ namespace {
             "input.schema.contract_mismatch",
             "Unknown trigger shorthand '"
               + node.at("trigger").get<std::string>() + "'",
-            path + ".trigger");
+            (path / "trigger").to_string());
           return false;
         }
         out_mapping.triggers.push_back(TriggerSource {
@@ -556,8 +556,8 @@ namespace {
       } else if (has_triggers) {
         for (size_t i = 0; i < node["triggers"].size(); ++i) {
           auto trigger = TriggerSource {};
-          if (!parse_trigger(node["triggers"][i],
-                path + ".triggers[" + std::to_string(i) + "]", trigger)) {
+          if (!parse_trigger(
+                node["triggers"][i], path / "triggers" / i, trigger)) {
             return false;
           }
           out_mapping.triggers.push_back(std::move(trigger));
@@ -566,13 +566,15 @@ namespace {
       return true;
     };
 
-    const auto parse_context = [&](const json& node, const std::string& path,
-                                 ContextSource& out_context) -> bool {
+    const auto parse_context
+      = [&](const json& node, const json::json_pointer& path,
+          ContextSource& out_context) -> bool {
       out_context.name = node.at("name").get<std::string>();
+      out_context.json_pointer = path.to_string();
       if (auto refused = internal::CheckAssetVirtualPath(request,
             container.ProductVirtualPath(
               out_context.name, data::kInputMappingContextDescriptorExtension),
-            path + ".name")) {
+            (path / "name").to_string())) {
         session.AddDiagnostic(std::move(*refused));
         return false;
       }
@@ -582,8 +584,7 @@ namespace {
       const auto& mappings = node.at("mappings");
       for (size_t i = 0; i < mappings.size(); ++i) {
         auto mapping = MappingSource {};
-        if (!parse_mapping(mappings[i],
-              path + ".mappings[" + std::to_string(i) + "]", mapping)) {
+        if (!parse_mapping(mappings[i], path / "mappings" / i, mapping)) {
           return false;
         }
         out_context.mappings.push_back(std::move(mapping));
@@ -595,9 +596,8 @@ namespace {
     try {
       if (doc.contains("actions")) {
         for (size_t i = 0; i < doc["actions"].size(); ++i) {
-          parse_ok = parse_action(doc["actions"][i],
-                       "$.actions[" + std::to_string(i) + "]")
-            && parse_ok;
+          const auto action_path = json::json_pointer {} / "actions" / i;
+          parse_ok = parse_action(doc["actions"][i], action_path) && parse_ok;
         }
       }
 
@@ -605,8 +605,8 @@ namespace {
       const auto contexts = doc.value("contexts", json::array());
       for (size_t i = 0; i < contexts.size(); ++i) {
         auto context = ContextSource {};
-        if (!parse_context(
-              contexts[i], "$.contexts[" + std::to_string(i) + "]", context)) {
+        const auto context_path = json::json_pointer {} / "contexts" / i;
+        if (!parse_context(contexts[i], context_path, context)) {
           parse_ok = false;
           continue;
         }
@@ -614,7 +614,7 @@ namespace {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "input.context.name_duplicate",
             "Duplicate context name '" + context.name + "'",
-            "$.contexts[" + std::to_string(i) + "].name");
+            (context_path / "name").to_string());
           parse_ok = false;
           continue;
         }
@@ -645,7 +645,7 @@ namespace {
     }
 
     [[nodiscard]] auto Resolve(const std::string& action,
-      const std::string& object_path) -> std::optional<data::AssetKey>
+      const json::json_pointer& location) -> std::optional<data::AssetKey>
     {
       if (!action.ends_with(data::kInputActionDescriptorExtension)) {
         if (const auto it = source_.local_action_keys.find(action);
@@ -653,14 +653,15 @@ namespace {
           return it->second;
         }
         Refuse("input.context.action_unresolved",
-          "No action of this source is named '" + action + "'", object_path);
+          "No action of this source is named '" + action + "'",
+          location.to_string());
         return std::nullopt;
       }
 
       const auto reference = internal::ResolveJobReference(request_, action);
       if (!reference.has_value()) {
         session_.AddDiagnostic(internal::RefuseReference(
-          request_, action, reference.error(), object_path));
+          request_, action, reference.error(), location.to_string()));
         return std::nullopt;
       }
       // A product of this source is not mounted yet; the source declares it.
@@ -681,25 +682,25 @@ namespace {
       const auto& refused = resolved.error();
       if (refused.reason == AssetReferenceRefusal::kUnmounted) {
         session_.AddDiagnostic(internal::RefuseUnmountedReference(
-          request_, *reference, object_path));
+          request_, *reference, location.to_string()));
       } else if (refused.reason == AssetReferenceRefusal::kTypeMismatch) {
         Refuse("input.context.action_type_mismatch",
           internal::DescribeLookup(*reference, refused)
             + "; it does not name an input action",
-          object_path);
+          location.to_string());
       } else {
         Refuse("input.context.action_unresolved",
-          internal::DescribeLookup(*reference, refused), object_path);
+          internal::DescribeLookup(*reference, refused), location.to_string());
       }
       return std::nullopt;
     }
 
   private:
-    auto Refuse(std::string code, std::string message,
-      const std::string& object_path) -> void
+    auto Refuse(std::string code, std::string message, std::string json_pointer)
+      -> void
     {
       AddDiagnostic(session_, request_, ImportSeverity::kError, std::move(code),
-        std::move(message), object_path);
+        std::move(message), std::move(json_pointer));
     }
 
     // NOLINTBEGIN(*-avoid-const-or-ref-data-members)
@@ -718,8 +719,8 @@ namespace {
     auto actions = ActionResolver { source, session, request };
     const auto resolve_action_key
       = [&](const std::string& reference,
-          const std::string& object_path) -> std::optional<data::AssetKey> {
-      return actions.Resolve(reference, object_path);
+          const json::json_pointer& location) -> std::optional<data::AssetKey> {
+      return actions.Resolve(reference, location);
     };
 
     auto built_contexts = std::vector<BuiltContextAsset> {};
@@ -743,7 +744,7 @@ namespace {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "input.context.string_table_overflow",
             "Input mapping context string table exceeded uint32 limits",
-            "contexts." + context.name);
+            source_ctx.json_pointer);
           return std::nullopt;
         }
       };
@@ -752,9 +753,9 @@ namespace {
       for (size_t i = 0; i < source_ctx.mappings.size(); ++i) {
         const auto& source_mapping = source_ctx.mappings[i];
         const auto mapping_path
-          = "contexts." + context.name + ".mappings[" + std::to_string(i) + "]";
+          = json::json_pointer { source_ctx.json_pointer } / "mappings" / i;
         const auto action_key = resolve_action_key(
-          source_mapping.action_name, mapping_path + ".action");
+          source_mapping.action_name, mapping_path / "action");
         const auto slot_offset = intern_slot(source_mapping.slot_name);
         if (!action_key.has_value() || !slot_offset.has_value()) {
           build_ok = false;
@@ -764,7 +765,7 @@ namespace {
         if (context.triggers.size() > std::numeric_limits<uint32_t>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "input.context.trigger_count_overflow",
-            "Trigger table exceeded uint32 limits", mapping_path);
+            "Trigger table exceeded uint32 limits", mapping_path.to_string());
           build_ok = false;
           break;
         }
@@ -773,8 +774,7 @@ namespace {
 
         for (size_t t = 0; t < source_mapping.triggers.size(); ++t) {
           const auto& source_trigger = source_mapping.triggers[t];
-          const auto trigger_path
-            = mapping_path + ".triggers[" + std::to_string(t) + "]";
+          const auto trigger_path = mapping_path / "triggers" / t;
           auto trigger = InputTriggerRecord {};
           trigger.type = source_trigger.type;
           trigger.behavior = source_trigger.behavior;
@@ -788,7 +788,7 @@ namespace {
           if (source_trigger.linked_action_name.has_value()) {
             const auto linked
               = resolve_action_key(*source_trigger.linked_action_name,
-                trigger_path + ".chord_action");
+                trigger_path / "chord_action");
             if (!linked.has_value()) {
               build_ok = false;
               break;
@@ -803,8 +803,8 @@ namespace {
               = static_cast<uint32_t>(source_trigger.aux.size());
             for (size_t a = 0; a < source_trigger.aux.size(); ++a) {
               const auto& source_aux = source_trigger.aux[a];
-              const auto aux_key = resolve_action_key(source_aux.action_name,
-                trigger_path + ".aux[" + std::to_string(a) + "].action");
+              const auto aux_key = resolve_action_key(
+                source_aux.action_name, trigger_path / "aux" / a / "action");
               if (!aux_key.has_value()) {
                 build_ok = false;
                 break;

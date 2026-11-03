@@ -290,7 +290,7 @@ NOLINT_TEST_F(SourceMountsTest, AbsoluteCommittedPathIsRefused)
       &oxygen::content::import::ImportDiagnostic::code);
   ASSERT_NE(it, table.diagnostics.end());
   EXPECT_EQ(it->source_path, "manifest.json");
-  EXPECT_EQ(it->object_path, "mounts[0].path");
+  EXPECT_EQ(it->json_pointer, "/mounts/0/path");
   // The refused path is reported once; the mount is not a placeholder.
   EXPECT_FALSE(HasDiagnosticCode(table.diagnostics, codes::kUnbound.id));
 }
@@ -518,7 +518,7 @@ NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
   EXPECT_FALSE(manifest.has_value());
   EXPECT_NE(errors.str().find("[mount.kind_unknown]"), std::string::npos)
     << errors.str();
-  EXPECT_NE(errors.str().find("mounts[0].kind"), std::string::npos)
+  EXPECT_NE(errors.str().find("/mounts/0/kind"), std::string::npos)
     << errors.str();
 }
 
@@ -781,7 +781,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesAMountPath)
 
   const auto located = table.LocateReference(
     Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "/Media/Images/wood.png", .field = "source" },
+    CommittedPath {
+      .text = "/Media/Images/wood.png",
+      .json_pointer = "/source",
+    },
     findings);
 
   ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
@@ -801,7 +804,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesASelfAbsolutePath)
 
   const auto refused = table.LocateReference(
     Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "/Content/Images/wood.png", .field = "source" },
+    CommittedPath {
+      .text = "/Content/Images/wood.png",
+      .json_pointer = "/source",
+    },
     findings);
 
   EXPECT_FALSE(refused.has_value());
@@ -809,7 +815,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesASelfAbsolutePath)
     << DiagnosticSummary(findings);
   EXPECT_NE(findings.front().message.find("vpath.reference_self_absolute"),
     std::string::npos);
-  EXPECT_EQ(findings.front().object_path, "source");
+  EXPECT_EQ(findings.front().json_pointer, "/source");
 }
 
 //! A relative path may name source media, which asset references refuse.
@@ -823,7 +829,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesSourceMedia)
     Project() / "Content" / "Textures" / "wood.otex.json",
     CommittedPath {
       .text = "../SourceMedia/Images/wood.png",
-      .field = "source",
+      .json_pointer = "/source",
     },
     findings);
 
@@ -841,7 +847,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceResolvesARelativePathInTheMount)
 
   const auto located = table.LocateReference(
     Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "../Images/wood.png", .field = "source" },
+    CommittedPath { .text = "../Images/wood.png", .json_pointer = "/source" },
     findings);
 
   ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
@@ -864,7 +870,8 @@ NOLINT_TEST_F(
   const auto referrer = Project() / "Content" / "wood.material.json";
 
   const auto refused = table.LocateReference(referrer,
-    CommittedPath { .text = "../Other/wood.png", .field = "source" }, findings);
+    CommittedPath { .text = "../Other/wood.png", .json_pointer = "/source" },
+    findings);
 
   EXPECT_FALSE(refused.has_value());
   ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
@@ -874,7 +881,8 @@ NOLINT_TEST_F(
 
   findings.clear();
   const auto named = table.LocateReference(referrer,
-    CommittedPath { .text = "/Other/wood.png", .field = "source" }, findings);
+    CommittedPath { .text = "/Other/wood.png", .json_pointer = "/source" },
+    findings);
   EXPECT_TRUE(named.has_value()) << DiagnosticSummary(findings);
 }
 
@@ -888,7 +896,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAnAbsolutePath)
 
   const auto located
     = table.LocateReference(Project() / "Content" / "wood.material.json",
-      CommittedPath { .text = absolute, .field = "source" }, findings);
+      CommittedPath { .text = absolute, .json_pointer = "/source" }, findings);
 
   EXPECT_FALSE(located.has_value());
   EXPECT_TRUE(HasDiagnosticCode(findings, codes::kAbsoluteCommitted.id))
@@ -906,7 +914,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesAMisspelledMount)
 
   const auto located = table.LocateReference(
     Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "/content/Images/wood.png", .field = "source" },
+    CommittedPath {
+      .text = "/content/Images/wood.png",
+      .json_pointer = "/source",
+    },
     findings);
 
   EXPECT_FALSE(located.has_value());
@@ -923,7 +934,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesAPathTheRulesRefuse)
   auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
 
   const auto located = table.LocateSource(
-    CommittedPath { .text = "/Content/Images/wood.png.", .field = "source" },
+    CommittedPath {
+      .text = "/Content/Images/wood.png.",
+      .json_pointer = "/source",
+    },
     findings);
 
   EXPECT_FALSE(located.has_value());
@@ -931,7 +945,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesAPathTheRulesRefuse)
     << DiagnosticSummary(findings);
   EXPECT_NE(findings.front().message.find("vpath.segment.trailing_dot"),
     std::string::npos);
-  EXPECT_EQ(findings.front().object_path, "source");
+  EXPECT_EQ(findings.front().json_pointer, "/source");
 }
 
 //! A link inside the mount the text names leaves the file in that mount: it
@@ -945,7 +959,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateSourceFollowsALinkWithinItsMount)
   auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
 
   const auto located = table.LocateSource(
-    CommittedPath { .text = "/Content/Alias/wood.png", .field = "source" },
+    CommittedPath {
+      .text = "/Content/Alias/wood.png",
+      .json_pointer = "/source",
+    },
     findings);
 
   ASSERT_HAS_VALUE(located) << DiagnosticSummary(findings);
@@ -966,7 +983,7 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesALinkIntoAnotherMount)
 
   const auto located = table.LocateReference(
     Project() / "Content" / "Materials" / "wood.material.json",
-    CommittedPath { .text = "../Shared/wood.png", .field = "source" },
+    CommittedPath { .text = "../Shared/wood.png", .json_pointer = "/source" },
     findings);
 
   EXPECT_FALSE(located.has_value());
@@ -983,7 +1000,10 @@ NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesALinkOutOfEveryMount)
   auto findings = std::vector<oxygen::content::import::ImportDiagnostic> {};
 
   const auto located = table.LocateSource(
-    CommittedPath { .text = "/Content/Elsewhere/wood.png", .field = "source" },
+    CommittedPath {
+      .text = "/Content/Elsewhere/wood.png",
+      .json_pointer = "/source",
+    },
     findings);
 
   EXPECT_FALSE(located.has_value());

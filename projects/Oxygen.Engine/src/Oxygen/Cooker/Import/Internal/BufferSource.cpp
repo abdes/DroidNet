@@ -47,43 +47,37 @@ namespace {
 
   auto AddDiagnostic(std::vector<ImportDiagnostic>& diagnostics,
     const std::filesystem::path& descriptor_path, const ImportSeverity severity,
-    std::string code, std::string message, std::string object_path = {}) -> void
+    std::string code, std::string message,
+    const json::json_pointer& pointer = json::json_pointer {}) -> void
   {
     diagnostics.push_back({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = descriptor_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = pointer.to_string(),
     });
   }
 
   auto ValidateBufferChunkSchema(std::vector<ImportDiagnostic>& diagnostics,
     const std::filesystem::path& descriptor_path, const nlohmann::json& chunk,
-    const std::string_view object_path) -> bool
+    const json::json_pointer& chunk_pointer) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "buffer.container.schema_validation_failed",
       .validation_failed_prefix = "Buffer chunk validation failed: ",
-      .validation_overflow_prefix = "Buffer container validation emitted ",
       .validator_failure_code = "buffer.container.schema_validator_failure",
       .validator_failure_prefix = "Buffer container schema validator failed: ",
-      .max_issues = 12,
     };
 
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetBufferEntryValidator(), chunk, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string_view chunk_object_path) -> void {
-        auto full_object_path = std::string(object_path);
-        if (!chunk_object_path.empty()) {
-          if (chunk_object_path.front() != '/') {
-            full_object_path += '.';
-          }
-          full_object_path += chunk_object_path;
-        }
+        const std::string& issue_pointer) -> void {
+        // The validator's pointer is relative to the chunk.
         AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-          std::string(code), message, full_object_path);
+          std::string(code), message,
+          chunk_pointer / json::json_pointer { issue_pointer });
       });
   }
 
@@ -92,7 +86,7 @@ namespace {
 auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
   const std::filesystem::path& descriptor_path, const std::string_view anchor,
   const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics,
-  const std::string_view object_path_prefix)
+  const json::json_pointer& buffers_pointer)
   -> std::optional<std::vector<BufferSource>>
 {
   const auto diagnostics_start = diagnostics.size();
@@ -109,22 +103,21 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
   entries.reserve(buffer_chunks.size());
 
   for (size_t i = 0; i < buffer_chunks.size(); ++i) {
-    const auto object_path
-      = std::string(object_path_prefix) + "[" + std::to_string(i) + "]";
+    const auto chunk_pointer = buffers_pointer / i;
     const auto& buffer_doc = buffer_chunks.at(i);
 
     if (!ValidateBufferChunkSchema(
-          diagnostics, descriptor_path, buffer_doc, object_path)) {
+          diagnostics, descriptor_path, buffer_doc, chunk_pointer)) {
       continue;
     }
 
     auto entry = BufferSource {};
-    entry.object_path = object_path;
-    const auto source_field = object_path + ".source";
+    entry.json_pointer = chunk_pointer.to_string();
+    const auto source_field = (chunk_pointer / "source").to_string();
     const auto located = mounts.LocateReference(descriptor_path,
       CommittedPath {
         .text = buffer_doc.at("source").get_ref<const std::string&>(),
-        .field = source_field,
+        .json_pointer = source_field,
       },
       diagnostics);
     if (!located.has_value()) {
@@ -132,14 +125,14 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
     }
     entry.source_path = located->file;
 
-    const auto product_field = object_path + ".virtual_path";
+    const auto product_field = chunk_pointer / "virtual_path";
     const auto& product_text
       = buffer_doc.at("virtual_path").get_ref<const std::string&>();
     const auto product = oxygen::content::ResolveReference(
       anchor, product_text, VirtualPathRuleSet::kAuthored);
     if (!product.has_value()) {
       diagnostics.push_back(RefuseReference(anchor, descriptor_path.string(),
-        product_text, product.error(), product_field));
+        product_text, product.error(), product_field.to_string()));
       continue;
     }
     entry.source_id = *product;
@@ -171,10 +164,10 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
 
     auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
     entry.view_specs = internal::ParseBufferViewSpecs(
-      buffer_doc, object_path + ".views", view_issues);
+      buffer_doc, chunk_pointer / "views", view_issues);
     for (const auto& issue : view_issues) {
       AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-        issue.code, issue.message, issue.object_path);
+        issue.code, issue.message, json::json_pointer { issue.json_pointer });
     }
     if (!view_issues.empty()) {
       continue;

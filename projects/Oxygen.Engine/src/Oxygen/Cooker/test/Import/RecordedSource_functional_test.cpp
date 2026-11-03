@@ -257,23 +257,23 @@ namespace {
       = (ProjectRoot() / "Content" / "Materials" / "ground.omat.json")
           .generic_string();
     const auto cases = std::array {
-      std::pair { "jobs[0].source",
+      std::pair { "/jobs/0/source",
         MaterialManifest(json::array({ MaterialJob(absolute) })) },
-      std::pair { "output",
+      std::pair { "/output",
         [&] {
           auto manifest = MaterialManifest(json::array(
             { MaterialJob("/Content/Materials/ground.omat.json") }));
           manifest["output"] = ProjectCookedRoot().generic_string();
           return manifest;
         }() },
-      std::pair { "jobs[0].cooked_context_roots[0]",
+      std::pair { "/jobs/0/cooked_context_roots/0",
         [&] {
           auto job = MaterialJob("/Content/Materials/ground.omat.json");
           job["cooked_context_roots"]
             = json::array({ ProjectCookedRoot().generic_string() });
           return MaterialManifest(json::array({ job }));
         }() },
-      std::pair { "project_root",
+      std::pair { "/project_root",
         [&] {
           auto manifest = MaterialManifest(json::array(
             { MaterialJob("/Content/Materials/ground.omat.json") }));

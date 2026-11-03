@@ -10,6 +10,8 @@
 #include <variant>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -35,14 +37,14 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
 
@@ -104,9 +106,8 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  auto prepared
-    = MaterialSource::FromDescriptor(descriptor->normalized_descriptor_json,
-      Request().source_path, Request().job_name.value_or(""), diagnostics);
+  auto prepared = MaterialSource::FromDescriptor(descriptor->descriptor_json,
+    Request().source_path, Request().job_name.value_or(""), diagnostics);
   AddDiagnostics(session, std::move(diagnostics));
   if (!prepared) {
     ReportPhaseProgress(
@@ -142,7 +143,9 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
         observer_ptr { &session }, observer_ptr { &Request() }, mounts,
         {
           .text = binding.source_id,
-          .object_path = "textures." + std::string(slot.name),
+          .json_pointer = (nlohmann::json::json_pointer {} / "textures"
+            / std::string(slot.name))
+            .to_string(),
           .diagnostic_prefix = "material.descriptor.",
           .allow_missing = true,
         });

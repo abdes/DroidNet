@@ -7,7 +7,6 @@
 #include <chrono>
 #include <memory>
 #include <optional>
-#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -485,8 +484,10 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       = remap.contains(item.material.storage_name) ? replaced : produced;
     group.push_back(&item.material);
   }
-  const auto dropped
-    = internal::TexturesOnlyReplacedMaterialsUse(produced, replaced);
+  const auto dropped = internal::TexturesOnlyReplacedMaterialsUse({
+    .produced = produced,
+    .replaced = replaced,
+  });
   for (auto& item : plan->pending_textures) {
     plan->product_names.textures.insert(item.name);
     if (!dropped.contains(item.source_id)) {

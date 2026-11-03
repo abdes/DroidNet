@@ -38,13 +38,13 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       .code = std::string(reference.diagnostic_prefix) + code,
       .message = std::move(message),
       .source_path = request->source_path.string(),
-      .object_path = reference.object_path,
+      .json_pointer = reference.json_pointer,
     });
   };
   const auto resolved = ResolveJobReference(*request, reference.text);
   if (!resolved.has_value()) {
     session->AddDiagnostic(RefuseReference(
-      *request, reference.text, resolved.error(), reference.object_path));
+      *request, reference.text, resolved.error(), reference.json_pointer));
     co_return std::nullopt;
   }
   const auto& virtual_path = resolved->resolved;
@@ -90,7 +90,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
 
   if (!in_output) {
     session->AddDiagnostic(
-      RefuseUnmountedReference(*request, *resolved, reference.object_path));
+      RefuseUnmountedReference(*request, *resolved, reference.json_pointer));
     co_return std::nullopt;
   }
 
@@ -107,7 +107,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       .message = "Texture descriptor not found: " + looked_for
         + "; cooking continues without it",
       .source_path = request->source_path.string(),
-      .object_path = reference.object_path,
+      .json_pointer = reference.json_pointer,
     });
     co_return ResolvedTextureReference { .missing = true };
   }

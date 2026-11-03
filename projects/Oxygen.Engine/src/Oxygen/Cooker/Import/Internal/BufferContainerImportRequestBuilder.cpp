@@ -44,19 +44,17 @@ namespace {
     const auto config = JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "buffer.container.schema_validation_failed",
       .validation_failed_prefix = "Buffer container validation failed: ",
-      .validation_overflow_prefix = "Buffer container validation emitted ",
       .validator_failure_code = "buffer.container.schema_validator_failure",
       .validator_failure_prefix = "Buffer container schema validator failed: ",
-      .max_issues = 12,
     };
 
     return ValidateJsonSchemaWithDiagnostics(GetBufferContainerValidator(),
       descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         error_stream << "ERROR [" << code << "]: " << message;
-        if (!object_path.empty()) {
-          error_stream << " (" << object_path << ")";
+        if (!json_pointer.empty()) {
+          error_stream << " (at '" << json_pointer << "')";
         }
         error_stream << "\n";
       });
@@ -120,7 +118,7 @@ auto BuildBufferContainerRequest(const BufferContainerImportSettings& settings,
   }
 
   request.buffer_container = ImportRequest::BufferContainerPayload {
-    .normalized_descriptor_json = std::move(document->text),
+    .descriptor_json = std::move(document->text),
   };
 
   return request;

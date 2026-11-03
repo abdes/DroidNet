@@ -6,7 +6,7 @@
   "required": ["version", "producer_version", "complete", "jobs"],
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
     "producer_version": {
       "type": "string"
@@ -29,7 +29,7 @@
         "written",
         "virtual_path",
         "kind",
-        "object_path",
+        "json_pointer",
         "required"
       ],
       "properties": {
@@ -54,7 +54,8 @@
             "physics-scene"
           ]
         },
-        "object_path": {
+        "json_pointer": {
+          "description": "RFC 6901 pointer to the field that holds the text, in the analyzed source; empty when no field of that source does.",
           "type": "string"
         },
         "required": {
@@ -157,7 +158,14 @@
     "diagnostic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["severity", "code", "message", "source_path", "object_path"],
+      "required": [
+        "severity",
+        "code",
+        "message",
+        "source_path",
+        "object_path",
+        "json_pointer"
+      ],
       "properties": {
         "severity": {
           "enum": ["Info", "Warning", "Error", "Unknown"]
@@ -172,6 +180,11 @@
           "type": "string"
         },
         "object_path": {
+          "description": "The hierarchical path of the model or scene object the diagnostic is about, such as a node, mesh or material; empty when it is about none.",
+          "type": "string"
+        },
+        "json_pointer": {
+          "description": "RFC 6901 pointer to the value the diagnostic is about, in the JSON document source_path names; empty when it is about the whole document or not about a JSON document.",
           "type": "string"
         },
         "object_name": {

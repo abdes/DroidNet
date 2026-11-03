@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -53,8 +54,10 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
     const auto object_path = "material_remap/" + name;
     const auto reference = ResolveJobReference(request, target);
     if (!reference.has_value()) {
-      session.AddDiagnostic(
-        RefuseReference(request, target, reference.error(), object_path));
+      auto refused
+        = RefuseReference(request, target, reference.error(), std::string {});
+      refused.object_path = object_path;
+      session.AddDiagnostic(std::move(refused));
       continue;
     }
     const auto found = LookupReference(
@@ -64,8 +67,10 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
       continue;
     }
     if (found.error().reason == AssetReferenceRefusal::kUnmounted) {
-      session.AddDiagnostic(
-        RefuseUnmountedReference(request, *reference, object_path));
+      auto refused
+        = RefuseUnmountedReference(request, *reference, std::string {});
+      refused.object_path = object_path;
+      session.AddDiagnostic(std::move(refused));
       continue;
     }
     session.AddDiagnostic({
@@ -81,13 +86,19 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
   return keys;
 }
 
+//! The materials of a model import: those it produces and those a
+//! `material_remap` replaces.
+struct ModelMaterials final {
+  std::span<const MaterialSource* const> produced;
+  std::span<const MaterialSource* const> replaced;
+};
+
 //! The texture source IDs that only replaced materials bind, which the import
 //! does not produce.
 [[nodiscard]] inline auto TexturesOnlyReplacedMaterialsUse(
-  std::span<const MaterialSource* const> produced,
-  std::span<const MaterialSource* const> replaced)
-  -> std::set<std::string, std::less<>>
+  const ModelMaterials& materials) -> std::set<std::string, std::less<>>
 {
+  const auto& [produced, replaced] = materials;
   const auto collect = [](std::span<const MaterialSource* const> materials) {
     auto ids = std::set<std::string, std::less<>> {};
     for (const auto* material : materials) {

@@ -199,7 +199,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     << "Expected request->scene_descriptor to contain a value";
 
   const auto normalized
-    = json::parse(request->scene_descriptor->normalized_descriptor_json);
+    = json::parse(request->scene_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "DemoScene");
 }
 

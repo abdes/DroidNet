@@ -196,7 +196,8 @@ namespace {
   {
     auto key = std::string {};
     key.reserve(diagnostic.code.size() + diagnostic.message.size()
-      + diagnostic.source_path.size() + diagnostic.object_path.size() + 16U);
+      + diagnostic.source_path.size() + diagnostic.object_path.size()
+      + diagnostic.json_pointer.size() + 16U);
     key.append(std::to_string(static_cast<uint32_t>(diagnostic.severity)));
     key.push_back('\x1F');
     key.append(diagnostic.code);
@@ -206,6 +207,8 @@ namespace {
     key.append(diagnostic.source_path);
     key.push_back('\x1F');
     key.append(diagnostic.object_path);
+    key.push_back('\x1F');
+    key.append(diagnostic.json_pointer);
     return key;
   }
 

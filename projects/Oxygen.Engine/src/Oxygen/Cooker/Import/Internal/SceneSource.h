@@ -66,7 +66,7 @@ struct SceneSource final {
     data::SurfaceId part_id;
     base::Sha256Digest layout_revision {};
     OverrideValue value;
-    std::string object_path;
+    std::string json_pointer;
   };
 
   struct Renderable final {
@@ -78,7 +78,7 @@ struct SceneSource final {
   struct Reference final {
     std::string virtual_path;
     std::optional<data::AssetType> type;
-    std::string object_path;
+    std::string json_pointer;
   };
 
   //! A change of a node an instance brings in, by its node path.
@@ -91,7 +91,7 @@ struct SceneSource final {
   struct Instance final {
     uint32_t node_index = 0;
     std::string scene;
-    std::string object_path;
+    std::string json_pointer;
     std::vector<InstanceChange> changes;
   };
 
@@ -99,7 +99,7 @@ struct SceneSource final {
   struct StartingInputContext final {
     std::string context;
     int32_t priority = 0;
-    std::string object_path;
+    std::string json_pointer;
   };
 
   struct Fog final {

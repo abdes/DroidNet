@@ -173,7 +173,7 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-      .normalized_descriptor_json = json { { "name", name } }.dump(),
+      .descriptor_json = json { { "name", name } }.dump(),
     };
     return request;
   }
@@ -189,7 +189,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = R"({
+          .descriptor_json = R"({
             "name": "ground",
             "static_friction": 0.95,
             "dynamic_friction": 0.70,
@@ -212,7 +212,7 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = R"({"version":)"
+      .descriptor_json = R"({"version":)"
         + std::to_string(internal::kSceneDescriptorVersion)
         + R"(,"name":"DemoScene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})",
     };
@@ -250,7 +250,7 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = json {
+      .descriptor_json = json {
         { "version", internal::kSceneDescriptorVersion },
         { "name", "Part" },
         {
@@ -403,7 +403,7 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-      .normalized_descriptor_json = R"({
+      .descriptor_json = R"({
         "name": "HdrEmission",
         "parameters": {
           "emissive_color": [1.0, 0.25, 0.0],
@@ -426,7 +426,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = R"({
+          .descriptor_json = R"({
             "name": "ground",
             "static_friction": 0.95,
             "dynamic_friction": 0.65,
@@ -507,7 +507,7 @@ namespace {
     request.cooked_root = cooked;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(source);
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor.dump(),
+      .descriptor_json = descriptor.dump(),
     };
 
     ExpectGoldenOutput(std::move(request));
@@ -532,7 +532,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
-          .normalized_descriptor_json = descriptor.dump(),
+          .descriptor_json = descriptor.dump(),
         };
 
     ExpectGoldenOutput(std::move(request));
@@ -584,7 +584,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.source_mounts = oxygen::cooker::test::ContentMountTable(source);
     request.geometry_descriptor = ImportRequest::GeometryDescriptorPayload {
-      .normalized_descriptor_json = descriptor.dump(),
+      .descriptor_json = descriptor.dump(),
     };
 
     ExpectGoldenOutput(std::move(request));
@@ -595,7 +595,7 @@ namespace {
     const auto cooked = ScenarioRoots("scene_descriptor").cooked;
     auto request = DemoSceneRequest(cooked);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = json {
+      .descriptor_json = json {
         { "version", internal::kSceneDescriptorVersion },
         { "name", "DemoScene" },
         { "nodes", json::array() },

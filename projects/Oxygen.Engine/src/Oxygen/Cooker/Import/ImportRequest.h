@@ -53,7 +53,7 @@ struct ImportRequest final {
    descriptor domain.
   */
   struct BufferContainerPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Input-import request payload.
@@ -69,7 +69,7 @@ struct ImportRequest final {
    domain.
   */
   struct MaterialDescriptorPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Physics material-descriptor request payload.
@@ -79,7 +79,7 @@ struct ImportRequest final {
    * physics-material-descriptor domain.
   */
   struct PhysicsMaterialDescriptorPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Collision shape-descriptor request payload.
@@ -89,7 +89,7 @@ struct ImportRequest final {
    * collision-shape-descriptor domain.
   */
   struct CollisionShapeDescriptorPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Geometry-descriptor request payload.
@@ -100,7 +100,7 @@ struct ImportRequest final {
    domain.
   */
   struct GeometryDescriptorPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Scene-descriptor request payload.
@@ -111,7 +111,7 @@ struct ImportRequest final {
    domain.
   */
   struct SceneDescriptorPayload final {
-    std::string normalized_descriptor_json;
+    std::string descriptor_json;
   };
 
   //! Inflight scene binding context for scripting-sidecar resolution.

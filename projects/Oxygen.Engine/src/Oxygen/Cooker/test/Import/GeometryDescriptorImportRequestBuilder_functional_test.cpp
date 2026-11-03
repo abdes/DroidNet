@@ -86,7 +86,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     << "Expected request->geometry_descriptor to contain a value";
 
   const auto normalized
-    = json::parse(request->geometry_descriptor->normalized_descriptor_json);
+    = json::parse(request->geometry_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "ProcCube");
 }
 

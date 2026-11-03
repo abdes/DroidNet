@@ -226,6 +226,9 @@ auto BuildDiagnosticsJson(const std::vector<ImportDiagnostic>& diagnostics)
     if (!diag.object_path.empty()) {
       entry["object_path"] = diag.object_path;
     }
+    if (!diag.json_pointer.empty()) {
+      entry["json_pointer"] = diag.json_pointer;
+    }
     if (!diag.object_name.empty()) {
       entry["object_name"] = diag.object_name;
     }

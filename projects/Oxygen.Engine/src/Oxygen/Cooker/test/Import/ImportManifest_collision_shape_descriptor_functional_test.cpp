@@ -77,8 +77,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
     request->asset_virtual_path, "/Cooked/Physics/Shapes/floor_box.ocshape");
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
 
-  const auto normalized = json::parse(
-    request->collision_shape_descriptor->normalized_descriptor_json);
+  const auto normalized
+    = json::parse(request->collision_shape_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "floor_box");
   EXPECT_EQ(normalized.at("shape_type").get<std::string>(), "box");
 }

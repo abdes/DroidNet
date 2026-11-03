@@ -69,7 +69,7 @@ namespace {
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-        .normalized_descriptor_json = descriptor.dump(),
+        .descriptor_json = descriptor.dump(),
       };
       return Submit(std::move(request));
     }
@@ -294,7 +294,7 @@ namespace {
       if (found == report.diagnostics.end()) {
         return std::nullopt;
       }
-      return found->object_path;
+      return found->json_pointer;
     };
 
     // Act
@@ -311,17 +311,17 @@ namespace {
     const auto undeclared_path
       = path_of(undeclared, "script.sidecar.param_undeclared");
     ASSERT_HAS_VALUE(undeclared_path);
-    EXPECT_EQ(*undeclared_path, "instance_bindings[0].params[0].key");
+    EXPECT_EQ(*undeclared_path, "/instance_bindings/0/params/0/key");
     EXPECT_FALSE(other_type.success);
     const auto other_type_path
       = path_of(other_type, "script.sidecar.param_type_mismatch");
     ASSERT_HAS_VALUE(other_type_path);
-    EXPECT_EQ(*other_type_path, "instance_bindings[0].params[0].type");
+    EXPECT_EQ(*other_type_path, "/instance_bindings/0/params/0/type");
     EXPECT_FALSE(other_asset_type.success);
     const auto other_asset_type_path
       = path_of(other_asset_type, "script.sidecar.param_asset_kind_mismatch");
     ASSERT_HAS_VALUE(other_asset_type_path);
-    EXPECT_EQ(*other_asset_type_path, "instance_bindings[0].params[0].value");
+    EXPECT_EQ(*other_asset_type_path, "/instance_bindings/0/params/0/value");
     EXPECT_TRUE(declared.success);
   }
 

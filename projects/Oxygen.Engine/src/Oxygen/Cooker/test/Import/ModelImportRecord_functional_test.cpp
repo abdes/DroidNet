@@ -328,7 +328,7 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
     });
 
     EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
-    EXPECT_EQ(refusal.object_path, std::string("settings.") + key);
+    EXPECT_EQ(refusal.json_pointer, std::string("/settings/") + key);
   }
 }
 
@@ -368,7 +368,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAMalformedRecord)
     = RefusalOf([&] { return ModelImportRecord::Read(broken, mounts_); });
 
   EXPECT_EQ(twice_refusal.code, "import.model_record_invalid");
-  EXPECT_EQ(twice_refusal.object_path, "node_continuity");
+  EXPECT_EQ(twice_refusal.json_pointer, "/node_continuity");
   EXPECT_EQ(broken_refusal.code, "import.model_record_invalid");
 }
 
@@ -384,7 +384,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesASourceOfAnotherFormat)
     = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
 
   EXPECT_EQ(refusal.code, "import.model_record_invalid");
-  EXPECT_EQ(refusal.object_path, "source");
+  EXPECT_EQ(refusal.json_pointer, "/source");
 }
 
 //! One record per source identity: a copy of a record at another identity is
@@ -576,7 +576,7 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
   });
 
   EXPECT_EQ(refusal.code, "import.source_missing");
-  EXPECT_EQ(refusal.object_path, "source");
+  EXPECT_EQ(refusal.json_pointer, "/source");
   EXPECT_THAT(refusal.message, testing::HasSubstr("rebinds it"));
 }
 
@@ -820,7 +820,7 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
   });
 
   EXPECT_EQ(refusal.code, "import.generation_invalid");
-  EXPECT_EQ(refusal.object_path, "index_sha256");
+  EXPECT_EQ(refusal.json_pointer, "/index_sha256");
 }
 
 //! A selected generation that is gone is `import.generation_missing`, never a

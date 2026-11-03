@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
@@ -27,7 +27,8 @@ struct BufferSource final {
   std::filesystem::path source_path;
   //! The product's virtual path, resolved against the container's identity.
   std::string source_id;
-  std::string object_path;
+  //! Where the declaration is in the document named by `source_path`.
+  std::string json_pointer;
   std::vector<internal::BufferDescriptorViewSpec> view_specs;
   uint32_t usage_flags = 0;
   uint32_t element_stride = 1;
@@ -47,7 +48,8 @@ struct BufferSource final {
     const nlohmann::json& buffer_chunks,
     const std::filesystem::path& descriptor_path, std::string_view anchor,
     const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics,
-    std::string_view object_path_prefix = "buffers")
+    const nlohmann::json::json_pointer& buffers_pointer
+    = nlohmann::json::json_pointer { "/buffers" })
     -> std::optional<std::vector<BufferSource>>;
 };
 

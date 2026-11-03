@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oxygen-engine.dev/schemas/oxygen.input.schema.json",
   "title": "Oxygen Input Source Schema",
   "description": "An input source: a container of input actions and mapping contexts. Each product is named under the source's identity (`/Content/Input/Player.input/Jump.oiact`). A mapping names an action of this source by its name, and any other action by a reference ending with `.oiact`.",
@@ -14,7 +14,7 @@
       "type": "array",
       "description": "The actions this source declares.",
       "items": {
-        "$ref": "#/$defs/action"
+        "$ref": "#/definitions/action"
       },
       "default": []
     },
@@ -22,12 +22,12 @@
       "type": "array",
       "description": "The mapping contexts this source declares.",
       "items": {
-        "$ref": "#/$defs/context"
+        "$ref": "#/definitions/context"
       },
       "default": []
     }
   },
-  "$defs": {
+  "definitions": {
     "local_action_name": {
       "description": "A name that is not a reference: it does not end with `.oiact`.",
       "allOf": [
@@ -45,7 +45,7 @@
       "description": "An action: the name of an action this source declares, or a reference ending with `.oiact` (`Car.input/Jump.oiact`, `/Props/Input/Shared.input/Use.oiact`).",
       "anyOf": [
         {
-          "$ref": "#/$defs/local_action_name"
+          "$ref": "#/definitions/local_action_name"
         },
         {
           "allOf": [
@@ -64,7 +64,7 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "#/$defs/local_action_name"
+          "$ref": "#/definitions/local_action_name"
         },
         "type": {
           "type": "string",
@@ -87,7 +87,7 @@
       "additionalProperties": false,
       "properties": {
         "action": {
-          "$ref": "#/$defs/action_reference"
+          "$ref": "#/definitions/action_reference"
         },
         "completion_states": {
           "type": "integer",
@@ -140,18 +140,18 @@
           "minimum": 0
         },
         "chord_action": {
-          "$ref": "#/$defs/action_reference"
+          "$ref": "#/definitions/action_reference"
         },
         "combo_actions": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/trigger_aux"
+            "$ref": "#/definitions/trigger_aux"
           }
         },
         "aux": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/trigger_aux"
+            "$ref": "#/definitions/trigger_aux"
           },
           "default": []
         }
@@ -232,7 +232,7 @@
       "additionalProperties": false,
       "properties": {
         "action": {
-          "$ref": "#/$defs/action_reference"
+          "$ref": "#/definitions/action_reference"
         },
         "slot": {
           "type": "string",
@@ -402,7 +402,7 @@
         "triggers": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/trigger"
+            "$ref": "#/definitions/trigger"
           },
           "default": []
         },
@@ -450,7 +450,7 @@
         "mappings": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/mapping"
+            "$ref": "#/definitions/mapping"
           },
           "default": []
         }

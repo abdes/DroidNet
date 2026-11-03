@@ -225,7 +225,7 @@ Architectural split:
    - role: validate + normalize `BufferContainerImportSettings` into an
      `ImportRequest`. Loads the container JSON file, schema-validates it against
      `kBufferContainerSchema`, resolves `job_name`, and stores `descriptor_doc->dump()` in
-     `request.buffer_container.normalized_descriptor_json`.
+     `request.buffer_container.descriptor_json`.
    - note: The presence of `request.buffer_container` is the route discriminant
      that bypasses all format detection in `AsyncImportService`. This field is a
      **top-level optional on `ImportRequest`** (not nested inside

@@ -41,7 +41,7 @@ inline auto IsCanonicalVirtualPath(const std::string_view virtual_path) -> bool
  @return The diagnostic, or nothing when the path is accepted.
 */
 inline auto CheckAssetVirtualPath(const ImportRequest& request,
-  const std::string_view virtual_path, std::string object_path)
+  const std::string_view virtual_path, std::string json_pointer)
   -> std::optional<ImportDiagnostic>
 {
   const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
@@ -54,7 +54,7 @@ inline auto CheckAssetVirtualPath(const ImportRequest& request,
     .message = "The asset name gives a virtual path the engine refuses: "
       + std::string(virtual_path),
     .source_path = request.source_path.string(),
-    .object_path = std::move(object_path),
+    .json_pointer = std::move(json_pointer),
   };
 }
 
@@ -141,7 +141,7 @@ inline auto ResolveJobReference(const ImportRequest& request,
 //! the file whose identity is `anchor`.
 inline auto RefuseReference(const std::string_view anchor,
   std::string source_path, const std::string_view text,
-  const VirtualPathError error, std::string object_path) -> ImportDiagnostic
+  const VirtualPathError error, std::string json_pointer) -> ImportDiagnostic
 {
   return ImportDiagnostic {
     .severity = ImportSeverity::kError,
@@ -150,7 +150,7 @@ inline auto RefuseReference(const std::string_view anchor,
       + " is not a reference the engine accepts ("
       + oxygen::content::to_string(error) + ")",
     .source_path = std::move(source_path),
-    .object_path = std::move(object_path),
+    .json_pointer = std::move(json_pointer),
   };
 }
 
@@ -158,15 +158,15 @@ inline auto RefuseReference(const std::string_view anchor,
 //! the job's authored file.
 inline auto RefuseReference(const ImportRequest& request,
   const std::string_view text, const VirtualPathError error,
-  std::string object_path) -> ImportDiagnostic
+  std::string json_pointer) -> ImportDiagnostic
 {
   return RefuseReference(request.OutputIdentity(), request.source_path.string(),
-    text, error, std::move(object_path));
+    text, error, std::move(json_pointer));
 }
 
 //! The diagnostic refusing a reference that names no mounted cooked root.
 inline auto RefuseUnmountedReference(const ImportRequest& request,
-  const ResolvedReference& reference, std::string object_path)
+  const ResolvedReference& reference, std::string json_pointer)
   -> ImportDiagnostic
 {
   return ImportDiagnostic {
@@ -175,7 +175,7 @@ inline auto RefuseUnmountedReference(const ImportRequest& request,
     .message = "'" + reference.written + "' resolves to " + reference.resolved
       + ", which is in no mounted cooked root",
     .source_path = request.source_path.string(),
-    .object_path = std::move(object_path),
+    .json_pointer = std::move(json_pointer),
   };
 }
 
@@ -214,7 +214,6 @@ inline auto PlaceAsset(
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = "virtual_path",
     };
   };
   if (virtual_path.empty()) {

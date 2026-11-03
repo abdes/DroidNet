@@ -78,7 +78,7 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
   ASSERT_HAS_VALUE(request->material_descriptor);
 
   const auto normalized
-    = json::parse(request->material_descriptor->normalized_descriptor_json);
+    = json::parse(request->material_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "WoodFloor");
   EXPECT_EQ(normalized.at("textures")
               .at("base_color")

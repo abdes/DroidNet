@@ -79,7 +79,7 @@ namespace {
       request.asset_virtual_path = std::string(identity.asset_virtual_path);
       request.cooked_root = cooked_root;
       request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-        .normalized_descriptor_json = std::move(descriptor_json),
+        .descriptor_json = std::move(descriptor_json),
       };
       return request;
     }

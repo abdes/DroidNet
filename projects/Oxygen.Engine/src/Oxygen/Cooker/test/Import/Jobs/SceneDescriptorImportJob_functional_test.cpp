@@ -105,7 +105,7 @@ namespace {
         = oxygen::cooker::test::SourceMountPath(request.source_path);
       request.cooked_root = cooked_root;
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-        .normalized_descriptor_json = document.dump(),
+        .descriptor_json = document.dump(),
       };
       return request;
     }

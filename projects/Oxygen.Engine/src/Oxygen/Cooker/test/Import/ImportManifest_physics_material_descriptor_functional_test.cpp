@@ -81,8 +81,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     request->asset_virtual_path, "/Cooked/Physics/Materials/ground.opmat");
   ASSERT_HAS_VALUE(request->physics_material_descriptor);
 
-  const auto normalized = json::parse(
-    request->physics_material_descriptor->normalized_descriptor_json);
+  const auto normalized
+    = json::parse(request->physics_material_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "ground");
   EXPECT_EQ(normalized.at("density").get<double>(), 1500.0);
 }

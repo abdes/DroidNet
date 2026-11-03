@@ -96,7 +96,7 @@ internal sealed partial class CookSourceAnalyzer(
         {
             var path = uri.VirtualPath;
             var kind = ContentCookAssetKinds.Of(path) == ContentCookAssetKind.Script ? "script" : "asset";
-            return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
+            return new NativeLogicalDependency(path, kind, JsonPointer: string.Empty, Required: true);
         }) ?? [];
 
     private async Task<(List<PreparedSource> Prepared, ImmutableArray<DiagnosticRecord>.Builder Diagnostics)> PrepareSourcesAsync(

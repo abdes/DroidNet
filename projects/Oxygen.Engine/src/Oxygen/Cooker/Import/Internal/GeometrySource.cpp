@@ -41,14 +41,15 @@ namespace {
 
   auto AddDiagnostic(std::vector<ImportDiagnostic>& diagnostics,
     const std::filesystem::path& source_path, const ImportSeverity severity,
-    std::string code, std::string message, std::string object_path = {}) -> void
+    std::string code, std::string message,
+    const json::json_pointer& pointer = json::json_pointer {}) -> void
   {
     diagnostics.push_back({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = pointer.to_string(),
     });
   }
 
@@ -66,19 +67,17 @@ namespace {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "geometry.descriptor.schema_validation_failed",
       .validation_failed_prefix = "Geometry descriptor validation failed: ",
-      .validation_overflow_prefix = "Geometry descriptor validation emitted ",
       .validator_failure_code = "geometry.descriptor.schema_validator_failure",
       .validator_failure_prefix
       = "Geometry descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetGeometryDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-          std::string(code), message, object_path);
+          std::string(code), message, json::json_pointer { json_pointer });
       });
   }
 
@@ -210,14 +209,14 @@ namespace {
       const auto& surfaces = document.at("surfaces");
       for (size_t index = 0; index < surfaces.size(); ++index) {
         const auto& surface_doc = surfaces.at(index);
-        const auto path = "surfaces[" + std::to_string(index) + "]";
+        const auto surface_pointer = json::json_pointer { "/surfaces" } / index;
         const auto id = data::SurfaceId::FromString(
           surface_doc.at("surface_id").get<std::string>());
         if (!id || std::ranges::find(declared, id.value()) == declared.end()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
             "geometry.descriptor.surface_unknown",
             "Surface defaults name a surface no submesh declares",
-            path + ".surface_id");
+            surface_pointer / "surface_id");
           return false;
         }
         if (std::ranges::find(
@@ -226,7 +225,7 @@ namespace {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
             "geometry.descriptor.surface_duplicate",
             "Surface defaults name a surface more than once",
-            path + ".surface_id");
+            surface_pointer / "surface_id");
           return false;
         }
         auto entry = AuthoredSurfaceDefaults { .surface_id = id.value() };
@@ -247,7 +246,7 @@ namespace {
           "LOD policy distance thresholds must not decrease, its "
           "screen-space error lists must not increase and must have equal "
           "lengths",
-          "lod_policy");
+          json::json_pointer { "/lod_policy" });
         return false;
       }
     }
@@ -277,7 +276,7 @@ namespace {
     source.lods.reserve(lods.size());
     for (size_t lod_index = 0; lod_index < lods.size(); ++lod_index) {
       const auto& lod_doc = lods.at(lod_index);
-      const auto lod_path = "lods[" + std::to_string(lod_index) + "]";
+      const auto lod_pointer = json::json_pointer { "/lods" } / lod_index;
       auto lod = GeometrySource::Lod {};
       lod.name = lod_doc.at("name").get<std::string>();
       const auto type = lod_doc.at("mesh_type").get<std::string>();
@@ -315,7 +314,7 @@ namespace {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
             "geometry.procedural.params_invalid",
             "Failed encoding procedural parameter blob",
-            lod_path + ".procedural.params");
+            lod_pointer / "procedural" / "params");
           return std::nullopt;
         }
         lod.mesh = std::move(procedural);
@@ -325,15 +324,14 @@ namespace {
       for (size_t submesh_index = 0; submesh_index < submeshes.size();
         ++submesh_index) {
         const auto& submesh_doc = submeshes.at(submesh_index);
-        const auto submesh_path
-          = lod_path + ".submeshes[" + std::to_string(submesh_index) + "]";
+        const auto submesh_pointer = lod_pointer / "submeshes" / submesh_index;
         const auto surface = data::SurfaceId::FromString(
           submesh_doc.at("surface_id").get<std::string>());
         if (!surface || surface.value().IsNil()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
             "geometry.descriptor.surface_id_invalid",
             "Submesh requires a non-nil canonical surface identity",
-            submesh_path + ".surface_id");
+            submesh_pointer / "surface_id");
           return std::nullopt;
         }
         auto submesh = GeometrySource::Submesh {
@@ -351,15 +349,14 @@ namespace {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
             "geometry.descriptor.submesh_bounds_invalid",
             "Submesh bounds must be ordered and lie inside the LOD bounds",
-            submesh_path + ".bounds");
+            submesh_pointer / "bounds");
           return std::nullopt;
         }
         const auto& views = submesh_doc.at("views");
         submesh.views.reserve(views.size());
         for (size_t view_index = 0; view_index < views.size(); ++view_index) {
           const auto& view_doc = views.at(view_index);
-          const auto view_path
-            = submesh_path + ".views[" + std::to_string(view_index) + "]";
+          const auto view_pointer = submesh_pointer / "views" / view_index;
           auto view = GeometrySource::View {
             .view_ref = view_doc.at("view_ref").get<std::string>(),
             .bounds = view_doc.contains("bounds")
@@ -371,7 +368,7 @@ namespace {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
               "geometry.procedural.view_ref_invalid",
               "Procedural submesh view_ref must be '__all__'",
-              view_path + ".view_ref");
+              view_pointer / "view_ref");
             return std::nullopt;
           }
           if (submesh.bounds.has_value() && view.bounds.has_value()
@@ -380,7 +377,7 @@ namespace {
               "geometry.descriptor.view_bounds_invalid",
               "Mesh view bounds must be ordered and lie inside the submesh "
               "bounds",
-              view_path + ".bounds");
+              view_pointer / "bounds");
             return std::nullopt;
           }
           submesh.views.push_back(std::move(view));

@@ -68,8 +68,8 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
     std::optional<std::string> { "manifest-collision-shape" });
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
 
-  const auto normalized = json::parse(
-    request->collision_shape_descriptor->normalized_descriptor_json);
+  const auto normalized
+    = json::parse(request->collision_shape_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "floor_box");
   EXPECT_EQ(normalized.at("shape_type").get<std::string>(), "box");
   // Identity comes from the job, never from the descriptor.

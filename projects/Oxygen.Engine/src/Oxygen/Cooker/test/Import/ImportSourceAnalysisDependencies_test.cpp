@@ -25,12 +25,12 @@ using oxygen::content::import::ResolveDependency;
 constexpr auto kAnchor = "/Content/Scenes/Level.oscene";
 
 auto Text(std::string written, const ImportDependencyKind kind,
-  std::string object_path = {}) -> ImportDependencyText
+  std::string json_pointer = {}) -> ImportDependencyText
 {
   return {
     .written = std::move(written),
     .kind = kind,
-    .object_path = std::move(object_path),
+    .json_pointer = std::move(json_pointer),
   };
 }
 
@@ -39,14 +39,14 @@ auto Text(std::string written, const ImportDependencyKind kind,
 NOLINT_TEST(ImportSourceAnalysisDependenciesTest, RelativeTextResolves)
 {
   const auto dependency = ResolveDependency(kAnchor,
-    Text("../Materials/Wall.omat", ImportDependencyKind::kMaterial, "a.b"),
+    Text("../Materials/Wall.omat", ImportDependencyKind::kMaterial, "/a/b"),
     VirtualPathRuleSet::kAuthored);
 
   ASSERT_TRUE(dependency.has_value());
   EXPECT_EQ(dependency->written, "../Materials/Wall.omat");
   EXPECT_EQ(dependency->virtual_path, "/Content/Materials/Wall.omat");
   EXPECT_EQ(dependency->kind, ImportDependencyKind::kMaterial);
-  EXPECT_EQ(dependency->object_path, "a.b");
+  EXPECT_EQ(dependency->json_pointer, "/a/b");
   EXPECT_TRUE(dependency->required);
 }
 
@@ -102,7 +102,7 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, LocalBuffersMatchResolved)
   const auto references = std::vector<ImportDependencyText> {
     Text("./Ship.vb.obuf", ImportDependencyKind::kBuffer, "vb"),
     Text("../Geometry/Ship.ib.obuf", ImportDependencyKind::kBuffer, "ib"),
-    Text("../Shared/Common.obuf", ImportDependencyKind::kBuffer, "shared"),
+    Text("../Shared/Common.obuf", ImportDependencyKind::kBuffer, "/shared"),
   };
 
   const auto result = ExternalBufferReferences(anchor, local, references);
@@ -111,7 +111,7 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, LocalBuffersMatchResolved)
   ASSERT_EQ(result.dependencies.size(), 1U);
   EXPECT_EQ(result.dependencies[0].written, "../Shared/Common.obuf");
   EXPECT_EQ(result.dependencies[0].virtual_path, "/Content/Shared/Common.obuf");
-  EXPECT_EQ(result.dependencies[0].object_path, "shared");
+  EXPECT_EQ(result.dependencies[0].json_pointer, "/shared");
 }
 
 //! A buffer in another folder is external even when its file name matches a
@@ -135,7 +135,7 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, SameNameElsewhereIsExternal)
 NOLINT_TEST(ImportSourceAnalysisDependenciesTest, RefusedBufferIsReported)
 {
   const auto references = std::vector<ImportDependencyText> {
-    Text("../../Escape.obuf", ImportDependencyKind::kBuffer, "lods[0]"),
+    Text("../../Escape.obuf", ImportDependencyKind::kBuffer, "/lods/0"),
   };
 
   const auto result = ExternalBufferReferences(
@@ -144,7 +144,7 @@ NOLINT_TEST(ImportSourceAnalysisDependenciesTest, RefusedBufferIsReported)
   EXPECT_TRUE(result.dependencies.empty());
   ASSERT_EQ(result.refused.size(), 1U);
   EXPECT_EQ(result.refused[0].written, "../../Escape.obuf");
-  EXPECT_EQ(result.refused[0].object_path, "lods[0]");
+  EXPECT_EQ(result.refused[0].json_pointer, "/lods/0");
   EXPECT_EQ(result.refused[0].error, VirtualPathError::kReferenceOutsideMount);
 }
 

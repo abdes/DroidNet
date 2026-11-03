@@ -119,7 +119,7 @@ namespace {
     const auto diagnostic
       = FindDiagnostic(report, "script.sidecar.param_undeclared");
     ASSERT_HAS_VALUE(diagnostic);
-    EXPECT_EQ(diagnostic->object_path, "bindings[0].params[0].key");
+    EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/key");
   }
 
   //! An override whose type differs from the declaration fails at its type.
@@ -139,7 +139,7 @@ namespace {
     const auto diagnostic
       = FindDiagnostic(report, "script.sidecar.param_type_mismatch");
     ASSERT_HAS_VALUE(diagnostic);
-    EXPECT_EQ(diagnostic->object_path, "bindings[0].params[0].type");
+    EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/type");
   }
 
   //! A node override cooks its scene node index; an index outside the scene
@@ -164,7 +164,7 @@ namespace {
     const auto diagnostic
       = FindDiagnostic(rejected, "script.sidecar.param_node_out_of_range");
     ASSERT_HAS_VALUE(diagnostic);
-    EXPECT_EQ(diagnostic->object_path, "bindings[0].params[0].value");
+    EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/value");
 
     ASSERT_TRUE(accepted.success);
     const auto state = ReadSceneScriptState(cooked_root, *cooked.scene);
@@ -277,7 +277,7 @@ namespace {
     const auto kind_diagnostic
       = FindDiagnostic(wrong_kind, "script.sidecar.param_asset_kind_mismatch");
     ASSERT_HAS_VALUE(kind_diagnostic);
-    EXPECT_EQ(kind_diagnostic->object_path, "bindings[0].params[0].value");
+    EXPECT_EQ(kind_diagnostic->json_pointer, "/bindings/0/params/0/value");
     EXPECT_FALSE(missing.success);
     EXPECT_TRUE(FindDiagnostic(missing, "script.sidecar.param_asset_unresolved")
         .has_value());

@@ -37,7 +37,7 @@ namespace {
 
   void AddError(std::vector<ImportDiagnostic>& diagnostics,
     const std::string_view source_id, std::string code, std::string message,
-    std::string object_path = {})
+    std::string object_path = {}, std::string json_pointer = {})
   {
     diagnostics.push_back(ImportDiagnostic {
       .severity = ImportSeverity::kError,
@@ -45,6 +45,7 @@ namespace {
       .message = std::move(message),
       .source_path = std::string(source_id),
       .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
 
@@ -113,19 +114,17 @@ namespace {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "material.descriptor.schema_validation_failed",
       .validation_failed_prefix = "Material descriptor validation failed: ",
-      .validation_overflow_prefix = "Material descriptor validation emitted ",
       .validator_failure_code = "material.descriptor.schema_validator_failure",
       .validator_failure_prefix
       = "Material descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetMaterialDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         AddError(diagnostics, source_path.string(), std::string(code), message,
-          object_path);
+          {}, json_pointer);
       });
   }
 
@@ -524,7 +523,10 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
           AddError(diagnostics, source_path.string(),
             "material.descriptor.texture_uv_invalid",
             "Texture UV transform must contain two-component scale and offset",
-            "textures." + std::string(slot.name));
+            {},
+            (nlohmann::json::json_pointer {} / "textures"
+              / std::string(slot.name))
+              .to_string());
           return std::nullopt;
         }
         binding.uv_transform.rotation_radians

@@ -60,6 +60,7 @@ oxygen_cooker_test(
     "Import/InputImportRequestBuilder_test.cpp"
     "Import/JobReference_test.cpp"
     "Import/Jobs/TextureImportPolicy_test.cpp"
+    "Import/JsonSchemaValidation_test.cpp"
     "Import/SurfaceProvenance_test.cpp"
     "Import/MaterialSource_test.cpp"
     "Import/MeshTransformBake_test.cpp"
@@ -88,6 +89,12 @@ oxygen_cooker_test(
     "Import/TextureImportPresets_test.cpp"
     "Import/TexturePackingPolicy_test.cpp"
     "Import/TextureSourceAssembly_test.cpp"
+)
+# The cooker's embedded schemas, which the schema validation helper loads.
+target_include_directories(
+  Oxygen.Cooker.Import.Unit.Tests
+  PRIVATE
+    "${CMAKE_BINARY_DIR}/generated"
 )
 # The mount table and model import record case tables shared with the
 # editor's readers, and the virtual path case table the schemas follow.

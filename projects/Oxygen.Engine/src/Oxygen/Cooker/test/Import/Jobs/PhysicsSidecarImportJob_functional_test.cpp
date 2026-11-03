@@ -42,7 +42,7 @@ namespace {
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-      .normalized_descriptor_json = R"({"version":)"
+      .descriptor_json = R"({"version":)"
         + std::to_string(internal::kSceneDescriptorVersion)
         + R"(,"name":"DemoScene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})",
     };

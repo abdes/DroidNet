@@ -133,7 +133,7 @@ namespace {
       .Set("/density", 1800.0);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = material.Text(),
+          .descriptor_json = material.Text(),
         };
     return request;
   }
@@ -166,7 +166,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.collision_shape_descriptor
       = ImportRequest::CollisionShapeDescriptorPayload {
-          .normalized_descriptor_json = descriptor_doc.dump(),
+          .descriptor_json = descriptor_doc.dump(),
         };
     return request;
   }

@@ -46,22 +46,19 @@ namespace {
       = "physics.material.descriptor.schema_validation_failed",
       .validation_failed_prefix
       = "Physics material descriptor validation failed: ",
-      .validation_overflow_prefix
-      = "Physics material descriptor validation emitted ",
       .validator_failure_code
       = "physics.material.descriptor.schema_validator_failure",
       .validator_failure_prefix
       = "Physics material descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return ValidateJsonSchemaWithDiagnostics(
       GetPhysicsMaterialDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         error_stream << "ERROR [" << code << "]: " << message;
-        if (!object_path.empty()) {
-          error_stream << " (" << object_path << ")";
+        if (!json_pointer.empty()) {
+          error_stream << " (at '" << json_pointer << "')";
         }
         error_stream << "\n";
       });
@@ -127,7 +124,7 @@ auto BuildPhysicsMaterialDescriptorRequest(
 
   request.physics_material_descriptor
     = ImportRequest::PhysicsMaterialDescriptorPayload {
-        .normalized_descriptor_json = std::move(document->text),
+        .descriptor_json = std::move(document->text),
       };
 
   return request;

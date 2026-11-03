@@ -253,8 +253,8 @@ namespace {
           return false;
         }
         auto descriptor_doc = nlohmann::json {};
-        if (!ParseJsonObject(job.request.collision_shape_descriptor
-                               ->normalized_descriptor_json,
+        if (!ParseJsonObject(
+              job.request.collision_shape_descriptor->descriptor_json,
               "collision-shape-descriptor", descriptor_doc, error)) {
           return false;
         }

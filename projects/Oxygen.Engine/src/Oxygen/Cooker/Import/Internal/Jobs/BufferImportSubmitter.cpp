@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
@@ -47,14 +49,15 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    const nlohmann::json::json_pointer& pointer
+    = nlohmann::json::json_pointer {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = pointer.to_string(),
     });
   }
 
@@ -71,7 +74,7 @@ namespace {
   {
     for (const auto& issue : issues) {
       AddDiagnostic(session, request, ImportSeverity::kError, issue.code,
-        issue.message, issue.object_path);
+        issue.message, nlohmann::json::json_pointer { issue.json_pointer });
     }
   }
 
@@ -179,7 +182,7 @@ auto BufferImportSubmitter::SubmitBuffers(
         "buffer.container.virtual_path_unmounted",
         "Buffer virtual_path '" + entry.source_id
           + "' is outside the mount the container cooks into",
-        entry.object_path + ".virtual_path");
+        nlohmann::json::json_pointer { entry.json_pointer } / "virtual_path");
       continue;
     }
     submission.descriptor_relpath_by_source_id.emplace(
@@ -202,7 +205,7 @@ auto BufferImportSubmitter::SubmitBuffers(
           "buffer.container.source_read_failed",
           "Failed reading buffer source '" + entry.source_path.string()
             + "': " + read_result.error().message(),
-          entry.source_id);
+          nlohmann::json::json_pointer { entry.json_pointer } / "source");
       }
       continue;
     }
@@ -212,14 +215,14 @@ auto BufferImportSubmitter::SubmitBuffers(
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.source_empty",
         "Buffer source '" + entry.source_path.string() + "' holds no bytes",
-        entry.object_path + ".source");
+        nlohmann::json::json_pointer { entry.json_pointer } / "source");
       continue;
     }
     if (source_size > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.source_too_large",
         "Buffer source exceeds maximum supported size of 4 GiB",
-        entry.object_path + ".source");
+        nlohmann::json::json_pointer { entry.json_pointer } / "source");
       continue;
     }
 
@@ -230,8 +233,9 @@ auto BufferImportSubmitter::SubmitBuffers(
     descriptor.element_format = entry.element_format;
 
     auto view_issues = std::vector<internal::BufferDescriptorViewIssue> {};
-    auto normalized_views = internal::NormalizeBufferViews(
-      entry.view_specs, descriptor, entry.object_path + ".views", view_issues);
+    auto normalized_views = internal::NormalizeBufferViews(entry.view_specs,
+      descriptor, nlohmann::json::json_pointer { entry.json_pointer } / "views",
+      view_issues);
     AddViewIssues(*session_, *request_, view_issues);
     if (!view_issues.empty()) {
       continue;
@@ -274,9 +278,8 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
   } catch (const data::CookedFormatError& error) {
     AddDiagnostic(*session_, *request_, ImportSeverity::kError,
       "buffer.container.cooked_root_unreadable",
-      "The cooked root's buffer sidecars cannot be read: "
-        + std::string(error.what()),
-      session_->CookedRoot().string());
+      "The cooked root '" + session_->CookedRoot().string()
+        + "' buffer sidecars cannot be read: " + std::string(error.what()));
     co_return emitted_buffers;
   }
 
@@ -296,7 +299,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     if (relpath_it == submission.descriptor_relpath_by_source_id.end()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.internal_lookup_failed",
-        "Internal buffer entry lookup failed", result.source_id);
+        "Internal buffer entry lookup failed for '" + result.source_id + "'");
       continue;
     }
 
@@ -305,7 +308,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     if (views_it == submission.descriptor_views_by_source_id.end()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.internal_lookup_failed",
-        "Internal buffer views lookup failed", result.source_id);
+        "Internal buffer views lookup failed for '" + result.source_id + "'");
       continue;
     }
 
@@ -320,8 +323,8 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     if (!descriptor.has_value()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.descriptor_missing",
-        "Missing buffer descriptor for emitted resource index",
-        result.source_id);
+        "Missing buffer descriptor for emitted resource index of '"
+          + result.source_id + "'");
       continue;
     }
 
@@ -332,8 +335,8 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.dedup_virtual_path_conflict",
         "Equivalent buffers deduped to one resource index must share one "
-        "canonical virtual_path",
-        result.source_id);
+        "canonical virtual_path: '"
+          + existing->second + "' and '" + result.source_id + "'");
       continue;
     }
     canonical_identity_by_index.insert_or_assign(
@@ -347,8 +350,8 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     } catch (const std::exception& ex) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
         "buffer.container.sidecar_emit_failed",
-        "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
-        result.source_id);
+        "Failed to emit the buffer sidecar descriptor of '" + result.source_id
+          + "': " + std::string(ex.what()));
     }
 
     emitted_buffers.push_back(EmittedBuffer {

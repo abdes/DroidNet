@@ -23,6 +23,8 @@
 #include <variant>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderContext.h>
@@ -119,14 +121,14 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
 
@@ -164,14 +166,14 @@ namespace {
   //! asset it names. Reports the refusal and returns nothing when it fails.
   auto LookupSceneReference(SceneDescriptorExecutionContext& context,
     const std::string_view written,
-    const std::optional<data::AssetType> expected_type, std::string object_path)
-    -> std::optional<SceneReference>
+    const std::optional<data::AssetType> expected_type,
+    std::string json_pointer) -> std::optional<SceneReference>
   {
     const auto reference
       = internal::ResolveJobReference(context.request, written);
     if (!reference.has_value()) {
       context.session.AddDiagnostic(internal::RefuseReference(
-        context.request, written, reference.error(), std::move(object_path)));
+        context.request, written, reference.error(), std::move(json_pointer)));
       return std::nullopt;
     }
     const auto type_mismatch
@@ -181,7 +183,7 @@ namespace {
         "Reference type mismatch; expected "
           + std::string(data::to_string(*expected_type)) + " but found "
           + std::string(data::to_string(found)) + ": " + detail,
-        std::move(object_path));
+        std::move(json_pointer));
     };
     if (const auto it = context.index_cache.find(reference->resolved);
       it != context.index_cache.end()) {
@@ -212,14 +214,14 @@ namespace {
     switch (refused.reason) {
     case internal::AssetReferenceRefusal::kUnmounted:
       context.session.AddDiagnostic(internal::RefuseUnmountedReference(
-        context.request, *reference, std::move(object_path)));
+        context.request, *reference, std::move(json_pointer)));
       break;
     case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.reference_missing",
         "Reference was not found: "
           + internal::DescribeLookup(*reference, refused),
-        std::move(object_path));
+        std::move(json_pointer));
       break;
     case internal::AssetReferenceRefusal::kTypeMismatch:
       if (refused.found_type.has_value()) {
@@ -262,7 +264,8 @@ namespace {
   auto LoadSurfaceInventories(SceneDescriptorExecutionContext& context,
     const internal::SceneSource& source) -> bool
   {
-    for (const auto& renderable : source.renderables) {
+    for (size_t i = 0; i < source.renderables.size(); ++i) {
+      const auto& renderable = source.renderables.at(i);
       const auto names_a_surface = std::ranges::any_of(renderable.overrides,
         [](const internal::SceneSource::Override& entry) -> bool {
           return entry.property->part_kind == data::schema::PartKind::kSurface;
@@ -271,8 +274,11 @@ namespace {
         continue;
       }
       const auto& path = renderable.geometry;
+      const auto geometry_pointer
+        = (nlohmann::json::json_pointer {} / "renderables" / i / "geometry_ref")
+            .to_string();
       const auto resolved = LookupSceneReference(
-        context, path, data::AssetType::kGeometry, "renderables.geometry_ref");
+        context, path, data::AssetType::kGeometry, geometry_pointer);
       if (!resolved) {
         return false;
       }
@@ -285,7 +291,8 @@ namespace {
       if (!listed_bytes.has_value()) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_unavailable",
-          "Cannot read geometry for surface validation", path);
+          "Cannot read geometry '" + path + "' for surface validation",
+          geometry_pointer);
         return false;
       }
       try {
@@ -303,7 +310,9 @@ namespace {
           resolved->key, loaders::LoadGeometryAsset(loader_context));
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.geometry_inventory_invalid", error.what(), path);
+          "scene.descriptor.geometry_inventory_invalid",
+          "Geometry '" + path + "' is invalid: " + error.what(),
+          geometry_pointer);
         return false;
       }
     }
@@ -370,7 +379,7 @@ namespace {
   auto ResolveEnvironmentTexture(observer_ptr<ImportSession> session,
     observer_ptr<const ImportRequest> request,
     const std::span<const internal::MountedCookedSource> mounts,
-    std::string text, std::string object_path, const EnvironmentTextureUse use)
+    std::string text, std::string json_pointer, const EnvironmentTextureUse use)
     -> co::Co<std::optional<data::TextureTarget>>
   {
     const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
@@ -378,7 +387,7 @@ namespace {
       = co_await internal::ResolveTextureReference(session, request, mounts,
         {
           .text = std::move(text),
-          .object_path = object_path,
+          .json_pointer = json_pointer,
           .diagnostic_prefix = "scene.descriptor.",
           .allow_missing = true,
         });
@@ -391,7 +400,7 @@ namespace {
     if (const auto error
       = EnvironmentTextureFormatError(reference->descriptor, use)) {
       AddDiagnostic(*session, *request, ImportSeverity::kError,
-        prefix + "format_invalid", std::string(*error), object_path);
+        prefix + "format_invalid", std::string(*error), json_pointer);
       co_return std::nullopt;
     }
     co_return reference->target;
@@ -411,7 +420,7 @@ namespace {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
         "scene.descriptor.post_process_invalid",
         "Post-process values or record boundaries are invalid",
-        "environment.post_process_volume");
+        "/environment/post_process_volume");
       return std::nullopt;
     }
     for (const auto& key : source.curve) {
@@ -422,7 +431,7 @@ namespace {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.exposure_curve_write_failed",
           "Could not serialize exposure compensation curve",
-          "environment.post_process_volume.auto_exposure_compensation_curve");
+          "/environment/post_process_volume/auto_exposure_compensation_curve");
         return std::nullopt;
       }
     }
@@ -474,17 +483,17 @@ namespace {
   {
     struct Pending final {
       data::AssetKey key;
-      std::string_view object_path;
+      std::string_view json_pointer;
     };
     auto pending = std::vector<Pending> {};
     for (const auto& instance : instances) {
       pending.push_back(
-        { .key = instance.key, .object_path = instance.source->object_path });
+        { .key = instance.key, .json_pointer = instance.source->json_pointer });
     }
     auto scenes = SceneMap {};
     auto visited = std::unordered_set<data::AssetKey> {};
     while (!pending.empty()) {
-      const auto [key, object_path] = pending.back();
+      const auto [key, json_pointer] = pending.back();
       pending.pop_back();
       if (!visited.insert(key).second) {
         continue;
@@ -497,7 +506,7 @@ namespace {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_unreadable",
           "Cannot read an instanced scene: " + data::to_string(key),
-          std::string(object_path));
+          std::string(json_pointer));
         return std::nullopt;
       }
       try {
@@ -506,7 +515,7 @@ namespace {
         for (const auto& nested :
           scene->GetComponents<data::pak::world::SceneInstanceRecord>()) {
           pending.push_back(
-            { .key = nested.scene_key, .object_path = object_path });
+            { .key = nested.scene_key, .json_pointer = json_pointer });
         }
         scenes.emplace(key, std::move(scene));
       } catch (const std::exception& error) {
@@ -514,7 +523,7 @@ namespace {
           "scene.descriptor.instance_invalid",
           "An instanced scene is invalid; re-cook it: "
             + std::string(error.what()),
-          std::string(object_path));
+          std::string(json_pointer));
         return std::nullopt;
       }
     }
@@ -568,8 +577,8 @@ namespace {
   {
     auto instances = std::vector<CookedInstance> {};
     for (auto& instance : source.instances) {
-      const auto resolved = LookupSceneReference(
-        context, instance.scene, data::AssetType::kScene, instance.object_path);
+      const auto resolved = LookupSceneReference(context, instance.scene,
+        data::AssetType::kScene, instance.json_pointer);
       if (!resolved.has_value()) {
         return false;
       }
@@ -618,7 +627,7 @@ namespace {
           cycle ? "An instanced scene instances a scene on its own path"
                 : "An instanced scene cannot be composed: "
               + std::string(data::to_string(issue.code)),
-          instance->object_path);
+          instance->json_pointer);
         valid = false;
       }
       if (composed.occurrences.empty()) {
@@ -646,7 +655,7 @@ namespace {
             "scene.descriptor.instance_override_unresolved",
             "The change names no node of the instanced scene, or a property "
             "that node does not have; it has no effect until it resolves",
-            change.change.object_path);
+            change.change.json_pointer);
           continue;
         }
         if (change.change.property->part_kind
@@ -666,7 +675,7 @@ namespace {
                 "The change targets a surface the geometry does not declare; "
                 "it has no effect until the geometry declares the surface "
                 "again",
-                change.change.object_path);
+                change.change.json_pointer);
               continue;
             }
           }
@@ -687,7 +696,7 @@ namespace {
             ImportSeverity::kWarning, "scene.starting_camera.unresolved",
             "The starting camera names no camera of the instanced scene; the "
             "scene starts through its first camera",
-            "starting_camera");
+            "/starting_camera");
           camera = { .node_index = data::pak::world::kNoStartingCamera };
           source.starting_camera_path.clear();
         }
@@ -715,7 +724,7 @@ namespace {
       = std::get_if<internal::SceneSource::AssetReference>(&source.value)) {
       DCHECK_F(property.type == data::schema::ValueType::kAsset);
       const auto resolved = LookupSceneReference(
-        context, asset->virtual_path, property.asset_type, source.object_path);
+        context, asset->virtual_path, property.asset_type, source.json_pointer);
       if (!resolved.has_value()) {
         return false;
       }
@@ -756,7 +765,7 @@ namespace {
           ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
           "The override targets a surface the geometry does not declare; it "
           "has no effect until the geometry declares the surface again",
-          source.object_path);
+          source.json_pointer);
         return true;
       }
       record.part_id = source.part_id;
@@ -807,10 +816,12 @@ namespace {
     prepared.geometry_keys.reserve(source.renderables.size());
     for (size_t i = 0; i < source.renderables.size(); ++i) {
       const auto& source_renderable = source.renderables.at(i);
-      const auto object_path = "renderables[" + std::to_string(i) + "]";
+      const auto geometry_pointer
+        = (nlohmann::json::json_pointer {} / "renderables" / i / "geometry_ref")
+            .to_string();
       const auto resolved_geometry
         = LookupSceneReference(context, source_renderable.geometry,
-          data::AssetType::kGeometry, object_path + ".geometry_ref");
+          data::AssetType::kGeometry, geometry_pointer);
       if (!resolved_geometry.has_value()) {
         return std::nullopt;
       }
@@ -830,15 +841,15 @@ namespace {
     const auto scene_key = data::AssetKey::FromVirtualPath(scene_virtual_path);
     prepared.build.instances.reserve(source.instances.size());
     for (auto& instance : source.instances) {
-      const auto resolved = LookupSceneReference(
-        context, instance.scene, data::AssetType::kScene, instance.object_path);
+      const auto resolved = LookupSceneReference(context, instance.scene,
+        data::AssetType::kScene, instance.json_pointer);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
       if (resolved->key == scene_key) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_cycle", "A scene cannot instance itself",
-          std::move(instance.object_path));
+          std::move(instance.json_pointer));
         return std::nullopt;
       }
       for (const auto& change : instance.changes) {
@@ -855,7 +866,7 @@ namespace {
     auto starting_contexts = std::unordered_set<data::AssetKey> {};
     for (auto& starting : source.starting_input_contexts) {
       const auto resolved = LookupSceneReference(context, starting.context,
-        data::AssetType::kInputMappingContext, starting.object_path);
+        data::AssetType::kInputMappingContext, starting.json_pointer);
       if (!resolved.has_value()) {
         return std::nullopt;
       }
@@ -863,7 +874,7 @@ namespace {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.starting_input_context_duplicate",
           "An input context can start only once",
-          std::move(starting.object_path));
+          std::move(starting.json_pointer));
         return std::nullopt;
       }
       prepared.build.starting_input_contexts.push_back({
@@ -927,7 +938,7 @@ namespace {
     prepared.environment_references = std::move(references).Build();
     for (const auto& reference : source.references) {
       if (!LookupSceneReference(context, reference.virtual_path, reference.type,
-            reference.object_path)
+            reference.json_pointer)
             .has_value()) {
         return std::nullopt;
       }
@@ -978,7 +989,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
   auto source = internal::SceneSource::FromDescriptor(
-    descriptor->normalized_descriptor_json, Request().source_path, diagnostics);
+    descriptor->descriptor_json, Request().source_path, diagnostics);
   AddDiagnostics(session, std::move(diagnostics));
   if (!source.has_value()) {
     ReportPhaseProgress(
@@ -1011,7 +1022,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto textures = EnvironmentTextureIndices {};
   // The lambda is awaited in place and its references outlive each call.
   const auto resolve_texture
-    = [&](const std::optional<std::string>& path, std::string object_path,
+    = [&](const std::optional<std::string>& path, std::string json_pointer,
         const EnvironmentTextureUse use,
         data::TextureTarget& target) -> co::Co<bool> {
     if (!path.has_value()) {
@@ -1019,7 +1030,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     }
     const auto resolved = co_await ResolveEnvironmentTexture(
       observer_ptr { &session }, observer_ptr { &Request() }, context.mounts,
-      *path, std::move(object_path), use);
+      *path, std::move(json_pointer), use);
     if (!resolved.has_value()) {
       co_return false;
     }
@@ -1028,25 +1039,25 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   };
   if (source->post_process.has_value()
     && !co_await resolve_texture(source->post_process->metering_mask,
-      "environment.post_process_volume.auto_exposure_metering_mask",
+      "/environment/post_process_volume/auto_exposure_metering_mask",
       EnvironmentTextureUse::kMeteringMask, textures.metering_mask)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
   if (source->fog.has_value()
     && !co_await resolve_texture(source->fog->cubemap,
-      "environment.fog.inscattering_color_cubemap_ref",
+      "/environment/fog/inscattering_color_cubemap_ref",
       EnvironmentTextureUse::kCubemap, textures.fog_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
   if (source->sky_light.has_value()
     && !co_await resolve_texture(source->sky_light->cubemap,
-      "environment.sky_light.cubemap_ref", EnvironmentTextureUse::kCubemap,
+      "/environment/sky_light/cubemap_ref", EnvironmentTextureUse::kCubemap,
       textures.sky_light_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
   if (source->sky_sphere.has_value()
     && !co_await resolve_texture(source->sky_sphere->cubemap,
-      "environment.sky_sphere.cubemap_ref", EnvironmentTextureUse::kCubemap,
+      "/environment/sky_sphere/cubemap_ref", EnvironmentTextureUse::kCubemap,
       textures.sky_sphere_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }

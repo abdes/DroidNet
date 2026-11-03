@@ -6,9 +6,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cctype>
-#include <cstddef>
 #include <exception>
 #include <stdexcept>
 #include <string>
@@ -78,18 +75,18 @@ inline auto MakeJsonSchemaValidator(const nlohmann::json& schema)
   return validator;
 }
 
+//! One schema issue, located by the RFC 6901 pointer of the offending value
+//! (empty for the document root).
 struct JsonSchemaIssue final {
-  std::string object_path;
+  std::string json_pointer;
   std::string message;
 };
 
 struct JsonSchemaValidationDiagnosticConfig final {
   std::string_view validation_failed_code;
   std::string_view validation_failed_prefix;
-  std::string_view validation_overflow_prefix;
   std::string_view validator_failure_code;
   std::string_view validator_failure_prefix;
-  size_t max_issues = 12;
 };
 
 class CollectingJsonSchemaErrorHandler final
@@ -99,7 +96,7 @@ public:
     const nlohmann::json& /*unused*/, const std::string& message) override
   {
     issues_.push_back(JsonSchemaIssue {
-      .object_path = JsonPointerToObjectPath(ptr.to_string()),
+      .json_pointer = ptr.to_string(),
       .message = message,
     });
   }
@@ -111,74 +108,6 @@ public:
   }
 
 private:
-  static auto DecodeJsonPointerToken(std::string_view token) -> std::string
-  {
-    auto out = std::string {};
-    out.reserve(token.size());
-    for (size_t i = 0; i < token.size(); ++i) {
-      if (token[i] == '~' && i + 1 < token.size()) {
-        if (token[i + 1] == '0') {
-          out.push_back('~');
-          ++i;
-          continue;
-        }
-        if (token[i + 1] == '1') {
-          out.push_back('/');
-          ++i;
-          continue;
-        }
-      }
-      out.push_back(token[i]);
-    }
-    return out;
-  }
-
-  static auto IsArrayIndexToken(std::string_view token) -> bool
-  {
-    if (token.empty()) {
-      return false;
-    }
-    return std::ranges::all_of(token, [](const char ch) -> bool {
-      return std::isdigit(static_cast<unsigned char>(ch)) != 0;
-    });
-  }
-
-  static auto JsonPointerToObjectPath(std::string_view pointer) -> std::string
-  {
-    if (pointer.empty() || pointer == "/") {
-      return {};
-    }
-
-    auto out = std::string {};
-    if (pointer.front() == '/') {
-      pointer.remove_prefix(1);
-    }
-
-    size_t pos = 0;
-    while (pos <= pointer.size()) {
-      const auto next = pointer.find('/', pos);
-      const auto token = next == std::string_view::npos
-        ? pointer.substr(pos)
-        : pointer.substr(pos, next - pos);
-      const auto decoded = DecodeJsonPointerToken(token);
-      if (IsArrayIndexToken(decoded)) {
-        out.append("[");
-        out.append(decoded);
-        out.append("]");
-      } else {
-        if (!out.empty()) {
-          out.push_back('.');
-        }
-        out.append(decoded);
-      }
-      if (next == std::string_view::npos) {
-        break;
-      }
-      pos = next + 1;
-    }
-    return out;
-  }
-
   std::vector<JsonSchemaIssue> issues_;
 };
 
@@ -204,13 +133,12 @@ inline auto CollectJsonSchemaIssues(
 
 //! Validates `instance` against `validator`'s schema.
 /*!
- @throw std::invalid_argument naming `what` and the path and message of the
- first issues; never the document, which can be large.
+ @throw std::invalid_argument naming `what` and the JSON pointer and message
+ of every issue; never the document, which can be large.
 */
 inline auto ValidateJsonSchema(nlohmann::json_schema::json_validator& validator,
   const nlohmann::json& instance, const std::string_view what) -> void
 {
-  constexpr size_t kShownIssues = 3;
   auto issues = std::vector<JsonSchemaIssue> {};
   auto internal_error = std::string {};
   if (!CollectJsonSchemaIssues(validator, instance, issues, internal_error)) {
@@ -221,22 +149,19 @@ inline auto ValidateJsonSchema(nlohmann::json_schema::json_validator& validator,
     return;
   }
   auto message = std::string(what) + " is invalid";
-  const auto shown = std::min(issues.size(), kShownIssues);
-  for (size_t i = 0; i < shown; ++i) {
-    const auto& issue = issues[i];
-    message += (i == 0 ? ": " : "; ")
-      + (issue.object_path.empty() ? std::string("(root)") : issue.object_path)
-      + ": " + issue.message;
-  }
-  if (issues.size() > shown) {
-    message += "; and " + std::to_string(issues.size() - shown) + " more";
+  auto separator = std::string_view { ": " };
+  for (const auto& issue : issues) {
+    message.append(separator);
+    message.append(issue.json_pointer.empty() ? "(root)" : issue.json_pointer);
+    message.append(": ");
+    message.append(issue.message);
+    separator = "; ";
   }
   throw std::invalid_argument(message);
 }
 
-//! Validates `instance` and emits each schema issue, at most
-//! `config.max_issues` of them and then the count, as `emit(code, message,
-//! object_path)`; true when the schema accepts the instance.
+//! Validates `instance` and emits every schema issue as `emit(code, message,
+//! json_pointer)`; true when the schema accepts the instance.
 template <typename EmitDiagnosticFn>
 inline auto ValidateJsonSchemaWithDiagnostics(
   nlohmann::json_schema::json_validator& validator,
@@ -252,19 +177,10 @@ inline auto ValidateJsonSchemaWithDiagnostics(
       std::string {});
     return false;
   }
-  const auto reported = std::min(issues.size(), config.max_issues);
-  for (size_t i = 0; i < reported; ++i) {
-    const auto& issue = issues[i];
+  for (const auto& issue : issues) {
     emit(config.validation_failed_code,
       std::string(config.validation_failed_prefix) + issue.message,
-      issue.object_path);
-  }
-  if (issues.size() > reported) {
-    emit(config.validation_failed_code,
-      std::string(config.validation_overflow_prefix)
-        + std::to_string(issues.size()) + " error(s); showing first "
-        + std::to_string(reported),
-      std::string {});
+      issue.json_pointer);
   }
   return issues.empty();
 }

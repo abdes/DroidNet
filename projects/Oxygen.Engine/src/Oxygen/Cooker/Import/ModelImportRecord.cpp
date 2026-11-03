@@ -89,7 +89,8 @@ namespace {
 
   namespace codes = model_record_codes;
 
-  //! Refuses with `code`, about `file` and its JSON field `field`.
+  //! Refuses with `code`, about `file` and its JSON field at the RFC 6901
+  //! pointer `field`.
   [[noreturn]] auto Refuse(const std::string_view code,
     const std::filesystem::path& file, std::string field, std::string message)
     -> void
@@ -99,7 +100,7 @@ namespace {
       .code = std::string(code),
       .message = std::move(message),
       .source_path = file.generic_string(),
-      .object_path = std::move(field),
+      .json_pointer = std::move(field),
     });
   }
 
@@ -270,7 +271,7 @@ namespace {
   {
     const auto format = FormatOf(source);
     if (format != ImportFormat::kGltf && format != ImportFormat::kFbx) {
-      Refuse(codes::kInvalid, record, "source",
+      Refuse(codes::kInvalid, record, "/source",
         "A model import source must be glTF, GLB or FBX: "
           + source.generic_string());
     }
@@ -283,12 +284,12 @@ namespace {
     const std::filesystem::path& record, const json& settings) -> void
   {
     if (!settings.is_object()) {
-      Refuse(codes::kInvalid, record, "settings",
+      Refuse(codes::kInvalid, record, "/settings",
         "Model import settings must be an object");
     }
     for (const auto* key : kStructuralKeys) {
       if (settings.contains(key)) {
-        Refuse(codes::kInvalid, record, std::string("settings.") + key,
+        Refuse(codes::kInvalid, record, std::string("/settings/") + key,
           std::string("Model import settings hold no '") + key
             + "'; the record and its manifest own it");
       }
@@ -304,7 +305,7 @@ namespace {
       RequireSettings(record, settings);
       return settings;
     } catch (const json::parse_error& error) {
-      Refuse(codes::kInvalid, record, "settings",
+      Refuse(codes::kInvalid, record, "/settings",
         std::string("Model import settings are no JSON: ") + error.what());
     }
   }
@@ -345,7 +346,7 @@ namespace {
         },
         errors);
     if (!parsed || parsed->jobs.size() != 1U) {
-      Refuse(codes::kInvalid, record, "settings",
+      Refuse(codes::kInvalid, record, "/settings",
         "Invalid model import settings: " + errors.str());
     }
   }
@@ -409,7 +410,7 @@ namespace {
       const auto id
         = data::NodeId::FromString(node.at("node_id").get<std::string>());
       if (!id) {
-        Refuse(codes::kInvalid, record, key,
+        Refuse(codes::kInvalid, record, std::string("/") + key,
           std::string("Invalid node ID in '") + key + "'");
       }
       nodes.push_back({
@@ -507,7 +508,7 @@ namespace {
         continue;
       }
       if (other.source_identity == content.source_identity) {
-        Refuse(codes::kDuplicate, path, "source_identity",
+        Refuse(codes::kDuplicate, path, "/source_identity",
           "Two model import records have the source identity "
             + content.source_identity.ToString() + ": " + path.generic_string()
             + " and " + other_path.generic_string());
@@ -544,7 +545,7 @@ namespace {
       const auto document = json::parse(ReadText(path));
       const auto id = Uuid::FromString(document.at("id").get<std::string>());
       if (!id || !id.value().IsValidV7()) {
-        Refuse(codes::kGenerationInvalid, path, "id",
+        Refuse(codes::kGenerationInvalid, path, "/id",
           "The selected generation is not named by a UUIDv7");
       }
       auto index = document.at("index_sha256").get<std::string>();
@@ -693,7 +694,7 @@ namespace {
             document.at("surface_provenance").dump(), content.source_identity)
         : std::make_shared<const SurfaceProvenance>(content.source_identity);
     } catch (const std::invalid_argument& error) {
-      Refuse(codes::kInvalid, path, "surface_provenance", error.what());
+      Refuse(codes::kInvalid, path, "/surface_provenance", error.what());
     }
 
     auto anchors = std::set<std::string> {};
@@ -703,7 +704,7 @@ namespace {
         .continues = entry.at("continues").get<std::string>(),
       });
       if (!anchors.insert(added.anchor).second) {
-        Refuse(codes::kInvalid, path, "node_continuity",
+        Refuse(codes::kInvalid, path, "/node_continuity",
           "Two node continuity entries have the anchor '" + added.anchor + "'");
       }
     }
@@ -725,8 +726,8 @@ namespace {
     const std::string& text, const MountTable& mounts) -> MountedSource
   {
     auto findings = std::vector<ImportDiagnostic> {};
-    const auto located = mounts.LocateReference(
-      record_path, CommittedPath { .text = text, .field = "source" }, findings);
+    const auto located = mounts.LocateReference(record_path,
+      CommittedPath { .text = text, .json_pointer = "/source" }, findings);
     if (!located.has_value()) {
       Refuse(findings, record_path, "source",
         "Cannot locate the source '" + text + "'");
@@ -814,7 +815,8 @@ auto ModelImportRecord::RecordPathOf(const MountTable& mounts,
   const auto record = std::string(identity) + std::string(kRecordSuffix);
   return mounts
     .LocateSource(
-      CommittedPath { .text = record, .field = "virtual_path" }, findings)
+      CommittedPath { .text = record, .json_pointer = "/virtual_path" },
+      findings)
     .transform([](const MountedSource& located) -> std::filesystem::path {
       return located.file;
     });
@@ -1175,7 +1177,7 @@ auto ModelImportRecord::Save(const ModelImportRecordSave& save) -> void
     content.settings_json = ParseSettings(path, *save.settings_json).dump();
   }
   if (content.source.empty()) {
-    Refuse(codes::kInvalid, path, "source",
+    Refuse(codes::kInvalid, path, "/source",
       "A new model import record needs a source");
   }
   ValidateSettings(path, content, identity, *save.mounts);
@@ -1272,7 +1274,7 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
   state->content = Read(state->record_path, mounts);
   RequireUniqueRecord(state->record_path, state->content, mounts);
   if (!Exists(state->content.source)) {
-    Refuse(codes::kSourceMissing, state->record_path, "source",
+    Refuse(codes::kSourceMissing, state->record_path, "/source",
       "The source " + state->content.source.generic_string() + " of the model "
         + state->identity + " is missing; importing the new file as "
         + state->identity + " rebinds it");
@@ -1321,14 +1323,14 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
       },
       errors);
   if (!parsed || parsed->jobs.size() != 1U) {
-    Refuse(codes::kInvalid, state->record_path, "settings", errors.str());
+    Refuse(codes::kInvalid, state->record_path, "/settings", errors.str());
   }
   auto& job = parsed->jobs.front();
   auto& settings = job.job_type == "fbx" ? job.fbx : job.gltf;
   settings.cooked_root = root.string();
   auto request = job.BuildRequest(errors);
   if (!request) {
-    Refuse(codes::kInvalid, state->record_path, "settings", errors.str());
+    Refuse(codes::kInvalid, state->record_path, "/settings", errors.str());
   }
   state->request = std::move(*request);
   state->request.source_key = data::SourceKey { state->generation };
@@ -1398,7 +1400,7 @@ auto ModelImportRecord::SelectedGeneration(
   auto selected = directory / head->id.ToString();
   const auto head_path = directory / kHeadFileName;
   if (!std::filesystem::is_directory(base::ToNativePath(selected))) {
-    Refuse(codes::kGenerationMissing, head_path, "id",
+    Refuse(codes::kGenerationMissing, head_path, "/id",
       "The selected generation " + selected.generic_string()
         + " is gone; import the model again");
   }
@@ -1406,7 +1408,7 @@ auto ModelImportRecord::SelectedGeneration(
     selected / data::loose_cooked::kGenerationLeaseFileName,
     serio::FileLockMode::kShared);
   if (!lease) {
-    Refuse(codes::kGenerationInvalid, head_path, "id",
+    Refuse(codes::kGenerationInvalid, head_path, "/id",
       "The selected generation " + selected.generic_string()
         + " cannot be leased: " + lease.error().message());
   }
@@ -1414,7 +1416,7 @@ auto ModelImportRecord::SelectedGeneration(
     = FileDigest(selected / oxygen::data::loose_cooked::kIndexFileName,
       codes::kGenerationInvalid);
   if (base::ToHexString(actual) != head->index_sha256) {
-    Refuse(codes::kGenerationInvalid, head_path, "index_sha256",
+    Refuse(codes::kGenerationInvalid, head_path, "/index_sha256",
       "The index of the selected generation " + selected.generic_string()
         + " changed after publication");
   }

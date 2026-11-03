@@ -13,7 +13,7 @@
 #include <string_view>
 #include <vector>
 
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -33,11 +33,12 @@ struct BufferDescriptorViewSpec final {
 struct BufferDescriptorViewIssue final {
   std::string code;
   std::string message;
-  std::string object_path;
+  //! Where the issue is in the buffer container document.
+  std::string json_pointer;
 };
 
 [[nodiscard]] auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
-  std::string_view object_path_prefix,
+  const nlohmann::json::json_pointer& views_pointer,
   std::vector<BufferDescriptorViewIssue>& issues)
   -> std::vector<BufferDescriptorViewSpec>;
 
@@ -45,7 +46,7 @@ struct BufferDescriptorViewIssue final {
 [[nodiscard]] auto NormalizeBufferViews(
   std::span<const BufferDescriptorViewSpec> declared_views,
   const data::pak::core::BufferResourceDesc& descriptor,
-  std::string_view object_path_prefix,
+  const nlohmann::json::json_pointer& views_pointer,
   std::vector<BufferDescriptorViewIssue>& issues)
   -> std::vector<data::BufferResourceView>;
 

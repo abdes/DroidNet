@@ -217,8 +217,8 @@ namespace {
         break;
       }
       errors << " [" << diagnostic.code << "]: " << diagnostic.message;
-      if (!diagnostic.object_path.empty()) {
-        errors << " (at '" << diagnostic.object_path << "')";
+      if (!diagnostic.json_pointer.empty()) {
+        errors << " (at '" << diagnostic.json_pointer << "')";
       }
       errors << "\n";
     }
@@ -262,15 +262,14 @@ namespace {
       ReportAbsoluteCommitted(text, field, errors);
       return false;
     };
-    const auto field
-      = prefix.empty() ? std::string(key) : fmt::format("{}.{}", prefix, key);
+    const auto field = fmt::format("{}/{}", prefix, key);
     const auto& value = obj.at(key);
     if (!value.is_array()) {
       return check(value, field);
     }
     auto relative = true;
     for (const auto& [index, item] : std::views::enumerate(value)) {
-      relative = check(item, fmt::format("{}[{}]", field, index)) && relative;
+      relative = check(item, fmt::format("{}/{}", field, index)) && relative;
     }
     return relative;
   }
@@ -291,12 +290,13 @@ namespace {
         };
     if (doc.contains("defaults") && doc.at("defaults").is_object()) {
       for (const auto& [name, settings] : doc.at("defaults").items()) {
-        check_settings(settings, "defaults." + name);
+        check_settings(
+          settings, (json::json_pointer {} / "defaults" / name).to_string());
       }
     }
     if (doc.contains("jobs") && doc.at("jobs").is_array()) {
       for (const auto& [index, job] : std::views::enumerate(doc.at("jobs"))) {
-        check_settings(job, fmt::format("jobs[{}]", index));
+        check_settings(job, fmt::format("/jobs/{}", index));
       }
     }
     return relative;
@@ -323,7 +323,9 @@ namespace {
           .message
           = fmt::vformat(code.message.get(), fmt::make_format_args(name, text)),
           .source_path = declared_in,
-          .object_path = fmt::format("mounts[{}].kind", index),
+          .json_pointer = (json::json_pointer {} / "mounts"
+            / static_cast<std::size_t>(index) / "kind")
+            .to_string(),
           .object_name = name,
         });
         continue;
@@ -351,7 +353,7 @@ namespace {
   {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     auto located = mounts.LocateSource(
-      CommittedPath { .text = text, .field = field }, diagnostics);
+      CommittedPath { .text = text, .json_pointer = field }, diagnostics);
     PrintDiagnostics(diagnostics, errors);
     return located;
   }
@@ -389,13 +391,13 @@ namespace {
   {
     const auto& source = job.at("source").get_ref<const std::string&>();
     if (!job.contains("derived_from")) {
-      return LocateSource(mounts, source, job_field + ".source", errors);
+      return LocateSource(mounts, source, job_field + "/source", errors);
     }
-    const auto file = LocateFile(mounts, source, job_field + ".source", errors);
+    const auto file = LocateFile(mounts, source, job_field + "/source", errors);
     if (!file.has_value()) {
       return std::nullopt;
     }
-    const auto field = job_field + ".derived_from";
+    const auto field = job_field + "/derived_from";
     if (!mounts.IsInOutputFolder(*file)) {
       ReportCode(mount_codes::kDerivedFromNotDerived, source, field, errors);
       return std::nullopt;
@@ -1867,7 +1869,7 @@ namespace {
         model_job = MakeModelJob(entry, *model_record);
       }
       const auto& job = model_record ? model_job : entry;
-      const auto job_field = fmt::format("jobs[{}]", manifest.jobs.size());
+      const auto job_field = fmt::format("/jobs/{}", manifest.jobs.size());
 
       ImportManifestJob manifest_job {};
       manifest_job.source_key = manifest.defaults.source_key;
@@ -2174,7 +2176,7 @@ namespace {
       }
       for (auto& mapping : manifest_job.texture.sources) {
         const auto located = LocateSource(
-          *manifest.mounts, mapping.file, job_field + ".sources", error_stream);
+          *manifest.mounts, mapping.file, job_field + "/sources", error_stream);
         if (!located.has_value()) {
           return std::nullopt;
         }

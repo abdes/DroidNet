@@ -145,8 +145,8 @@ NOLINT_TEST_F(ModelImportRecordCasesTest, SourcesAreReferencesFromTheRecord)
     const auto record = RecordOf(identity);
     auto findings = std::vector<ImportDiagnostic> {};
 
-    const auto located = Mounts().LocateReference(
-      record, CommittedPath { .text = written, .field = "source" }, findings);
+    const auto located = Mounts().LocateReference(record,
+      CommittedPath { .text = written, .json_pointer = "/source" }, findings);
 
     if (row.contains("refusal")) {
       EXPECT_FALSE(located.has_value());

@@ -62,7 +62,7 @@ NOLINT_TEST(InputSchemaTest, SlotNamesAreTheSlotsThePlatformRegisters)
   }
   auto admitted
     = PrimarySchema()
-        .at(json::json_pointer("/$defs/mapping/properties/slot/enum"))
+        .at(json::json_pointer("/definitions/mapping/properties/slot/enum"))
         .get<std::vector<std::string>>();
   std::ranges::sort(registered);
   std::ranges::sort(admitted);

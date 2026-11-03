@@ -28,12 +28,12 @@ namespace {
   //! A node index no test scene has.
   constexpr auto kOutOfRangeNode = 99999U;
 
-  auto HasAnyObjectPath(const std::vector<ImportDiagnostic>& diagnostics)
+  auto HasAnyJsonPointer(const std::vector<ImportDiagnostic>& diagnostics)
     -> bool
   {
     return std::ranges::any_of(
       diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-        return !diagnostic.object_path.empty();
+        return !diagnostic.json_pointer.empty();
       });
   }
 
@@ -72,7 +72,7 @@ namespace {
     }));
     ASSERT_FALSE(report.success);
     ExpectDiagnosticFieldsComplete(report.diagnostics);
-    EXPECT_TRUE(HasAnyObjectPath(report.diagnostics));
+    EXPECT_TRUE(HasAnyJsonPointer(report.diagnostics));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -201,7 +201,7 @@ namespace {
       auto signature = std::vector<std::string> {};
       signature.reserve(report.diagnostics.size());
       for (const auto& diagnostic : report.diagnostics) {
-        signature.push_back(diagnostic.code + "|" + diagnostic.object_path);
+        signature.push_back(diagnostic.code + "|" + diagnostic.json_pointer);
       }
       return signature;
     };
@@ -505,7 +505,7 @@ namespace {
     ASSERT_NE(refused, report.diagnostics.end());
     EXPECT_NE(refused->message.find("vpath.reference_outside_mount"),
       std::string::npos);
-    EXPECT_EQ(refused->object_path, "bindings[0].script_virtual_path");
+    EXPECT_EQ(refused->json_pointer, "/bindings/0/script_virtual_path");
   }
 
   //! Absolute text naming the scene's own mount is refused: a reference to the

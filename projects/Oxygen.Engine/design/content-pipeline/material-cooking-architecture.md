@@ -213,7 +213,7 @@ Architectural split:
    - role: validate + normalize `MaterialDescriptorImportSettings` into an
      `ImportRequest`. Loads the descriptor JSON file, schema-validates it
      against `kMaterialDescriptorSchema`, resolves `job_name`, and stores `descriptor_doc->dump()` in
-     `request.material_descriptor.normalized_descriptor_json`.
+     `request.material_descriptor.descriptor_json`.
    - note: The presence of `request.material_descriptor` is the route
      discriminant that bypasses all format detection in `AsyncImportService`.
 

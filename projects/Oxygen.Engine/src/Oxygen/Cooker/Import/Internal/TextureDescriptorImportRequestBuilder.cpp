@@ -50,7 +50,7 @@ namespace {
     -> std::optional<std::string>
   {
     const auto located = mounts.LocateReference(descriptor_path,
-      CommittedPath { .text = text, .field = field }, diagnostics);
+      CommittedPath { .text = text, .json_pointer = field }, diagnostics);
     if (!located.has_value()) {
       return std::nullopt;
     }
@@ -71,23 +71,21 @@ namespace {
     const auto config = JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "texture.descriptor.schema_validation_failed",
       .validation_failed_prefix = "Texture descriptor validation failed: ",
-      .validation_overflow_prefix = "Texture descriptor validation emitted ",
       .validator_failure_code = "texture.descriptor.schema_validator_failure",
       .validator_failure_prefix
       = "Texture descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return ValidateJsonSchemaWithDiagnostics(GetTextureDescriptorValidator(),
       descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         diagnostics.push_back(ImportDiagnostic {
           .severity = ImportSeverity::kError,
           .code = std::string(code),
           .message = message,
           .source_path = source_path.string(),
-          .object_path = object_path,
+          .json_pointer = json_pointer,
         });
       });
   }
@@ -100,7 +98,7 @@ namespace {
     -> bool
   {
     auto source = LocateReferenced(mounts, descriptor_path,
-      descriptor_doc.at("source").get<std::string>(), "source", diagnostics);
+      descriptor_doc.at("source").get<std::string>(), "/source", diagnostics);
     if (!source.has_value()) {
       return false;
     }
@@ -113,7 +111,8 @@ namespace {
         const auto& mapping_doc = sources.at(index);
         auto file = LocateReferenced(mounts, descriptor_path,
           mapping_doc.at("file").get<std::string>(),
-          "sources[" + std::to_string(index) + "].file", diagnostics);
+          (json::json_pointer {} / "sources" / index / "file").to_string(),
+          diagnostics);
         if (!file.has_value()) {
           return false;
         }
@@ -292,8 +291,8 @@ namespace internal {
     for (const auto& diagnostic : diagnostics) {
       error_stream << "ERROR [" << diagnostic.code
                    << "]: " << diagnostic.message;
-      if (!diagnostic.object_path.empty()) {
-        error_stream << " (" << diagnostic.object_path << ")";
+      if (!diagnostic.json_pointer.empty()) {
+        error_stream << " (at '" << diagnostic.json_pointer << "')";
       }
       error_stream << '\n';
     }

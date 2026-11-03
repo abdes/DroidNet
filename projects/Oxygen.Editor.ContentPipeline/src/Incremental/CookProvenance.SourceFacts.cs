@@ -65,7 +65,7 @@ internal sealed partial record CookProvenance
     {
         if (product.SourceFiles.IsDefault || product.DeclaredOutputs.IsDefault || product.NativeReferences.IsDefault
             || product.DeclaredOutputs.Concat(product.NativeReferences).Any(static item => item is null
-                || !ValidVirtualPath(item.VirtualPath) || string.IsNullOrWhiteSpace(item.Kind) || item.ObjectPath is null))
+                || !ValidVirtualPath(item.VirtualPath) || string.IsNullOrWhiteSpace(item.Kind) || item.JsonPointer is null))
         {
             return false;
         }

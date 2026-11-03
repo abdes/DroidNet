@@ -31,12 +31,13 @@ namespace {
   using oxygen::data::pak::core::BufferResourceDesc;
 
   auto AddIssue(std::vector<BufferDescriptorViewIssue>& issues,
-    std::string code, std::string message, std::string object_path) -> void
+    std::string code, std::string message,
+    const nlohmann::json::json_pointer& json_pointer) -> void
   {
     issues.push_back(BufferDescriptorViewIssue {
       .code = std::move(code),
       .message = std::move(message),
-      .object_path = std::move(object_path),
+      .json_pointer = json_pointer.to_string(),
     });
   }
 
@@ -52,7 +53,7 @@ namespace {
 } // namespace
 
 auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
-  const std::string_view object_path_prefix,
+  const nlohmann::json::json_pointer& views_pointer,
   std::vector<BufferDescriptorViewIssue>& issues)
   -> std::vector<BufferDescriptorViewSpec>
 {
@@ -64,7 +65,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
   const auto& views_json = buffer_doc.at("views");
   if (!views_json.is_array()) {
     AddIssue(issues, "buffer.view.shape_invalid", "'views' must be an array",
-      std::string(object_path_prefix));
+      views_pointer);
     return specs;
   }
 
@@ -72,8 +73,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
   auto seen_names = std::unordered_set<std::string> {};
 
   for (size_t i = 0; i < views_json.size(); ++i) {
-    const auto item_path
-      = std::string(object_path_prefix) + "[" + std::to_string(i) + "]";
+    const auto item_path = views_pointer / i;
     const auto& view_json = views_json.at(i);
     if (!view_json.is_object()) {
       AddIssue(issues, "buffer.view.shape_invalid",
@@ -82,7 +82,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
     }
     if (!view_json.contains("name") || !view_json.at("name").is_string()) {
       AddIssue(issues, "buffer.view.name_missing",
-        "Each view entry must define a string 'name'", item_path + ".name");
+        "Each view entry must define a string 'name'", item_path / "name");
       continue;
     }
 
@@ -91,13 +91,13 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
     if (spec.name == data::kWholeBufferViewName) {
       AddIssue(issues, "buffer.view.explicit_all_disallowed",
         "View name '__all__' is reserved and must not be declared explicitly",
-        item_path + ".name");
+        item_path / "name");
       continue;
     }
 
     if (!seen_names.insert(spec.name).second) {
       AddIssue(issues, "buffer.view.name_duplicate",
-        "Duplicate buffer view name in one descriptor", item_path + ".name");
+        "Duplicate buffer view name in one descriptor", item_path / "name");
       continue;
     }
 
@@ -113,7 +113,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
       } catch (const std::exception&) {
         AddIssue(issues, "buffer.view.value_invalid",
           "View field must be a non-negative integer",
-          item_path + "." + std::string(key));
+          item_path / std::string(key));
         return false;
       }
     };
@@ -152,7 +152,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
 auto NormalizeBufferViews(
   std::span<const BufferDescriptorViewSpec> declared_views,
   const BufferResourceDesc& descriptor,
-  const std::string_view object_path_prefix,
+  const nlohmann::json::json_pointer& views_pointer,
   std::vector<BufferDescriptorViewIssue>& issues)
   -> std::vector<BufferResourceView>
 {
@@ -164,7 +164,7 @@ auto NormalizeBufferViews(
   if (element_stride == 0) {
     AddIssue(issues, "buffer.view.element_stride_invalid",
       "Cannot compute effective element stride from buffer descriptor",
-      std::string(object_path_prefix));
+      views_pointer);
     return {};
   }
 
@@ -178,14 +178,13 @@ auto NormalizeBufferViews(
       const auto size_bytes = static_cast<uint64_t>(descriptor.size_bytes);
       if (byte_end < byte_offset || byte_end > size_bytes) {
         AddIssue(issues, "buffer.view.range_out_of_bounds",
-          "Byte range exceeds buffer size", std::string(object_path_prefix));
+          "Byte range exceeds buffer size", views_pointer);
         continue;
       }
       if ((byte_offset % element_stride) != 0
         || (byte_length % element_stride) != 0) {
         AddIssue(issues, "buffer.view.range_unaligned",
-          "Byte ranges must align to effective element stride",
-          std::string(object_path_prefix));
+          "Byte ranges must align to effective element stride", views_pointer);
         continue;
       }
 
@@ -203,8 +202,7 @@ auto NormalizeBufferViews(
       if (WillMultiplyOverflow(element_offset, element_stride)
         || WillMultiplyOverflow(element_count, element_stride)) {
         AddIssue(issues, "buffer.view.range_overflow",
-          "Element range overflows when converted to bytes",
-          std::string(object_path_prefix));
+          "Element range overflows when converted to bytes", views_pointer);
         continue;
       }
 
@@ -214,7 +212,7 @@ auto NormalizeBufferViews(
       const auto size_bytes = static_cast<uint64_t>(descriptor.size_bytes);
       if (byte_end < byte_offset || byte_end > size_bytes) {
         AddIssue(issues, "buffer.view.range_out_of_bounds",
-          "Element range exceeds buffer size", std::string(object_path_prefix));
+          "Element range exceeds buffer size", views_pointer);
         continue;
       }
 
@@ -227,8 +225,7 @@ auto NormalizeBufferViews(
     }
 
     AddIssue(issues, "buffer.view.range_shape_invalid",
-      "View must define exactly one range pair",
-      std::string(object_path_prefix));
+      "View must define exactly one range pair", views_pointer);
   }
 
   return normalized;

@@ -64,7 +64,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = R"({
+          .descriptor_json = R"({
             "name": "ground",
             "static_friction": 0.95,
             "dynamic_friction": 0.65,
@@ -123,7 +123,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = R"({
+          .descriptor_json = R"({
             "name": "bad_material",
             "static_friction": 0.5,
             "unexpected": true
@@ -151,7 +151,7 @@ namespace {
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json = document.dump(),
+          .descriptor_json = document.dump(),
         };
     return request;
   }

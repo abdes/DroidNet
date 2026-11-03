@@ -70,8 +70,8 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
     std::optional<std::string> { "manifest-physics-material" });
   ASSERT_HAS_VALUE(request->physics_material_descriptor);
 
-  const auto normalized = json::parse(
-    request->physics_material_descriptor->normalized_descriptor_json);
+  const auto normalized
+    = json::parse(request->physics_material_descriptor->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "ground");
   // Identity comes from the job, never from the descriptor.
   EXPECT_FALSE(normalized.contains("virtual_path"));

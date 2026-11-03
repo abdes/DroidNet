@@ -346,7 +346,7 @@ struct LodGenerationOptions final {
  **Payload-presence routing** is used by descriptor domains (physics,
  buffer-container, material-descriptor, geometry-descriptor). The presence of
  the corresponding `optional<>` field in `ImportRequest` is the routing
- discriminator, and the field itself carries the complete normalized descriptor
+ discriminator, and the field itself carries the complete descriptor
  JSON that the pipeline consumes. The contract — routing signal and cook data
  — is self-contained in the `ImportRequest` payload.
 
@@ -365,7 +365,7 @@ struct LodGenerationOptions final {
 
  **Reason 1 — no descriptor payload in `ImportRequest`.**
  Both pipelines use format-based routing. Standalone image files and script
- files carry no normalized descriptor JSON. There is no existing payload field
+ files carry no descriptor JSON. There is no existing payload field
  in `ImportRequest` that could absorb these behavioral parameters without
  introducing a new `optional<>` field — which would, in turn, implicitly split
  the domain contract across two structs (`ImportRequest` for routing,
@@ -389,7 +389,7 @@ struct LodGenerationOptions final {
 
  Domains that use payload-presence routing already carry their entire contract
  in the `ImportRequest` payload. Their behavioral parameters belong inside the
- normalized descriptor JSON, where they are versioned, validated, and schema-
+ descriptor JSON, where they are versioned, validated, and schema-
  bound alongside the data they govern. Adding an `ImportOptions` tuning block
  for such a domain would split its contract across both structs, forcing every
  pipeline consumer to join them to understand a single request, and silently

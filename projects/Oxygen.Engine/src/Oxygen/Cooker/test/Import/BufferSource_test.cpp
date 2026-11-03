@@ -100,7 +100,7 @@ namespace {
     EXPECT_TRUE(HasDiagnosticCode(
       diagnostics, "buffer.container.virtual_path_duplicate"));
     ASSERT_FALSE(diagnostics.empty());
-    EXPECT_EQ(diagnostics.front().object_path, "buffers[1].virtual_path");
+    EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/1/virtual_path");
   }
 
   NOLINT_TEST_F(BufferSourceTest, NamesProductsRelativeToTheContainer)
@@ -151,7 +151,7 @@ namespace {
     EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
     EXPECT_THAT(diagnostics.front().message,
       ::testing::HasSubstr("vpath.reference_self_absolute"));
-    EXPECT_EQ(diagnostics.front().object_path, "buffers[0].virtual_path");
+    EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/0/virtual_path");
   }
 
   NOLINT_TEST_F(BufferSourceTest, RefusesAProductClimbingAboveTheMount)
@@ -178,12 +178,14 @@ namespace {
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
-      container.Identity(), Mounts(), diagnostics, "lod.buffers"));
+      container.Identity(), Mounts(), diagnostics,
+      Json::json_pointer { "/lod/buffers" }));
     EXPECT_TRUE(HasDiagnosticCode(
       diagnostics, "buffer.container.schema_validation_failed"));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().source_path, "geometry.json");
-    EXPECT_TRUE(diagnostics.front().object_path.starts_with("lod.buffers[0]"));
+    EXPECT_TRUE(diagnostics.front().json_pointer.starts_with("/lod/buffers/0"));
+    EXPECT_TRUE(diagnostics.front().object_path.empty());
   }
 
   NOLINT_TEST_F(BufferSourceTest, PreservesFormatDrivenStride)
@@ -227,7 +229,7 @@ namespace {
       container.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(diagnostics, "buffer.view.name_duplicate"));
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics.front().object_path, "buffers[0].views[1].name");
+    EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/0/views/1/name");
   }
 
   NOLINT_TEST_F(BufferSourceTest, ResolvesAMountPathSource)

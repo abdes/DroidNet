@@ -57,14 +57,15 @@ namespace {
   };
 
   auto AddDiagnostic(SourceContext& context, const ImportSeverity severity,
-    std::string code, std::string message, std::string object_path = {}) -> void
+    std::string code, std::string message,
+    const json::json_pointer& pointer = json::json_pointer {}) -> void
   {
     context.diagnostics->push_back({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = context.source_path->string(),
-      .object_path = std::move(object_path),
+      .json_pointer = pointer.to_string(),
     });
   }
 
@@ -81,18 +82,16 @@ namespace {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
       .validation_failed_code = "scene.descriptor.schema_validation_failed",
       .validation_failed_prefix = "Scene descriptor validation failed: ",
-      .validation_overflow_prefix = "Scene descriptor validation emitted ",
       .validator_failure_code = "scene.descriptor.schema_validator_failure",
       .validator_failure_prefix = "Scene descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetSceneDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         AddDiagnostic(context, ImportSeverity::kError, std::string(code),
-          message, object_path);
+          message, json::json_pointer { json_pointer });
       });
   }
 
@@ -132,10 +131,10 @@ namespace {
   class PropertyReader final {
   public:
     PropertyReader(SourceContext& context, const json& document,
-      std::string object_path, bool& valid)
+      json::json_pointer pointer, bool& valid)
       : context_(&context)
       , document_(&document)
-      , path_(std::move(object_path))
+      , path_(std::move(pointer))
       , valid_(&valid)
     {
     }
@@ -215,7 +214,7 @@ namespace {
         const auto value = ToFieldValue(
           found->at(i), component, static_cast<std::uint16_t>(fields.at(i)));
         if (!value.has_value()) {
-          Reject(key, PathOf(key) + "[" + std::to_string(i) + "]");
+          Reject(key, PathOf(key) / i);
           elements_valid = false;
           continue;
         }
@@ -244,7 +243,7 @@ namespace {
       auto elements_valid = true;
       for (size_t i = 0; i < out.size(); ++i) {
         if (!ToFloat(found->at(i).get<double>()).has_value()) {
-          Reject(key, PathOf(key) + "[" + std::to_string(i) + "]");
+          Reject(key, PathOf(key) / i);
           elements_valid = false;
         }
       }
@@ -303,32 +302,35 @@ namespace {
       return std::nullopt;
     }
 
-    [[nodiscard]] auto PathOf(const std::string_view key) const -> std::string
+    [[nodiscard]] auto PathOf(const std::string_view key) const
+      -> json::json_pointer
     {
-      return path_ + "." + std::string(key);
+      return path_ / std::string(key);
     }
 
-    auto Reject(const std::string_view key, std::string path) const -> void
+    auto Reject(
+      const std::string_view key, const json::json_pointer& path) const -> void
     {
       AddDiagnostic(*context_, ImportSeverity::kError,
         std::string(kScenePropertyOutOfRangeCode),
         "Property '" + std::string(key)
           + "' is not a finite value in the range, or a member, that the scene "
             "schema declares",
-        std::move(path));
+        path);
       *valid_ = false;
     }
 
     observer_ptr<SourceContext> context_;
     observer_ptr<const json> document_;
-    std::string path_;
+    json::json_pointer path_;
     observer_ptr<bool> valid_;
   };
 
   //! Reads one authored override value as its property's value type.
   auto ReadOverrideValue(SourceContext& context,
     const data::schema::OverrideProperty& property, const json& document,
-    const std::string& object_path) -> std::optional<SceneSource::OverrideValue>
+    const json::json_pointer& pointer)
+    -> std::optional<SceneSource::OverrideValue>
   {
     using data::schema::ValueType;
     switch (property.type) {
@@ -346,7 +348,7 @@ namespace {
         "scene.descriptor.lod_policy_invalid",
         "LOD policy thresholds must be finite, distances must not decrease and "
         "screen-space errors must not increase",
-        object_path);
+        pointer);
       return std::nullopt;
     case ValueType::kInt:
     case ValueType::kFloat:
@@ -360,19 +362,18 @@ namespace {
     }
     AddDiagnostic(context, ImportSeverity::kError,
       "scene.descriptor.override_unsupported",
-      "The override value type is not supported", object_path);
+      "The override value type is not supported", pointer);
     return std::nullopt;
   }
 
   //! Reads the `values` of one override owner into `overrides`.
   auto ReadOverrideValues(SourceContext& context, const json& values,
     const data::schema::PartKind part_kind, const data::SurfaceId part_id,
-    const std::string& object_path,
+    const json::json_pointer& pointer,
     std::vector<SceneSource::Override>& overrides) -> bool
   {
     for (const auto& [key, document] : values.items()) {
-      auto value_path = object_path;
-      value_path.append("[\"").append(key).append("\"]");
+      const auto value_path = pointer / key;
       const auto* property
         = data::schema::FindOverrideProperty("geometry", part_kind, key);
       if (property == nullptr) {
@@ -389,7 +390,7 @@ namespace {
         .property = property,
         .part_id = part_id,
         .value = std::move(*value),
-        .object_path = value_path,
+        .json_pointer = value_path.to_string(),
       });
     }
     return true;
@@ -397,13 +398,13 @@ namespace {
 
   //! Reads a renderable's `overrides`; each surface is named once.
   auto ReadOverrides(SourceContext& context, const json& document,
-    const std::string& object_path,
+    const json::json_pointer& pointer,
     std::vector<SceneSource::Override>& overrides) -> bool
   {
     if (document.contains("values")
       && !ReadOverrideValues(context, document.at("values"),
-        data::schema::PartKind::kNone, data::SurfaceId {},
-        object_path + ".values", overrides)) {
+        data::schema::PartKind::kNone, data::SurfaceId {}, pointer / "values",
+        overrides)) {
       return false;
     }
     if (!document.contains("parts")) {
@@ -413,7 +414,7 @@ namespace {
     const auto& parts = document.at("parts");
     for (size_t i = 0; i < parts.size(); ++i) {
       const auto& part = parts.at(i);
-      const auto part_path = object_path + ".parts[" + std::to_string(i) + "]";
+      const auto part_path = pointer / "parts" / i;
       // The descriptor schema admits surfaces only.
       DCHECK_F(part.at("kind").get<std::string>() == "surface");
       const auto surface
@@ -422,11 +423,11 @@ namespace {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.surface_id_invalid",
           "A surface override requires a non-nil surface identity, named once",
-          part_path + ".id");
+          part_path / "id");
         return false;
       }
       if (!ReadOverrideValues(context, part.at("values"),
-            data::schema::PartKind::kSurface, *surface, part_path + ".values",
+            data::schema::PartKind::kSurface, *surface, part_path / "values",
             overrides)) {
         return false;
       }
@@ -437,14 +438,15 @@ namespace {
   //! Reads a node path, reporting the first element that is not a non-nil
   //! node ID.
   auto ReadNodePath(SourceContext& context, const json& document,
-    const std::string& object_path) -> std::optional<std::vector<data::NodeId>>
+    const json::json_pointer& pointer)
+    -> std::optional<std::vector<data::NodeId>>
   {
     auto path = ParseNodePath(document);
     if (!path.has_value()) {
       AddDiagnostic(context, ImportSeverity::kError,
         "scene.descriptor.node_path_invalid",
         "A node path element must be a non-nil node ID",
-        object_path + "[" + std::to_string(path.error()) + "]");
+        pointer / path.error());
       return std::nullopt;
     }
     return std::move(*path);
@@ -454,7 +456,8 @@ namespace {
   //! schema units, and encodes it as the property's change.
   auto ReadChangeValue(SourceContext& context,
     const data::schema::OverrideProperty& property, const json& document,
-    const std::string& object_path) -> std::optional<SceneSource::OverrideValue>
+    const json::json_pointer& pointer)
+    -> std::optional<SceneSource::OverrideValue>
   {
     using data::schema::ValueType;
     auto value = std::optional<data::schema::SchemaValue> {};
@@ -502,7 +505,7 @@ namespace {
         "scene.descriptor.instance_override_invalid",
         "The value is not a valid value of the property the scene schema "
         "declares",
-        object_path);
+        pointer);
       return std::nullopt;
     }
     return *encoded;
@@ -511,17 +514,16 @@ namespace {
   //! Reads one component's changes of an instanced node.
   auto ReadComponentChanges(SourceContext& context,
     const std::string_view component_kind, const json& document,
-    const std::string& object_path, const std::vector<data::NodeId>& path,
+    const json::json_pointer& pointer, const std::vector<data::NodeId>& path,
     std::vector<SceneSource::InstanceChange>& changes) -> bool
   {
     const auto read_values
       = [&](const json& values, const data::schema::PartKind part_kind,
           const data::SurfaceId part_id,
           const base::Sha256Digest& layout_revision,
-          const std::string& values_path) -> bool {
+          const json::json_pointer& values_path) -> bool {
       for (const auto& [key, value] : values.items()) {
-        auto value_path = values_path;
-        value_path.append("[\"").append(key).append("\"]");
+        const auto value_path = values_path / key;
         const auto* property
           = data::schema::FindOverrideProperty(component_kind, part_kind, key);
         if (property == nullptr) {
@@ -545,7 +547,7 @@ namespace {
             .part_id = part_id,
             .layout_revision = layout_revision,
             .value = std::move(*read),
-            .object_path = std::move(value_path),
+            .json_pointer = value_path.to_string(),
           },
         });
       }
@@ -554,7 +556,7 @@ namespace {
 
     if (document.contains("values")
       && !read_values(document.at("values"), data::schema::PartKind::kNone,
-        data::SurfaceId {}, base::Sha256Digest {}, object_path + ".values")) {
+        data::SurfaceId {}, base::Sha256Digest {}, pointer / "values")) {
       return false;
     }
     if (!document.contains("parts")) {
@@ -563,13 +565,12 @@ namespace {
     const auto& parts = document.at("parts");
     for (size_t i = 0; i < parts.size(); ++i) {
       const auto& part = parts.at(i);
-      const auto part_path = object_path + ".parts[" + std::to_string(i) + "]";
+      const auto part_path = pointer / "parts" / i;
       // Surfaces are the only part kind.
       if (part.at("kind").get<std::string>() != "surface") {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.part_kind_unknown",
-          "The scene schema declares no part of this kind",
-          part_path + ".kind");
+          "The scene schema declares no part of this kind", part_path / "kind");
         return false;
       }
       const auto surface
@@ -580,18 +581,18 @@ namespace {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.surface_id_invalid",
           "A surface change requires a non-nil surface identity",
-          part_path + ".id");
+          part_path / "id");
         return false;
       }
       if (!revision.has_value()) {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.layout_revision_invalid",
           "A surface change requires the layout revision it was made for",
-          part_path + ".layout_revision");
+          part_path / "layout_revision");
         return false;
       }
       if (!read_values(part.at("values"), data::schema::PartKind::kSurface,
-            surface.value(), *revision, part_path + ".values")) {
+            surface.value(), *revision, part_path / "values")) {
         return false;
       }
     }
@@ -601,20 +602,19 @@ namespace {
   //! Reads an instance root's `overrides`, the changes of the nodes the
   //! instance brings in.
   auto ReadInstanceChanges(SourceContext& context, const json& document,
-    const std::string& object_path,
+    const json::json_pointer& pointer,
     std::vector<SceneSource::InstanceChange>& changes) -> bool
   {
     for (size_t i = 0; i < document.size(); ++i) {
       const auto& entry = document.at(i);
-      const auto entry_path = object_path + "[" + std::to_string(i) + "]";
+      const auto entry_path = pointer / i;
       const auto path
-        = ReadNodePath(context, entry.at("path"), entry_path + ".path");
+        = ReadNodePath(context, entry.at("path"), entry_path / "path");
       if (!path.has_value()) {
         return false;
       }
       for (const auto& [kind, component] : entry.at("components").items()) {
-        auto component_path = entry_path;
-        component_path.append(".components.").append(kind);
+        const auto component_path = entry_path / "components" / kind;
         if (!ReadComponentChanges(
               context, kind, component, component_path, *path, changes)) {
           return false;
@@ -633,7 +633,7 @@ namespace {
           "scene.descriptor.instance_override_duplicate",
           "Another change of this instance names the same node, property and "
           "part",
-          change.change.object_path);
+          json::json_pointer { change.change.json_pointer });
         return false;
       }
     }
@@ -952,7 +952,7 @@ namespace {
         "scene.descriptor.exposure_invalid",
         "Exposure settings rejected: "
           + std::string(scene::to_string(resolved.error())),
-        "environment.post_process_volume");
+        json::json_pointer { "/environment/post_process_volume" });
       return std::nullopt;
     }
     record.curve_key_count
@@ -983,13 +983,13 @@ namespace {
 
   auto ValidateNodeIndex(SourceContext& context, const uint32_t node_index,
     const uint32_t node_count, std::string code, std::string message,
-    std::string object_path) -> bool
+    const json::json_pointer& pointer) -> bool
   {
     if (node_index < node_count) {
       return true;
     }
     AddDiagnostic(context, ImportSeverity::kError, std::move(code),
-      std::move(message), std::move(object_path));
+      std::move(message), pointer);
     return false;
   }
 
@@ -1101,21 +1101,20 @@ namespace {
 
     for (size_t node_i = 0; node_i < nodes_doc.size(); ++node_i) {
       const auto& node_doc = nodes_doc.at(node_i);
-      const auto node_path
-        = std::string { "nodes[" } + std::to_string(node_i) + "]";
+      const auto node_path = json::json_pointer {} / "nodes" / node_i;
 
       auto node_record = data::pak::world::NodeRecord {};
       const auto node_id = ParseNonNilId<data::NodeId>(node_doc.at("id"));
       if (!node_id.has_value()) {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.node_id_invalid",
-          "A node ID must be a non-nil UUID", node_path + ".id");
+          "A node ID must be a non-nil UUID", node_path / "id");
         return std::nullopt;
       }
       if (!node_ids.insert(*node_id).second) {
         AddDiagnostic(context, ImportSeverity::kError,
           "scene.descriptor.node_id_duplicate",
-          "Another node of the scene has this ID", node_path + ".id");
+          "Another node of the scene has this ID", node_path / "id");
         return std::nullopt;
       }
       node_record.node_id = *node_id;
@@ -1129,7 +1128,7 @@ namespace {
         if (parent_index >= node_count) {
           AddDiagnostic(context, ImportSeverity::kError,
             "scene.descriptor.node_parent_out_of_range",
-            "Node parent index is out of range", node_path + ".parent");
+            "Node parent index is out of range", node_path / "parent");
           return std::nullopt;
         }
         node_record.parent_index = parent_index;
@@ -1150,12 +1149,12 @@ namespace {
         auto instance = SceneSource::Instance {
           .node_index = static_cast<uint32_t>(node_i),
           .scene = instance_doc.at("scene_ref").get<std::string>(),
-          .object_path = node_path + ".instance.scene_ref",
+          .json_pointer = (node_path / "instance" / "scene_ref").to_string(),
           .changes = {},
         };
         if (instance_doc.contains("overrides")
           && !ReadInstanceChanges(context, instance_doc.at("overrides"),
-            node_path + ".instance.overrides", instance.changes)) {
+            node_path / "instance" / "overrides", instance.changes)) {
           return std::nullopt;
         }
         prepared.instances.push_back(std::move(instance));
@@ -1170,13 +1169,13 @@ namespace {
       if (!ValidateNodeIndex(context, camera, node_count,
             "scene.descriptor.starting_camera_out_of_range",
             "Starting camera node index is out of range",
-            "starting_camera.node")) {
+            json::json_pointer { "/starting_camera/node" })) {
         return std::nullopt;
       }
       prepared.build.starting_camera.node_index = camera;
       if (camera_doc.contains("path")) {
-        auto path = ReadNodePath(
-          context, camera_doc.at("path"), "starting_camera.path");
+        auto path = ReadNodePath(context, camera_doc.at("path"),
+          json::json_pointer { "/starting_camera/path" });
         if (!path.has_value()) {
           return std::nullopt;
         }
@@ -1191,8 +1190,9 @@ namespace {
         prepared.starting_input_contexts.push_back({
           .context = document.at("context_ref").get<std::string>(),
           .priority = document.value("priority", int32_t { 0 }),
-          .object_path
-          = "starting_input_contexts[" + std::to_string(i) + "].context_ref",
+          .json_pointer = (json::json_pointer {} / "starting_input_contexts" / i
+            / "context_ref")
+            .to_string(),
         });
       }
     }
@@ -1202,7 +1202,7 @@ namespace {
       prepared.renderables.reserve(values.size());
       for (size_t i = 0; i < values.size(); ++i) {
         const auto& document = values.at(i);
-        const auto object_path = "renderables[" + std::to_string(i) + "]";
+        const auto pointer = json::json_pointer {} / "renderables" / i;
         auto renderable = SceneSource::Renderable {
           .node_index = document.at("node").get<uint32_t>(),
           .geometry = document.at("geometry_ref").get<std::string>(),
@@ -1210,12 +1210,12 @@ namespace {
         };
         if (!ValidateNodeIndex(context, renderable.node_index, node_count,
               "scene.descriptor.renderable_node_index_out_of_range",
-              "Renderable node index is out of range", object_path + ".node")) {
+              "Renderable node index is out of range", pointer / "node")) {
           return std::nullopt;
         }
         if (document.contains("overrides")
           && !ReadOverrides(context, document.at("overrides"),
-            object_path + ".overrides", renderable.overrides)) {
+            pointer / "overrides", renderable.overrides)) {
           return std::nullopt;
         }
         prepared.renderables.push_back(std::move(renderable));
@@ -1229,13 +1229,13 @@ namespace {
         prepared.build.perspective_cameras.reserve(perspective_doc.size());
         for (size_t i = 0; i < perspective_doc.size(); ++i) {
           const auto& camera_doc = perspective_doc.at(i);
-          const auto object_path
-            = std::string { "cameras.perspective[" } + std::to_string(i) + "]";
+          const auto pointer
+            = json::json_pointer {} / "cameras" / "perspective" / i;
           const auto node_index = camera_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
                 "scene.descriptor.camera_node_index_out_of_range",
                 "Perspective camera node index is out of range",
-                object_path + ".node")) {
+                pointer / "node")) {
             return std::nullopt;
           }
 
@@ -1245,7 +1245,7 @@ namespace {
           camera.node_index = node_index;
           auto camera_valid = true;
           const auto reader
-            = PropertyReader(context, camera_doc, object_path, camera_valid);
+            = PropertyReader(context, camera_doc, pointer, camera_valid);
           constexpr auto kCamera = ComponentId::kPerspectiveCamera;
           reader.ReadNamed("aspect_mode", camera,
             PerspectiveCameraField::kAspectMode,
@@ -1276,13 +1276,13 @@ namespace {
         prepared.build.orthographic_cameras.reserve(orthographic_doc.size());
         for (size_t i = 0; i < orthographic_doc.size(); ++i) {
           const auto& camera_doc = orthographic_doc.at(i);
-          const auto object_path
-            = std::string { "cameras.orthographic[" } + std::to_string(i) + "]";
+          const auto pointer
+            = json::json_pointer {} / "cameras" / "orthographic" / i;
           const auto node_index = camera_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
                 "scene.descriptor.camera_node_index_out_of_range",
                 "Orthographic camera node index is out of range",
-                object_path + ".node")) {
+                pointer / "node")) {
             return std::nullopt;
           }
 
@@ -1292,7 +1292,7 @@ namespace {
           camera.node_index = node_index;
           auto camera_valid = true;
           const auto reader
-            = PropertyReader(context, camera_doc, object_path, camera_valid);
+            = PropertyReader(context, camera_doc, pointer, camera_valid);
           constexpr auto kCamera = ComponentId::kOrthographicCamera;
           reader.ReadNamed("aspect_mode", camera,
             OrthographicCameraField::kAspectMode,
@@ -1327,13 +1327,13 @@ namespace {
         prepared.build.directional_lights.reserve(directional_doc.size());
         for (size_t i = 0; i < directional_doc.size(); ++i) {
           const auto& light_doc = directional_doc.at(i);
-          const auto object_path
-            = std::string { "lights.directional[" } + std::to_string(i) + "]";
+          const auto pointer
+            = json::json_pointer {} / "lights" / "directional" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
                 "scene.descriptor.light_node_index_out_of_range",
                 "Directional light node index is out of range",
-                object_path + ".node")) {
+                pointer / "node")) {
             return std::nullopt;
           }
 
@@ -1343,7 +1343,7 @@ namespace {
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
-            = PropertyReader(context, light_doc, object_path, light_valid);
+            = PropertyReader(context, light_doc, pointer, light_valid);
           constexpr auto kLight = ComponentId::kDirectionalLight;
           ReadLightCommon<DirectionalLightField>(reader, light, kLight);
           reader.Read("angular_size_radians", light, kLight,
@@ -1402,13 +1402,11 @@ namespace {
         prepared.build.point_lights.reserve(point_doc.size());
         for (size_t i = 0; i < point_doc.size(); ++i) {
           const auto& light_doc = point_doc.at(i);
-          const auto object_path
-            = std::string { "lights.point[" } + std::to_string(i) + "]";
+          const auto pointer = json::json_pointer {} / "lights" / "point" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
                 "scene.descriptor.light_node_index_out_of_range",
-                "Point light node index is out of range",
-                object_path + ".node")) {
+                "Point light node index is out of range", pointer / "node")) {
             return std::nullopt;
           }
 
@@ -1417,7 +1415,7 @@ namespace {
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
-            = PropertyReader(context, light_doc, object_path, light_valid);
+            = PropertyReader(context, light_doc, pointer, light_valid);
           constexpr auto kLight = ComponentId::kPointLight;
           ReadLightCommon<LocalLightField>(reader, light, kLight);
           reader.Read("range", light, kLight, LocalLightField::kRange);
@@ -1437,13 +1435,11 @@ namespace {
         prepared.build.spot_lights.reserve(spot_doc.size());
         for (size_t i = 0; i < spot_doc.size(); ++i) {
           const auto& light_doc = spot_doc.at(i);
-          const auto object_path
-            = std::string { "lights.spot[" } + std::to_string(i) + "]";
+          const auto pointer = json::json_pointer {} / "lights" / "spot" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
                 "scene.descriptor.light_node_index_out_of_range",
-                "Spot light node index is out of range",
-                object_path + ".node")) {
+                "Spot light node index is out of range", pointer / "node")) {
             return std::nullopt;
           }
 
@@ -1452,7 +1448,7 @@ namespace {
           light.node_index = node_index;
           auto light_valid = true;
           const auto reader
-            = PropertyReader(context, light_doc, object_path, light_valid);
+            = PropertyReader(context, light_doc, pointer, light_valid);
           constexpr auto kLight = ComponentId::kSpotLight;
           ReadLightCommon<LocalLightField>(reader, light, kLight);
           reader.Read("range", light, kLight, LocalLightField::kRange);
@@ -1507,13 +1503,12 @@ namespace {
       prepared.build.local_fog_volumes.reserve(local_fog_doc.size());
       for (size_t i = 0; i < local_fog_doc.size(); ++i) {
         const auto& volume_doc = local_fog_doc.at(i);
-        const auto object_path
-          = std::string { "local_fog_volumes[" } + std::to_string(i) + "]";
+        const auto pointer = json::json_pointer {} / "local_fog_volumes" / i;
         const auto node_index = volume_doc.at("node").get<uint32_t>();
         if (!ValidateNodeIndex(context, node_index, node_count,
               "scene.descriptor.local_fog_node_index_out_of_range",
               "Local fog volume node index is out of range",
-              object_path + ".node")) {
+              pointer / "node")) {
           return std::nullopt;
         }
 
@@ -1522,7 +1517,7 @@ namespace {
         record.node_index = node_index;
         auto fog_valid = true;
         const auto reader
-          = PropertyReader(context, volume_doc, object_path, fog_valid);
+          = PropertyReader(context, volume_doc, pointer, fog_valid);
         constexpr auto kFog = ComponentId::kLocalFogVolume;
         reader.Read("enabled", record, kFog, LocalFogVolumeField::kEnabled);
         reader.Read("radial_fog_extinction", record, kFog,
@@ -1570,8 +1565,9 @@ namespace {
           prepared.references.push_back({
             .virtual_path = values.at(i).get<std::string>(),
             .type = type,
-            .object_path
-            = "references." + std::string(key) + "[" + std::to_string(i) + "]",
+            .json_pointer
+            = (json::json_pointer {} / "references" / std::string(key) / i)
+              .to_string(),
           });
         }
       };

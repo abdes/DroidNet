@@ -148,7 +148,7 @@ namespace {
       document.Spell("/Content/Scenes/other.oscene"));
     EXPECT_FALSE(source->references.back().type.has_value());
     EXPECT_EQ(
-      source->references.back().object_path, "references.extra_assets[0]");
+      source->references.back().json_pointer, "/references/extra_assets/0");
   }
 
   //! Every override value is read as its property's value type, and its
@@ -488,121 +488,121 @@ namespace {
     struct Case {
       std::string_view group;
       std::string body;
-      std::string_view object_path;
+      std::string_view json_pointer;
     };
     const auto cases = std::vector<Case> {
       {
         .group = "cameras",
         .body
         = R"({"perspective":[{"node":0,"aspect_mode":"auto","fov_y":0}]})",
-        .object_path = "cameras.perspective[0].fov_y",
+        .json_pointer = "/cameras/perspective/0/fov_y",
       },
       {
         .group = "cameras",
         .body
         = R"({"perspective":[{"node":0,"aspect_mode":"auto","fov_y":3.2}]})",
-        .object_path = "cameras.perspective[0].fov_y",
+        .json_pointer = "/cameras/perspective/0/fov_y",
       },
       {
         .group = "cameras",
         .body
         = R"({"perspective":[{"node":0,"aspect_mode":"auto","near_plane":0}]})",
-        .object_path = "cameras.perspective[0].near_plane",
+        .json_pointer = "/cameras/perspective/0/near_plane",
       },
       {
         .group = "cameras",
         .body
         = R"({"perspective":[{"node":0,"aspect_mode":"auto","iso":-100}]})",
-        .object_path = "cameras.perspective[0].iso",
+        .json_pointer = "/cameras/perspective/0/iso",
       },
       {
         .group = "cameras",
         .body
         = R"({"orthographic":[{"node":0,"aspect_mode":"auto","orthographic_size":-1}]})",
-        .object_path = "cameras.orthographic[0].orthographic_size",
+        .json_pointer = "/cameras/orthographic/0/orthographic_size",
       },
       {
         .group = "cameras",
         .body
         = R"({"orthographic":[{"node":0,"aspect_mode":"auto","far_plane":-5}]})",
-        .object_path = "cameras.orthographic[0].far_plane",
+        .json_pointer = "/cameras/orthographic/0/far_plane",
       },
       {
         .group = "lights",
         .body = R"({"directional":[{"node":0,"intensity_lux":-1}]})",
-        .object_path = "lights.directional[0].intensity_lux",
+        .json_pointer = "/lights/directional/0/intensity_lux",
       },
       {
         .group = "lights",
         .body = R"({"directional":[{"node":0,"intensity_lux":1e300}]})",
-        .object_path = "lights.directional[0].intensity_lux",
+        .json_pointer = "/lights/directional/0/intensity_lux",
       },
       {
         .group = "lights",
         .body = R"({"directional":[{"node":0,"cascade_count":5}]})",
-        .object_path = "lights.directional[0].cascade_count",
+        .json_pointer = "/lights/directional/0/cascade_count",
       },
       {
         .group = "lights",
         .body = R"({"directional":[{"node":0,"split_mode":2}]})",
-        .object_path = "lights.directional[0].split_mode",
+        .json_pointer = "/lights/directional/0/split_mode",
       },
       {
         .group = "lights",
         .body = R"({"directional":[{"node":0,"cascade_distances":[1,2,3,0]}]})",
-        .object_path = "lights.directional[0].cascade_distances[3]",
+        .json_pointer = "/lights/directional/0/cascade_distances/3",
       },
       {
         .group = "lights",
         .body = R"({"point":[{"node":0,"range":0}]})",
-        .object_path = "lights.point[0].range",
+        .json_pointer = "/lights/point/0/range",
       },
       {
         .group = "lights",
         .body = R"({"point":[{"node":0,"luminous_flux_lm":0}]})",
-        .object_path = "lights.point[0].luminous_flux_lm",
+        .json_pointer = "/lights/point/0/luminous_flux_lm",
       },
       {
         .group = "lights",
         .body = R"({"point":[{"node":0,"common":{"color_rgb":[1,2,0]}}]})",
-        .object_path = "lights.point[0].common.color_rgb[1]",
+        .json_pointer = "/lights/point/0/common/color_rgb/1",
       },
       {
         .group = "lights",
         .body
         = R"({"point":[{"node":0,"common":{"exposure_compensation_ev":11}}]})",
-        .object_path = "lights.point[0].common.exposure_compensation_ev",
+        .json_pointer = "/lights/point/0/common/exposure_compensation_ev",
       },
       {
         .group = "lights",
         .body
         = R"({"spot":[{"node":0,"common":{"shadow":{"resolution_hint":4}}}]})",
-        .object_path = "lights.spot[0].common.shadow.resolution_hint",
+        .json_pointer = "/lights/spot/0/common/shadow/resolution_hint",
       },
       {
         .group = "lights",
         .body = R"({"spot":[{"node":0,"outer_cone_angle_radians":2}]})",
-        .object_path = "lights.spot[0].outer_cone_angle_radians",
+        .json_pointer = "/lights/spot/0/outer_cone_angle_radians",
       },
       {
         .group = "local_fog_volumes",
         .body = std::string(kFog) + "1" + std::string(kFogTail) + "0}]",
-        .object_path = "local_fog_volumes[0].fog_phase_g",
+        .json_pointer = "/local_fog_volumes/0/fog_phase_g",
       },
       {
         .group = "local_fog_volumes",
         .body = std::string(kFog) + "0" + std::string(kFogTail) + "200}]",
-        .object_path = "local_fog_volumes[0].sort_priority",
+        .json_pointer = "/local_fog_volumes/0/sort_priority",
       },
       {
         .group = "nodes",
         .body = R"([{"id":"00000000-0000-4000-8000-000000000001",
           "transform":{"scale":[1,0,1]}}])",
-        .object_path = "nodes[0].transform.scale[1]",
+        .json_pointer = "/nodes/0/transform/scale/1",
       },
     };
-    for (const auto& [group, body, object_path] : cases) {
-      SCOPED_TRACE(std::string(object_path));
+    for (const auto& [group, body, json_pointer] : cases) {
+      SCOPED_TRACE(std::string(json_pointer));
       auto document = MakeScene();
       document.Set("/nodes", WithIds(json::parse(R"([{}])")));
       document.Set("/" + std::string(group), json::parse(body));
@@ -613,7 +613,8 @@ namespace {
         = FindDiagnostic(diagnostics, internal::kScenePropertyOutOfRangeCode);
       ASSERT_NE(found, nullptr)
         << oxygen::cooker::test::DiagnosticSummary(diagnostics);
-      EXPECT_EQ(found->object_path, object_path);
+      EXPECT_EQ(found->json_pointer, json_pointer);
+      EXPECT_TRUE(found->object_path.empty());
     }
   }
 
@@ -836,7 +837,8 @@ namespace {
         return diagnostic.code == "scene.descriptor.node_path_invalid";
       });
     ASSERT_NE(invalid, diagnostics.end());
-    EXPECT_THAT(invalid->object_path, ::testing::EndsWith(".path[1]"));
+    EXPECT_THAT(invalid->json_pointer, ::testing::EndsWith("/path/1"));
+    EXPECT_TRUE(invalid->object_path.empty());
   }
 
   NOLINT_TEST(SceneSourceTest, NonObjectInputIsNotAFormatUpgradeError)

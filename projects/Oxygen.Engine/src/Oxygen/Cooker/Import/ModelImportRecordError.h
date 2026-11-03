@@ -46,7 +46,7 @@ namespace model_record_codes {
 //! stable code, the file and the record field it is about.
 /*!
  Every refusal of `ModelImportRecord` is one, so a caller acts on
- `Diagnostic().code` and shows `Diagnostic().object_path`, never parses the
+ `Diagnostic().code` and shows `Diagnostic().json_pointer`, never parses the
  message. `what()` is `[code] message`.
 */
 class ModelImportRecordError final : public std::runtime_error {

@@ -111,10 +111,11 @@ NOLINT_TEST(JobReferenceTest, InvalidReferenceDiagnosticNamesTheField)
   const auto request = MaterialRequest();
 
   const auto diagnostic = RefuseReference(request, "../../Brick.otex",
-    VirtualPathError::kReferenceOutsideMount, "textures/base_color");
+    VirtualPathError::kReferenceOutsideMount, "/textures/base_color");
 
   EXPECT_EQ(diagnostic.code, kReferenceInvalidCode);
-  EXPECT_EQ(diagnostic.object_path, "textures/base_color");
+  EXPECT_EQ(diagnostic.json_pointer, "/textures/base_color");
+  EXPECT_TRUE(diagnostic.object_path.empty());
   EXPECT_NE(diagnostic.message.find("vpath.reference_outside_mount"),
     std::string::npos);
 }
@@ -129,7 +130,7 @@ NOLINT_TEST(JobReferenceTest, UnmountedReferenceDiagnosticNamesBothForms)
   };
 
   const auto diagnostic
-    = RefuseUnmountedReference(request, reference, "material_ref");
+    = RefuseUnmountedReference(request, reference, "/material_ref");
 
   EXPECT_EQ(diagnostic.code, kReferenceUnmountedCode);
   EXPECT_NE(diagnostic.message.find("/Props/Crate.omat"), std::string::npos);

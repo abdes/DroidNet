@@ -139,7 +139,9 @@ internal static class NativeImportReportReader
                 Code = issue.GetProperty("code").GetString()!,
                 Message = issue.GetProperty("message").GetString()!,
                 AffectedPath = execution.MountsFile.Resolve(execution.InputRoot, requested.AttributedSource),
-                TechnicalMessage = issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
+                TechnicalMessage = issue.TryGetProperty("json_pointer", out var pointer)
+                    ? pointer.GetString()
+                    : issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
                 AffectedEntity = NativeSourceObject.Read(issue),
             });
         }

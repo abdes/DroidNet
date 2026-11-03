@@ -134,7 +134,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor_json.dump(),
+      .descriptor_json = descriptor_json.dump(),
     };
 
     const auto report = Import(std::move(request));
@@ -273,7 +273,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor_json.dump(),
+      .descriptor_json = descriptor_json.dump(),
     };
 
     const auto report = Import(std::move(request));
@@ -340,7 +340,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor_json.dump(),
+      .descriptor_json = descriptor_json.dump(),
     };
 
     const auto report = Import(std::move(request));
@@ -396,7 +396,7 @@ namespace {
     request.cooked_root = cooked_root;
     request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor_json.dump(),
+      .descriptor_json = descriptor_json.dump(),
     };
     const auto other_writer = serio::FileLock::TryAcquire(
       cooked_root / std::string(data::loose_cooked::kWriterLockFileName),

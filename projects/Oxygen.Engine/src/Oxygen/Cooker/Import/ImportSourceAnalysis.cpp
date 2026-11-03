@@ -79,6 +79,7 @@
 namespace oxygen::content::import {
 namespace {
   using Kind = ImportDependencyKind;
+  using Pointer = nlohmann::json::json_pointer;
 
   auto PathText(const std::filesystem::path& path) -> std::string
   {
@@ -154,7 +155,6 @@ namespace {
       .code = std::move(code),
       .message = std::move(message),
       .source_path = report.source_path.string(),
-      .object_path = {},
     });
   }
 
@@ -220,7 +220,7 @@ namespace {
     {
       report->diagnostics.push_back(
         internal::RefuseReference(anchor, report->source_path.string(),
-          refusal.written, refusal.error, refusal.object_path));
+          refusal.written, refusal.error, refusal.json_pointer));
     }
 
     //! Resolves a reference text into `into`, or reports it refused.
@@ -231,7 +231,7 @@ namespace {
       if (!resolved.has_value()) {
         Refuse({
           .written = std::move(text.written),
-          .object_path = std::move(text.object_path),
+          .json_pointer = std::move(text.json_pointer),
           .error = resolved.error(),
         });
         return;
@@ -247,7 +247,7 @@ namespace {
         {
           .written = std::move(written),
           .kind = kind,
-          .object_path = std::move(location),
+          .json_pointer = std::move(location),
         },
         rules);
     }
@@ -259,7 +259,7 @@ namespace {
         .written = path,
         .virtual_path = path,
         .kind = kind,
-        .object_path = {},
+        .json_pointer = {},
         .required = true,
       });
     }
@@ -306,7 +306,7 @@ namespace {
         .written = path,
         .virtual_path = std::move(path),
         .kind = kind,
-        .object_path = {},
+        .json_pointer = {},
         .required = required,
       });
     };
@@ -466,33 +466,30 @@ namespace {
   {
     const auto reference
       = [&](const nlohmann::json& parent, const std::string_view field,
-          const std::string& location) -> void {
+          const Pointer& location) -> void {
       if (parent.is_object() && parent.contains(field)
         && parent.at(field).is_string()
         && IsInputActionReference(
           parent.at(field).get_ref<const std::string&>())) {
         context.Reference(parent.at(field).get<std::string>(),
-          Kind::kInputAction, location + "." + std::string(field));
+          Kind::kInputAction, (location / std::string(field)).to_string());
       }
     };
     const auto contexts = JsonItems(root, "contexts");
     for (size_t c = 0; c < contexts.size(); ++c) {
       const auto mappings = JsonItems(contexts[c], "mappings");
       for (size_t m = 0; m < mappings.size(); ++m) {
-        const auto mapping_path = "$.contexts[" + std::to_string(c)
-          + "].mappings[" + std::to_string(m) + "]";
+        const auto mapping_path = Pointer {} / "contexts" / c / "mappings" / m;
         reference(mappings[m], "action", mapping_path);
         const auto triggers = JsonItems(mappings[m], "triggers");
         for (size_t t = 0; t < triggers.size(); ++t) {
-          const auto trigger_path
-            = mapping_path + ".triggers[" + std::to_string(t) + "]";
+          const auto trigger_path = mapping_path / "triggers" / t;
           reference(triggers[t], "chord_action", trigger_path);
           for (const std::string_view list : { "combo_actions", "aux" }) {
             const auto steps = JsonItems(triggers[t], list);
             for (size_t i = 0; i < steps.size(); ++i) {
-              reference(steps[i], "action",
-                trigger_path + "." + std::string(list) + "[" + std::to_string(i)
-                  + "]");
+              reference(
+                steps[i], "action", trigger_path / std::string(list) / i);
             }
           }
         }
@@ -630,7 +627,7 @@ namespace {
       co_return RefuseSource(context,
         "A collision shape names its physics material, 'material_ref'");
     }
-    context.Reference(*material, Kind::kAsset, "material_ref");
+    context.Reference(*material, Kind::kAsset, "/material_ref");
     co_return true;
   }
 
@@ -643,7 +640,7 @@ namespace {
       .written = scene,
       .virtual_path = scene,
       .kind = Kind::kScene,
-      .object_path = "target_scene_virtual_path",
+      .json_pointer = {},
       .required = true,
     });
   }
@@ -690,12 +687,11 @@ namespace {
     for (const auto& group : groups.items()) {
       const auto bindings = JsonItems(groups, group.key());
       for (size_t i = 0; i < bindings.size(); ++i) {
-        const auto location
-          = "bindings." + group.key() + "[" + std::to_string(i) + "]";
+        const auto location = Pointer {} / "bindings" / group.key() / i;
         for (const auto& field : kFields) {
           if (const auto text = JsonString(bindings[i], field.name)) {
-            context.Reference(
-              *text, field.kind, location + "." + std::string(field.name));
+            context.Reference(*text, field.kind,
+              (location / std::string(field.name)).to_string());
           }
         }
       }
@@ -725,8 +721,8 @@ namespace {
     }
     const auto rows
       = document->is_array() ? *document : document->at("bindings");
-    const auto params = [&context](const nlohmann::json& row,
-                          const std::string& location) -> void {
+    const auto params
+      = [&context](const nlohmann::json& row, const Pointer& location) -> void {
       const auto items = JsonItems(row, "params");
       for (size_t j = 0; j < items.size(); ++j) {
         if (JsonString(items[j], "type") != "asset") {
@@ -734,21 +730,22 @@ namespace {
         }
         if (const auto value = JsonString(items[j], "value")) {
           context.Reference(*value, Kind::kAsset,
-            location + ".params[" + std::to_string(j) + "].value");
+            (location / "params" / j / "value").to_string());
         }
       }
     };
+    // Rows given as an array are the bindings, as the cook reads them.
     for (size_t i = 0; i < rows.size(); ++i) {
-      const auto location = "bindings[" + std::to_string(i) + "]";
+      const auto location = Pointer {} / "bindings" / i;
       if (const auto script = JsonString(rows[i], "script_virtual_path")) {
-        context.Reference(
-          *script, Kind::kScript, location + ".script_virtual_path");
+        context.Reference(*script, Kind::kScript,
+          (location / "script_virtual_path").to_string());
       }
       params(rows[i], location);
     }
     const auto instances = JsonItems(*document, "instance_bindings");
     for (size_t i = 0; i < instances.size(); ++i) {
-      params(instances[i], "instance_bindings[" + std::to_string(i) + "]");
+      params(instances[i], Pointer {} / "instance_bindings" / i);
     }
     co_return true;
   }
@@ -794,7 +791,7 @@ namespace {
         const auto& binding = source->textures.*slot.binding;
         if (binding.assigned) {
           context.Reference(binding.source_id, Kind::kTexture,
-            "textures." + std::string(slot.name));
+            (Pointer {} / "textures" / std::string(slot.name)).to_string());
         }
       }
       co_return true;
@@ -817,41 +814,39 @@ namespace {
       }
       auto buffer_refs = std::vector<ImportDependencyText> {};
       const auto buffer_ref
-        = [&](const std::string& path, const std::string& location) -> void {
+        = [&](const std::string& path, const Pointer& location) -> void {
         buffer_refs.push_back({
           .written = path,
           .kind = Kind::kBuffer,
-          .object_path = location,
+          .json_pointer = location.to_string(),
         });
       };
       for (size_t i = 0; i < source->lods.size(); ++i) {
         const auto& lod = source->lods.at(i);
-        const auto location = "lods[" + std::to_string(i) + "]";
+        const auto location = Pointer {} / "lods" / i;
         const auto* skin
           = std::get_if<internal::GeometrySource::Skinned>(&lod.mesh);
         const auto* buffers = skin
           ? &skin->buffers
           : std::get_if<internal::GeometrySource::Buffers>(&lod.mesh);
         if (buffers) {
-          buffer_ref(buffers->vertex, location + ".buffers.vb_ref");
-          buffer_ref(buffers->index, location + ".buffers.ib_ref");
+          buffer_ref(buffers->vertex, location / "buffers" / "vb_ref");
+          buffer_ref(buffers->index, location / "buffers" / "ib_ref");
         }
         if (skin) {
-          buffer_ref(skin->joint_index, location + ".skinning.joint_index_ref");
-          buffer_ref(
-            skin->joint_weight, location + ".skinning.joint_weight_ref");
-          buffer_ref(
-            skin->inverse_bind, location + ".skinning.inverse_bind_ref");
-          buffer_ref(skin->joint_remap, location + ".skinning.joint_remap_ref");
+          const auto skinning = location / "skinning";
+          buffer_ref(skin->joint_index, skinning / "joint_index_ref");
+          buffer_ref(skin->joint_weight, skinning / "joint_weight_ref");
+          buffer_ref(skin->inverse_bind, skinning / "inverse_bind_ref");
+          buffer_ref(skin->joint_remap, skinning / "joint_remap_ref");
           if (skin->skeleton) {
             context.Reference(*skin->skeleton, Kind::kAsset,
-              location + ".skinning.skeleton_ref");
+              (skinning / "skeleton_ref").to_string());
           }
         }
         for (size_t submesh = 0; submesh < lod.submeshes.size(); ++submesh) {
           context.Reference(lod.submeshes.at(submesh).material, Kind::kMaterial,
-            location + ".submeshes[" + std::to_string(submesh)
-              + "].material_ref");
+            (location / "submeshes" / submesh / "material_ref").to_string());
         }
       }
       // A local buffer's id is its resolved identity, a product of the job.
@@ -879,55 +874,54 @@ namespace {
       context.Output(job.virtual_path, Kind::kScene);
       for (size_t i = 0; i < source->renderables.size(); ++i) {
         const auto& renderable = source->renderables.at(i);
-        const auto location = "renderables[" + std::to_string(i) + "]";
-        context.Reference(
-          renderable.geometry, Kind::kGeometry, location + ".geometry_ref");
+        context.Reference(renderable.geometry, Kind::kGeometry,
+          (Pointer {} / "renderables" / i / "geometry_ref").to_string());
         for (const auto& entry : renderable.overrides) {
           if (const auto* asset
             = std::get_if<internal::SceneSource::AssetReference>(
               &entry.value)) {
             context.Reference(asset->virtual_path,
-              AssetKind(entry.property->asset_type), entry.object_path);
+              AssetKind(entry.property->asset_type), entry.json_pointer);
           }
         }
       }
       // The scene cook composes each instanced scene, so each is cooked first.
       for (const auto& instance : source->instances) {
-        context.Reference(instance.scene, Kind::kScene, instance.object_path);
+        context.Reference(instance.scene, Kind::kScene, instance.json_pointer);
         for (const auto& entry : instance.changes) {
           if (const auto* asset
             = std::get_if<internal::SceneSource::AssetReference>(
               &entry.change.value)) {
             context.Reference(asset->virtual_path,
               AssetKind(entry.change.property->asset_type),
-              entry.change.object_path);
+              entry.change.json_pointer);
           }
         }
       }
       for (const auto& reference : source->references) {
         context.Reference(reference.virtual_path, AssetKind(reference.type),
-          reference.object_path);
+          reference.json_pointer);
       }
       // The scene cook resolves each starting context, so each is cooked first.
       for (const auto& starting : source->starting_input_contexts) {
         context.Reference(
-          starting.context, Kind::kInputMappingContext, starting.object_path);
+          starting.context, Kind::kInputMappingContext, starting.json_pointer);
       }
       if (source->fog && source->fog->cubemap) {
         context.Reference(*source->fog->cubemap, Kind::kTexture,
-          "environment.fog.inscattering_color_cubemap_ref");
+          "/environment/fog/inscattering_color_cubemap_ref");
       }
       if (source->sky_light && source->sky_light->cubemap) {
         context.Reference(*source->sky_light->cubemap, Kind::kTexture,
-          "environment.sky_light.cubemap_ref");
+          "/environment/sky_light/cubemap_ref");
       }
       if (source->sky_sphere && source->sky_sphere->cubemap) {
         context.Reference(*source->sky_sphere->cubemap, Kind::kTexture,
-          "environment.sky_sphere.cubemap_ref");
+          "/environment/sky_sphere/cubemap_ref");
       }
       if (source->post_process && source->post_process->metering_mask) {
         context.Reference(*source->post_process->metering_mask, Kind::kTexture,
-          "environment.post_process_volume.auto_exposure_metering_mask");
+          "/environment/post_process_volume/auto_exposure_metering_mask");
       }
       co_return true;
     }
@@ -1200,7 +1194,7 @@ auto ResolveDependency(const std::string_view anchor,
     .written = text.written,
     .virtual_path = std::move(*resolved),
     .kind = text.kind,
-    .object_path = text.object_path,
+    .json_pointer = text.json_pointer,
     .required = true,
   };
 }
@@ -1225,7 +1219,7 @@ auto ExternalBufferReferences(const std::string_view anchor,
     if (!resolved.has_value()) {
       result.refused.push_back({
         .written = reference.written,
-        .object_path = reference.object_path,
+        .json_pointer = reference.json_pointer,
         .error = resolved.error(),
       });
     } else if (!local.contains(resolved->virtual_path)) {
@@ -1248,7 +1242,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
         { "written", dependency.written },
         { "virtual_path", dependency.virtual_path },
         { "kind", KindName(dependency.kind) },
-        { "object_path", dependency.object_path },
+        { "json_pointer", dependency.json_pointer },
         { "required", dependency.required },
       });
     }
@@ -1309,6 +1303,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
         { "message", diagnostic.message },
         { "source_path", diagnostic.source_path },
         { "object_path", diagnostic.object_path },
+        { "json_pointer", diagnostic.json_pointer },
         { "object_name", diagnostic.object_name },
       });
     }

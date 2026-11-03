@@ -338,7 +338,7 @@ justify its presence in `ImportOptions` rather than in a per-request descriptor:
 
 - **Format-based routing anchor.** Texture imports use format-based routing
   (`ImportFormat::kTextureImage` derived from file extension). There is no
-  normalized descriptor JSON on `ImportRequest` to carry behavioral parameters.
+  descriptor JSON on `ImportRequest` to carry behavioral parameters.
   `TextureTuning` fills that gap for all import paths, including standalone CLI
   jobs and descriptor-driven jobs.
 

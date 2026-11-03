@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Oxygen verified cooked inventory",
   "type": "object",
   "additionalProperties": false,
@@ -26,7 +26,7 @@
       "minimum": 256
     },
     "index_sha256": {
-      "$ref": "#/$defs/digest"
+      "$ref": "#/definitions/digest"
     },
     "files": {
       "type": "array",
@@ -50,7 +50,7 @@
           },
           "sha256": {
             "description": "The file's SHA-256; all zero for a resource data file, whose resources are verified one by one against their table rows.",
-            "$ref": "#/$defs/digest"
+            "$ref": "#/definitions/digest"
           }
         }
       }
@@ -144,7 +144,7 @@
       }
     }
   },
-  "$defs": {
+  "definitions": {
     "digest": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"

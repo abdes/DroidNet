@@ -109,7 +109,7 @@ public sealed class SourceAnalysisAdapterTests
         _ = report.Complete.Should().BeFalse();
         _ = report.Jobs[0].Diagnostics.Should().ContainSingle(issue => issue.OperationId == execution.OperationId
             && issue.Code == "analysis.source_missing" && issue.Severity == DiagnosticSeverity.Error
-            && issue.AffectedPath == Path.Combine(workspace.Root, "first.json") && issue.TechnicalMessage == "textures.base_color");
+            && issue.AffectedPath == Path.Combine(workspace.Root, "first.json") && issue.TechnicalMessage == "/textures/base_color");
     }
 
     /// <summary>A diagnostic about an object of the source names the object as the file does, beside its path.</summary>
@@ -130,6 +130,7 @@ public sealed class SourceAnalysisAdapterTests
                     ["message"] = "The material's texture wrap and filter modes are not imported.",
                     ["source_path"] = job["source_path"]!.GetValue<string>(),
                     ["object_path"] = "/materials/12",
+                    ["json_pointer"] = string.Empty,
                     ["object_name"] = "Bun",
                 });
             },
@@ -175,7 +176,7 @@ public sealed class SourceAnalysisAdapterTests
                 var job = report["jobs"]![0]!;
                 switch (failure)
                 {
-                    case "version": report["version"] = 2; break;
+                    case "version": report["version"] = 3; break;
                     case "path": job["observations"]![0]!["path"] = "relative.json"; break;
                     case "absence": job["observations"]![0]!["exists"] = false; break;
                     case "completion": job["complete"] = false; break;
@@ -189,6 +190,7 @@ public sealed class SourceAnalysisAdapterTests
                             ["message"] = "Source failed.",
                             ["source_path"] = job["source_path"]!.GetValue<string>(),
                             ["object_path"] = string.Empty,
+                            ["json_pointer"] = string.Empty,
                         });
                         break;
                 }
@@ -368,12 +370,13 @@ public sealed class SourceAnalysisAdapterTests
                         ["code"] = "analysis.source_missing",
                         ["message"] = "A source is missing.",
                         ["source_path"] = source,
-                        ["object_path"] = "textures.base_color",
+                        ["object_path"] = string.Empty,
+                        ["json_pointer"] = "/textures/base_color",
                     }),
                 });
             }
 
-            var report = new JsonObject { ["version"] = 1, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs };
+            var report = new JsonObject { ["version"] = 2, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs };
             this.RewriteReport?.Invoke(report);
             await File.WriteAllTextAsync(this.ReportPath, report.ToJsonString(), cancellationToken).ConfigureAwait(false);
             return this.Failure is { } failure ? throw failure : new(this.ExitCode, string.Empty, string.Empty);

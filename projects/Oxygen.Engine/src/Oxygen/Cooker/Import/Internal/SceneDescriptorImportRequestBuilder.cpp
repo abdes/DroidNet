@@ -45,8 +45,8 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
     = SceneSource::FromDescriptor(document->text, descriptor_path, diagnostics);
   for (const auto& diagnostic : diagnostics) {
     error_stream << "ERROR [" << diagnostic.code << "]: " << diagnostic.message;
-    if (!diagnostic.object_path.empty()) {
-      error_stream << " (" << diagnostic.object_path << ")";
+    if (!diagnostic.json_pointer.empty()) {
+      error_stream << " (at '" << diagnostic.json_pointer << "')";
     }
     error_stream << '\n';
   }
@@ -84,7 +84,7 @@ auto BuildSceneDescriptorRequest(const SceneDescriptorImportSettings& settings,
     = settings.job_name.empty() ? source->name : settings.job_name;
 
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-    .normalized_descriptor_json = std::move(document->text),
+    .descriptor_json = std::move(document->text),
   };
 
   return request;

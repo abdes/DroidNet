@@ -52,6 +52,7 @@ namespace {
 
   namespace fs = std::filesystem;
   using nlohmann::json;
+  using Pointer = json::json_pointer;
 
   //! Where a mounts file stands: the `--mounts` file and the project's own
   //! may override committed paths; a parent file may not.
@@ -126,7 +127,8 @@ namespace {
   //! What a diagnostic is about, beyond its message.
   struct Subject final {
     fs::path file;
-    std::string field;
+    //! RFC 6901 pointer to the value, in `file`.
+    std::string json_pointer;
     std::string mount;
   };
 
@@ -136,11 +138,11 @@ namespace {
     if (subject.file.empty()) {
       return {};
     }
-    if (subject.field.empty()) {
+    if (subject.json_pointer.empty()) {
       return fmt::format(" (in '{}')", subject.file.string());
     }
     return fmt::format(
-      " (in '{}' at '{}')", subject.file.string(), subject.field);
+      " (in '{}' at '{}')", subject.file.string(), subject.json_pointer);
   }
 
   //! The file or option that gave a mount its folder.
@@ -189,7 +191,7 @@ namespace {
         .code = std::string { code.id },
         .message = std::move(message),
         .source_path = subject.file.string(),
-        .object_path = subject.field,
+        .json_pointer = subject.json_pointer,
         .object_name = subject.mount,
       });
     }
@@ -368,7 +370,8 @@ namespace {
   auto ParseMountsFile(const IMountFileSystem& files, const fs::path& path,
     const Reporter& reporter) -> std::optional<json>
   {
-    const auto subject = Subject { .file = path, .field = {}, .mount = {} };
+    const auto subject
+      = Subject { .file = path, .json_pointer = {}, .mount = {} };
     const auto text = ReadText(files, path);
     if (!text.has_value()) {
       reporter.Report(mount_codes::kFileInvalid, subject, "it cannot be read");
@@ -396,7 +399,7 @@ namespace {
       const auto& name = item.key();
       const auto subject = Subject {
         .file = path,
-        .field = "mounts." + name,
+        .json_pointer = (Pointer {} / "mounts" / name).to_string(),
         .mount = name,
       };
       if (!CheckName(name, owner, subject, reporter)) {
@@ -422,13 +425,17 @@ namespace {
     if (!internal::CollectJsonSchemaIssues(
           validator, doc, issues, internal_error)) {
       reporter.Report(mount_codes::kFileInvalid,
-        Subject { .file = path, .field = {}, .mount = {} },
+        Subject { .file = path, .json_pointer = {}, .mount = {} },
         "the schema validator failed: " + internal_error);
       return false;
     }
     for (const auto& issue : issues) {
       reporter.Report(mount_codes::kFileInvalid,
-        Subject { .file = path, .field = issue.object_path, .mount = {} },
+        Subject {
+          .file = path,
+          .json_pointer = issue.json_pointer,
+          .mount = {},
+        },
         issue.message);
     }
     return issues.empty();
@@ -450,7 +457,11 @@ namespace {
     const auto version = doc->find("version");
     if (version != doc->end() && version->is_number() && *version != 1) {
       reporter.Report(mount_codes::kFileVersion,
-        Subject { .file = header.file, .field = "version", .mount = {} },
+        Subject {
+          .file = header.file,
+          .json_pointer = "/version",
+          .mount = {},
+        },
         version->dump());
       return { .file = std::nullopt, .stops_walk = stops_walk };
     }
@@ -506,7 +517,7 @@ namespace {
         : request.working_directory / *request.mounts_option;
       if (file_system.KindOf(option) != cooked::PathKind::kFile) {
         reporter.Report(mount_codes::kFileInvalid,
-          Subject { .file = option, .field = {}, .mount = {} },
+          Subject { .file = option, .json_pointer = {}, .mount = {} },
           "the file named by --mounts does not exist");
         files.push_back(MountsFile {
           .file = option.lexically_normal(),
@@ -574,10 +585,11 @@ namespace {
         : request_->working_directory;
       for (const auto& [index, declaration] :
         std::views::enumerate(request_->declarations)) {
-        const auto field = fmt::format("mounts[{}]", index);
+        const auto field
+          = Pointer {} / "mounts" / static_cast<std::size_t>(index);
         const auto name_subject = Subject {
           .file = DeclaredIn(),
-          .field = field + ".name",
+          .json_pointer = (field / "name").to_string(),
           .mount = declaration.name,
         };
         if (!CheckName(
@@ -590,7 +602,7 @@ namespace {
           reporter_.Report(mount_codes::kKindUnknown,
             Subject {
               .file = DeclaredIn(),
-              .field = field + ".kind",
+              .json_pointer = (field / "kind").to_string(),
               .mount = declaration.name,
             },
             declaration.name, to_string(declaration.kind));
@@ -619,13 +631,13 @@ namespace {
           .binding = std::nullopt,
         };
         if (declaration.path.has_value()) {
-          const auto path_field = field + ".path";
+          const auto path_field = (field / "path").to_string();
           if (request_->form == MountDeclarationForm::kCommittedFile
             && IsAbsoluteText(ToPath(*declaration.path))) {
             reporter_.Report(mount_codes::kAbsoluteCommitted,
               Subject {
                 .file = DeclaredIn(),
-                .field = path_field,
+                .json_pointer = path_field,
                 .mount = declaration.name,
               },
               *declaration.path);
@@ -651,7 +663,7 @@ namespace {
       for (const auto& item : file.entries) {
         const auto subject = Subject {
           .file = file.file,
-          .field = "mounts." + item.name,
+          .json_pointer = (Pointer {} / "mounts" / item.name).to_string(),
           .mount = item.name,
         };
         const auto binding = Binding {
@@ -769,7 +781,11 @@ namespace {
           return;
         }
         reporter_.Report(mount_codes::kUnbound,
-          Subject { .file = DeclaredIn(), .field = {}, .mount = mount.name },
+          Subject {
+            .file = DeclaredIn(),
+            .json_pointer = {},
+            .mount = mount.name,
+          },
           mount.name);
         return;
       }
@@ -785,7 +801,7 @@ namespace {
         : MountRole::kShared;
       const auto subject = Subject {
         .file = DescribeOrigin(mount),
-        .field = {},
+        .json_pointer = {},
         .mount = mount.name,
       };
 
@@ -914,7 +930,7 @@ namespace {
             reporter_.Report(mount_codes::kFolderOverlap,
               Subject {
                 .file = DescribeOrigin(*other),
-                .field = {},
+                .json_pointer = {},
                 .mount = other->name,
               },
               other->name, other->folder.string(), mount->name,
@@ -930,7 +946,7 @@ namespace {
         reporter_.Report(mount_codes::kFolderInOutput,
           Subject {
             .file = DescribeOrigin(mount),
-            .field = {},
+            .json_pointer = {},
             .mount = mount.name,
           },
           mount.name, mount.folder.string());
@@ -1035,7 +1051,7 @@ namespace {
           committed, content::VirtualPathRuleSet::kCooked);
       error.has_value()) {
       findings.push_back(internal::RefuseReference(subject.file.string(),
-        subject.file.string(), committed, *error, subject.field));
+        subject.file.string(), committed, *error, subject.json_pointer));
       return std::nullopt;
     }
 
@@ -1120,7 +1136,11 @@ auto MountTable::MountPathOf(const fs::path& file,
     return MountedSource { .file = canonical, .mount_path = mount_path };
   }
   Reporter { findings }.Report(mount_codes::kSourceOutsideMount,
-    Subject { .file = fs::path { declared_in }, .field = {}, .mount = {} },
+    Subject {
+      .file = fs::path { declared_in },
+      .json_pointer = {},
+      .mount = {},
+    },
     canonical.generic_string());
   return std::nullopt;
 }
@@ -1131,7 +1151,7 @@ auto MountTable::LocateSource(const CommittedPath& committed,
   return Locate(*this, project_root,
     Subject {
       .file = fs::path { declared_in },
-      .field = std::string { committed.field },
+      .json_pointer = std::string { committed.json_pointer },
       .mount = {},
     },
     committed.text, findings);
@@ -1145,7 +1165,7 @@ auto MountTable::LocateReference(const fs::path& referrer,
     *file_system, referrer.is_absolute() ? referrer : project_root / referrer);
   const auto subject = Subject {
     .file = holder,
-    .field = std::string { reference.field },
+    .json_pointer = std::string { reference.json_pointer },
     .mount = {},
   };
   // A mount path starts with one slash and no root name; any other rooted
@@ -1166,9 +1186,9 @@ auto MountTable::LocateReference(const fs::path& referrer,
   const auto resolved = content::ResolveReference(
     own->mount_path, reference.text, content::VirtualPathRuleSet::kCooked);
   if (!resolved.has_value()) {
-    findings.push_back(
-      internal::RefuseReference(own->mount_path, holder.generic_string(),
-        reference.text, resolved.error(), std::string { reference.field }));
+    findings.push_back(internal::RefuseReference(own->mount_path,
+      holder.generic_string(), reference.text, resolved.error(),
+      std::string { reference.json_pointer }));
     return std::nullopt;
   }
   return Locate(*this, project_root, subject, *resolved, findings);
@@ -1261,7 +1281,7 @@ auto CheckMountNameConflicts(const std::span<const MountTable> tables)
     reporter.Report(mount_codes::kNameConflict,
       Subject {
         .file = DescribeOrigin(*other.table, mount),
-        .field = {},
+        .json_pointer = {},
         .mount = mount.name,
       },
       mount.name, mount.folder.string(), earlier.mount->folder.string(),

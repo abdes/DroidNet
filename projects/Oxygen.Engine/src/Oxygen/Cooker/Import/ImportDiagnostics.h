@@ -44,15 +44,20 @@ struct ImportDiagnostic final {
   std::string message;
 
   //! Optional path to the source file.
-  std::string source_path {};
+  std::string source_path;
 
   //! Optional hierarchical object path (node/material/mesh).
-  std::string object_path {};
+  std::string object_path;
+
+  //! Optional RFC 6901 pointer to the value the diagnostic is about, in the
+  //! JSON document `source_path` names; empty when the diagnostic is about the
+  //! whole document or is not about a JSON document.
+  std::string json_pointer;
 
   //! Optional name of the object the diagnostic is about, as the source file
   //! names it (a material, mesh or node); empty when the object has no name or
   //! the diagnostic is about the whole source.
-  std::string object_name {};
+  std::string object_name;
 };
 
 } // namespace oxygen::content::import

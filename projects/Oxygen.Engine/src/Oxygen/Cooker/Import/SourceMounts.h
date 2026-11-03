@@ -409,8 +409,9 @@ struct Mount final {
 //! A path a committed file holds, and the field that holds it.
 struct CommittedPath final {
   std::string_view text;
-  //! The field, such as `jobs[0].source`, named by diagnostics.
-  std::string_view field;
+  //! The RFC 6901 pointer to the field, such as `/jobs/0/source`, named by
+  //! diagnostics.
+  std::string_view json_pointer;
 };
 
 //! A source file located through a mount table.

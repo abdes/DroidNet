@@ -79,14 +79,14 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
 
@@ -104,20 +104,17 @@ namespace {
       .validation_failed_code = "physics.shape.schema_validation_failed",
       .validation_failed_prefix
       = "Collision shape descriptor validation failed: ",
-      .validation_overflow_prefix
-      = "Collision shape descriptor validation emitted ",
       .validator_failure_code = "physics.shape.schema_validator_failure",
       .validator_failure_prefix
       = "Collision shape descriptor schema validator failed: ",
-      .max_issues = 12,
     };
 
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetCollisionShapeDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) -> void {
+        const std::string& json_pointer) -> void {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(code), message, object_path);
+          std::string(code), message, json_pointer);
       });
   }
 
@@ -265,7 +262,7 @@ namespace {
     const auto reference = internal::ResolveJobReference(request, material_ref);
     if (!reference.has_value()) {
       session.AddDiagnostic(internal::RefuseReference(
-        request, material_ref, reference.error(), "material_ref"));
+        request, material_ref, reference.error(), "/material_ref"));
       return false;
     }
     const auto named
@@ -276,13 +273,13 @@ namespace {
     if (!found.has_value()) {
       if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
         session.AddDiagnostic(internal::RefuseUnmountedReference(
-          request, *reference, "material_ref"));
+          request, *reference, "/material_ref"));
       } else {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "physics.shape.material_ref_unresolved",
           "Reference was not found: "
             + internal::DescribeLookup(*reference, found.error()),
-          "material_ref");
+          "/material_ref");
       }
       return false;
     }
@@ -292,7 +289,7 @@ namespace {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.reference_source_mismatch",
         "Resolved material_ref is not in the target source domain: " + named,
-        "material_ref");
+        "/material_ref");
       return false;
     }
 
@@ -300,7 +297,7 @@ namespace {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.material_ref_not_physics_material",
         "Resolved material_ref has unexpected asset type: " + named,
-        "material_ref");
+        "/material_ref");
       return false;
     }
 
@@ -461,7 +458,7 @@ namespace {
         || limits_min.at(2) > limits_max.at(2)) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "physics.shape.world_boundary_limits_invalid",
-          "limits_min must be <= limits_max for each axis", "limits_min");
+          "limits_min must be <= limits_max for each axis", "/limits_min");
         return false;
       }
       break;
@@ -477,9 +474,10 @@ namespace {
     return true;
   }
 
-  auto ParseCompoundChild(const json& child_doc, const std::string& child_path,
-    ImportSession& session, const ImportRequest& request,
-    phys::CompoundShapeChildDesc& out_child) -> bool
+  auto ParseCompoundChild(const json& child_doc,
+    const json::json_pointer& child_path, ImportSession& session,
+    const ImportRequest& request, phys::CompoundShapeChildDesc& out_child)
+    -> bool
   {
     auto child_error = std::optional<std::string> {};
     auto child_type = phys::ShapeType::kInvalid;
@@ -512,14 +510,15 @@ namespace {
         "physics.shape.schema_contract_mismatch",
         "Compound child extraction failed after schema validation: "
           + *child_error,
-        child_path);
+        child_path.to_string());
       return false;
     }
 
     if (child_type == phys::ShapeType::kCompound) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         "physics.shape.compound_child_invalid",
-        "Nested compound child shapes are not supported", child_path);
+        "Nested compound child shapes are not supported",
+        child_path.to_string());
       return false;
     }
 
@@ -563,7 +562,7 @@ namespace {
           AddDiagnostic(session, request, ImportSeverity::kError,
             "physics.shape.world_boundary_limits_invalid",
             "Compound child limits_min must be <= limits_max for each axis",
-            child_path + ".limits_min");
+            (child_path / "limits_min").to_string());
           return false;
         }
         break;
@@ -575,7 +574,8 @@ namespace {
       case phys::ShapeType::kCompound:
         AddDiagnostic(session, request, ImportSeverity::kError,
           "physics.shape.compound_child_invalid",
-          "Compound children must use analytic shape types only", child_path);
+          "Compound children must use analytic shape types only",
+          child_path.to_string());
         return false;
       }
     } catch (const std::exception& ex) {
@@ -583,7 +583,7 @@ namespace {
         "physics.shape.schema_contract_mismatch",
         "Compound child parameter extraction failed after schema validation: "
           + std::string(ex.what()),
-        child_path);
+        child_path.to_string());
       return false;
     }
 
@@ -602,7 +602,7 @@ namespace {
     const auto& children = descriptor_doc.at("children");
     out_children.reserve(children.size());
     for (size_t i = 0; i < children.size(); ++i) {
-      const auto child_path = "children[" + std::to_string(i) + "]";
+      const auto child_path = json::json_pointer {} / "children" / i;
       auto child_desc = phys::CompoundShapeChildDesc {};
       if (!ParseCompoundChild(
             children.at(i), child_path, session, request, child_desc)) {
@@ -657,14 +657,14 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = json::parse(request_payload->normalized_descriptor_json);
+    descriptor_doc = json::parse(request_payload->descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
   if (parse_exception.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.request_invalid_json",
-      "Normalized descriptor payload is invalid JSON: " + *parse_exception);
+      "Descriptor payload is invalid JSON: " + *parse_exception);
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid collision shape payload");
     co_return co_await FinalizeWithTelemetry(session);
@@ -672,7 +672,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (!descriptor_doc.is_object()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.request_invalid_json",
-      "Normalized descriptor payload must be a JSON object");
+      "Descriptor payload must be a JSON object");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid collision shape payload");
     co_return co_await FinalizeWithTelemetry(session);

@@ -54,7 +54,7 @@ namespace {
     request.source_mounts = oxygen::cooker::test::ContentMountTable(
       request.source_path.parent_path());
     request.buffer_container = ImportRequest::BufferContainerPayload {
-      .normalized_descriptor_json = descriptor_doc.dump(),
+      .descriptor_json = descriptor_doc.dump(),
     };
     return request;
   }

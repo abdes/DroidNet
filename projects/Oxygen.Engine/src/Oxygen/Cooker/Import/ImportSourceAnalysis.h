@@ -43,7 +43,9 @@ struct ImportLogicalDependency final {
   //! The canonical virtual path the text names.
   std::string virtual_path;
   ImportDependencyKind kind = ImportDependencyKind::kAsset;
-  std::string object_path;
+  //! RFC 6901 pointer to the field that holds the text, in the analyzed
+  //! source; empty when no field of that source does.
+  std::string json_pointer;
   bool required = true;
 };
 
@@ -51,13 +53,17 @@ struct ImportLogicalDependency final {
 struct ImportDependencyText final {
   std::string written;
   ImportDependencyKind kind = ImportDependencyKind::kAsset;
-  std::string object_path;
+  //! RFC 6901 pointer to the field that holds the text, in the analyzed
+  //! source; empty when no field of that source does.
+  std::string json_pointer;
 };
 
 //! A reference text the grammar refuses.
 struct ImportDependencyRefusal final {
   std::string written;
-  std::string object_path;
+  //! RFC 6901 pointer to the field that holds the text, in the analyzed
+  //! source; empty when no field of that source does.
+  std::string json_pointer;
   VirtualPathError error = VirtualPathError::kEmpty;
 };
 
@@ -161,7 +167,7 @@ struct ImportSourceJobAnalysis final {
 
 //! Source discovery for one manifest batch. No cooked files are produced.
 struct ImportSourceAnalysis final {
-  uint32_t version = 1;
+  uint32_t version = 2;
   std::string producer_version;
   std::vector<ImportSourceJobAnalysis> jobs;
   bool complete = false;

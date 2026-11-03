@@ -66,7 +66,7 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
                 Code = issue.GetProperty("code").GetString()!,
                 Message = issue.GetProperty("message").GetString()!,
                 AffectedPath = issue.GetProperty("source_path").GetString(),
-                TechnicalMessage = issue.GetProperty("object_path").GetString(),
+                TechnicalMessage = Location(issue),
                 AffectedEntity = NativeSourceObject.Read(issue),
             })])
         {
@@ -77,8 +77,14 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
         => [.. entries.EnumerateArray().Select(static item => new NativeLogicalDependency(
             item.GetProperty("virtual_path").GetString()!,
             item.GetProperty("kind").GetString()!,
-            item.GetProperty("object_path").GetString()!,
+            item.GetProperty("json_pointer").GetString()!,
             item.GetProperty("required").GetBoolean()))];
+
+    // Where a diagnostic points: its place in the JSON source, else the model object.
+    private static string? Location(JsonElement issue)
+        => issue.GetProperty("json_pointer").GetString() is { Length: > 0 } pointer
+            ? pointer
+            : issue.GetProperty("object_path").GetString();
 
     private static NativeSourceObservation ReadObservation(JsonElement item)
     {

@@ -137,18 +137,16 @@ namespace {
 
   auto AddDiagnosticAtPath(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path) -> void
+    const nlohmann::json::json_pointer& location) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = location.to_string(),
     });
   }
-
-  constexpr size_t kMaxSchemaDiagnostics = 12;
 
   auto PhysicsSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
@@ -164,24 +162,22 @@ namespace {
       = internal::JsonSchemaValidationDiagnosticConfig {
           .validation_failed_code = "physics.sidecar.schema_validation_failed",
           .validation_failed_prefix = "Schema validation failed: ",
-          .validation_overflow_prefix = "Schema validation reported ",
           .validator_failure_code = "physics.sidecar.schema_validator_failure",
           .validator_failure_prefix
           = "Physics schema validation engine failure: ",
-          .max_issues = kMaxSchemaDiagnostics,
         };
 
     return internal::ValidateJsonSchemaWithDiagnostics(PhysicsSchemaValidator(),
       doc, kSchemaDiagConfig,
       [&](const std::string_view code, std::string message,
-        std::string object_path) -> void {
-        if (object_path.empty()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            std::string(code), std::move(message));
-          return;
-        }
-        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          std::string(code), std::move(message), std::move(object_path));
+        std::string json_pointer) -> void {
+        session.AddDiagnostic({
+          .severity = ImportSeverity::kError,
+          .code = std::string(code),
+          .message = std::move(message),
+          .source_path = request.source_path.string(),
+          .json_pointer = std::move(json_pointer),
+        });
       });
   }
 
@@ -1105,14 +1101,14 @@ namespace {
     const auto& array = bindings.at(key);
     out.reserve(array.size());
     for (size_t i = 0; i < array.size(); ++i) {
-      const auto object_path
-        = std::string("bindings.") + key + "[" + std::to_string(i) + "]";
+      const auto location
+        = nlohmann::json::json_pointer {} / "bindings" / std::string(key) / i;
       auto record = RecordT {};
       auto error = std::string {};
       if (!parse_fn(array.at(i), record, error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.schema_contract_mismatch", std::move(error),
-          object_path);
+          location);
         continue;
       }
       out.push_back(std::move(record));
@@ -1133,8 +1129,8 @@ namespace {
           "Duplicate singleton binding for node "
             + std::to_string(oxygen::base::CheckedAt(node_indices, i)) + " in "
             + std::string(category),
-          std::string("bindings.") + std::string(category) + "["
-            + std::to_string(i) + "]");
+          nlohmann::json::json_pointer {} / "bindings" / std::string(category)
+            / i);
       }
     }
   }
@@ -1263,14 +1259,14 @@ namespace {
   };
 
   auto ResolveAssetKeyForVirtualPath(BindingValidationContext& ctx,
-    std::string_view text, std::string_view object_path,
+    std::string_view text, const nlohmann::json::json_pointer& location,
     const data::AssetType expected_type, const ReferenceCodes& codes)
     -> std::optional<data::AssetKey>
   {
     const auto reference = internal::ResolveJobReference(*ctx.request, text);
     if (!reference.has_value()) {
       ctx.session->AddDiagnostic(internal::RefuseReference(
-        *ctx.request, text, reference.error(), std::string(object_path)));
+        *ctx.request, text, reference.error(), location.to_string()));
       return std::nullopt;
     }
     const auto named
@@ -1281,13 +1277,13 @@ namespace {
     if (!found.has_value()) {
       if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
         ctx.session->AddDiagnostic(internal::RefuseUnmountedReference(
-          *ctx.request, *reference, std::string(object_path)));
+          *ctx.request, *reference, location.to_string()));
       } else {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           std::string(codes.unresolved),
           "Reference was not found: "
             + internal::DescribeLookup(*reference, found.error()),
-          std::string(object_path));
+          location);
       }
       return std::nullopt;
     }
@@ -1299,15 +1295,14 @@ namespace {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         "physics.sidecar.reference_source_mismatch",
         "Resolved reference is not in the target scene source domain: " + named,
-        std::string(object_path));
+        location);
       return std::nullopt;
     }
 
     if (target_it->second->type != expected_type) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.wrong_type),
-        "Resolved reference has unexpected asset type: " + named,
-        std::string(object_path));
+        "Resolved reference has unexpected asset type: " + named, location);
       return std::nullopt;
     }
 
@@ -1316,14 +1311,14 @@ namespace {
 
   auto ValidateNodeIndex(const uint32_t node_index, const uint32_t node_count,
     ImportSession& session, const ImportRequest& request,
-    std::string_view object_path) -> bool
+    const nlohmann::json::json_pointer& location) -> bool
   {
     if (node_index < node_count) {
       return true;
     }
     AddDiagnosticAtPath(session, request, ImportSeverity::kError,
       "physics.sidecar.node_ref_out_of_bounds",
-      "Node index is out of bounds for target scene", std::string(object_path));
+      "Node index is out of bounds for target scene", location);
     return false;
   }
 
@@ -1333,8 +1328,8 @@ namespace {
   {
     for (size_t i = 0; i < bindings.size(); ++i) {
       auto& binding = bindings.at(i);
-      const auto base_path = std::string("bindings.") + std::string(category)
-        + "[" + std::to_string(i) + "]";
+      const auto base_path = nlohmann::json::json_pointer {} / "bindings"
+        / std::string(category) / i;
       if (!ValidateNodeIndex(binding.record.node_index, ctx.node_count,
             *ctx.session, *ctx.request, base_path)) {
         continue;
@@ -1342,14 +1337,14 @@ namespace {
 
       const auto shape_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
-          base_path + ".shape_ref", data::AssetType::kCollisionShape,
+          base_path / "shape_ref", data::AssetType::kCollisionShape,
           ReferenceCodes {
             .unresolved = "physics.sidecar.shape_ref_unresolved",
             .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
           });
       const auto material_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.material_ref,
-          base_path + ".material_ref", data::AssetType::kPhysicsMaterial,
+          base_path / "material_ref", data::AssetType::kPhysicsMaterial,
           ReferenceCodes {
             .unresolved = "physics.sidecar.material_ref_unresolved",
             .wrong_type = "physics.sidecar.material_ref_not_physics_material",
@@ -1369,8 +1364,8 @@ namespace {
   {
     for (size_t i = 0; i < bindings.size(); ++i) {
       auto& binding = bindings.at(i);
-      const auto base_path = std::string("bindings.") + std::string(category)
-        + "[" + std::to_string(i) + "]";
+      const auto base_path = nlohmann::json::json_pointer {} / "bindings"
+        / std::string(category) / i;
       if (!ValidateNodeIndex(binding.record.node_index, ctx.node_count,
             *ctx.session, *ctx.request, base_path)) {
         continue;
@@ -1378,7 +1373,7 @@ namespace {
 
       const auto shape_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
-          base_path + ".shape_ref", data::AssetType::kCollisionShape,
+          base_path / "shape_ref", data::AssetType::kCollisionShape,
           ReferenceCodes {
             .unresolved = "physics.sidecar.shape_ref_unresolved",
             .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
@@ -1399,10 +1394,10 @@ namespace {
         continue;
       }
       const auto base_path
-        = std::string("bindings.characters[") + std::to_string(i) + "]";
+        = nlohmann::json::json_pointer {} / "bindings" / "characters" / i;
       const auto inner_shape_key
         = ResolveAssetKeyForVirtualPath(ctx, *binding.inner_shape_ref,
-          base_path + ".inner_shape_ref", data::AssetType::kCollisionShape,
+          base_path / "inner_shape_ref", data::AssetType::kCollisionShape,
           ReferenceCodes {
             .unresolved = "physics.sidecar.inner_shape_ref_unresolved",
             .wrong_type = "physics.sidecar.inner_shape_ref_not_collision_shape",
@@ -1419,8 +1414,8 @@ namespace {
     BindingValidationContext& ctx) -> void
   {
     for (size_t i = 0; i < records.size(); ++i) {
-      const auto path = std::string("bindings.") + std::string(category) + "["
-        + std::to_string(i) + "]";
+      const auto path = nlohmann::json::json_pointer {} / "bindings"
+        / std::string(category) / i;
       (void)ValidateNodeIndex(node_index_of(records.at(i)), ctx.node_count,
         *ctx.session, *ctx.request, path);
     }
@@ -1443,9 +1438,9 @@ namespace {
 
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
-        = std::string("bindings.soft_bodies[") + std::to_string(i) + "]";
+        = nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i;
       if (!ValidateNodeIndex(records.at(i).record.node_index, ctx.node_count,
-            *ctx.session, *ctx.request, base_path + ".node_index")) {
+            *ctx.session, *ctx.request, base_path / "node_index")) {
         continue;
       }
 
@@ -1456,35 +1451,35 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.edge_compliance must be finite and >= 0",
-          base_path + ".edge_compliance");
+          base_path / "edge_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.shear_compliance)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.shear_compliance must be finite and >= 0",
-          base_path + ".shear_compliance");
+          base_path / "shear_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.bend_compliance)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.bend_compliance must be finite and >= 0",
-          base_path + ".bend_compliance");
+          base_path / "bend_compliance");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.volume_compliance)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.volume_compliance must be finite and >= 0",
-          base_path + ".volume_compliance");
+          base_path / "volume_compliance");
         continue;
       }
       if (!std::isfinite(records.at(i).record.pressure_coefficient)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.pressure_coefficient must be finite",
-          base_path + ".pressure_coefficient");
+          base_path / "pressure_coefficient");
         continue;
       }
       if (!is_finite_non_negative(
@@ -1492,14 +1487,14 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.tether_max_distance_multiplier must be finite and >= 0",
-          base_path + ".tether_max_distance_multiplier");
+          base_path / "tether_max_distance_multiplier");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.global_damping)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.global_damping must be finite and >= 0",
-          base_path + ".global_damping");
+          base_path / "global_damping");
         continue;
       }
 
@@ -1507,28 +1502,28 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.restitution must be finite and >= 0",
-          base_path + ".restitution");
+          base_path / "restitution");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.friction)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.friction must be finite and >= 0",
-          base_path + ".friction");
+          base_path / "friction");
         continue;
       }
       if (!is_finite_non_negative(records.at(i).record.vertex_radius)) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.vertex_radius must be finite and >= 0",
-          base_path + ".vertex_radius");
+          base_path / "vertex_radius");
         continue;
       }
       if (records.at(i).record.solver_iteration_count == 0U) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.solver_iteration_count must be greater than zero",
-          base_path + ".solver_iteration_count");
+          base_path / "solver_iteration_count");
         continue;
       }
       if (records.at(i).pinned_vertices.size()
@@ -1536,7 +1531,7 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.pinned_vertices exceeds uint32 range",
-          base_path + ".pinned_vertices");
+          base_path / "pinned_vertices");
         continue;
       }
       if (records.at(i).kinematic_vertices.size()
@@ -1544,7 +1539,7 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "soft_bodies.kinematic_vertices exceeds uint32 range",
-          base_path + ".kinematic_vertices");
+          base_path / "kinematic_vertices");
         continue;
       }
 
@@ -1555,7 +1550,7 @@ namespace {
 
       const auto source_mesh_key
         = ResolveAssetKeyForVirtualPath(ctx, records.at(i).source_mesh_ref,
-          base_path + ".source_mesh_ref", data::AssetType::kGeometry,
+          base_path / "source_mesh_ref", data::AssetType::kGeometry,
           ReferenceCodes {
             .unresolved = "physics.sidecar.source_mesh_ref_unresolved",
             .wrong_type = "physics.sidecar.source_mesh_ref_not_geometry",
@@ -1569,7 +1564,7 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.source_mesh_ref_unresolved",
           "Resolved source mesh has no descriptor in target cooked root",
-          base_path + ".source_mesh_ref");
+          base_path / "source_mesh_ref");
         continue;
       }
       records.at(i).source_mesh_references
@@ -1578,7 +1573,7 @@ namespace {
       const auto& collision_mesh_ref = records.at(i).collision_mesh_ref;
       if (collision_mesh_ref) {
         (void)ResolveAssetKeyForVirtualPath(ctx, *collision_mesh_ref,
-          base_path + ".collision_mesh_ref", data::AssetType::kGeometry,
+          base_path / "collision_mesh_ref", data::AssetType::kGeometry,
           ReferenceCodes {
             .unresolved = "physics.sidecar.collision_mesh_ref_unresolved",
             .wrong_type = "physics.sidecar.collision_mesh_ref_not_geometry",
@@ -1587,7 +1582,7 @@ namespace {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
             ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "soft_bodies.collision_mesh_ref is not supported for jolt backend",
-            base_path + ".collision_mesh_ref");
+            base_path / "collision_mesh_ref");
           continue;
         }
       }
@@ -1601,7 +1596,7 @@ namespace {
             ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "soft-body backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
-            base_path + ".backend.target");
+            base_path / "backend" / "target");
           continue;
         }
       }
@@ -1625,14 +1620,14 @@ namespace {
 
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
-        = std::string("bindings.joints[") + std::to_string(i) + "]";
+        = nlohmann::json::json_pointer {} / "bindings" / "joints" / i;
       const bool node_a_ok
         = ValidateNodeIndex(records.at(i).record.node_index_a, ctx.node_count,
-          *ctx.session, *ctx.request, base_path + ".node_index_a");
+          *ctx.session, *ctx.request, base_path / "node_index_a");
       const bool node_b_ok
         = (records.at(i).record.node_index_b == phys::kWorldAttachmentNodeIndex)
         || ValidateNodeIndex(records.at(i).record.node_index_b, ctx.node_count,
-          *ctx.session, *ctx.request, base_path + ".node_index_b");
+          *ctx.session, *ctx.request, base_path / "node_index_b");
       if (!(node_a_ok && node_b_ok)) {
         continue;
       }
@@ -1646,7 +1641,7 @@ namespace {
             ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "joint backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
-            base_path + ".backend.target");
+            base_path / "backend" / "target");
           continue;
         }
       }
@@ -1672,16 +1667,16 @@ namespace {
     wheel_records.clear();
     for (size_t i = 0; i < records.size(); ++i) {
       const auto base_path
-        = std::string("bindings.vehicles[") + std::to_string(i) + "]";
+        = nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i;
       if (!ValidateNodeIndex(records.at(i).record.node_index, ctx.node_count,
-            *ctx.session, *ctx.request, base_path + ".node_index")) {
+            *ctx.session, *ctx.request, base_path / "node_index")) {
         continue;
       }
 
       if (records.at(i).wheels.size() < 2U) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
-          "Vehicle must declare at least two wheels", base_path + ".wheels");
+          "Vehicle must declare at least two wheels", base_path / "wheels");
         continue;
       }
 
@@ -1691,25 +1686,24 @@ namespace {
       const auto wheel_offset = wheel_records.size();
       auto slice_count = uint32_t { 0 };
       for (size_t w = 0; w < records.at(i).wheels.size(); ++w) {
-        const auto wheel_path
-          = base_path + ".wheels[" + std::to_string(w) + "]";
+        const auto wheel_path = base_path / "wheels" / w;
         const auto& wheel = records.at(i).wheels.at(w);
         if (!ValidateNodeIndex(wheel.node_index, ctx.node_count, *ctx.session,
-              *ctx.request, wheel_path + ".node_index")) {
+              *ctx.request, wheel_path / "node_index")) {
           continue;
         }
         if (wheel.node_index == records.at(i).record.node_index) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
             ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheel node_index must differ from chassis node_index",
-            wheel_path + ".node_index");
+            wheel_path / "node_index");
           continue;
         }
         if (!wheel_nodes.insert(wheel.node_index).second) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
             ImportSeverity::kError, "physics.sidecar.payload_invalid",
             "Vehicle wheels must reference distinct node_index values",
-            wheel_path + ".node_index");
+            wheel_path / "node_index");
           continue;
         }
         const auto role_key = (static_cast<uint32_t>(wheel.axle_index) << 16U)
@@ -1733,7 +1727,7 @@ namespace {
             ImportSeverity::kError, "physics.sidecar.backend_mismatch",
             "vehicle wheel backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
-            wheel_path + ".backend.target");
+            wheel_path / "backend" / "target");
           continue;
         }
 
@@ -1751,7 +1745,7 @@ namespace {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
           "physics.sidecar.payload_invalid",
           "Vehicle wheel bindings must resolve to at least two valid wheels",
-          base_path + ".wheels");
+          base_path / "wheels");
         wheel_records.resize(wheel_offset);
         continue;
       }
@@ -3060,7 +3054,7 @@ namespace {
   }
 
   auto EmitBindingBlob(ImportSession& session, const ImportRequest& request,
-    const std::string_view object_path,
+    const nlohmann::json::json_pointer& location,
     const std::vector<std::byte>& blob_bytes,
     const phys::PhysicsResourceFormat format, data::AssetKey& out_asset_key)
     -> bool
@@ -3075,7 +3069,7 @@ namespace {
         "physics.sidecar.resource_emit_failed",
         "Failed emitting backend-cooked physics payload: "
           + std::string(ex.what()),
-        std::string(object_path));
+        location);
       return false;
     }
   }
@@ -3097,12 +3091,12 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           std::string(cook_error.code),
           "Failed to cook soft-body topology resource: " + cook_error.reason,
-          "bindings.soft_bodies[" + std::to_string(i) + "]");
+          nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i);
         continue;
       }
       if (!EmitBindingBlob(session, request,
-            "bindings.soft_bodies[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).record.topology_format,
+            nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i,
+            blob_bytes, records.at(i).record.topology_format,
             records.at(i).record.topology_asset_key)) {
         continue;
       }
@@ -3120,12 +3114,12 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.resource_serialize_failed",
           "Failed to cook joint constraint resource: " + cook_error,
-          "bindings.joints[" + std::to_string(i) + "]");
+          nlohmann::json::json_pointer {} / "bindings" / "joints" / i);
         continue;
       }
       if (!EmitBindingBlob(session, request,
-            "bindings.joints[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).constraint_format,
+            nlohmann::json::json_pointer {} / "bindings" / "joints" / i,
+            blob_bytes, records.at(i).constraint_format,
             records.at(i).record.constraint_asset_key)) {
         continue;
       }
@@ -3144,12 +3138,12 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "physics.sidecar.resource_serialize_failed",
           "Failed to cook vehicle constraint resource: " + cook_error,
-          "bindings.vehicles[" + std::to_string(i) + "]");
+          nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i);
         continue;
       }
       if (!EmitBindingBlob(session, request,
-            "bindings.vehicles[" + std::to_string(i) + "]", blob_bytes,
-            records.at(i).constraint_format,
+            nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i,
+            blob_bytes, records.at(i).constraint_format,
             records.at(i).record.constraint_asset_key)) {
         continue;
       }

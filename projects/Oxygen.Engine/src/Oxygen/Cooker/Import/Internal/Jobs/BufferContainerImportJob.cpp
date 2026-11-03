@@ -30,14 +30,14 @@ namespace {
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path = {}) -> void
+    std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = std::move(json_pointer),
     });
   }
 
@@ -90,14 +90,14 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto descriptor_doc = nlohmann::json {};
   auto parse_exception = std::optional<std::string> {};
   try {
-    descriptor_doc = nlohmann::json::parse(payload->normalized_descriptor_json);
+    descriptor_doc = nlohmann::json::parse(payload->descriptor_json);
   } catch (const std::exception& ex) {
     parse_exception = ex.what();
   }
   if (parse_exception.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "buffer.container.request_invalid_json",
-      "Normalized descriptor payload is invalid JSON: " + *parse_exception);
+      "Descriptor payload is invalid JSON: " + *parse_exception);
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid buffer-container payload");
     co_return co_await FinalizeWithTelemetry(session);
@@ -105,7 +105,7 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (!descriptor_doc.is_object()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "buffer.container.request_invalid_json",
-      "Normalized descriptor payload must be a JSON object");
+      "Descriptor payload must be a JSON object");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid buffer-container payload");
     co_return co_await FinalizeWithTelemetry(session);

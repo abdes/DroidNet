@@ -74,7 +74,7 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   ASSERT_HAS_VALUE(request->buffer_container);
 
   const auto normalized
-    = json::parse(request->buffer_container->normalized_descriptor_json);
+    = json::parse(request->buffer_container->descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "CharacterBuffers");
   ASSERT_TRUE(normalized.at("buffers").is_array());
   ASSERT_EQ(normalized.at("buffers").size(), 1U);

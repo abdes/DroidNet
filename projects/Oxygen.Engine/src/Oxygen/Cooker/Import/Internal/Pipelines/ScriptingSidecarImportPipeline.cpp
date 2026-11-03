@@ -101,16 +101,19 @@ namespace {
     });
   }
 
+  //! A location in the sidecar document.
+  using JsonPointer = nlohmann::json::json_pointer;
+
   auto AddDiagnosticAtPath(ImportSession& session, const ImportRequest& request,
     const ImportSeverity severity, std::string code, std::string message,
-    std::string object_path) -> void
+    const JsonPointer& location) -> void
   {
     session.AddDiagnostic({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
-      .object_path = std::move(object_path),
+      .json_pointer = location.to_string(),
     });
   }
 
@@ -155,9 +158,9 @@ namespace {
     std::vector<data::NodeId> node_path;
     data::ScriptSlotId slot_id;
     SidecarParam param;
-    //! The sidecar path its diagnostics name; empty for a change the scene
-    //! already holds.
-    std::string object_path;
+    //! The sidecar location its diagnostics name; empty for a change the
+    //! scene already holds.
+    std::string json_pointer;
   };
 
   //! Cooked scenes by key.
@@ -477,7 +480,7 @@ namespace {
 
   //! Reads a row's `params`, each key once; reports every violation.
   auto ParseRowParams(ImportSession& session, const ImportRequest& request,
-    const nlohmann::json& binding, const std::string& object_path,
+    const nlohmann::json& binding, const JsonPointer& location,
     std::vector<SidecarParam>& params) -> bool
   {
     if (!binding.contains("params")) {
@@ -486,18 +489,17 @@ namespace {
     if (!binding.at("params").is_array()) {
       AddDiagnosticAtPath(session, request, ImportSeverity::kError,
         "script.sidecar.payload_invalid", "Row field 'params' must be an array",
-        object_path);
+        location);
       return false;
     }
     for (size_t j = 0; j < binding.at("params").size(); ++j) {
       auto parsed_param = SidecarParam {};
       auto error = std::string {};
-      const auto param_path
-        = object_path + ".params[" + std::to_string(j) + "]";
+      const auto param_location = location / "params" / j;
       if (!ParseScriptParamRecord(
             binding.at("params").at(j), parsed_param, error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.param_invalid", std::move(error), param_path);
+          "script.sidecar.param_invalid", std::move(error), param_location);
         continue;
       }
       const auto duplicate = std::ranges::any_of(
@@ -509,7 +511,7 @@ namespace {
           "script.sidecar.param_duplicate",
           "Parameter '" + parsed_param.key
             + "' is overridden twice in one slot",
-          param_path + ".key");
+          param_location / "key");
         continue;
       }
       params.push_back(std::move(parsed_param));
@@ -554,19 +556,19 @@ namespace {
 
     SidecarDocument out {};
     for (size_t i = 0; i < doc.at("bindings").size(); ++i) {
-      const auto object_path = "bindings[" + std::to_string(i) + "]";
+      const auto location = JsonPointer {} / "bindings" / i;
       const auto& binding = doc.at("bindings").at(i);
       if (!binding.is_object()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid", "Binding row must be an object",
-          object_path);
+          location);
         continue;
       }
       if (!binding.contains("node_index")
         || !binding.at("node_index").is_number_unsigned()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid",
-          "Binding row requires unsigned field 'node_index'", object_path);
+          "Binding row requires unsigned field 'node_index'", location);
         continue;
       }
       const auto slot_id = binding.contains("slot_id")
@@ -576,15 +578,14 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.slot_id_invalid",
           "Binding row requires a non-nil UUID 'slot_id'",
-          object_path + ".slot_id");
+          location / "slot_id");
         continue;
       }
       if (!binding.contains("script_virtual_path")
         || !binding.at("script_virtual_path").is_string()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.payload_invalid",
-          "Binding row requires string field 'script_virtual_path'",
-          object_path);
+          "Binding row requires string field 'script_virtual_path'", location);
         continue;
       }
 
@@ -598,7 +599,7 @@ namespace {
         if (!binding.at("execution_order").is_number_integer()) {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
-            "Binding row field 'execution_order' must be integer", object_path);
+            "Binding row field 'execution_order' must be integer", location);
           continue;
         }
         const auto order = binding.at("execution_order").get<int64_t>();
@@ -607,13 +608,13 @@ namespace {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
             "Binding row field 'execution_order' is out of int32 range",
-            object_path);
+            location);
           continue;
         }
         row.execution_order = static_cast<int32_t>(order);
       }
 
-      if (!ParseRowParams(session, request, binding, object_path, row.params)) {
+      if (!ParseRowParams(session, request, binding, location, row.params)) {
         continue;
       }
 
@@ -628,14 +629,14 @@ namespace {
         return std::nullopt;
       }
       for (size_t i = 0; i < doc.at("instance_bindings").size(); ++i) {
-        const auto object_path = "instance_bindings[" + std::to_string(i) + "]";
+        const auto location = JsonPointer {} / "instance_bindings" / i;
         const auto& binding = doc.at("instance_bindings").at(i);
         if (!binding.is_object() || !binding.contains("node_index")
           || !binding.at("node_index").is_number_unsigned()) {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.payload_invalid",
             "Instance binding row requires unsigned field 'node_index'",
-            object_path);
+            location);
           continue;
         }
         auto path = binding.contains("node_path")
@@ -645,7 +646,7 @@ namespace {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.node_path_invalid",
             "Instance binding row requires a 'node_path' of non-nil node IDs",
-            object_path + ".node_path");
+            location / "node_path");
           continue;
         }
         const auto slot_id = binding.contains("slot_id")
@@ -655,7 +656,7 @@ namespace {
           AddDiagnosticAtPath(session, request, ImportSeverity::kError,
             "script.sidecar.slot_id_invalid",
             "Instance binding row requires a non-nil UUID 'slot_id'",
-            object_path + ".slot_id");
+            location / "slot_id");
           continue;
         }
         auto row = SidecarInstanceRow {
@@ -665,8 +666,7 @@ namespace {
           .params = {},
           .source_index = i,
         };
-        if (!ParseRowParams(
-              session, request, binding, object_path, row.params)) {
+        if (!ParseRowParams(session, request, binding, location, row.params)) {
           continue;
         }
         out.instance_rows.push_back(std::move(row));
@@ -690,7 +690,7 @@ namespace {
           "Duplicate sidecar binding identity ("
             + std::to_string(row.node_index) + "|"
             + data::to_string(row.slot_id) + ")",
-          "bindings[" + std::to_string(row.source_index) + "]");
+          JsonPointer {} / "bindings" / row.source_index);
       }
     }
     std::ranges::sort(
@@ -705,7 +705,7 @@ namespace {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.duplicate_slot_conflict",
           "Two instance binding rows change one slot of one instanced node",
-          "instance_bindings[" + std::to_string(row.source_index) + "]");
+          JsonPointer {} / "instance_bindings" / row.source_index);
       }
     }
 
@@ -1210,14 +1210,14 @@ namespace {
         continue;
       }
 
-      const auto object_path = "bindings[" + std::to_string(row.source_index)
-        + "].script_virtual_path";
+      const auto location = JsonPointer {} / "bindings" / row.source_index
+        / "script_virtual_path";
       const auto read
         = detail::ReadCookedDescriptor(*mounted->context, mounted->entry->key);
       if (!read.has_value()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.script_declarations_unreadable",
-          "Failed to read the script descriptor", object_path);
+          "Failed to read the script descriptor", location);
         continue;
       }
       auto decoded = DecodeScriptDeclarations(read.value());
@@ -1226,7 +1226,7 @@ namespace {
           "script.sidecar.script_declarations_unreadable",
           "Script descriptor is invalid or not in the current format; recook "
           "the script",
-          object_path);
+          location);
         continue;
       }
       declarations.emplace(key, std::move(*decoded));
@@ -1459,22 +1459,21 @@ namespace {
       auto incoming_bindings
         = std::map<uint32_t, std::vector<SlotWithParams>> {};
       for (const auto& row : parsed_->rows) {
-        const auto object_path
-          = "bindings[" + std::to_string(row.source_index) + "]";
+        const auto location = JsonPointer {} / "bindings" / row.source_index;
         if (row.node_index >= node_count_) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.node_ref_unresolved",
             "Node index is out of bounds for target scene",
-            object_path + ".node_index");
+            location / "node_index");
           continue;
         }
 
         const auto script_reference
           = internal::ResolveJobReference(*request_, row.script_virtual_path);
         if (!script_reference.has_value()) {
-          session_->AddDiagnostic(
-            internal::RefuseReference(*request_, row.script_virtual_path,
-              script_reference.error(), object_path + ".script_virtual_path"));
+          session_->AddDiagnostic(internal::RefuseReference(*request_,
+            row.script_virtual_path, script_reference.error(),
+            (location / "script_virtual_path").to_string()));
           continue;
         }
         const auto found = internal::LookupReference(cooked_contexts_,
@@ -1486,7 +1485,7 @@ namespace {
               .missing = "script.sidecar.script_ref_unresolved",
               .type_mismatch = "script.sidecar.script_ref_not_script_asset",
             },
-            object_path + ".script_virtual_path");
+            location / "script_virtual_path");
           continue;
         }
         const auto resolved_script_key = found->key;
@@ -1496,10 +1495,10 @@ namespace {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_declarations_unreadable",
             "Script parameter declarations are unavailable",
-            object_path + ".script_virtual_path");
+            location / "script_virtual_path");
           continue;
         }
-        auto params = ValidateOverrides(row, object_path, declared->second);
+        auto params = ValidateOverrides(row, location, declared->second);
         if (!params) {
           continue;
         }
@@ -1547,7 +1546,7 @@ namespace {
     //! Checks a node value: an index of the scene, and with a path, an
     //! instance root.
     auto CheckNodeValue(const SidecarParam& param, const std::string& key,
-      const std::string& value_path) -> bool
+      const JsonPointer& value_location) -> bool
     {
       const auto node_index = param.record.value.as_node.node_index;
       if (node_index >= node_count_) {
@@ -1555,7 +1554,7 @@ namespace {
           "script.sidecar.param_node_out_of_range",
           "Node index " + std::to_string(node_index) + " of parameter '" + key
             + "' is out of bounds for target scene",
-          value_path);
+          value_location);
         return false;
       }
       if (!param.node_path.empty() && !IsInstanceRoot(node_index)) {
@@ -1563,7 +1562,7 @@ namespace {
           "script.sidecar.instance_root_invalid",
           "Parameter '" + key
             + "' names a node path below a node that instances no scene",
-          value_path);
+          value_location);
         return false;
       }
       return true;
@@ -1588,30 +1587,29 @@ namespace {
       }
       auto valid = true;
       for (const auto& row : parsed_->instance_rows) {
-        const auto object_path
-          = "instance_bindings[" + std::to_string(row.source_index) + "]";
+        const auto location
+          = JsonPointer {} / "instance_bindings" / row.source_index;
         if (row.node_index >= node_count_ || !IsInstanceRoot(row.node_index)) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.instance_root_invalid",
             "The row's node is not an instance root of the target scene",
-            object_path + ".node_index");
+            location / "node_index");
           valid = false;
           continue;
         }
         for (size_t j = 0; j < row.params.size(); ++j) {
           auto param = row.params.at(j);
-          const auto value_path
-            = object_path + ".params[" + std::to_string(j) + "].value";
+          const auto value_location = location / "params" / j / "value";
           if (param.record.type == script::ScriptParamType::kAsset) {
             const auto asset = ResolveAssetParam(
-              param, param.key, data::AssetType::kUnknown, value_path);
+              param, param.key, data::AssetType::kUnknown, value_location);
             if (!asset) {
               valid = false;
               continue;
             }
             param.record.value.as_asset = *asset;
           } else if (param.record.type == script::ScriptParamType::kNode
-            && !CheckNodeValue(param, param.key, value_path)) {
+            && !CheckNodeValue(param, param.key, value_location)) {
             valid = false;
             continue;
           }
@@ -1620,7 +1618,7 @@ namespace {
             .node_path = row.node_path,
             .slot_id = row.slot_id,
             .param = std::move(param),
-            .object_path = object_path + ".params[" + std::to_string(j) + "]",
+            .json_pointer = (location / "params" / j).to_string(),
           });
         }
       }
@@ -1656,9 +1654,9 @@ namespace {
       auto valid = true;
       auto unresolved = std::vector<const InstanceParamChange*> {};
       for (const auto& change : changes) {
-        const auto object_path = change.object_path.empty()
-          ? std::string { "instance_bindings" }
-          : change.object_path;
+        const auto location = change.json_pointer.empty()
+          ? JsonPointer {} / "instance_bindings"
+          : JsonPointer { change.json_pointer };
         // Each change is composed on its own, so that what composition finds
         // is this change's, and the slot it applies to is known.
         auto value = ParamValue(change.param);
@@ -1691,7 +1689,7 @@ namespace {
             "script.sidecar.instance_override_invalid",
             "The value has another kind than the slot's value of the "
             "parameter",
-            object_path);
+            location);
           valid = false;
           continue;
         }
@@ -1700,7 +1698,7 @@ namespace {
             "script.sidecar.instance_override_unresolved",
             "The change names no node of the instanced scene, or a slot that "
             "node does not have; it has no effect until it resolves",
-            object_path);
+            location);
           unresolved.push_back(&change);
           continue;
         }
@@ -1713,11 +1711,11 @@ namespace {
             "The script of the slot the change reaches is not in the mounted "
             "cooked content; the change is checked when the scene is "
             "instantiated",
-            object_path);
+            location);
           continue;
         }
         if (!CheckInstanceDeclaration(change.param, declared->second,
-              data::to_string(slot->script), object_path)) {
+              data::to_string(slot->script), location)) {
           valid = false;
         }
       }
@@ -1743,10 +1741,10 @@ namespace {
 
     //! The declaration of `param` among the declarations of `script_name`, or
     //! null after reporting an undeclared key or a value of another type at
-    //! `param_path`.
+    //! `param_location`.
     auto FindDeclaration(const SidecarParam& param,
       std::span<const SidecarParam> declared, const std::string& script_name,
-      const std::string& param_path) -> const SidecarParam*
+      const JsonPointer& param_location) -> const SidecarParam*
     {
       const auto& key = param.key;
       const auto declaration
@@ -1755,7 +1753,7 @@ namespace {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
           "script.sidecar.param_undeclared",
           "Script '" + script_name + "' declares no parameter '" + key + "'",
-          param_path + ".key");
+          param_location / "key");
         return nullptr;
       }
       if (declaration->record.type != param.record.type) {
@@ -1765,7 +1763,7 @@ namespace {
             + std::string(script::to_string(declaration->record.type))
             + " but the override is "
             + std::string(script::to_string(param.record.type)),
-          param_path + ".type");
+          param_location / "type");
         return nullptr;
       }
       return &*declaration;
@@ -1773,13 +1771,13 @@ namespace {
 
     //! Checks a change of an instanced slot's parameter against the
     //! declarations of the slot's script, as an override of the slot itself
-    //! is checked; reports every violation at `param_path`.
+    //! is checked; reports every violation at `param_location`.
     auto CheckInstanceDeclaration(const SidecarParam& param,
       std::span<const SidecarParam> declared, const std::string& script_name,
-      const std::string& param_path) -> bool
+      const JsonPointer& param_location) -> bool
     {
       const auto* declaration
-        = FindDeclaration(param, declared, script_name, param_path);
+        = FindDeclaration(param, declared, script_name, param_location);
       if (declaration == nullptr) {
         return false;
       }
@@ -1796,7 +1794,7 @@ namespace {
             + std::string(data::to_string(declared_type))
             + " asset but the change's asset is a "
             + std::string(data::to_string(changed_type)),
-          param_path + ".value");
+          param_location / "value");
         return false;
       }
       return true;
@@ -1826,18 +1824,17 @@ namespace {
     //! Checks each override of `row` against the script's declarations and
     //! resolves asset values; reports every violation at its JSON path.
     auto ValidateOverrides(const SidecarBindingRow& row,
-      const std::string& object_path, std::span<const SidecarParam> declared)
+      const JsonPointer& location, std::span<const SidecarParam> declared)
       -> std::optional<std::vector<SidecarParam>>
     {
       auto records = std::vector<SidecarParam> {};
       auto valid = true;
       for (size_t j = 0; j < row.params.size(); ++j) {
         const auto& param = row.params.at(j);
-        const auto param_path
-          = object_path + ".params[" + std::to_string(j) + "]";
+        const auto param_location = location / "params" / j;
         const auto& key = param.key;
         const auto* declaration = FindDeclaration(
-          param, declared, row.script_virtual_path, param_path);
+          param, declared, row.script_virtual_path, param_location);
         if (declaration == nullptr) {
           valid = false;
           continue;
@@ -1848,14 +1845,14 @@ namespace {
         if (record.type == script::ScriptParamType::kAsset) {
           const auto asset = ResolveAssetParam(param, key,
             declaration->record.value.as_asset.asset_type,
-            param_path + ".value");
+            param_location / "value");
           if (!asset) {
             valid = false;
             continue;
           }
           record.value.as_asset = *asset;
         } else if (record.type == script::ScriptParamType::kNode
-          && !CheckNodeValue(resolved, key, param_path + ".value")) {
+          && !CheckNodeValue(resolved, key, param_location / "value")) {
           valid = false;
           continue;
         }
@@ -1868,14 +1865,15 @@ namespace {
     }
 
     auto ResolveAssetParam(const SidecarParam& param, const std::string& key,
-      const data::AssetType declared_type, const std::string& value_path)
+      const data::AssetType declared_type, const JsonPointer& value_location)
       -> std::optional<script::ScriptAssetParamValue>
     {
       const auto reference
         = internal::ResolveJobReference(*request_, param.asset_virtual_path);
       if (!reference.has_value()) {
-        session_->AddDiagnostic(internal::RefuseReference(
-          *request_, param.asset_virtual_path, reference.error(), value_path));
+        session_->AddDiagnostic(
+          internal::RefuseReference(*request_, param.asset_virtual_path,
+            reference.error(), value_location.to_string()));
         return std::nullopt;
       }
       const auto expected = declared_type == data::AssetType::kUnknown
@@ -1890,7 +1888,7 @@ namespace {
             .missing = "script.sidecar.param_asset_unresolved",
             .type_mismatch = "script.sidecar.param_asset_kind_mismatch",
           },
-          value_path);
+          value_location);
         return std::nullopt;
       }
       return script::ScriptAssetParamValue {
@@ -1912,19 +1910,19 @@ namespace {
     //! for.
     auto ReportRefusedReference(const internal::ResolvedReference& reference,
       const internal::AssetReferenceRefused& refused,
-      const RefusedReference& report, std::string object_path) const -> void
+      const RefusedReference& report, const JsonPointer& location) const -> void
     {
       switch (refused.reason) {
       case internal::AssetReferenceRefusal::kUnmounted:
         session_->AddDiagnostic(internal::RefuseUnmountedReference(
-          *request_, reference, std::move(object_path)));
+          *request_, reference, location.to_string()));
         return;
       case internal::AssetReferenceRefusal::kMissing:
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
           std::string(report.missing),
           report.subject
             + " was not found: " + internal::DescribeLookup(reference, refused),
-          std::move(object_path));
+          location);
         return;
       case internal::AssetReferenceRefusal::kTypeMismatch:
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
@@ -1934,7 +1932,7 @@ namespace {
               refused.found_type.value_or(data::AssetType::kUnknown)))
             + " asset of the wrong type: "
             + internal::DescribeLookup(reference, refused),
-          std::move(object_path));
+          location);
         return;
       }
     }

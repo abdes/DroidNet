@@ -95,7 +95,7 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
     = TempDir() / "oxygen_material_descriptor_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-    .normalized_descriptor_json
+    .descriptor_json
     = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":"not/canonical"}}})",
   };
 
@@ -132,7 +132,7 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
     = TempDir() / "oxygen_material_descriptor_schema_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
   request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
-    .normalized_descriptor_json
+    .descriptor_json
     = R"({"name":"BadMat","textures":{"base_color":{"virtual_path":42}}})",
   };
 
@@ -168,7 +168,7 @@ NOLINT_TEST_F(
   std::filesystem::create_directories(*request.cooked_root);
   request.source_mounts = oxygen::cooker::test::ContentMountTable(TempDir());
   request.buffer_container = ImportRequest::BufferContainerPayload {
-    .normalized_descriptor_json
+    .descriptor_json
     = R"({"name":"BadContainer","buffers":[{"source":"missing.buffer.bin","virtual_path":"not/canonical","element_stride":16}]})",
   };
 
@@ -205,7 +205,7 @@ NOLINT_TEST_F(
     = TempDir() / "oxygen_scene_descriptor_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);
   request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
-    .normalized_descriptor_json
+    .descriptor_json
     = R"({"name":"BadScene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"},{"id":"00000000-0000-4000-8000-000000000002","name":"Mesh","parent":0}],"renderables":[{"node":1,"geometry_ref":"not/canonical"}]})",
   };
 

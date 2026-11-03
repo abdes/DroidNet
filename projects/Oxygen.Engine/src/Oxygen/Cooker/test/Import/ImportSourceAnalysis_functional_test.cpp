@@ -285,7 +285,7 @@ namespace {
         });
     ASSERT_NE(context, references.end()) << report.ToJson();
     EXPECT_EQ(context->kind, ImportDependencyKind::kInputMappingContext);
-    EXPECT_EQ(context->object_path, "starting_input_contexts[0].context_ref");
+    EXPECT_EQ(context->json_pointer, "/starting_input_contexts/0/context_ref");
     EXPECT_TRUE(context->required);
   }
 
@@ -311,7 +311,7 @@ namespace {
     const auto scene = find("/Cooked/Props/Crate.glb/Crate.oscene");
     ASSERT_NE(scene, references.end()) << report.ToJson();
     EXPECT_EQ(scene->kind, ImportDependencyKind::kScene);
-    EXPECT_EQ(scene->object_path, "nodes[1].instance.scene_ref");
+    EXPECT_EQ(scene->json_pointer, "/nodes/1/instance/scene_ref");
     EXPECT_TRUE(scene->required);
     const auto material = find("/Cooked/Materials/Red.omat");
     ASSERT_NE(material, references.end()) << report.ToJson();
@@ -358,7 +358,7 @@ namespace {
     const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     const auto serialized = nlohmann::json::parse(report.ToJson());
-    EXPECT_EQ(serialized.at("version"), 1);
+    EXPECT_EQ(serialized.at("version"), ImportSourceAnalysis {}.version);
     EXPECT_EQ(serialized.at("jobs").size(), 2U);
   }
 
@@ -464,8 +464,8 @@ namespace {
     ASSERT_EQ(result.references.size(), 1U);
     EXPECT_EQ(result.references.front().virtual_path,
       "/Content/Common.input/Fire.oiact");
-    EXPECT_EQ(result.references.front().object_path,
-      "$.contexts[0].mappings[1].action");
+    EXPECT_EQ(
+      result.references.front().json_pointer, "/contexts/0/mappings/1/action");
     ASSERT_EQ(result.observations.size(), 1U);
   }
 
@@ -1010,7 +1010,7 @@ namespace {
     EXPECT_EQ(result.outputs.front().virtual_path, shape.Identity());
     EXPECT_EQ(Referenced(result),
       std::vector<std::string> { "/Content/Physics/Wood.opmat" });
-    EXPECT_EQ(result.references.front().object_path, "material_ref");
+    EXPECT_EQ(result.references.front().json_pointer, "/material_ref");
   }
 
   //! Whether the only job of `report` refuses its source.
@@ -1101,8 +1101,8 @@ namespace {
         "/Content/Physics/Crate.ocshape",
         "/Content/Physics/Wood.opmat",
       }));
-    EXPECT_EQ(result.references.at(1).object_path,
-      "bindings.rigid_bodies[0].shape_ref");
+    EXPECT_EQ(result.references.at(1).json_pointer,
+      "/bindings/rigid_bodies/0/shape_ref");
   }
 
   //! A reference the grammar refuses in a sidecar is reported with its code,
@@ -1135,7 +1135,7 @@ namespace {
     EXPECT_TRUE(std::ranges::any_of(diagnostics,
       [](const auto& diagnostic) -> bool {
         return diagnostic.code == "import.reference_invalid"
-          && diagnostic.object_path == "bindings.colliders[0].shape_ref"
+          && diagnostic.json_pointer == "/bindings/colliders/0/shape_ref"
           && diagnostic.message.contains("vpath.reference_self_absolute");
       }))
       << report.ToJson();
@@ -1178,7 +1178,7 @@ namespace {
       EXPECT_TRUE(result.outputs.empty());
       EXPECT_EQ(Referenced(result), expected) << inline_bindings;
       EXPECT_EQ(
-        result.references.at(2).object_path, "bindings[0].params[0].value");
+        result.references.at(2).json_pointer, "/bindings/0/params/0/value");
     }
   }
 } // namespace
