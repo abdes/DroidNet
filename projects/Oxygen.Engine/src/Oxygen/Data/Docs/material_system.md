@@ -89,7 +89,7 @@ copies of the cooked material descriptor.
 
 ## Validation
 
-A cooked material is refused with a `CookedOpenError` code when it breaks the
+A cooked material is refused with a `CookedFormatError` code when it breaks the
 format. `CheckMaterialDescriptor` owns the descriptor's rules: a defined domain
 other than `kUnknown`, only defined flags and stage bits, one shader reference
 per declared stage in ascending stage order, and emissive factors in range.

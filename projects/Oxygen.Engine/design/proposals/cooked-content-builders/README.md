@@ -271,7 +271,7 @@ program, all in memory:
   the records the description implies (a `SceneBuilder` scene through
   `SceneAsset`, a sidecar matching its scene).
 - Each `CookedBytes` and `DescriptorDefects` defect produces the failure its
-  reader names (`CookedOpenFailure`, the decoder's error), and nothing else.
+  reader names (`CookedFormatFailure`, the decoder's error), and nothing else.
 
 One test pins the builders to the pipeline: the same content and identity
 built by `CookedPak` and by `PakBuilder` over its loose root, in memory, give

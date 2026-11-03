@@ -71,7 +71,7 @@ API, the formats or the diagnostics calls cooked content a "library".
 //! The read view of one cooked source: a loose cooked root or a pak.
 class CookedContent final {
 public:
-  //! Opens `source` through `storage`; throws `data::CookedOpenError`.
+  //! Opens `source` through `storage`; throws `data::CookedFormatError`.
   static auto Open(const CookerStorageReader& storage,
     const data::CookedSource& source) -> CookedContent;
 

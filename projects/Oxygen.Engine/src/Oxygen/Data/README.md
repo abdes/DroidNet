@@ -104,22 +104,22 @@ Physics, before authored local transforms.
 
 ## 5. Invariants & Validation (Read First)
 
-| Invariant                                                           | Enforced Where                                       |
-| ------------------------------------------------------------------- | ---------------------------------------------------- |
-| Mesh has ≥1 vertex (owned storage)                                  | Mesh ctor (`invalid_argument`)                       |
-| Mesh has ≥1 submesh; SubMesh has ≥1 MeshView                        | `MeshBuilder::Build` (`logic_error`)                 |
-| SubMesh has exactly 1 material (non-null)                           | SubMesh ctor (`logic_error`)                         |
-| MeshView draws ≥1 vertex and ≥1 index                               | MeshView ctor (`invalid_argument`)                   |
-| Single storage mode per MeshBuilder                                 | `ValidateStorageType` (`logic_error`)                |
-| Buffers hold whole vertices and 16-bit or 32-bit indices            | Mesh buffer binding (`CookedOpenError`)              |
-| Every view lies in its buffers; its indices name its vertices       | MeshView ctor and buffer binding (`CookedOpenError`) |
-| Surface table: each declared surface once, known flags              | GeometryAsset ctor (`CookedOpenError`)               |
-| Default LOD policy keeps `LodPolicyRecord`'s rules                  | GeometryAsset ctor (`CookedOpenError`)               |
-| Material values and shader stages are defined; one shader per stage | `CheckMaterialDescriptor` (`CookedOpenError`)        |
-| Texture type, format, compression and extents are defined           | TextureResource ctor (`CookedOpenError`)             |
-| Texture subresources hold their rows within the payload data        | TextureResource ctor (`CookedOpenError`)             |
-| Buffer usage, element format or stride, and size are coherent       | BufferResource ctor (`CookedOpenError`)              |
-| Procedural params in valid range                                    | Each generator (returns std::nullopt)                |
+| Invariant                                                           | Enforced Where                                         |
+| ------------------------------------------------------------------- | ------------------------------------------------------ |
+| Mesh has ≥1 vertex (owned storage)                                  | Mesh ctor (`invalid_argument`)                         |
+| Mesh has ≥1 submesh; SubMesh has ≥1 MeshView                        | `MeshBuilder::Build` (`logic_error`)                   |
+| SubMesh has exactly 1 material (non-null)                           | SubMesh ctor (`logic_error`)                           |
+| MeshView draws ≥1 vertex and ≥1 index                               | MeshView ctor (`invalid_argument`)                     |
+| Single storage mode per MeshBuilder                                 | `ValidateStorageType` (`logic_error`)                  |
+| Buffers hold whole vertices and 16-bit or 32-bit indices            | Mesh buffer binding (`CookedFormatError`)              |
+| Every view lies in its buffers; its indices name its vertices       | MeshView ctor and buffer binding (`CookedFormatError`) |
+| Surface table: each declared surface once, known flags              | GeometryAsset ctor (`CookedFormatError`)               |
+| Default LOD policy keeps `LodPolicyRecord`'s rules                  | GeometryAsset ctor (`CookedFormatError`)               |
+| Material values and shader stages are defined; one shader per stage | `CheckMaterialDescriptor` (`CookedFormatError`)        |
+| Texture type, format, compression and extents are defined           | TextureResource ctor (`CookedFormatError`)             |
+| Texture subresources hold their rows within the payload data        | TextureResource ctor (`CookedFormatError`)             |
+| Buffer usage, element format or stride, and size are coherent       | BufferResource ctor (`CookedFormatError`)              |
+| Procedural params in valid range                                    | Each generator (returns std::nullopt)                  |
 
 A mesh read from its descriptor is built before its buffers load; it shows no
 vertices until `Mesh::SetBufferResources` binds buffers that hold every view.
@@ -259,13 +259,13 @@ Performance tweaks (safe & optional):
 
 ## 11. Troubleshooting
 
-| Symptom                              | Likely Cause                                                      | Action                                                |
-| ------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| Crash inside MeshView ctor           | Out-of-range descriptor values                                    | Validate source descriptor before construction        |
-| Buffer refused on load               | Index format/stride mismatch or size misaligned                   | Read the `CookedOpenError`; fix the cooked buffer row |
-| Logic error mixing storage           | Called `WithBufferResources` after `WithVertices` (or vice versa) | Use one storage mode per builder instance             |
-| Bounding sphere seems large          | Sphere derived from AABB, not minimal                             | Implement tighter sphere if necessary                 |
-| Procedural generator returns nullopt | Invalid parameters (below minimums)                               | Re-check segment/size constraints                     |
+| Symptom                              | Likely Cause                                                      | Action                                                  |
+| ------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------- |
+| Crash inside MeshView ctor           | Out-of-range descriptor values                                    | Validate source descriptor before construction          |
+| Buffer refused on load               | Index format/stride mismatch or size misaligned                   | Read the `CookedFormatError`; fix the cooked buffer row |
+| Logic error mixing storage           | Called `WithBufferResources` after `WithVertices` (or vice versa) | Use one storage mode per builder instance               |
+| Bounding sphere seems large          | Sphere derived from AABB, not minimal                             | Implement tighter sphere if necessary                   |
+| Procedural generator returns nullopt | Invalid parameters (below minimums)                               | Re-check segment/size constraints                       |
 
 ---
 

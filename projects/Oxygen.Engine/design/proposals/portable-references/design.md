@@ -282,17 +282,17 @@ The `record` field is removed.
 
 ### Content
 
-| Type                                | Change                                                                                                                                                                              |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `VirtualPath.h/.cpp`                | `ResolveReference`, `RelativeReference`, the two errors and their `to_string`                                                                                                       |
-| `VirtualPathCases.json`             | `references` table; `TableCoversEveryRefusalCode` includes it                                                                                                                       |
-| `Docs/virtual_paths.md`             | References section; the dot rule is stated for canonical paths only                                                                                                                 |
-| `IContentSource`                    | `FindTextureVirtualPath(key)`; an asset's library is the root of `ResolveVirtualPath(key)`, a pak's from its browse index                                                           |
-| `ContentSourceRegistry`             | Requirement check in `ValidateMount`; `lower_layers` identity list kept only for bases                                                                                              |
-| `PakFile`                           | Typed open failure (`data::CookedOpenError`, `CookedOpenFailure::{kWrongFormat, kUnsupportedVersion, kCorrupt}`) instead of `std::runtime_error` text; `CheckHeader`, `CheckFooter` |
-| `LooseCookedIndex`                  | Typed open failure with the same reasons; `LoadFromBytes`                                                                                                                           |
-| `Docs/patch_resolution_contract.md` | Dependency requirements next to base compatibility                                                                                                                                  |
-| `Docs/loose_cooked_content.md`      | Records are mount files; the `Imports/` paragraph is removed                                                                                                                        |
+| Type                                | Change                                                                                                                                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VirtualPath.h/.cpp`                | `ResolveReference`, `RelativeReference`, the two errors and their `to_string`                                                                                                           |
+| `VirtualPathCases.json`             | `references` table; `TableCoversEveryRefusalCode` includes it                                                                                                                           |
+| `Docs/virtual_paths.md`             | References section; the dot rule is stated for canonical paths only                                                                                                                     |
+| `IContentSource`                    | `FindTextureVirtualPath(key)`; an asset's library is the root of `ResolveVirtualPath(key)`, a pak's from its browse index                                                               |
+| `ContentSourceRegistry`             | Requirement check in `ValidateMount`; `lower_layers` identity list kept only for bases                                                                                                  |
+| `PakFile`                           | Typed open failure (`data::CookedFormatError`, `CookedFormatFailure::{kWrongFormat, kUnsupportedVersion, kCorrupt}`) instead of `std::runtime_error` text; `CheckHeader`, `CheckFooter` |
+| `LooseCookedIndex`                  | Typed open failure with the same reasons; `LoadFromBytes`                                                                                                                               |
+| `Docs/patch_resolution_contract.md` | Dependency requirements next to base compatibility                                                                                                                                      |
+| `Docs/loose_cooked_content.md`      | Records are mount files; the `Imports/` paragraph is removed                                                                                                                            |
 
 ### Data
 

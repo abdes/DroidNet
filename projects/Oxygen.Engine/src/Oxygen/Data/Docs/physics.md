@@ -907,7 +907,7 @@ is used internally:
     or version skew.
   - **Binding table rules** — the sidecar reader (`PhysicsSceneAsset`) decodes
     every table when it reads the descriptor, and refuses one that breaks
-    these rules with a typed `CookedOpenError`:
+    these rules with a typed `CookedFormatError`:
     - The directory names each binding type the format defines at most once,
       with that type's record size.
     - A binding names nodes below `target_node_count`; a joint's second node
