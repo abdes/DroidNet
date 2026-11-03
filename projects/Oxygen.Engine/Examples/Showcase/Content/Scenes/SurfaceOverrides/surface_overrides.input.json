@@ -32,7 +32,7 @@
       "mappings": [
         {
           "action": "ToggleShadeAction",
-          "slot": "Alpha1",
+          "slot": "1",
           "triggers": [
             {
               "type": "pressed",

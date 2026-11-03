@@ -754,22 +754,14 @@ auto AssetLoader::BindDependenciesAsync(data::ScriptAsset& /*asset*/,
 }
 
 auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
-  const internal::DependencyCollector& /*collector*/,
+  const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
-  auto keys = std::vector<data::AssetKey> {};
-  for (const auto& mapping : asset.GetMappings()) {
-    keys.push_back(mapping.action_asset_key);
-  }
-  for (const auto& trigger : asset.GetTriggers()) {
-    keys.push_back(trigger.linked_action_asset_key);
-  }
-  for (const auto& auxiliary : asset.GetTriggerAuxRecords()) {
-    keys.push_back(auxiliary.action_asset_key);
-  }
+  // The actions the context maps and its triggers link, as its loader
+  // collected them.
   OXCO_WITH_NURSERY(nursery)
   {
-    for (const auto& key : keys) {
+    for (const auto& key : collector.AssetDependencies()) {
       nursery.Start([this, key, &asset, &bindings, request] -> co::Co<> {
         co_await BindAssetAsync<data::InputActionAsset>(
           key, asset, bindings, request);

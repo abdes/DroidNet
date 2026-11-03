@@ -6,13 +6,16 @@
 
 // Covers: Import/Schemas/oxygen.input.schema.json
 
+#include <algorithm>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -46,6 +49,27 @@ auto GameplayMapping(const std::string_view slot) -> InputSource
 
 class InputSchemaCaseTest : public ::testing::TestWithParam<SchemaCase> { };
 
+//! The platform owns slot names: the schema admits exactly the slots it
+//! registers, so a cooked mapping always names a slot the runtime resolves.
+NOLINT_TEST(InputSchemaTest, SlotNamesAreTheSlotsThePlatformRegisters)
+{
+  auto slots = std::vector<oxygen::platform::InputSlot> {};
+  oxygen::platform::InputSlots::Initialize();
+  oxygen::platform::InputSlots::GetAllInputSlots(slots);
+  auto registered = std::vector<std::string> {};
+  for (const auto& slot : slots) {
+    registered.emplace_back(slot.GetName());
+  }
+  auto admitted
+    = PrimarySchema()
+        .at(json::json_pointer("/$defs/mapping/properties/slot/enum"))
+        .get<std::vector<std::string>>();
+  std::ranges::sort(registered);
+  std::ranges::sort(admitted);
+
+  EXPECT_EQ(admitted, registered);
+}
+
 NOLINT_TEST_P(InputSchemaCaseTest, ValidatesDocument)
 {
   oxygen::cooker::test::ExpectSchemaCase(PrimarySchema(), GetParam());
@@ -68,7 +92,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
             R"({ "action": "Jump", "slot": "Space", "trigger": "pressed" })"))
         .Append("/contexts/0/mappings", json::parse(R"({
             "action": "Move",
-            "slot": "UpArrow",
+            "slot": "Up",
             "triggers": [
               {
                 "type": "combo",
@@ -155,6 +179,14 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
         .Text(),
       false,
       "/contexts/0/mappings/0/action",
+    },
+    SchemaCase {
+      "RejectsSlotNameThePlatformDoesNotRegister",
+      GameplayMapping("UpArrow")
+        .Set("/contexts/0/mappings/0/action", "Jump")
+        .Text(),
+      false,
+      "/contexts/0/mappings/0/slot",
     },
     SchemaCase {
       "RejectsUnknownFields",

@@ -49,7 +49,8 @@ namespace oxygen::cooker::testing {
   data::pak::input::InputActionAssetDesc record = {}) -> DescriptorFixture;
 
 //! A cooked input mapping context, as the input cook writes it: its mappings,
-//! each with its triggers, and the actions they name as its references.
+//! each with its triggers (a combo with its steps), and the actions they name
+//! as its references.
 /*!
  Each record a test passes keeps its values; the builder sets the action,
  the slot name and the trigger range.
@@ -70,6 +71,16 @@ public:
     std::vector<data::pak::input::InputTriggerRecord> triggers = {},
     data::pak::input::InputActionMappingRecord record = {})
     -> InputContextBuilder&;
+
+  //! Maps the action `action` to the input slot `slot` through one combo
+  //! trigger, which completes after the actions of `steps`.
+  /*!
+   The builder sets the trigger's type and its step range; `trigger` keeps its
+   other values, such as a linked action.
+  */
+  auto Combo(const data::AssetKey& action, std::string_view slot,
+    std::vector<data::pak::input::InputTriggerAuxRecord> steps,
+    data::pak::input::InputTriggerRecord trigger = {}) -> InputContextBuilder&;
 
   [[nodiscard]] auto Name() const noexcept -> const std::string&
   {
@@ -96,6 +107,7 @@ private:
   data::pak::input::InputMappingContextAssetDesc record_;
   std::vector<Mapped> mappings_;
   std::vector<data::pak::input::InputTriggerRecord> triggers_;
+  std::vector<data::pak::input::InputTriggerAuxRecord> steps_;
 };
 
 } // namespace oxygen::cooker::testing

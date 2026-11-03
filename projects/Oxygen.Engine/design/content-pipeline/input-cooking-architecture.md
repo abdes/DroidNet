@@ -2,6 +2,8 @@
 
 **Date:** 2026-03-02 **Status:** Design / Specification
 
+**Last updated:** 2026-11-03
+
 ## 0. Status Tracking
 
 This document is the target architecture contract. Live implementation progress
@@ -15,8 +17,9 @@ Current implementation status snapshot:
    `InputImportPipeline`, async routing, manifest `type: "input"` integration,
    and ImportTool input command wiring.
 2. Implemented: runtime `EnumerateMountedInputContextsAsync()` +
-   `HydrateInputContext()` APIs, including trigger hydration, slot alias
-   normalization, and mounted-context metadata extraction.
+   `HydrateInputContext()` APIs, including trigger hydration and
+   mounted-context metadata extraction. Slot names are the Platform registry's
+   names only (Section 7.4.4); hydration builds a context all or nothing.
 3. Implemented: scene-binding infrastructure removal in native tooling/runtime
    (`INPT` and `input_context_bindings` paths removed) and shipped input JSON
    schema (`src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`) with
@@ -127,9 +130,9 @@ Architectural split:
 
 ## 6. Class Design
 
-## 6.1 New Classes
+### 6.1 New Classes
 
-### Import/Cooker
+#### Import/Cooker
 
 1. `oxygen::content::import::InputImportSettings`
    - file: `src/Oxygen/Cooker/Import/InputImportSettings.h`
@@ -156,7 +159,7 @@ Architectural split:
    - role: parse/validate/serialize/emit for `InputAction` and
      `InputMappingContext`.
 
-### Runtime
+#### Runtime
 
 1. `oxygen::content::HydrateInputContext(...)`
    - files:
@@ -172,7 +175,7 @@ Architectural split:
    - role: scan mounted sources for `kInputMappingContext` assets and return
      metadata entries. Mirrors existing `EnumerateMountedScenes()`.
 
-## 6.2 Changed Classes
+### 6.2 Changed Classes
 
 1. `ImportRequest`
    - add top-level `InputPayload` marker (orchestration-only; presence signals
@@ -241,7 +244,7 @@ Architectural split:
 
 ## 7. API Contracts
 
-## 7.1 Import Request Payload
+### 7.1 Import Request Payload
 
 Add to `ImportRequest`:
 
@@ -266,7 +269,7 @@ Routing contract:
    `job_type == "input"`, and `request.asset_virtual_path` to the job's
    `virtual_path`, the source's identity.
 
-## 7.2 Input Command (CLI Only)
+### 7.2 Input Command (CLI Only)
 
 Command surface:
 
@@ -284,7 +287,7 @@ CLI-only optional flags (NOT valid in manifest job objects):
 These flags are consumed by the `InputCommand` CLI handler to build an
 `ImportRequest`. They do NOT appear in manifest `jobs[]` entries.
 
-## 7.3 Manifest Contract (`ImportManifest`)
+### 7.3 Manifest Contract (`ImportManifest`)
 
 This section defines manifest-mode import for input assets in ImportTool batch
 mode.
@@ -396,7 +399,7 @@ Cross-tool scope clarification:
    schema exists.
 3. Both paths must serialize identical `InputMappingContextAssetDesc` semantics.
 
-### 7.3.1 Dependency Scheduling Contract
+#### 7.3.1 Dependency Scheduling Contract
 
 Batch execution is dependency-aware:
 
@@ -414,7 +417,7 @@ Batch execution is dependency-aware:
 5. The execution node for each input job remains
    `InputImportJob -> InputImportPipeline`.
 
-## 7.4 Input Source JSON Specification (Importer Input Files)
+### 7.4 Input Source JSON Specification (Importer Input Files)
 
 This section defines the JSON document shapes consumed by:
 
@@ -422,7 +425,7 @@ This section defines the JSON document shapes consumed by:
 
 These are importer source documents, not ImportManifest job documents.
 
-### 7.4.0 Authoring Model
+#### 7.4.0 Authoring Model
 
 The input system uses two kinds of cooked assets internally
 (`InputActionAssetDesc`, `InputMappingContextAssetDesc`). The authoring unit is
@@ -494,7 +497,7 @@ Manifest example (typical — single self-contained file):
 }
 ```
 
-### 7.4.1 File Extension Convention
+#### 7.4.1 File Extension Convention
 
 Input sources use the `*.input.json` suffix, associated with
 `oxygen.input.schema.json`.
@@ -516,7 +519,7 @@ This gives authors immediate autocompletion, hover documentation, and real-time
 validation for every field, enum value, and slot name without any extension or
 plugin.
 
-### 7.4.2 Input Source JSON (`*.input.json`)
+#### 7.4.2 Input Source JSON (`*.input.json`)
 
 One schema, `oxygen.input.schema.json`, describes every input source: optional
 `actions` and optional `contexts`, both defaulting to empty. Schema validation
@@ -558,25 +561,25 @@ Canonical document (`PlayerInput.input.json`):
       "mappings": [
         {
           "action": "Move",
-          "slot": "UpArrow",
+          "slot": "Up",
           "trigger": "down",
           "scale": [0, 1]
         },
         {
           "action": "Move",
-          "slot": "DownArrow",
+          "slot": "Down",
           "trigger": "down",
           "scale": [0, -1]
         },
         {
           "action": "Move",
-          "slot": "LeftArrow",
+          "slot": "Left",
           "trigger": "down",
           "scale": [-1, 0]
         },
         {
           "action": "Move",
-          "slot": "RightArrow",
+          "slot": "Right",
           "trigger": "down",
           "scale": [1, 0]
         },
@@ -608,7 +611,7 @@ actions, and `/Content/Input/PlayerInput.input/Gameplay.oimap` and
    declared in this source's `actions` array, or the virtual path of an action
    in mounted content (Section 7.4.0).
 
-### 7.4.2.1 Action Declaration
+##### 7.4.2.1 Action Declaration
 
 Each `actions[]` item:
 
@@ -635,7 +638,7 @@ Binary mapping:
 | `type`           | `value_type`                          | `"bool"`→0, `"axis1d"`→1, `"axis2d"`→2 |
 | `consumes_input` | `flags`                               | `true` → `kConsumesInput` bit set      |
 
-### 7.4.2.2 Context Declaration
+##### 7.4.2.2 Context Declaration
 
 Each `contexts[]` item:
 
@@ -662,7 +665,7 @@ Binary mapping:
 | `name`     | `header.name_offset`                          | UTF-8, in the descriptor string table |
 | `priority` | `default_priority`                            | direct int32 copy                     |
 
-### 7.4.2.3 Mapping Record Contract
+##### 7.4.2.3 Mapping Record Contract
 
 Each `mappings[]` item:
 
@@ -703,47 +706,52 @@ Binary mapping:
 | `scale`    | `scale[2]`                                | direct float copy                   |
 | `bias`     | `bias[2]`                                 | direct float copy                   |
 
-### 7.4.4 Input Slot Names
+#### 7.4.4 Input Slot Names
 
-The `slot` field in mappings must match a registered input slot name from
-`InputSlots` ([Input.h](src/Oxygen/Platform/Input.h)). The JSON Schema
-enumerates all valid names for autocomplete.
+The `slot` field in mappings must be the name of a slot the Platform registry
+registers (`platform::InputSlots::FindByName`,
+[Input.h](src/Oxygen/Platform/Input.h)). The JSON Schema enumerates exactly
+those names (a cooker test pins the equality). Aliases are not accepted:
+`UpArrow`, `Alpha1`, `LeftControl` and `Print` are schema errors at cook, and
+a cooked mapping naming a slot the registry lacks fails its load with
+`ContentLoadFailure::kContentInvalid`. `InputSlots::None` is not registered
+and cannot be mapped.
 
-Available slot categories:
+Registered slot names, by category:
 
 **Mouse:** `MouseWheelUp`, `MouseWheelDown`, `MouseWheelLeft`,
 `MouseWheelRight`, `MouseWheelX`, `MouseWheelY`, `MouseWheelXY`,
 `LeftMouseButton`, `RightMouseButton`, `MiddleMouseButton`, `ThumbMouseButton1`,
 `ThumbMouseButton2`, `MouseX`, `MouseY`, `MouseXY`
 
-**Keyboard — Special:** `None`, `AnyKey`, `BackSpace`, `Delete`, `Tab`, `Clear`,
+**Keyboard — Special:** `AnyKey`, `BackSpace`, `Delete`, `Tab`, `Clear`,
 `Return`, `Pause`, `Escape`, `Space`
 
 **Keyboard — Keypad:** `Keypad0`..`Keypad9`, `KeypadPeriod`, `KeypadDivide`,
 `KeypadMultiply`, `KeypadMinus`, `KeypadPlus`, `KeypadEnter`, `KeypadEquals`
 
-**Keyboard — Navigation:** `UpArrow`, `DownArrow`, `LeftArrow`, `RightArrow`,
-`Insert`, `Home`, `End`, `PageUp`, `PageDown`
+**Keyboard — Navigation:** `Up`, `Down`, `Left`, `Right`, `Insert`, `Home`,
+`End`, `PageUp`, `PageDown`
 
 **Keyboard — Function:** `F1`..`F15`
 
-**Keyboard — Alpha:** `Alpha0`..`Alpha9`, `A`..`Z`
+**Keyboard — Alphanumeric:** `0`..`9`, `A`..`Z`
 
-**Keyboard — Symbols:** `Exclaim`, `DoubleQuote`, `Hash`, `Dollar`, `Percent`,
+**Keyboard — Symbols:** `!` (not `Exclaim`), `DoubleQuote`, `Hash`, `Dollar`, `Percent`,
 `Ampersand`, `Quote`, `LeftParen`, `RightParen`, `Asterisk`, `Plus`, `Comma`,
 `Minus`, `Period`, `Slash`, `Colon`, `Semicolon`, `Less`, `Equals`, `Greater`,
 `Question`, `At`, `LeftBracket`, `Backslash`, `RightBracket`, `Caret`,
 `Underscore`, `BackQuote`
 
 **Keyboard — Modifiers:** `NumLock`, `CapsLock`, `ScrollLock`, `RightShift`,
-`LeftShift`, `RightControl`, `LeftControl`, `RightAlt`, `LeftAlt`, `LeftMeta`,
-`RightMeta`, `Help`, `Print`, `SysReq`, `Menu`
+`LeftShift`, `RightCtrl`, `LeftCtrl`, `RightAlt`, `LeftAlt`, `LeftMeta`,
+`RightMeta`, `Help`, `PrintScreen`, `SysReq`, `Menu`
 
 Note: Gamepad slot names are not yet registered in the engine. When gamepad
 support is added to `InputSlots`, the JSON Schema and this list will be extended
 accordingly.
 
-### 7.4.5 Trigger Contract
+#### 7.4.5 Trigger Contract
 
 Each `triggers[]` item (or the expanded form of a `trigger` shorthand):
 
@@ -786,7 +794,7 @@ Binary mapping:
 | `chord_action`          | `linked_action_asset_key`           | resolved to `AssetKey`                        |
 | `combo_actions`         | `aux_start_index` + `aux_count`     | references aux record table                   |
 
-### 7.4.6 Trigger Aux Contract
+#### 7.4.6 Trigger Aux Contract
 
 Each `aux[]` item (used for combo step definitions):
 
@@ -807,7 +815,7 @@ Binary mapping:
 | `completion_states` | `completion_states`                    | direct uint32                    |
 | `time_to_complete`  | `time_to_complete_ns`                  | seconds → nanoseconds conversion |
 
-### 7.4.7 Parsing Ownership
+#### 7.4.7 Parsing Ownership
 
 1. `InputImportPipeline` owns source document parsing/validation.
 2. `InputImportJob` does not parse schema details; it orchestrates pipeline
@@ -815,11 +823,11 @@ Binary mapping:
 3. diagnostics for source schema failures must use `input.context.*` and
    `input.asset.*` namespaces.
 
-## 7.5 JSON Schema Distribution
+### 7.5 JSON Schema Distribution
 
 The engine ships JSON Schema files that provide real-time editor support:
 
-### 7.5.1 Shipped Schema Files
+#### 7.5.1 Shipped Schema Files
 
 1. `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json` — the input
    source format (actions and contexts).
@@ -837,7 +845,7 @@ Schema features:
 6. Input slot enum is auto-generated from `InputSlots` class to stay in sync
    with the engine.
 
-### 7.5.2 Schema Location Convention
+#### 7.5.2 Schema Location Convention
 
 Schema files are shipped in the engine's `schemas/` directory at the repository
 root. Source files reference them via relative path:
@@ -856,7 +864,7 @@ accordingly:
 Alternatively, use workspace-level settings for automatic association (Section
 7.4.1) and omit `$schema` from source files entirely.
 
-### 7.5.3 Schema Maintenance
+#### 7.5.3 Schema Maintenance
 
 1. The input slot enum in the schema is generated from `InputSlots` registered
    names. When slots are added to the engine, the schema must be regenerated.
@@ -867,14 +875,14 @@ Alternatively, use workspace-level settings for automatic association (Section
 
 ## 8. Binary Contract Changes
 
-## 8.1 `InputMappingContextFlags`
+### 8.1 `InputMappingContextFlags`
 
 `InputMappingContextFlags` defines no flag: the field is reserved, cooked
 contexts store `kNone`, and the loader rejects a descriptor that sets a bit. The
 descriptor version is 2; version 1 descriptors carried start flags and must be
 recooked.
 
-## 8.2 `InputMappingContextAssetDesc`
+### 8.2 `InputMappingContextAssetDesc`
 
 Add field:
 
@@ -885,7 +893,7 @@ Constraints:
 1. total struct size remains 256 bytes.
 2. reserved padding adjusted accordingly.
 
-## 8.3 `InputContextBindingRecord` — Removed
+### 8.3 `InputContextBindingRecord` — Removed
 
 This struct, its flags enum (`InputContextBindingFlags`), and the
 `kInputContextBinding` component type are fully removed from the codebase as
@@ -1016,7 +1024,7 @@ This reads `default_priority` from the `InputMappingContextAssetDesc` header.
 
 ## 10. Import Pipeline Behavior
 
-## 10.1 `InputImportJob`
+### 10.1 `InputImportJob`
 
 Responsibilities:
 
@@ -1026,7 +1034,7 @@ Responsibilities:
 4. submit one work item and collect one result.
 5. finalize import session and return `ImportReport`.
 
-## 10.2 `InputImportPipeline`
+### 10.2 `InputImportPipeline`
 
 Responsibilities:
 

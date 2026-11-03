@@ -141,7 +141,7 @@ NOLINT_TEST(AssetDescriptorsTest, InputContextReadsBackMappingsAndTriggers)
   chord.linked_action_asset_key = crouch;
   auto context = InputContextBuilder { "Gameplay" };
   context.Mapping(jump, "Space", { input::InputTriggerRecord {}, chord })
-    .Mapping(crouch, "LeftControl");
+    .Mapping(crouch, "LeftCtrl");
 
   const auto references = context.References();
   const auto read

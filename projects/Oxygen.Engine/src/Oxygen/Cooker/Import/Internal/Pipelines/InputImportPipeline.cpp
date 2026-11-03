@@ -261,198 +261,6 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto CanonicalizeInputSlotName(
-    const std::string_view authored_name) -> std::string_view
-  {
-    static constexpr std::array<std::pair<std::string_view, std::string_view>,
-      17>
-      kAliasTable {
-        std::pair { "UpArrow", "Up" },
-        std::pair { "DownArrow", "Down" },
-        std::pair { "RightArrow", "Right" },
-        std::pair { "LeftArrow", "Left" },
-        std::pair { "Alpha0", "0" },
-        std::pair { "Alpha1", "1" },
-        std::pair { "Alpha2", "2" },
-        std::pair { "Alpha3", "3" },
-        std::pair { "Alpha4", "4" },
-        std::pair { "Alpha5", "5" },
-        std::pair { "Alpha6", "6" },
-        std::pair { "Alpha7", "7" },
-        std::pair { "Alpha8", "8" },
-        std::pair { "Alpha9", "9" },
-        std::pair { "Exclaim", "!" },
-        std::pair { "RightControl", "RightCtrl" },
-        std::pair { "LeftControl", "LeftCtrl" },
-      };
-    for (const auto& [alias_name, canonical_name] : kAliasTable) {
-      if (authored_name == alias_name) {
-        return canonical_name;
-      }
-    }
-    if (authored_name == "Print") {
-      return "PrintScreen";
-    }
-    return authored_name;
-  }
-
-  auto BuildKnownSlotNames() -> std::unordered_set<std::string>
-  {
-    static constexpr std::array<std::string_view, 145> kKnownSlotNames {
-      "MouseWheelUp",
-      "MouseWheelDown",
-      "MouseWheelLeft",
-      "MouseWheelRight",
-      "MouseWheelX",
-      "MouseWheelY",
-      "MouseWheelXY",
-      "LeftMouseButton",
-      "RightMouseButton",
-      "MiddleMouseButton",
-      "ThumbMouseButton1",
-      "ThumbMouseButton2",
-      "MouseX",
-      "MouseY",
-      "MouseXY",
-      "None",
-      "AnyKey",
-      "BackSpace",
-      "Delete",
-      "Tab",
-      "Clear",
-      "Return",
-      "Pause",
-      "Escape",
-      "Space",
-      "Keypad0",
-      "Keypad1",
-      "Keypad2",
-      "Keypad3",
-      "Keypad4",
-      "Keypad5",
-      "Keypad6",
-      "Keypad7",
-      "Keypad8",
-      "Keypad9",
-      "KeypadPeriod",
-      "KeypadDivide",
-      "KeypadMultiply",
-      "KeypadMinus",
-      "KeypadPlus",
-      "KeypadEnter",
-      "KeypadEquals",
-      "Up",
-      "Down",
-      "Right",
-      "Left",
-      "Insert",
-      "Home",
-      "End",
-      "PageUp",
-      "PageDown",
-      "F1",
-      "F2",
-      "F3",
-      "F4",
-      "F5",
-      "F6",
-      "F7",
-      "F8",
-      "F9",
-      "F10",
-      "F11",
-      "F12",
-      "F13",
-      "F14",
-      "F15",
-      "0",
-      "1",
-      "2",
-      "3",
-      "4",
-      "5",
-      "6",
-      "7",
-      "8",
-      "9",
-      "!",
-      "DoubleQuote",
-      "Hash",
-      "Dollar",
-      "Percent",
-      "Ampersand",
-      "Quote",
-      "LeftParen",
-      "RightParen",
-      "Asterisk",
-      "Plus",
-      "Comma",
-      "Minus",
-      "Period",
-      "Slash",
-      "Colon",
-      "Semicolon",
-      "Less",
-      "Equals",
-      "Greater",
-      "Question",
-      "At",
-      "LeftBracket",
-      "Backslash",
-      "RightBracket",
-      "Caret",
-      "Underscore",
-      "BackQuote",
-      "A",
-      "B",
-      "C",
-      "D",
-      "E",
-      "F",
-      "G",
-      "H",
-      "I",
-      "J",
-      "K",
-      "L",
-      "M",
-      "N",
-      "O",
-      "P",
-      "Q",
-      "R",
-      "S",
-      "T",
-      "U",
-      "V",
-      "W",
-      "X",
-      "Y",
-      "Z",
-      "NumLock",
-      "CapsLock",
-      "ScrollLock",
-      "RightShift",
-      "LeftShift",
-      "RightCtrl",
-      "LeftCtrl",
-      "RightAlt",
-      "LeftAlt",
-      "LeftMeta",
-      "RightMeta",
-      "Help",
-      "PrintScreen",
-      "SysReq",
-      "Menu",
-    };
-    auto known = std::unordered_set<std::string> {};
-    known.reserve(kKnownSlotNames.size());
-    for (const auto slot_name : kKnownSlotNames) {
-      known.emplace(slot_name);
-    }
-    return known;
-  }
-
   //! Where an input source's products are named: under its identity.
   /*!
    The source's identity is its path without the authoring `.json`
@@ -558,9 +366,7 @@ namespace {
 
   auto ParseInputSourceDocument(const json& doc,
     const InputContainer& container, ImportSession& session,
-    const ImportRequest& request,
-    const std::unordered_set<std::string>& known_slots, ParsedInputSource& out)
-    -> bool
+    const ImportRequest& request, ParsedInputSource& out) -> bool
   {
     out.declared_actions.clear();
     out.local_action_keys.clear();
@@ -719,24 +525,8 @@ namespace {
     const auto parse_mapping = [&](const json& node, const std::string& path,
                                  MappingSource& out_mapping) -> bool {
       out_mapping.action_name = node.at("action").get<std::string>();
-      const auto authored_slot_name = node.at("slot").get<std::string>();
-      const auto canonical_slot_name
-        = CanonicalizeInputSlotName(authored_slot_name);
-      out_mapping.slot_name = std::string(canonical_slot_name);
-      if (canonical_slot_name != authored_slot_name) {
-        AddDiagnostic(session, request, ImportSeverity::kInfo,
-          "input.context.slot_alias_normalized",
-          "Normalized slot alias '" + authored_slot_name + "' to '"
-            + out_mapping.slot_name + "'",
-          path + ".slot");
-      }
-      if (!known_slots.contains(out_mapping.slot_name)) {
-        AddDiagnostic(session, request, ImportSeverity::kWarning,
-          "input.context.slot_unknown",
-          "Unknown slot '" + authored_slot_name + "' after normalization to '"
-            + out_mapping.slot_name + "'; keeping authored value",
-          path + ".slot");
-      }
+      // The schema admits only the slot names the platform registers.
+      out_mapping.slot_name = node.at("slot").get<std::string>();
 
       if (node.contains("scale")) {
         out_mapping.scale[0] = node["scale"][0].get<float>();
@@ -1310,10 +1100,9 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   if (!ValidateInputSchema(doc, *session, request)) {
     co_return false;
   }
-  const auto known_slots = BuildKnownSlotNames();
   auto parsed_source = ParsedInputSource {};
   if (!ParseInputSourceDocument(
-        doc, container, *session, request, known_slots, parsed_source)) {
+        doc, container, *session, request, parsed_source)) {
     co_return false;
   }
 

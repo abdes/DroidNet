@@ -37,6 +37,7 @@ oxygen_cooker_test(
   DEPS
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+    oxygen::platform-input
     oxygen::scene
   SOURCES
     "Import/AsyncImporter_test.cpp"

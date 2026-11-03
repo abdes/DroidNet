@@ -11,38 +11,61 @@
 #include <span>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::loaders {
 
 namespace detail {
 
-  inline auto ValidateTriggerType(const data::pak::input::InputTriggerType type)
-    -> void
+  //! Refuses a trigger of an unknown type or behavior, or a chord or chain
+  //! trigger that names no linked action.
+  inline auto ValidateTrigger(
+    const data::pak::input::InputTriggerRecord& trigger) -> void
   {
-    using T = data::pak::input::InputTriggerType;
-    switch (type) {
-    case T::kPressed:
-    case T::kReleased:
-    case T::kDown:
-    case T::kHold:
-    case T::kHoldAndRelease:
-    case T::kPulse:
-    case T::kTap:
-    case T::kChord:
-    case T::kActionChain:
-    case T::kCombo:
+    using Type = data::pak::input::InputTriggerType;
+    switch (trigger.type) {
+    case Type::kChord:
+    case Type::kActionChain:
+      if (trigger.linked_action_asset_key.IsNil()) {
+        throw ContentLoadError(ContentLoadFailure::kContentInvalid,
+          "input chord or chain trigger names no linked action");
+      }
+      break;
+    case Type::kPressed:
+    case Type::kReleased:
+    case Type::kDown:
+    case Type::kHold:
+    case Type::kHoldAndRelease:
+    case Type::kPulse:
+    case Type::kTap:
+    case Type::kCombo:
+      break;
+    default:
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidValue, "invalid input trigger type");
+    }
+    using Behavior = data::pak::input::InputTriggerBehavior;
+    switch (trigger.behavior) {
+    case Behavior::kExplicit:
+    case Behavior::kImplicit:
+    case Behavior::kBlocker:
       return;
     default:
-      throw std::runtime_error("invalid input trigger type");
+      throw data::CookedFormatError(
+        data::CookedDefect::kInvalidValue, "invalid input trigger behavior");
     }
   }
 
@@ -74,17 +97,17 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
 
   if (desc.header.version
     != data::pak::input::kInputMappingContextAssetVersion) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kUnsupportedVersion,
       "Input descriptor version is not current; re-cook the asset");
   }
 
   if (static_cast<data::AssetType>(desc.header.asset_type)
     != data::AssetType::kInputMappingContext) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kWrongMagic,
       "invalid asset type for input mapping context descriptor");
   }
   if (desc.flags != data::pak::input::InputMappingContextFlags::kNone) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
       "input mapping context descriptor sets reserved flags");
   }
 
@@ -98,22 +121,26 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   if (desc.mappings.count > 0
     && desc.mappings.entry_size
       != sizeof(data::pak::input::InputActionMappingRecord)) {
-    throw std::runtime_error("input mappings entry_size mismatch");
+    throw data::CookedFormatError(
+      data::CookedDefect::kWrongRowSize, "input mappings entry_size mismatch");
   }
   if (desc.triggers.count > 0
     && desc.triggers.entry_size
       != sizeof(data::pak::input::InputTriggerRecord)) {
-    throw std::runtime_error("input triggers entry_size mismatch");
+    throw data::CookedFormatError(
+      data::CookedDefect::kWrongRowSize, "input triggers entry_size mismatch");
   }
   if (desc.trigger_aux.count > 0
     && desc.trigger_aux.entry_size
       != sizeof(data::pak::input::InputTriggerAuxRecord)) {
-    throw std::runtime_error("input trigger_aux entry_size mismatch");
+    throw data::CookedFormatError(data::CookedDefect::kWrongRowSize,
+      "input trigger_aux entry_size mismatch");
   }
   if (desc.header.strings.size == 0
     || desc.header.strings.offset
       < sizeof(data::pak::input::InputMappingContextAssetDesc)) {
-    throw std::runtime_error("input strings location is invalid");
+    throw data::CookedFormatError(
+      data::CookedDefect::kOutOfBounds, "input strings location is invalid");
   }
 
   size_t end = sizeof(data::pak::input::InputMappingContextAssetDesc);
@@ -154,7 +181,7 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     CheckLoaderResult(
       record, "input mapping context asset", "InputTriggerRecord");
     triggers.at(i) = *record;
-    detail::ValidateTriggerType(triggers.at(i).type);
+    detail::ValidateTrigger(triggers.at(i));
   }
 
   std::vector<data::pak::input::InputTriggerAuxRecord> trigger_aux(
@@ -168,6 +195,10 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     CheckLoaderResult(
       record, "input mapping context asset", "InputTriggerAuxRecord");
     trigger_aux.at(i) = *record;
+    if (trigger_aux.at(i).action_asset_key.IsNil()) {
+      throw ContentLoadError(ContentLoadFailure::kContentInvalid,
+        "input combo step names no action");
+    }
   }
 
   auto strings = data::DescriptorStrings {};
@@ -175,20 +206,29 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     strings
       = data::DescriptorStrings::FromDescriptor(payload, desc.header.strings);
   } catch (const std::invalid_argument& error) {
-    throw std::runtime_error(
+    throw data::CookedFormatError(data::CookedDefect::kInvalidString,
       fmt::format("input mapping context strings: {}", error.what()));
   }
   auto name
     = ResolveDescriptorString(strings, desc.header.name_offset, "asset name");
 
   for (const auto& mapping : mappings) {
-    static_cast<void>(ResolveDescriptorString(
-      strings, mapping.slot_name_offset, "input mapping slot name"));
+    const auto slot = ResolveDescriptorString(
+      strings, mapping.slot_name_offset, "input mapping slot name");
+    if (!platform::InputSlots::FindByName(slot)) {
+      throw ContentLoadError(ContentLoadFailure::kContentInvalid,
+        fmt::format("input mapping slot '{}' is unknown", slot));
+    }
+    if (mapping.action_asset_key.IsNil()) {
+      throw ContentLoadError(
+        ContentLoadFailure::kContentInvalid, "input mapping names no action");
+    }
     const auto trigger_end
       = mapping.trigger_start_index + mapping.trigger_count;
     if (trigger_end < mapping.trigger_start_index
       || trigger_end > triggers.size()) {
-      throw std::runtime_error("input mapping trigger range out of bounds");
+      throw data::CookedFormatError(data::CookedDefect::kInvalidReference,
+        "input mapping trigger range out of bounds");
     }
   }
 
@@ -196,7 +236,8 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     if (trigger.type == data::pak::input::InputTriggerType::kCombo) {
       const auto aux_end = trigger.aux_start_index + trigger.aux_count;
       if (aux_end < trigger.aux_start_index || aux_end > trigger_aux.size()) {
-        throw std::runtime_error("input combo trigger aux range out of bounds");
+        throw data::CookedFormatError(data::CookedDefect::kInvalidReference,
+          "input combo trigger aux range out of bounds");
       }
     }
   }
@@ -226,28 +267,21 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
   }
 
   if (!context.parse_only) {
-    if (!context.dependency_collector) {
-      throw std::runtime_error(
-        "InputMappingContext loader requires dependency collector "
-        "for non-parse-only loads");
-    }
+    DCHECK_NOTNULL_F(context.dependency_collector,
+      "an input mapping context decode collects its actions");
 
     for (const auto& mapping : mappings) {
-      if (mapping.action_asset_key != data::AssetKey {}) {
-        context.dependency_collector->AddAssetDependency(
-          mapping.action_asset_key);
-      }
+      context.dependency_collector->AddAssetDependency(
+        mapping.action_asset_key);
     }
     for (const auto& trigger : triggers) {
-      if (trigger.linked_action_asset_key != data::AssetKey {}) {
+      if (!trigger.linked_action_asset_key.IsNil()) {
         context.dependency_collector->AddAssetDependency(
           trigger.linked_action_asset_key);
       }
     }
     for (const auto& aux : trigger_aux) {
-      if (aux.action_asset_key != data::AssetKey {}) {
-        context.dependency_collector->AddAssetDependency(aux.action_asset_key);
-      }
+      context.dependency_collector->AddAssetDependency(aux.action_asset_key);
     }
   }
 

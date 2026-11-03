@@ -24,6 +24,7 @@
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -41,6 +42,7 @@ namespace {
   namespace world = data::pak::world;
   namespace script = data::pak::scripting;
   namespace physics = data::pak::physics;
+  namespace input = data::pak::input;
   namespace render = data::pak::render;
 
   //! The record `T` at `offset` of `bytes`.
@@ -92,7 +94,8 @@ namespace {
   }
 
   //! The offset of the element `index` of `table`, of `size` bytes.
-  auto ElementOffset(const world::SceneDataTable& table, const uint32_t index,
+  template <class Table>
+  auto ElementOffset(const Table& table, const uint32_t index,
     const size_t size, const char* what) -> size_t
   {
     if (index >= table.count || table.entry_size != size) {
@@ -197,6 +200,88 @@ auto DescriptorDefects::ReplaceString(std::vector<std::byte>& descriptor,
   }
   throw std::invalid_argument(
     "the descriptor holds no string '" + std::string(from) + "'");
+}
+
+auto DescriptorDefects::InputActionAt(const std::span<const std::byte> action)
+  -> input::InputActionAssetDesc
+{
+  return ReadRecord<input::InputActionAssetDesc>(action, 0U);
+}
+
+auto DescriptorDefects::SetInputAction(std::vector<std::byte>& action,
+  const input::InputActionAssetDesc& desc) -> void
+{
+  WriteRecord(action, 0U, desc);
+}
+
+auto DescriptorDefects::InputContextAt(const std::span<const std::byte> context)
+  -> input::InputMappingContextAssetDesc
+{
+  return ReadRecord<input::InputMappingContextAssetDesc>(context, 0U);
+}
+
+auto DescriptorDefects::SetInputContext(std::vector<std::byte>& context,
+  const input::InputMappingContextAssetDesc& desc) -> void
+{
+  WriteRecord(context, 0U, desc);
+}
+
+auto DescriptorDefects::InputMappingAt(const std::span<const std::byte> context,
+  const uint32_t index) -> input::InputActionMappingRecord
+{
+  const auto desc = InputContextAt(context);
+  return ReadRecord<input::InputActionMappingRecord>(context,
+    ElementOffset(desc.mappings, index, sizeof(input::InputActionMappingRecord),
+      "mapping"));
+}
+
+auto DescriptorDefects::SetInputMapping(std::vector<std::byte>& context,
+  const uint32_t index, const input::InputActionMappingRecord& mapping) -> void
+{
+  const auto desc = InputContextAt(context);
+  WriteRecord(context,
+    ElementOffset(
+      desc.mappings, index, sizeof(input::InputActionMappingRecord), "mapping"),
+    mapping);
+}
+
+auto DescriptorDefects::InputTriggerAt(const std::span<const std::byte> context,
+  const uint32_t index) -> input::InputTriggerRecord
+{
+  const auto desc = InputContextAt(context);
+  return ReadRecord<input::InputTriggerRecord>(context,
+    ElementOffset(
+      desc.triggers, index, sizeof(input::InputTriggerRecord), "trigger"));
+}
+
+auto DescriptorDefects::SetInputTrigger(std::vector<std::byte>& context,
+  const uint32_t index, const input::InputTriggerRecord& trigger) -> void
+{
+  const auto desc = InputContextAt(context);
+  WriteRecord(context,
+    ElementOffset(
+      desc.triggers, index, sizeof(input::InputTriggerRecord), "trigger"),
+    trigger);
+}
+
+auto DescriptorDefects::InputTriggerAuxAt(
+  const std::span<const std::byte> context, const uint32_t index)
+  -> input::InputTriggerAuxRecord
+{
+  const auto desc = InputContextAt(context);
+  return ReadRecord<input::InputTriggerAuxRecord>(context,
+    ElementOffset(desc.trigger_aux, index, sizeof(input::InputTriggerAuxRecord),
+      "trigger aux"));
+}
+
+auto DescriptorDefects::SetInputTriggerAux(std::vector<std::byte>& context,
+  const uint32_t index, const input::InputTriggerAuxRecord& aux) -> void
+{
+  const auto desc = InputContextAt(context);
+  WriteRecord(context,
+    ElementOffset(desc.trigger_aux, index, sizeof(input::InputTriggerAuxRecord),
+      "trigger aux"),
+    aux);
 }
 
 auto DescriptorDefects::MaterialAt(const std::span<const std::byte> material)

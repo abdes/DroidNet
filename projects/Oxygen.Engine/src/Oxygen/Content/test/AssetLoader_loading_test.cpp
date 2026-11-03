@@ -19,13 +19,16 @@
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/test/Fakes/StubAssetLoader.h>
 #include <Oxygen/Cooker/testing/AssetDescriptors.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -227,6 +230,72 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
       };
     }(InputKeys { .action = action_key, .context = context_key }, cooked_root,
                              &el));
+}
+
+//! A hydration takes the action assets of one loader but those it keeps back.
+class PartialActionLoader final
+  : public oxygen::content::testing::StubAssetLoader {
+public:
+  using StubAssetLoader::GetInputActionAsset;
+
+  PartialActionLoader(oxygen::content::IAssetLoader& loader,
+    const oxygen::data::AssetKey resolvable)
+    : loader_(&loader)
+    , resolvable_(resolvable)
+  {
+  }
+
+  auto GetInputActionAsset(
+    const oxygen::data::AssetKey& key, const oxygen::data::Asset& context)
+    -> std::shared_ptr<oxygen::data::InputActionAsset> override
+  {
+    return key == resolvable_ ? loader_->GetInputActionAsset(key, context)
+                              : nullptr;
+  }
+
+private:
+  oxygen::observer_ptr<oxygen::content::IAssetLoader> loader_;
+  oxygen::data::AssetKey resolvable_;
+};
+
+//! A context builds all or nothing: when the second action it maps does not
+//! resolve, hydration returns null and the input system holds neither action
+//! nor the context, though the first action resolved.
+NOLINT_TEST_F(
+  AssetLoaderPoolTest, HydrateInputContextWithUnresolvedActionRegistersNothing)
+{
+  const auto cooked_root = TempDir() / "hydrate_unresolved_action";
+  auto root = LooseCookedRoot { "Game" };
+  const auto first = root.InputAction("Input/First.oiact");
+  const auto second = root.InputAction("Input/Second.oiact");
+  auto context = oxygen::cooker::testing::InputContextBuilder { "Pair" };
+  context.Mapping(first, "Space").Mapping(second, "W");
+  const auto context_key = root.InputContext("Input/Pair.oimap", context);
+  oxygen::cooker::testing::Materialize(root.Files(), cooked_root);
+  loader_.AddLooseCookedRoot(cooked_root);
+  oxygen::co::BroadcastChannel<oxygen::platform::InputEvent> input_channel;
+  oxygen::engine::InputSystem input_system(input_channel.ForRead());
+
+  const auto hydrated_run = WhileActive(
+    [&] -> Co<std::shared_ptr<oxygen::input::InputMappingContext>> {
+      const auto asset
+        = co_await loader_.LoadAssetAsync<InputMappingContextAsset>(
+          context_key);
+      if (!asset) {
+        ADD_FAILURE() << "the context did not load";
+        co_return nullptr;
+      }
+      auto partial = PartialActionLoader { loader_, first };
+      co_return oxygen::content::HydrateInputContext(
+        *asset, partial, input_system);
+    }());
+  ASSERT_HAS_VALUE(hydrated_run);
+  const auto& hydrated = *hydrated_run;
+
+  EXPECT_THAT(hydrated, IsNull());
+  EXPECT_THAT(input_system.GetActionByKey(first), IsNull());
+  EXPECT_THAT(input_system.GetActionByKey(second), IsNull());
+  EXPECT_THAT(input_system.GetMappingContextByKey(context_key), IsNull());
 }
 
 //! StartLoadInputMappingContextAsset loads a context with the actions it maps

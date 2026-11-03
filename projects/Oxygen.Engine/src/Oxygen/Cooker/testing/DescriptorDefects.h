@@ -19,6 +19,7 @@
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -71,6 +72,60 @@ struct DescriptorDefects final {
   */
   static auto ReplaceString(std::vector<std::byte>& descriptor,
     std::string_view from, std::string_view to) -> void;
+
+  //=== Input ===-----------------------------------------------------------//
+
+  //! The input action's descriptor record.
+  [[nodiscard]] static auto InputActionAt(std::span<const std::byte> action)
+    -> data::pak::input::InputActionAssetDesc;
+
+  //! Replaces the input action's descriptor record, whatever values it holds.
+  static auto SetInputAction(std::vector<std::byte>& action,
+    const data::pak::input::InputActionAssetDesc& desc) -> void;
+
+  //! The input mapping context's descriptor record.
+  [[nodiscard]] static auto InputContextAt(std::span<const std::byte> context)
+    -> data::pak::input::InputMappingContextAssetDesc;
+
+  //! Replaces the input mapping context's descriptor record, whatever values
+  //! it holds, such as table sizes or flags.
+  static auto SetInputContext(std::vector<std::byte>& context,
+    const data::pak::input::InputMappingContextAssetDesc& desc) -> void;
+
+  //! The mapping `index` of the input mapping context.
+  /*!
+   @throw std::invalid_argument When the context has no such mapping.
+  */
+  [[nodiscard]] static auto InputMappingAt(std::span<const std::byte> context,
+    uint32_t index) -> data::pak::input::InputActionMappingRecord;
+
+  //! Replaces the mapping `index` of the input mapping context.
+  static auto SetInputMapping(std::vector<std::byte>& context, uint32_t index,
+    const data::pak::input::InputActionMappingRecord& mapping) -> void;
+
+  //! The trigger `index` of the input mapping context, counting the triggers
+  //! of every mapping in the order the context lists them.
+  /*!
+   @throw std::invalid_argument When the context has no such trigger.
+  */
+  [[nodiscard]] static auto InputTriggerAt(std::span<const std::byte> context,
+    uint32_t index) -> data::pak::input::InputTriggerRecord;
+
+  //! Replaces the trigger `index` of the input mapping context.
+  static auto SetInputTrigger(std::vector<std::byte>& context, uint32_t index,
+    const data::pak::input::InputTriggerRecord& trigger) -> void;
+
+  //! The combo step `index` of the input mapping context.
+  /*!
+   @throw std::invalid_argument When the context has no such step.
+  */
+  [[nodiscard]] static auto InputTriggerAuxAt(
+    std::span<const std::byte> context, uint32_t index)
+    -> data::pak::input::InputTriggerAuxRecord;
+
+  //! Replaces the combo step `index` of the input mapping context.
+  static auto SetInputTriggerAux(std::vector<std::byte>& context,
+    uint32_t index, const data::pak::input::InputTriggerAuxRecord& aux) -> void;
 
   //=== Materials ===-------------------------------------------------------//
 

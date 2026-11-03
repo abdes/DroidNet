@@ -174,6 +174,9 @@ target_link_libraries(
     oxygen::composition
     oxygen::console
     oxygen::data
+    # The header-only input context loader checks slot names with the
+    # platform's registry.
+    oxygen::platform-input
   PRIVATE
     glm::glm
     oxygen::input

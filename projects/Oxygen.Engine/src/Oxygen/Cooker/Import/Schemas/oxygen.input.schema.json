@@ -252,7 +252,6 @@
             "MouseX",
             "MouseY",
             "MouseXY",
-            "None",
             "AnyKey",
             "BackSpace",
             "Delete",
@@ -381,27 +380,9 @@
             "Help",
             "PrintScreen",
             "SysReq",
-            "Menu",
-            "UpArrow",
-            "DownArrow",
-            "RightArrow",
-            "LeftArrow",
-            "Alpha0",
-            "Alpha1",
-            "Alpha2",
-            "Alpha3",
-            "Alpha4",
-            "Alpha5",
-            "Alpha6",
-            "Alpha7",
-            "Alpha8",
-            "Alpha9",
-            "Exclaim",
-            "RightControl",
-            "LeftControl",
-            "Print"
+            "Menu"
           ],
-          "description": "Input slot name. Canonical runtime names and authoring aliases are accepted."
+          "description": "Input slot name, as the platform registers it."
         },
         "trigger": {
           "type": "string",

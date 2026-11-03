@@ -4,522 +4,469 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string_view>
-#include <type_traits>
 #include <utility>
+#include <vector>
 
-#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
+#include <Oxygen/Cooker/testing/AssetDescriptors.h>
+#include <Oxygen/Cooker/testing/DescriptorDefects.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
-
-using oxygen::serio::Reader;
 
 namespace {
 
-class InputLoadersTest : public testing::Test {
-protected:
-  using MemoryStream = oxygen::serio::MemoryStream;
-  using Writer = oxygen::serio::Writer<MemoryStream>;
+using oxygen::content::ContentLoadError;
+using oxygen::content::ContentLoadFailure;
+using oxygen::cooker::testing::DescriptorDefects;
+using oxygen::cooker::testing::InputActionDescriptor;
+using oxygen::cooker::testing::InputContextBuilder;
+using oxygen::data::CookedDefect;
+namespace data = oxygen::data;
+namespace input = oxygen::data::pak::input;
+namespace loaders = oxygen::content::loaders;
 
-  InputLoadersTest()
-    : writer_(stream_)
-    , reader_(stream_)
-  {
-  }
-
-  auto ResetForRead() -> void
-  {
-    if (!stream_.Seek(oxygen::serio::ByteOffset { 0 })) {
-      throw std::runtime_error("Failed to seek stream");
-    }
-  }
-
-  auto MakeParseOnlyContext() -> oxygen::content::LoaderContext
-  {
-    ResetForRead();
-    return oxygen::content::LoaderContext {
-      .current_asset_key = oxygen::data::AssetKey {},
-      .desc_reader = &reader_,
-      .work_offline = true,
-      .parse_only = true,
-    };
-  }
-
-  auto MakeDecodeContext() -> std::pair<oxygen::content::LoaderContext,
-    std::shared_ptr<oxygen::content::internal::DependencyCollector>>
-  {
-    ResetForRead();
-    auto collector
-      = std::make_shared<oxygen::content::internal::DependencyCollector>();
-    return { oxygen::content::LoaderContext {
-               .current_asset_key = oxygen::data::AssetKey {},
-               .source_instance = oxygen::data::SourceInstanceId(11U),
-               .desc_reader = &reader_,
-               .work_offline = true,
-               .dependency_collector = collector,
-               .parse_only = false,
-             },
-      collector };
-  }
-
-  auto WriteBlob(const auto& pod) -> void
-  {
-    const auto bytes = std::as_bytes(std::span(&pod, 1));
-    const auto res = writer_.WriteBlob(bytes);
-    ASSERT_TRUE(res) << res.error().message();
-  }
-
-  //! Writes a mapping context with one mapping and one trigger of `type`.
-  auto WriteSingleTriggerContext(
-    const oxygen::data::pak::input::InputTriggerType type) -> void
-  {
-    using oxygen::data::AssetType;
-    using oxygen::data::pak::input::InputActionMappingRecord;
-    using oxygen::data::pak::input::InputMappingContextAssetDesc;
-    using oxygen::data::pak::input::InputTriggerBehavior;
-    using oxygen::data::pak::input::InputTriggerRecord;
-
-    constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-    constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-    constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
-
-    InputMappingContextAssetDesc desc {};
-    desc.header.asset_type
-      = static_cast<uint8_t>(AssetType::kInputMappingContext);
-    desc.header.version
-      = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-    desc.mappings.offset = kDescSize;
-    desc.mappings.count = 1;
-    desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-    desc.triggers.offset = kDescSize + kMappingSize;
-    desc.triggers.count = 1;
-    desc.triggers.entry_size = static_cast<uint32_t>(kTriggerSize);
-    desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
-    desc.trigger_aux.count = 0;
-    desc.trigger_aux.entry_size
-      = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-    desc.header.strings.offset
-      = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
-        desc.trigger_aux.offset);
-    desc.header.strings.size = 2;
-
-    InputActionMappingRecord mapping {};
-    mapping.slot_name_offset = 1;
-    mapping.trigger_start_index = 0;
-    mapping.trigger_count = 1;
-
-    InputTriggerRecord trigger {};
-    trigger.type = type;
-    trigger.behavior = InputTriggerBehavior::kImplicit;
-
-    static constexpr auto kStrings = std::string_view { "\0\0", 2 };
-    WriteBlob(desc);
-    WriteBlob(mapping);
-    WriteBlob(trigger);
-    ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-    ASSERT_TRUE(writer_.Flush());
-  }
-
-  MemoryStream stream_;
-  Writer writer_;
-  Reader<MemoryStream> reader_;
-};
-
-NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
+//! The defect `load` refuses its descriptor with for a rule of its format;
+//! empty when it throws nothing. Any other exception fails the test.
+auto DefectOf(auto&& load) -> std::optional<CookedDefect>
 {
-  using oxygen::content::loaders::LoadInputActionAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionAssetDesc;
-  using oxygen::data::pak::input::InputActionAssetFlags;
-  using oxygen::data::pak::input::InputActionValueType;
+  try {
+    load();
+  } catch (const oxygen::data::CookedFormatError& error) {
+    return error.Defect();
+  }
+  return std::nullopt;
+}
 
-  InputActionAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
-  desc.value_type = InputActionValueType::kAxis2D;
-  desc.flags = InputActionAssetFlags::kConsumesInput
-    | InputActionAssetFlags::kCumulativeAccumulation;
-  const auto strings = oxygen::data::DescriptorStringsBuilder {};
-  desc.header.strings = { .offset = sizeof(desc), .size = strings.Size() };
+//! The failure `load` refuses its descriptor with for a rule of the engine;
+//! empty when it throws nothing. Any other exception fails the test.
+auto FailureOf(auto&& load) -> std::optional<ContentLoadFailure>
+{
+  try {
+    load();
+  } catch (const ContentLoadError& error) {
+    return error.Failure();
+  }
+  return std::nullopt;
+}
 
-  WriteBlob(desc);
-  ASSERT_TRUE(writer_.WriteBlob(strings.Bytes()));
-  ASSERT_TRUE(writer_.Flush());
+auto Key(const char* path) -> data::AssetKey
+{
+  return data::AssetKey::FromVirtualPath(path);
+}
 
-  auto context = MakeParseOnlyContext();
-  const auto asset = LoadInputActionAsset(context);
+auto Jump() -> data::AssetKey { return Key("/Game/Input/Jump.oiact"); }
+
+auto Crouch() -> data::AssetKey { return Key("/Game/Input/Crouch.oiact"); }
+
+//! What the product loader `load` reads from `bytes`: a parse-only read or,
+//! given a `collector`, a decode that records the dependencies.
+template <typename Load>
+auto Read(const std::span<const std::byte> bytes, Load load,
+  std::shared_ptr<oxygen::content::internal::DependencyCollector> collector
+  = {})
+{
+  auto stream = oxygen::serio::ReadOnlyMemoryStream { bytes };
+  auto reader = oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> {
+    stream,
+  };
+  const auto parse_only = collector == nullptr;
+  return load(oxygen::content::LoaderContext {
+    .current_asset_key = {},
+    .source_instance = data::SourceInstanceId(11U),
+    .desc_reader = &reader,
+    .work_offline = true,
+    .dependency_collector = std::move(collector),
+    .parse_only = parse_only,
+  });
+}
+
+auto ContextDefect(const std::vector<std::byte>& bytes)
+  -> std::optional<CookedDefect>
+{
+  return DefectOf(
+    [&] { (void)Read(bytes, loaders::LoadInputMappingContextAsset); });
+}
+
+auto ContextFailure(const std::vector<std::byte>& bytes)
+  -> std::optional<ContentLoadFailure>
+{
+  return FailureOf(
+    [&] { (void)Read(bytes, loaders::LoadInputMappingContextAsset); });
+}
+
+auto ActionDefect(const std::vector<std::byte>& bytes)
+  -> std::optional<CookedDefect>
+{
+  return DefectOf([&] { (void)Read(bytes, loaders::LoadInputActionAsset); });
+}
+
+auto ActionFailure(const std::vector<std::byte>& bytes)
+  -> std::optional<ContentLoadFailure>
+{
+  return FailureOf([&] { (void)Read(bytes, loaders::LoadInputActionAsset); });
+}
+
+//! A context that maps Jump to Space through one default trigger.
+auto JumpContext() -> std::vector<std::byte>
+{
+  auto context = InputContextBuilder { "Gameplay" };
+  context.Mapping(Jump(), "Space", { input::InputTriggerRecord {} });
+  return context.Bytes();
+}
+
+//! A context that maps Jump to Space through a combo of one step, Crouch.
+auto ComboContext() -> std::vector<std::byte>
+{
+  auto step = input::InputTriggerAuxRecord {};
+  step.action_asset_key = Crouch();
+  auto context = InputContextBuilder { "Gameplay" };
+  context.Combo(Jump(), "Space", { step });
+  return context.Bytes();
+}
+
+//! A context that maps Jump to Space through a trigger of `type`, linked to
+//! Crouch; then makes the trigger's link nil.
+auto NilLinkedContext(const input::InputTriggerType type)
+  -> std::vector<std::byte>
+{
+  auto trigger = input::InputTriggerRecord {};
+  trigger.type = type;
+  trigger.linked_action_asset_key = Crouch();
+  auto context = InputContextBuilder { "Gameplay" };
+  context.Mapping(Jump(), "Space", { trigger });
+  auto bytes = context.Bytes();
+  trigger.linked_action_asset_key = {};
+  DescriptorDefects::SetInputTrigger(bytes, 0U, trigger);
+  return bytes;
+}
+
+//=== Valid descriptors ===---------------------------------------------------//
+
+//! An action descriptor loads with its name, value type and flags.
+NOLINT_TEST(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
+{
+  const auto action = InputActionDescriptor("Look",
+    {
+      .value_type = input::InputActionValueType::kAxis2D,
+      .flags = input::InputActionAssetFlags::kConsumesInput
+        | input::InputActionAssetFlags::kCumulativeAccumulation,
+    });
+
+  const auto asset = Read(action.bytes, loaders::LoadInputActionAsset);
+
   ASSERT_THAT(asset, ::testing::NotNull());
-  EXPECT_EQ(asset->GetValueType(), InputActionValueType::kAxis2D);
+  EXPECT_EQ(asset->GetAssetName(), "Look");
+  EXPECT_EQ(asset->GetValueType(), input::InputActionValueType::kAxis2D);
   EXPECT_TRUE(asset->ConsumesInput());
   EXPECT_TRUE(asset->AccumulatesCumulatively());
 }
 
-NOLINT_TEST_F(InputLoadersTest,
+//! A decode of a context records the actions its mappings, trigger links and
+//! combo steps name as dependencies, and reads its slot names back.
+NOLINT_TEST(InputLoadersTest,
   LoadInputMappingContextAssetDecodeCollectsActionDependencies)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetKey;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionMappingRecord;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
-  using oxygen::data::pak::input::InputTriggerAuxRecord;
-  using oxygen::data::pak::input::InputTriggerBehavior;
-  using oxygen::data::pak::input::InputTriggerRecord;
-  using oxygen::data::pak::input::InputTriggerType;
+  const auto linked = Key("/Game/Input/Look.oiact");
+  auto trigger = input::InputTriggerRecord {};
+  trigger.linked_action_asset_key = linked;
+  auto step = input::InputTriggerAuxRecord {};
+  step.action_asset_key = Crouch();
+  auto context = InputContextBuilder { "Gameplay" };
+  context.Combo(Jump(), "PageUp", { step }, trigger);
+  auto collector
+    = std::make_shared<oxygen::content::internal::DependencyCollector>();
 
-  constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-  constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-  constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
-  constexpr size_t kAuxSize = sizeof(InputTriggerAuxRecord);
+  const auto asset
+    = Read(context.Bytes(), loaders::LoadInputMappingContextAsset, collector);
 
-  const auto make_asset_key = [](const std::uint8_t seed) -> AssetKey {
-    auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
-    bytes.at(0) = seed;
-    return AssetKey::FromBytes(bytes);
-  };
-  const AssetKey action_a = make_asset_key(0xAAU);
-  const AssetKey action_b = make_asset_key(0xBBU);
-  const AssetKey action_c = make_asset_key(0xCCU);
-
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-
-  desc.mappings.offset = kDescSize;
-  desc.mappings.count = 1;
-  desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-  desc.triggers.offset = kDescSize + kMappingSize;
-  desc.triggers.count = 1;
-  desc.triggers.entry_size = static_cast<uint32_t>(kTriggerSize);
-  desc.trigger_aux.offset = kDescSize + kMappingSize + kTriggerSize;
-  desc.trigger_aux.count = 1;
-  desc.trigger_aux.entry_size = static_cast<uint32_t>(kAuxSize);
-  desc.header.strings.offset
-    = kDescSize + kMappingSize + kTriggerSize + kAuxSize;
-
-  static constexpr auto kStrings
-    = std::string_view { "\0Keyboard.PageUp\0", 17 };
-  desc.header.strings.size = static_cast<uint32_t>(kStrings.size());
-
-  InputActionMappingRecord mapping {};
-  mapping.action_asset_key = action_a;
-  mapping.slot_name_offset = 1;
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 1;
-
-  InputTriggerRecord trigger {};
-  trigger.type = InputTriggerType::kPressed;
-  trigger.behavior = InputTriggerBehavior::kImplicit;
-  trigger.linked_action_asset_key = action_b;
-  trigger.aux_start_index = 0;
-  trigger.aux_count = 1;
-
-  InputTriggerAuxRecord aux {};
-  aux.action_asset_key = action_c;
-  aux.completion_states = 3;
-  aux.time_to_complete_ns = 1234;
-  aux.flags = 5;
-
-  WriteBlob(desc);
-  WriteBlob(mapping);
-  WriteBlob(trigger);
-  WriteBlob(aux);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
-
-  auto [context, collector] = MakeDecodeContext();
-  const auto asset = LoadInputMappingContextAsset(context);
   ASSERT_THAT(asset, ::testing::NotNull());
   ASSERT_EQ(asset->GetMappings().size(), 1U);
   ASSERT_EQ(asset->GetTriggers().size(), 1U);
   ASSERT_EQ(asset->GetTriggerAuxRecords().size(), 1U);
-
-  const auto slot_name = asset->TryGetString(
-    oxygen::base::CheckedAt(asset->GetMappings(), 0).slot_name_offset);
-  ASSERT_TRUE(slot_name.has_value());
-  EXPECT_EQ(slot_name, std::optional<std::string_view> { "Keyboard.PageUp" });
-
+  EXPECT_EQ(asset->TryGetString(asset->GetMappings().front().slot_name_offset),
+    std::optional<std::string_view> { "PageUp" });
   const auto& deps = collector->AssetDependencies();
-  EXPECT_THAT(deps, ::testing::Contains(action_a));
-  EXPECT_THAT(deps, ::testing::Contains(action_b));
-  EXPECT_THAT(deps, ::testing::Contains(action_c));
+  EXPECT_THAT(deps, ::testing::Contains(Jump()));
+  EXPECT_THAT(deps, ::testing::Contains(linked));
+  EXPECT_THAT(deps, ::testing::Contains(Crouch()));
 }
 
-NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetInvalidValueTypeThrows)
+//! Every trigger type the input schema declares loads, the chord and the
+//! action chain included.
+NOLINT_TEST(InputLoadersTest, LoadInputMappingContextAssetAcceptsChord)
 {
-  using oxygen::content::loaders::LoadInputActionAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionAssetDesc;
-  using oxygen::data::pak::input::InputActionValueType;
+  for (const auto type : {
+         input::InputTriggerType::kChord,
+         input::InputTriggerType::kActionChain,
+       }) {
+    auto trigger = input::InputTriggerRecord {};
+    trigger.type = type;
+    trigger.linked_action_asset_key = Crouch();
+    auto context = InputContextBuilder { "Gameplay" };
+    context.Mapping(Jump(), "Space", { trigger });
 
-  InputActionAssetDesc desc {};
-  desc.header.asset_type = static_cast<uint8_t>(AssetType::kInputAction);
-  desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
-  // A value no catalog entry defines.
-  desc.value_type = static_cast<InputActionValueType>(7U);
+    const auto asset
+      = Read(context.Bytes(), loaders::LoadInputMappingContextAsset);
 
-  WriteBlob(desc);
-  ASSERT_TRUE(writer_.Flush());
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW({ (void)LoadInputActionAsset(context); }, std::runtime_error);
+    ASSERT_THAT(asset, ::testing::NotNull());
+    EXPECT_EQ(asset->GetTriggers().front().type, type);
+  }
 }
 
-NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAssetInvalidTriggerTypeThrows)
+//=== Format defects ===------------------------------------------------------//
+
+//! An action of another descriptor version is a format defect.
+NOLINT_TEST(InputLoadersTest, LoadInputActionAssetStaleVersionIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::pak::input::InputTriggerType;
+  auto bytes = InputActionDescriptor("Jump").bytes;
+  DescriptorDefects::SetVersion(
+    bytes, static_cast<uint8_t>(input::kInputActionAssetVersion + 1U));
 
-  // One past the last trigger type the format defines.
-  WriteSingleTriggerContext(static_cast<InputTriggerType>(
-    static_cast<std::underlying_type_t<InputTriggerType>>(
-      InputTriggerType::kCombo)
-    + 1U));
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ActionDefect(bytes), CookedDefect::kUnsupportedVersion);
 }
 
-//! Every trigger type the input schema declares loads, the chord included.
-NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetAcceptsChord)
+//! An action descriptor whose header names another asset type is a format
+//! defect.
+NOLINT_TEST(InputLoadersTest, LoadInputActionAssetWrongAssetTypeIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::pak::input::InputTriggerType;
+  auto bytes = InputActionDescriptor("Jump").bytes;
+  DescriptorDefects::SetAssetType(bytes, data::AssetType::kInputMappingContext);
 
-  WriteSingleTriggerContext(InputTriggerType::kChord);
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_NO_THROW({ (void)LoadInputMappingContextAsset(context); });
+  EXPECT_EQ(ActionDefect(bytes), CookedDefect::kWrongMagic);
 }
 
-NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAssetInvalidSlotOffsetThrows)
+//! A value type no format version defines is a format defect.
+NOLINT_TEST(InputLoadersTest, LoadInputActionAssetInvalidValueTypeIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionMappingRecord;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  auto bytes = InputActionDescriptor("Jump").bytes;
+  auto desc = DescriptorDefects::InputActionAt(bytes);
+  desc.value_type = static_cast<input::InputActionValueType>(7U);
+  DescriptorDefects::SetInputAction(bytes, desc);
 
-  constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-  constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.mappings.offset = kDescSize;
-  desc.mappings.count = 1;
-  desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-  desc.triggers.offset = kDescSize + kMappingSize;
-  desc.triggers.count = 0;
-  desc.triggers.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerRecord);
-  desc.trigger_aux.offset = desc.triggers.offset;
-  desc.trigger_aux.count = 0;
-  desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset
-    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
-      desc.trigger_aux.offset);
-  desc.header.strings.size = 2;
-
-  InputActionMappingRecord mapping {};
-  mapping.slot_name_offset = 5; // out of bounds for 2-byte string table
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 0;
-
-  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
-  WriteBlob(desc);
-  WriteBlob(mapping);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ActionDefect(bytes), CookedDefect::kInvalidValue);
 }
 
-NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAssetTriggerRangeOutOfBoundsThrows)
+//! A context of another descriptor version is a format defect.
+NOLINT_TEST(InputLoadersTest, LoadInputMappingContextAssetStaleVersionIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionMappingRecord;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  auto bytes = JumpContext();
+  DescriptorDefects::SetVersion(
+    bytes, static_cast<uint8_t>(input::kInputMappingContextAssetVersion + 1U));
 
-  constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-  constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.mappings.offset = kDescSize;
-  desc.mappings.count = 1;
-  desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-  desc.triggers.offset = kDescSize + kMappingSize;
-  desc.triggers.count = 0;
-  desc.triggers.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerRecord);
-  desc.trigger_aux.offset = desc.triggers.offset;
-  desc.trigger_aux.count = 0;
-  desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset
-    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
-      desc.trigger_aux.offset);
-  desc.header.strings.size = 2;
-
-  InputActionMappingRecord mapping {};
-  mapping.slot_name_offset = 1;
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 1; // out of bounds because triggers.count == 0
-
-  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
-  WriteBlob(desc);
-  WriteBlob(mapping);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kUnsupportedVersion);
 }
 
-NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAssetComboAuxOutOfBoundsThrows)
+//! A context descriptor whose header names another asset type is a format
+//! defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetWrongAssetTypeIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputActionMappingRecord;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
-  using oxygen::data::pak::input::InputTriggerBehavior;
-  using oxygen::data::pak::input::InputTriggerRecord;
-  using oxygen::data::pak::input::InputTriggerType;
+  auto bytes = JumpContext();
+  DescriptorDefects::SetAssetType(bytes, data::AssetType::kInputAction);
 
-  constexpr size_t kDescSize = sizeof(InputMappingContextAssetDesc);
-  constexpr size_t kMappingSize = sizeof(InputActionMappingRecord);
-  constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
-
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.mappings.offset = kDescSize;
-  desc.mappings.count = 1;
-  desc.mappings.entry_size = static_cast<uint32_t>(kMappingSize);
-  desc.triggers.offset = kDescSize + kMappingSize;
-  desc.triggers.count = 1;
-  desc.triggers.entry_size = static_cast<uint32_t>(kTriggerSize);
-  desc.trigger_aux.offset = desc.triggers.offset + kTriggerSize;
-  desc.trigger_aux.count = 0;
-  desc.trigger_aux.entry_size
-    = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset
-    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
-      desc.trigger_aux.offset);
-  desc.header.strings.size = 2;
-
-  InputActionMappingRecord mapping {};
-  mapping.slot_name_offset = 1;
-  mapping.trigger_start_index = 0;
-  mapping.trigger_count = 1;
-
-  InputTriggerRecord trigger {};
-  trigger.type = InputTriggerType::kCombo;
-  trigger.behavior = InputTriggerBehavior::kImplicit;
-  trigger.aux_start_index = 0;
-  trigger.aux_count = 1; // out of bounds because trigger_aux.count == 0
-
-  static constexpr auto kStrings = std::string_view { "\0\0", 2 };
-  WriteBlob(desc);
-  WriteBlob(mapping);
-  WriteBlob(trigger);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
-
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kWrongMagic);
 }
 
-NOLINT_TEST_F(
-  InputLoadersTest, LoadInputMappingContextAssetDecodeWithoutCollectorThrows)
+//! Context flags are reserved: a descriptor that sets one is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetReservedFlagsAreADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  auto bytes = JumpContext();
+  auto desc = DescriptorDefects::InputContextAt(bytes);
+  desc.flags = static_cast<input::InputMappingContextFlags>(1U);
+  DescriptorDefects::SetInputContext(bytes, desc);
 
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
-  desc.header.strings.size = 1;
-
-  static constexpr auto kStrings = std::string_view { "\0", 1 };
-  WriteBlob(desc);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
-
-  auto context = MakeParseOnlyContext();
-  context.parse_only = false;
-  context.dependency_collector.reset();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kReservedNotZero);
 }
 
-//! Context flags are reserved: a descriptor that sets one is rejected.
-NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetReservedFlagsThrow)
+//! A mapping table whose row size is not the record's is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetMappingRowSizeIsADefect)
 {
-  using oxygen::content::loaders::LoadInputMappingContextAsset;
-  using oxygen::data::AssetType;
-  using oxygen::data::pak::input::InputMappingContextAssetDesc;
-  using oxygen::data::pak::input::InputMappingContextFlags;
+  auto bytes = JumpContext();
+  auto desc = DescriptorDefects::InputContextAt(bytes);
+  desc.mappings.entry_size += 1U;
+  DescriptorDefects::SetInputContext(bytes, desc);
 
-  InputMappingContextAssetDesc desc {};
-  desc.header.asset_type
-    = static_cast<uint8_t>(AssetType::kInputMappingContext);
-  desc.header.version
-    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  desc.flags = static_cast<InputMappingContextFlags>(1U);
-  desc.header.strings.offset = sizeof(InputMappingContextAssetDesc);
-  desc.header.strings.size = 1;
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kWrongRowSize);
+}
 
-  static constexpr auto kStrings = std::string_view { "\0", 1 };
-  WriteBlob(desc);
-  ASSERT_TRUE(writer_.WriteBlob(std::as_bytes(std::span(kStrings))));
-  ASSERT_TRUE(writer_.Flush());
+//! A trigger table whose row size is not the record's is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetTriggerRowSizeIsADefect)
+{
+  auto bytes = JumpContext();
+  auto desc = DescriptorDefects::InputContextAt(bytes);
+  desc.triggers.entry_size += 1U;
+  DescriptorDefects::SetInputContext(bytes, desc);
 
-  auto context = MakeParseOnlyContext();
-  EXPECT_THROW(
-    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kWrongRowSize);
+}
+
+//! A combo step table whose row size is not the record's is a format defect.
+NOLINT_TEST(InputLoadersTest, LoadInputMappingContextAssetComboRowSizeIsADefect)
+{
+  auto bytes = ComboContext();
+  auto desc = DescriptorDefects::InputContextAt(bytes);
+  desc.trigger_aux.entry_size += 1U;
+  DescriptorDefects::SetInputContext(bytes, desc);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kWrongRowSize);
+}
+
+//! A context without a string table is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetNoStringTableIsADefect)
+{
+  auto bytes = JumpContext();
+  auto desc = DescriptorDefects::InputContextAt(bytes);
+  desc.header.strings.size = 0U;
+  DescriptorDefects::SetInputContext(bytes, desc);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kOutOfBounds);
+}
+
+//! A slot name that starts past the string table is a format defect.
+NOLINT_TEST(InputLoadersTest, LoadInputMappingContextAssetSlotOffsetIsADefect)
+{
+  auto bytes = JumpContext();
+  auto mapping = DescriptorDefects::InputMappingAt(bytes, 0U);
+  mapping.slot_name_offset = 1000U;
+  DescriptorDefects::SetInputMapping(bytes, 0U, mapping);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kOutOfBounds);
+}
+
+//! A trigger type no format version defines is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetInvalidTriggerTypeIsADefect)
+{
+  auto bytes = JumpContext();
+  auto trigger = DescriptorDefects::InputTriggerAt(bytes, 0U);
+  trigger.type = static_cast<input::InputTriggerType>(0xFFU);
+  DescriptorDefects::SetInputTrigger(bytes, 0U, trigger);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kInvalidValue);
+}
+
+//! A trigger behavior no format version defines is a format defect.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetInvalidTriggerBehaviorIsADefect)
+{
+  auto bytes = JumpContext();
+  auto trigger = DescriptorDefects::InputTriggerAt(bytes, 0U);
+  trigger.behavior = static_cast<input::InputTriggerBehavior>(0xFFU);
+  DescriptorDefects::SetInputTrigger(bytes, 0U, trigger);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kInvalidValue);
+}
+
+//! A mapping whose trigger range runs past the trigger table is a format
+//! defect.
+NOLINT_TEST(InputLoadersTest,
+  LoadInputMappingContextAssetTriggerRangeOutOfBoundsIsADefect)
+{
+  auto bytes = JumpContext();
+  auto mapping = DescriptorDefects::InputMappingAt(bytes, 0U);
+  mapping.trigger_count += 1U;
+  DescriptorDefects::SetInputMapping(bytes, 0U, mapping);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kInvalidReference);
+}
+
+//! A combo trigger whose step range runs past the step table is a format
+//! defect.
+NOLINT_TEST(InputLoadersTest,
+  LoadInputMappingContextAssetComboStepRangeOutOfBoundsIsADefect)
+{
+  auto bytes = ComboContext();
+  auto trigger = DescriptorDefects::InputTriggerAt(bytes, 0U);
+  trigger.aux_count += 1U;
+  DescriptorDefects::SetInputTrigger(bytes, 0U, trigger);
+
+  EXPECT_EQ(ContextDefect(bytes), CookedDefect::kInvalidReference);
+}
+
+//=== Engine rules ===--------------------------------------------------------//
+
+//! An action without a name breaks an engine rule: contexts and scripts find
+//! an action by its name.
+NOLINT_TEST(InputLoadersTest, LoadInputActionAssetEmptyNameIsInvalidContent)
+{
+  auto bytes = InputActionDescriptor("Jump").bytes;
+  auto desc = DescriptorDefects::InputActionAt(bytes);
+  // Offset 0 of a descriptor's string table is the empty string.
+  desc.header.name_offset = 0U;
+  DescriptorDefects::SetInputAction(bytes, desc);
+
+  EXPECT_EQ(ActionFailure(bytes), ContentLoadFailure::kContentInvalid);
+}
+
+//! A mapping on a slot the platform does not register breaks an engine rule.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetUnknownSlotIsInvalidContent)
+{
+  auto bytes = JumpContext();
+  DescriptorDefects::ReplaceString(bytes, "Space", "Spacx");
+
+  EXPECT_EQ(ContextFailure(bytes), ContentLoadFailure::kContentInvalid);
+}
+
+//! A mapping that names no action breaks an engine rule.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetNilActionIsInvalidContent)
+{
+  auto bytes = JumpContext();
+  auto mapping = DescriptorDefects::InputMappingAt(bytes, 0U);
+  mapping.action_asset_key = {};
+  DescriptorDefects::SetInputMapping(bytes, 0U, mapping);
+
+  EXPECT_EQ(ContextFailure(bytes), ContentLoadFailure::kContentInvalid);
+}
+
+//! A chord trigger that links no action breaks an engine rule.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetNilChordLinkIsInvalidContent)
+{
+  EXPECT_EQ(ContextFailure(NilLinkedContext(input::InputTriggerType::kChord)),
+    ContentLoadFailure::kContentInvalid);
+}
+
+//! An action chain trigger that links no action breaks an engine rule.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetNilChainLinkIsInvalidContent)
+{
+  EXPECT_EQ(
+    ContextFailure(NilLinkedContext(input::InputTriggerType::kActionChain)),
+    ContentLoadFailure::kContentInvalid);
+}
+
+//! A combo step that names no action breaks an engine rule.
+NOLINT_TEST(
+  InputLoadersTest, LoadInputMappingContextAssetNilComboStepIsInvalidContent)
+{
+  auto bytes = ComboContext();
+  auto step = DescriptorDefects::InputTriggerAuxAt(bytes, 0U);
+  step.action_asset_key = {};
+  DescriptorDefects::SetInputTriggerAux(bytes, 0U, step);
+
+  EXPECT_EQ(ContextFailure(bytes), ContentLoadFailure::kContentInvalid);
 }
 
 } // namespace

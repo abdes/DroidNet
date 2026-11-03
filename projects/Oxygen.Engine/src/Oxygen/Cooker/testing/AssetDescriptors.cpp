@@ -118,10 +118,21 @@ auto InputContextBuilder::Mapping(const data::AssetKey& action,
   return *this;
 }
 
+auto InputContextBuilder::Combo(const data::AssetKey& action,
+  const std::string_view slot, std::vector<input::InputTriggerAuxRecord> steps,
+  input::InputTriggerRecord trigger) -> InputContextBuilder&
+{
+  trigger.type = input::InputTriggerType::kCombo;
+  trigger.aux_start_index = static_cast<uint32_t>(steps_.size());
+  trigger.aux_count = static_cast<uint32_t>(steps.size());
+  steps_.insert(steps_.end(), steps.begin(), steps.end());
+  return Mapping(action, slot, { trigger });
+}
+
 auto InputContextBuilder::Bytes() const -> std::vector<std::byte>
 {
-  // The cook's layout: the mapping, trigger and (empty) trigger aux tables
-  // after the record, then the string table with the slot names.
+  // The cook's layout: the mapping, trigger and trigger aux tables after the
+  // record, then the string table with the slot names.
   auto desc = record_;
   desc.header.asset_type
     = static_cast<uint8_t>(data::AssetType::kInputMappingContext);
@@ -148,7 +159,7 @@ auto InputContextBuilder::Bytes() const -> std::vector<std::byte>
   desc.trigger_aux = {
     .offset = desc.triggers.offset
       + static_cast<uint32_t>(triggers_.size() * desc.triggers.entry_size),
-    .count = 0U,
+    .count = static_cast<uint32_t>(steps_.size()),
     .entry_size = sizeof(input::InputTriggerAuxRecord),
   };
   auto bytes = std::vector<std::byte> {};
@@ -157,6 +168,9 @@ auto InputContextBuilder::Bytes() const -> std::vector<std::byte>
     AppendRecord(bytes, record);
   }
   for (const auto& record : triggers_) {
+    AppendRecord(bytes, record);
+  }
+  for (const auto& record : steps_) {
     AppendRecord(bytes, record);
   }
   data::AppendDescriptorStrings(bytes, strings);
@@ -176,6 +190,9 @@ auto InputContextBuilder::References() const -> data::AssetReferences
   for (const auto& trigger : triggers_) {
     references.AddAsset(
       trigger.linked_action_asset_key, data::AssetType::kInputAction);
+  }
+  for (const auto& step : steps_) {
+    references.AddAsset(step.action_asset_key, data::AssetType::kInputAction);
   }
   return std::move(references).Build();
 }

@@ -4,6 +4,8 @@ Status: `design approved (ED-M10.1, 2026-10-11)`; identity rewritten to the
 input source contract (2026-10-19); delivered by
 [ED-M10](../plan/ED-M10-input-authoring.md).
 
+Last updated: 2026-11-03
+
 Last Updated: 2026-10-20 01:32
 
 Summary: users author input actions and input mapping contexts in input sources,
@@ -111,9 +113,10 @@ Engine, verified in source:
   section, are the only way contexts start ([player][player-start]). Contexts
   have no `auto_load` or `auto_activate` flags in the schema, cooker or cooked
   format, so this design has no such fields.
-- **Slots.** 145 names: keyboard keys, mouse buttons, `MouseX`/`MouseY`/
-  `MouseXY`, wheel directions and axes, `AnyKey`, `None`, plus 18 aliases the
-  cooker normalizes (`UpArrow` to `Up`, `LeftControl` to `LeftCtrl`).
+- **Slots.** 144 names, exactly the Platform registry's: keyboard keys,
+  mouse buttons, `MouseX`/`MouseY`/`MouseXY`, wheel directions and axes and
+  `AnyKey`. Aliases (`UpArrow`, `LeftControl`) are not accepted by the schema,
+  the cooker or the runtime.
 
 Editor:
 
@@ -247,11 +250,11 @@ ComboStep(Id, Action:ActionRef, CompletionStates:flags, TimeToComplete)
 InputActionDecl and InputContextDecl also carry Description?
 ```
 
-Reading normalizes nothing that changes the file: a slot alias, the `trigger`
-shorthand and omitted defaults are remembered so that an unedited file saves
-identically apart from key order and whitespace. Editing an item writes its
-canonical form: canonical slot name and the `triggers` array (the shorthand is
-kept while the mapping still has exactly that one default trigger).
+Reading normalizes nothing that changes the file: the `trigger` shorthand and
+omitted defaults are remembered so that an unedited file saves identically
+apart from key order and whitespace. Editing an item writes its canonical
+form: the `triggers` array (the shorthand is kept while the mapping still has
+exactly that one default trigger).
 
 ### 7.4 Fields
 
@@ -664,7 +667,7 @@ Diagnostics carry the document, file path, asset URI and property path. Engine
 | ID    | Check                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | IA-1  | Creating a source, then an action and a context in it, writes a schema-valid source whose cook produces `<source>/<name>.oiact` and `.oimap` with the expected keys; reader and writer tests cover every field and default.                                                                                                                                                                                                            |
-| IA-2  | The example input sources open, save unchanged in value and cook to identical descriptors; aliases and shorthand survive until edited.                                                                                                                                                                                                                                                                                                 |
+| IA-2  | The example input sources open, save unchanged in value and cook to identical descriptors; shorthand survives until edited.                                                                                                                                                                                                                                                                                                            |
 | IA-3  | Key capture session tests with synthesized events: letters, digits, both-side modifiers, keypad and extended keys, mouse buttons, wheel, Escape, focus loss; Ctrl+S, Ctrl+Z, Delete and the Play and Stop shortcuts are swallowed and bind their first key; Alt, F10 and Tab are captured, not acted on.                                                                                                                               |
 | IA-4  | Every trigger type's fields edit, validate and round-trip; type change, reorder, combo steps and flags undo and redo as single entries.                                                                                                                                                                                                                                                                                                |
 | IA-10 | Input overlap rule, one implementation: an identical slot twice in a context, an overlapping pair (`MouseXY` then `MouseX`), and contexts started together by a Play section at different and equal priorities each report `InputShadowed` when the earlier action consumes and `BindingConflict` when it does not, on the later row and in the key selector; Group by action warns only when it changes which mapping consumes first. |
