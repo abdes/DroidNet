@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <cstddef>
 #include <exception>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
@@ -92,12 +94,20 @@ struct JsonSchemaValidationDiagnosticConfig final {
 class CollectingJsonSchemaErrorHandler final
   : public nlohmann::json_schema::error_handler {
 public:
+  //! Records the issue; a refused string is named in its message, because a
+  //! refused key has no pointer of its own and its message does not name it.
   void error(const nlohmann::json::json_pointer& ptr,
-    const nlohmann::json& /*unused*/, const std::string& message) override
+    const nlohmann::json& instance, const std::string& message) override
   {
+    constexpr std::size_t kNamedLength = 128;
+    auto text = message;
+    if (instance.is_string()
+      && instance.get_ref<const std::string&>().size() <= kNamedLength) {
+      text += ": '" + instance.get<std::string>() + "'";
+    }
     issues_.push_back(JsonSchemaIssue {
       .json_pointer = ptr.to_string(),
-      .message = message,
+      .message = std::move(text),
     });
   }
 

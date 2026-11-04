@@ -89,7 +89,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("input.manifest.key_not_allowed"));
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
@@ -403,7 +403,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("input.manifest.job_id_missing"));
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 } // namespace

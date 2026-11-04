@@ -155,6 +155,7 @@ oxygen_cooker_test(
     "Import/ImportEventLoop_functional_test.cpp"
     "Import/ImportJob_functional_test.cpp"
     "Import/ImportJob_lifetime_functional_test.cpp"
+    "Import/ImportManifestDiagnostics_functional_test.cpp"
     "Import/ImportManifest_buffer_container_functional_test.cpp"
     "Import/ImportManifest_collision_shape_descriptor_functional_test.cpp"
     "Import/ImportManifest_geometry_descriptor_functional_test.cpp"

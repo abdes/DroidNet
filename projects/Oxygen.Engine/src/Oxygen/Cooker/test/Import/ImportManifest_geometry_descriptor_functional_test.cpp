@@ -190,7 +190,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 } // namespace

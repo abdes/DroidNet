@@ -487,7 +487,7 @@ Import/cook examples:
 - `physics.sidecar.node_ref_out_of_bounds`
 - `physics.sidecar.reference_source_mismatch`
 - `physics.sidecar.constraint_resource_index_invalid`
-- `physics.manifest.key_not_allowed`
+- `manifest.schema_validation_failed`
 
 Runtime/load examples:
 

@@ -167,9 +167,12 @@ struct ImportSourceJobAnalysis final {
 
 //! Source discovery for one manifest batch. No cooked files are produced.
 struct ImportSourceAnalysis final {
-  uint32_t version = 2;
+  uint32_t version = 3;
   std::string producer_version;
   std::vector<ImportSourceJobAnalysis> jobs;
+  //! What the manifest itself reports, before any job: a refused manifest
+  //! has no jobs and its errors here.
+  std::vector<ImportDiagnostic> diagnostics;
   bool complete = false;
 
   OXGN_COOK_NDAPI auto ToJson() const -> std::string;

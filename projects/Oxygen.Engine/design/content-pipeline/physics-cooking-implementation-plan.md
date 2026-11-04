@@ -441,8 +441,8 @@ Acceptance:
          - `physics.manifest.dependency_inference_failed`
          - `physics.manifest.dependency_unresolved`
          - `physics.manifest.dependency_ambiguous`
-         - `physics.manifest.dependency_missing_target`
-         - `physics.manifest.dependency_cycle`
+         - `manifest.dependency_missing`
+         - `manifest.dependency_cycle`
        - tests added:
          - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
            covering:
@@ -495,7 +495,7 @@ Acceptance:
           - duplicate ambiguous ref diagnostics are bounded
           - duplicate missing explicit dependency diagnostics are bounded
           - physics duplicate-job-id namespace diagnostic uses
-            `physics.manifest.job_id_duplicate`
+            `manifest.job_id_duplicate`
     - closure evidence:
       - user-reported validation: `All Green` for P8 test updates.
 11. P9 `done`:
@@ -766,8 +766,8 @@ Build/test execution in this pass:
    - `physics.manifest.dependency_inference_failed`
    - `physics.manifest.dependency_unresolved`
    - `physics.manifest.dependency_ambiguous`
-   - `physics.manifest.dependency_missing_target`
-   - `physics.manifest.dependency_cycle`
+   - `manifest.dependency_missing`
+   - `manifest.dependency_cycle`
 3. Test coverage:
    - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
      - unresolved inferred refs
@@ -815,14 +815,14 @@ Build/test execution in this pass:
    - batch DAG duplicate suppression for physics diagnostics:
      - unresolved refs (`physics.manifest.dependency_unresolved`)
      - ambiguous refs (`physics.manifest.dependency_ambiguous`)
-     - missing explicit targets (`physics.manifest.dependency_missing_target`)
+     - missing explicit targets (`manifest.dependency_missing`)
        in:
      - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
 2. Diagnostic namespace stabilization refinement:
    - duplicate job-id diagnostic now uses physics namespace for physics batches:
-     - `physics.manifest.job_id_duplicate`
+     - `manifest.job_id_duplicate`
        and retains legacy namespace for non-physics-only batches:
-     - `input.manifest.job_id_duplicate`
+     - `manifest.job_id_duplicate`
 3. Test coverage added/expanded:
    - `src/Oxygen/Cooker/test/Import/ImportSession_test.cpp`
      - `ImportSessionTest.AddDiagnosticDuplicateSuppressed`

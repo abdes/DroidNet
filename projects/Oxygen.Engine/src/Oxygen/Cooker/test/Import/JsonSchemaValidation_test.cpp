@@ -26,6 +26,7 @@ namespace {
 
   struct Emitted final {
     std::string code;
+    std::string message;
     std::string json_pointer;
   };
 
@@ -43,10 +44,11 @@ namespace {
     auto emitted = std::vector<Emitted> {};
     [[maybe_unused]] const auto accepted
       = ValidateJsonSchemaWithDiagnostics(validator, instance, kConfig,
-        [&emitted](const std::string_view code, const std::string& /*message*/,
+        [&emitted](const std::string_view code, const std::string& message,
           const std::string& json_pointer) -> void {
           emitted.push_back({
             .code = std::string(code),
+            .message = message,
             .json_pointer = json_pointer,
           });
         });
@@ -109,6 +111,20 @@ namespace {
     for (const auto& pointer : pointers) {
       EXPECT_TRUE(instance.contains(json::json_pointer { pointer }));
     }
+  }
+
+  //! A refused key is located at its object and named by its message.
+  NOLINT_TEST(JsonSchemaValidationTest, RefusedKeyIsNamedInTheMessage)
+  {
+    const auto emitted = Validate(R"({
+      "type": "object",
+      "propertyNames": { "enum": ["known"] }
+    })",
+      json { { "unknown_key", 1 } });
+
+    ASSERT_EQ(emitted.size(), 1U);
+    EXPECT_TRUE(emitted.front().json_pointer.empty());
+    EXPECT_NE(emitted.front().message.find("unknown_key"), std::string::npos);
   }
 
   //! A value the root itself breaks is located by the empty pointer.

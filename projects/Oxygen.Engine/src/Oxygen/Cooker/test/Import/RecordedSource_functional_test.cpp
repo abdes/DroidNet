@@ -408,7 +408,7 @@ namespace {
 
     // Assert
     EXPECT_FALSE(batch.has_value());
-    EXPECT_THAT(errors.str(), HasSubstr("[batch.job_id_duplicate]"));
+    EXPECT_THAT(errors.str(), HasSubstr("[manifest.job_id_duplicate]"));
   }
 
   //! A derived file in an output folder records the authored source it

@@ -283,10 +283,10 @@ Tasks:
 3. Extend `BatchCommand` and `ImportRunner` job type resolution.
 4. Extend manifest parser with `id` and `depends_on` fields for input jobs.
 5. Add dependency graph builder + topological scheduler in batch flow:
-   - validate unique `id` values (diagnostic: `input.manifest.job_id_duplicate`)
+   - validate unique `id` values (diagnostic: `manifest.job_id_duplicate`)
    - validate every `depends_on` target exists (diagnostic:
-     `input.manifest.dep_missing_target`)
-   - detect cycles (diagnostic: `input.manifest.dep_cycle`)
+     `manifest.dependency_missing`)
+   - detect cycles (diagnostic: `manifest.dependency_cycle`)
    - skip dependents deterministically on predecessor failure (diagnostic:
      `input.import.skipped_predecessor_failed`)
    - (wrong-type detection removed: both primary-format and standalone-action
@@ -295,7 +295,7 @@ Tasks:
 6. Extend `ImportManifest` defaults/job parsing/build request path for `input`
    only.
 7. Enforce input-job whitelist keys only: `id`, `type`, `source`, `depends_on`.
-   Reject any other key with diagnostic `input.manifest.key_not_allowed`.
+   Reject any other key with diagnostic `manifest.schema_validation_failed`.
    Explicitly rejected keys include but are not limited to: `output`, `name`,
    `verbose`, `report`, and all source-document fields
    (`actions`, `contexts`, `mappings`, `triggers`, `trigger`, `slot`,
@@ -309,7 +309,7 @@ Acceptance:
 2. Batch execution honors `depends_on` ordering and failure propagation.
 3. Report job type output is correct for input requests.
 4. Input job parser rejects any key outside `id/type/source/depends_on` with
-   `input.manifest.key_not_allowed`.
+   `manifest.schema_validation_failed`.
 5. Cycle detection prevents circular dependency chains.
 6. Unresolved action references from cross-file imports are caught at pipeline
    parse time via `input.context.action_unresolved`.
@@ -417,7 +417,7 @@ Tasks:
    references and new docs links).
 5. Add manifest key whitelist enforcement tests:
    - verify `input` jobs accept exactly `id`, `type`, `source`, `depends_on`
-   - verify rejection with `input.manifest.key_not_allowed` for `output`,
+   - verify rejection with `manifest.schema_validation_failed` for `output`,
      `name`, `verbose`, and source-document fields
 6. Add dependency DAG tests:
    - topological ordering verification
@@ -489,12 +489,12 @@ Required concrete diagnostics:
     format)
 13. `input.import.skipped_predecessor_failed`
 14. `input.manifest.job_id_missing`
-15. `input.manifest.job_id_duplicate`
-16. `input.manifest.dep_missing_target`
-17. `input.manifest.dep_cycle`
+15. `manifest.job_id_duplicate`
+16. `manifest.dependency_missing`
+17. `manifest.dependency_cycle`
 18. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for diagnostic
     code stability)
-19. `input.manifest.key_not_allowed`
+19. `manifest.schema_validation_failed`
 
 ## 7. Regression Protection
 

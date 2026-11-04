@@ -10,15 +10,14 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <ostream>
 #include <ranges>
 #include <span>
-#include <sstream>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -30,6 +29,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
@@ -79,11 +79,72 @@ namespace oxygen::content::import {
 namespace {
 
   using nlohmann::json;
-  using nlohmann::json_schema::error_handler;
   using nlohmann::json_schema::json_validator;
 
-  auto ReadSourceKey(const json& value, std::optional<data::SourceKey>& key,
-    std::ostream& errors) -> bool
+  //! Where the diagnostics of one manifest go, and the file they are about.
+  struct Findings final {
+    observer_ptr<std::vector<ImportDiagnostic>> diagnostics;
+    std::string source_path;
+
+    //! Adds an error about the value at `json_pointer` of the manifest file.
+    auto Error(const std::string_view code, std::string message,
+      std::string json_pointer) const -> void
+    {
+      diagnostics->push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { code },
+        .message = std::move(message),
+        .source_path = source_path,
+        .json_pointer = std::move(json_pointer),
+      });
+    }
+  };
+
+  //! The pointer to the job at `index` of a manifest's `jobs`.
+  auto JobPointer(const std::size_t index) -> json::json_pointer
+  {
+    return json::json_pointer {} / "jobs" / index;
+  }
+
+  //! True when a diagnostic added from position `first` on is an error.
+  auto HasErrorSince(const std::vector<ImportDiagnostic>& diagnostics,
+    const std::size_t first) -> bool
+  {
+    return std::ranges::any_of(
+      diagnostics | std::views::drop(static_cast<std::ptrdiff_t>(first)),
+      [](const ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.severity == ImportSeverity::kError;
+      });
+  }
+
+  auto ManifestSchemaValidator() -> json_validator&
+  {
+    static auto validator
+      = internal::MakeJsonSchemaValidator(json::parse(kImportManifestSchema));
+    return validator;
+  }
+
+  //! Reports every issue the manifest schema finds in `document`.
+  auto ValidateAgainstSchema(const json& document, const Findings& findings)
+    -> bool
+  {
+    return internal::ValidateJsonSchemaWithDiagnostics(
+      ManifestSchemaValidator(), document,
+      internal::JsonSchemaValidationDiagnosticConfig {
+        .validation_failed_code = manifest_codes::kSchemaValidationFailed,
+        .validation_failed_prefix = {},
+        .validator_failure_code = manifest_codes::kSchemaValidatorFailure,
+        .validator_failure_prefix = "the schema validator failed: ",
+      },
+      [&findings](const std::string_view code, std::string message,
+        std::string json_pointer) -> void {
+        findings.Error(code, std::move(message), std::move(json_pointer));
+      });
+  }
+
+  //! Reads the `source_key` that `value`, the object at `owner`, declares.
+  auto ReadSourceKey(const json& value, const json::json_pointer& owner,
+    std::optional<data::SourceKey>& key, const Findings& findings) -> bool
   {
     if (!value.contains("source_key")) {
       return true;
@@ -91,105 +152,13 @@ namespace {
     const auto parsed
       = Uuid::FromString(value.at("source_key").get<std::string>());
     if (!parsed) {
-      errors << "ERROR: source_key must be a canonical UUIDv7\n";
+      findings.Error(manifest_codes::kSourceKeyInvalid,
+        "source_key must be a canonical UUIDv7",
+        (owner / "source_key").to_string());
       return false;
     }
     key = data::SourceKey { parsed.value() };
     return true;
-  }
-
-  class CollectingErrorHandler final : public error_handler {
-  public:
-    static constexpr size_t kMaxErrors = 12;
-
-    void error(const json::json_pointer& ptr, const json& instance,
-      const std::string& message) override
-    {
-      std::ostringstream out;
-      const auto path = ptr.to_string();
-      out << (path.empty() ? "<root>" : path) << ": " << message;
-      if (!instance.is_discarded() && instance.is_primitive()) {
-        out << " (value=" << instance.dump() << ")";
-      }
-
-      if (errors_.size() < kMaxErrors) {
-        errors_.push_back(out.str());
-      }
-      ++total_errors_;
-    }
-
-    [[nodiscard]] auto HasErrors() const noexcept -> bool
-    {
-      return !errors_.empty();
-    }
-
-    [[nodiscard]] auto ToString() const -> std::string
-    {
-      std::ostringstream out;
-      for (const auto& error : errors_) {
-        out << "- " << error << "\n";
-      }
-      if (total_errors_ > errors_.size()) {
-        out << "- ... " << (total_errors_ - errors_.size())
-            << " additional schema error(s) suppressed\n";
-      }
-      return out.str();
-    }
-
-  private:
-    std::vector<std::string> errors_;
-    size_t total_errors_ = 0;
-  };
-
-  class SchemaValidator {
-  public:
-    SchemaValidator()
-      : validator_(
-          internal::MakeJsonSchemaValidator(json::parse(kImportManifestSchema)))
-    {
-    }
-
-    auto Validate(const json& instance) const -> std::optional<std::string>
-    {
-      try {
-        CollectingErrorHandler handler;
-        [[maybe_unused]] auto _ = validator_.validate(instance, handler);
-        if (handler.HasErrors()) {
-          return handler.ToString();
-        }
-        return std::nullopt;
-      } catch (const std::exception& e) {
-        return std::string(e.what());
-      }
-    }
-
-    static auto Instance() -> const SchemaValidator&
-    {
-      static SchemaValidator instance;
-      return instance;
-    }
-
-  private:
-    mutable json_validator validator_;
-  };
-
-  auto ReadJsonFile(const std::filesystem::path& path,
-    std::ostream& error_stream) -> std::optional<json>
-  {
-    const auto bytes = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
-    if (!bytes) {
-      error_stream << "ERROR: failed to read manifest: " << path.string()
-                   << ": " << bytes.error().message() << "\n";
-      return std::nullopt;
-    }
-
-    try {
-      const auto text = bytes->Unsigned();
-      return json::parse(text.begin(), text.end());
-    } catch (const std::exception& e) {
-      error_stream << "ERROR: invalid manifest JSON: " << e.what() << "\n";
-      return std::nullopt;
-    }
   }
 
   auto ResolveSourcePath(
@@ -204,78 +173,75 @@ namespace {
 
   //! Reports a one-fact mount code about a committed field.
   auto ReportCode(const MountCode<std::string_view>& code,
-    const std::string_view text, const std::string_view field,
-    std::ostream& errors) -> void
+    const std::string_view text, const json::json_pointer& field,
+    const Findings& findings) -> void
   {
-    errors << "ERROR [" << code.id << "]: "
-           << fmt::vformat(code.message.get(), fmt::make_format_args(text))
-           << " (at '" << field << "')\n";
+    findings.Error(code.id,
+      fmt::vformat(code.message.get(), fmt::make_format_args(text)),
+      field.to_string());
   }
 
   //! Reports an absolute path in a committed field.
   auto ReportAbsoluteCommitted(const std::string_view text,
-    const std::string_view field, std::ostream& errors) -> void
+    const json::json_pointer& field, const Findings& findings) -> void
   {
-    ReportCode(mount_codes::kAbsoluteCommitted, text, field, errors);
+    ReportCode(mount_codes::kAbsoluteCommitted, text, field, findings);
   }
 
-  //! Checks that a folder field, or each folder of an array field, is
-  //! relative.
+  //! Checks that a folder field, or each folder of an array field, of the
+  //! object at `owner` is relative; the schema has checked their types.
   auto RequireRelativeFolders(const json& obj, const std::string_view key,
-    const std::string_view prefix, std::ostream& errors) -> bool
+    const json::json_pointer& owner, const Findings& findings) -> bool
   {
     if (!obj.is_object() || !obj.contains(key)) {
       return true;
     }
-    const auto check
-      = [&errors](const json& value, const std::string& field) -> bool {
-      if (!value.is_string()) {
-        return true;
-      }
+    const auto check = [&findings](const json& value,
+                         const json::json_pointer& field) -> bool {
       const auto& text = value.get_ref<const std::string&>();
       const auto path = std::filesystem::path(text);
       if (!path.has_root_name() && !path.has_root_directory()) {
         return true;
       }
-      ReportAbsoluteCommitted(text, field, errors);
+      ReportAbsoluteCommitted(text, field, findings);
       return false;
     };
-    const auto field = fmt::format("{}/{}", prefix, key);
+    const auto field = owner / std::string { key };
     const auto& value = obj.at(key);
     if (!value.is_array()) {
       return check(value, field);
     }
     auto relative = true;
-    for (const auto& [index, item] : std::views::enumerate(value)) {
-      relative = check(item, fmt::format("{}/{}", field, index)) && relative;
+    for (std::size_t index = 0; index < value.size(); ++index) {
+      relative = check(value.at(index), field / index) && relative;
     }
     return relative;
   }
 
   //! Checks that the folders of a committed manifest (`project_root`, every
   //! `output` and `cooked_context_roots`) are relative.
-  auto RequireRelativeFolders(const json& doc, std::ostream& errors) -> bool
+  auto RequireRelativeFolders(const json& doc, const Findings& findings) -> bool
   {
-    auto relative = RequireRelativeFolders(doc, "project_root", {}, errors);
-    relative = RequireRelativeFolders(doc, "output", {}, errors) && relative;
-    const auto check_settings
-      = [&errors, &relative](const json& settings, const std::string& field) {
-          relative = RequireRelativeFolders(settings, "output", field, errors)
-            && relative;
-          relative = RequireRelativeFolders(
-                       settings, "cooked_context_roots", field, errors)
-            && relative;
-        };
-    if (doc.contains("defaults") && doc.at("defaults").is_object()) {
+    const auto root = json::json_pointer {};
+    auto relative = RequireRelativeFolders(doc, "project_root", root, findings);
+    relative
+      = RequireRelativeFolders(doc, "output", root, findings) && relative;
+    const auto check_settings = [&findings, &relative](const json& settings,
+                                  const json::json_pointer& field) -> void {
+      relative = RequireRelativeFolders(settings, "output", field, findings)
+        && relative;
+      relative = RequireRelativeFolders(
+                   settings, "cooked_context_roots", field, findings)
+        && relative;
+    };
+    if (doc.contains("defaults")) {
       for (const auto& [name, settings] : doc.at("defaults").items()) {
-        check_settings(
-          settings, (json::json_pointer {} / "defaults" / name).to_string());
+        check_settings(settings, root / "defaults" / name);
       }
     }
-    if (doc.contains("jobs") && doc.at("jobs").is_array()) {
-      for (const auto& [index, job] : std::views::enumerate(doc.at("jobs"))) {
-        check_settings(job, fmt::format("/jobs/{}", index));
-      }
+    const auto& jobs = doc.at("jobs");
+    for (std::size_t index = 0; index < jobs.size(); ++index) {
+      check_settings(jobs.at(index), JobPointer(index));
     }
     return relative;
   }
@@ -283,29 +249,30 @@ namespace {
   //! The committed mount declaration of a manifest, its shape checked by the
   //! schema; a kind other than `Source` or `Cooked` is `mount.kind_unknown`.
   auto ReadMountDeclarations(const json& doc, const std::string& declared_in,
-    std::ostream& errors) -> std::optional<std::vector<MountDeclaration>>
+    const Findings& findings) -> std::optional<std::vector<MountDeclaration>>
   {
     auto declarations = std::vector<MountDeclaration> {};
-    auto findings = std::vector<ImportDiagnostic> {};
-    for (const auto& [index, entry] :
-      std::views::enumerate(doc.value("mounts", json::array()))) {
+    auto valid = true;
+    const auto mounts = doc.value("mounts", json::array());
+    for (std::size_t index = 0; index < mounts.size(); ++index) {
+      const auto& entry = mounts.at(index);
       const auto name = entry.at("name").get<std::string>();
       const auto text
         = entry.value("kind", std::string { to_string(MountKind::kSource) });
       const auto kind = ParseMountKind(text);
       if (!kind.has_value()) {
         const auto& code = mount_codes::kKindUnknown;
-        findings.push_back(ImportDiagnostic {
+        findings.diagnostics->push_back(ImportDiagnostic {
           .severity = code.severity,
           .code = std::string { code.id },
           .message
           = fmt::vformat(code.message.get(), fmt::make_format_args(name, text)),
           .source_path = declared_in,
-          .json_pointer = (json::json_pointer {} / "mounts"
-            / static_cast<std::size_t>(index) / "kind")
-            .to_string(),
+          .json_pointer
+          = (json::json_pointer {} / "mounts" / index / "kind").to_string(),
           .object_name = name,
         });
+        valid = false;
         continue;
       }
       auto& declaration = declarations.emplace_back(MountDeclaration {
@@ -317,8 +284,7 @@ namespace {
         declaration.path = entry.at("path").get<std::string>();
       }
     }
-    if (!findings.empty()) {
-      internal::WriteDiagnostics(findings, errors);
+    if (!valid) {
       return std::nullopt;
     }
     return declarations;
@@ -326,31 +292,30 @@ namespace {
 
   //! Locates a source a committed field names through the manifest's mounts.
   auto LocateSource(const MountTable& mounts, const std::string& text,
-    const std::string_view field, std::ostream& errors)
+    const json::json_pointer& field, const Findings& findings)
     -> std::optional<MountedSource>
   {
-    auto diagnostics = std::vector<ImportDiagnostic> {};
-    auto located = mounts.LocateSource(
-      CommittedPath { .text = text, .json_pointer = field }, diagnostics);
-    internal::WriteDiagnostics(diagnostics, errors);
-    return located;
+    const auto pointer = field.to_string();
+    return mounts.LocateSource(
+      CommittedPath { .text = text, .json_pointer = pointer },
+      *findings.diagnostics);
   }
 
   //! A file a committed field names that need not lie in a mount: a mount
   //! path, or a path relative to the project root.
   auto LocateFile(const MountTable& mounts, const std::string& text,
-    const std::string_view field, std::ostream& errors)
+    const json::json_pointer& field, const Findings& findings)
     -> std::optional<std::filesystem::path>
   {
     if (text.starts_with('/')) {
-      return LocateSource(mounts, text, field, errors)
+      return LocateSource(mounts, text, field, findings)
         .transform([](const MountedSource& source) -> std::filesystem::path {
           return source.file;
         });
     }
     const auto path = std::filesystem::path(text);
     if (path.has_root_name() || path.has_root_directory()) {
-      ReportAbsoluteCommitted(text, field, errors);
+      ReportAbsoluteCommitted(text, field, findings);
       return std::nullopt;
     }
     return (mounts.project_root / path).lexically_normal();
@@ -364,38 +329,38 @@ namespace {
    `Source` mount, as a source map names its original.
   */
   auto LocateJobSource(const MountTable& mounts, const json& job,
-    const std::string& job_field, std::ostream& errors)
+    const json::json_pointer& job_ptr, const Findings& findings)
     -> std::optional<MountedSource>
   {
     const auto& source = job.at("source").get_ref<const std::string&>();
     if (!job.contains("derived_from")) {
-      return LocateSource(mounts, source, job_field + "/source", errors);
+      return LocateSource(mounts, source, job_ptr / "source", findings);
     }
-    const auto file = LocateFile(mounts, source, job_field + "/source", errors);
+    const auto file = LocateFile(mounts, source, job_ptr / "source", findings);
     if (!file.has_value()) {
       return std::nullopt;
     }
-    const auto field = job_field + "/derived_from";
+    const auto field = job_ptr / "derived_from";
     if (!mounts.IsInOutputFolder(*file)) {
-      ReportCode(mount_codes::kDerivedFromNotDerived, source, field, errors);
+      ReportCode(mount_codes::kDerivedFromNotDerived, source, field, findings);
       return std::nullopt;
     }
     const auto& derived = job.at("derived_from").get_ref<const std::string&>();
     const auto path = std::filesystem::path(derived);
     if (!derived.starts_with('/')) {
       if (path.has_root_name() || path.has_root_directory()) {
-        ReportAbsoluteCommitted(derived, field, errors);
+        ReportAbsoluteCommitted(derived, field, findings);
       } else {
-        ReportCode(mount_codes::kDerivedFromInvalid, derived, field, errors);
+        ReportCode(mount_codes::kDerivedFromInvalid, derived, field, findings);
       }
       return std::nullopt;
     }
     const auto mount = mounts.Find(derived.substr(1, derived.find('/', 1) - 1));
     if (!mount || mount->kind != MountKind::kSource) {
-      ReportCode(mount_codes::kDerivedFromInvalid, derived, field, errors);
+      ReportCode(mount_codes::kDerivedFromInvalid, derived, field, findings);
       return std::nullopt;
     }
-    const auto authored = LocateSource(mounts, derived, field, errors);
+    const auto authored = LocateSource(mounts, derived, field, findings);
     if (!authored.has_value()) {
       return std::nullopt;
     }
@@ -405,12 +370,11 @@ namespace {
   //! The model import record of the model a `model` job names by its
   //! identity, found at that identity through the manifest's mounts.
   auto ReadModelRecord(const json& job, const MountTable& mounts,
-    std::ostream& errors) -> std::shared_ptr<const ModelImportRecordContent>
+    const json::json_pointer& job_ptr, const Findings& findings)
+    -> std::shared_ptr<const ModelImportRecordContent>
   {
-    auto findings = std::vector<ImportDiagnostic> {};
     const auto path = ModelImportRecord::RecordPathOf(
-      mounts, job.at("virtual_path").get<std::string>(), findings);
-    internal::WriteDiagnostics(findings, errors);
+      mounts, job.at("virtual_path").get<std::string>(), *findings.diagnostics);
     if (!path.has_value()) {
       return {};
     }
@@ -418,12 +382,13 @@ namespace {
       return std::make_shared<const ModelImportRecordContent>(
         ModelImportRecord::Read(*path, mounts));
     } catch (const ModelImportRecordError& error) {
-      internal::WriteDiagnostics(std::span { &error.Diagnostic(), 1 }, errors);
+      findings.diagnostics->push_back(error.Diagnostic());
       return {};
     } catch (const std::filesystem::filesystem_error& error) {
-      errors << "ERROR [" << model_record_codes::kUnreadable
-             << "]: model import record '" << path->generic_string()
-             << "': " << error.what() << "\n";
+      findings.Error(model_record_codes::kUnreadable,
+        fmt::format(
+          "model import record '{}': {}", path->generic_string(), error.what()),
+        (job_ptr / "virtual_path").to_string());
       return {};
     }
   }
@@ -542,42 +507,6 @@ namespace {
       manifest_dir, job.input.cooked_context_roots);
   }
 
-  auto ReadStringField(const json& obj, const char* name, std::string& target,
-    std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    if (!obj.at(name).is_string()) {
-      errors << "ERROR: '" << name << "' must be a string\n";
-      return false;
-    }
-    target = obj.at(name).get<std::string>();
-    return true;
-  }
-
-  auto ReadStringArrayField(const json& obj, const char* name,
-    std::vector<std::string>& target, std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    if (!obj.at(name).is_array()) {
-      errors << "ERROR: '" << name << "' must be an array\n";
-      return false;
-    }
-    target.clear();
-    target.reserve(obj.at(name).size());
-    for (size_t i = 0; i < obj.at(name).size(); ++i) {
-      if (!obj.at(name).at(i).is_string()) {
-        errors << "ERROR: '" << name << "[" << i << "]' must be a string\n";
-        return false;
-      }
-      target.push_back(obj.at(name).at(i).get<std::string>());
-    }
-    return true;
-  }
-
   auto TrimInPlace(std::string& value) -> void
   {
     const auto is_ws = [](const unsigned char ch) -> bool {
@@ -597,209 +526,57 @@ namespace {
     value = std::string(first, last.base());
   }
 
-  auto CollectJobDependencies(const json& job, const std::string_view job_type,
-    const bool require_job_id, std::string& job_id,
-    std::vector<std::string>& depends_on, std::ostream& errors) -> bool
+  //! Reads `name` of `obj` into `target` when `obj` has it; the schema has
+  //! checked its type and range.
+  template <typename T>
+  auto ReadValue(const json& obj, const char* name, T& target) -> void
   {
-    if (!ReadStringField(job, "id", job_id, errors)) {
-      return false;
+    if (obj.contains(name)) {
+      target = obj.at(name).get<T>();
     }
-    TrimInPlace(job_id);
-    if (require_job_id && job_id.empty()) {
-      if (job_type == "input") {
-        errors << "ERROR [input.manifest.job_id_missing]: input job.id is "
-                  "required and must be a string\n";
-      } else {
-        errors << "ERROR: " << job_type
-               << " job.id is required and must be a string\n";
-      }
-      return false;
-    }
-
-    if (!ReadStringArrayField(job, "depends_on", depends_on, errors)) {
-      return false;
-    }
-    for (size_t dep_index = 0; dep_index < depends_on.size(); ++dep_index) {
-      auto& dep = depends_on.at(dep_index);
-      TrimInPlace(dep);
-      if (dep.empty()) {
-        errors << "ERROR: " << job_type << " job.depends_on[" << dep_index
-               << "] must not be empty\n";
-        return false;
-      }
-    }
-    return true;
   }
 
-  auto IsAllowedInputJobKey(const std::string_view key) -> bool
+  //! Reads an optional `name` of `obj` into `target`.
+  template <typename T>
+  auto ReadValue(const json& obj, const char* name, std::optional<T>& target)
+    -> void
   {
-    return key == "id" || key == "type" || key == "source"
-      || key == "derived_from" || key == "virtual_path" || key == "depends_on"
-      || key == "output" || key == "cooked_context_roots"
-      || key == "source_key";
+    if (obj.contains(name)) {
+      target = obj.at(name).get<T>();
+    }
   }
 
-  auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
+  //! Reads the job's trimmed `id` and `depends_on`.
+  /*!
+   The schema requires an input job's `id` and forbids empty ones; text that is
+   only whitespace is empty once trimmed.
+  */
+  auto ReadJobDependencies(const json& job, const json::json_pointer& job_ptr,
+    const bool require_job_id, ImportManifestJob& manifest_job,
+    const Findings& findings) -> bool
   {
-    return key == "id" || key == "depends_on" || key == "type"
-      || key == "source" || key == "derived_from" || key == "bindings"
-      || key == "target_scene_virtual_path" || key == "output" || key == "name"
-      || key == "verbose" || key == "physics_backend" || key == "source_key";
-  }
-
-  auto ReportEarlyJobKeyWhitelistViolations(
-    const json& manifest, std::ostream& errors) -> bool
-  {
-    if (!manifest.contains("jobs") || !manifest.at("jobs").is_array()) {
-      return false;
+    auto valid = true;
+    ReadValue(job, "id", manifest_job.id);
+    TrimInPlace(manifest_job.id);
+    if (require_job_id && manifest_job.id.empty()) {
+      findings.Error(manifest_codes::kInputJobIdMissing,
+        "input job.id must not be empty", (job_ptr / "id").to_string());
+      valid = false;
     }
 
-    for (const auto& job : manifest.at("jobs")) {
-      if (!job.is_object()) {
-        continue;
-      }
-      if (!job.contains("type") || !job.at("type").is_string()) {
-        continue;
-      }
-
-      const auto job_type = job.at("type").get<std::string>();
-      if (job_type == "input") {
-        for (auto it = job.begin(); it != job.end(); ++it) {
-          if (!IsAllowedInputJobKey(it.key())) {
-            errors << "ERROR [input.manifest.key_not_allowed]: key '"
-                   << it.key()
-                   << "' is not allowed for input jobs; allowed keys are "
-                      "'id', 'type', 'source', 'virtual_path', 'depends_on', "
-                      "'output', 'cooked_context_roots', 'source_key'\n";
-            return true;
-          }
-        }
-        if (!job.contains("id") || !job.at("id").is_string()) {
-          errors << "ERROR [input.manifest.job_id_missing]: input job.id "
-                    "is required and must be a string\n";
-          return true;
-        }
-        auto job_id = job.at("id").get<std::string>();
-        TrimInPlace(job_id);
-        if (job_id.empty()) {
-          errors << "ERROR [input.manifest.job_id_missing]: input job.id "
-                    "must not be empty\n";
-          return true;
-        }
-      } else if (job_type == "physics-sidecar") {
-        for (auto it = job.begin(); it != job.end(); ++it) {
-          if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
-            errors << "ERROR [physics.manifest.key_not_allowed]: key '"
-                   << it.key() << "' is not allowed for physics-sidecar jobs\n";
-            return true;
-          }
-        }
-      }
-
-      if (job_type == "script-sidecar" || job_type == "physics-sidecar") {
-        const bool has_source = job.contains("source");
-        const bool has_bindings = job.contains("bindings");
-        if (has_source && has_bindings) {
-          errors << "ERROR: " << job_type
-                 << " job requires exactly one of 'source' or 'bindings'\n";
-          return true;
-        }
+    ReadValue(job, "depends_on", manifest_job.depends_on);
+    for (std::size_t index = 0; index < manifest_job.depends_on.size();
+      ++index) {
+      auto& dependency = manifest_job.depends_on.at(index);
+      TrimInPlace(dependency);
+      if (dependency.empty()) {
+        findings.Error(manifest_codes::kDependencyEmpty,
+          "depends_on entry must not be empty",
+          (job_ptr / "depends_on" / index).to_string());
+        valid = false;
       }
     }
-
-    return false;
-  }
-
-  auto ReadBoolField(const json& obj, const char* name, bool& target,
-    std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    if (!obj.at(name).is_boolean()) {
-      errors << "ERROR: '" << name << "' must be a boolean\n";
-      return false;
-    }
-    target = obj.at(name).get<bool>();
-    return true;
-  }
-
-  auto ReadUIntField(const json& obj, const char* name, uint32_t& target,
-    std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    if (!obj.at(name).is_number_unsigned()
-      && !obj.at(name).is_number_integer()) {
-      errors << "ERROR: '" << name << "' must be an integer\n";
-      return false;
-    }
-    const auto value = obj.at(name).get<int64_t>();
-    if (value < 0) {
-      errors << "ERROR: '" << name << "' must be >= 0\n";
-      return false;
-    }
-    target = static_cast<uint32_t>(value);
-    return true;
-  }
-
-  auto ReadUInt16Field(const json& obj, const char* name, uint16_t& target,
-    std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    uint32_t value = 0U;
-    if (!ReadUIntField(obj, name, value, errors)) {
-      return false;
-    }
-    target = static_cast<uint16_t>(value);
-    return true;
-  }
-
-  auto ReadOptionalUIntField(const json& obj, const char* name,
-    std::optional<uint32_t>& target, std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    uint32_t value = 0U;
-    if (!ReadUIntField(obj, name, value, errors)) {
-      return false;
-    }
-    target = value;
-    return true;
-  }
-
-  //! Reads an optional positive byte count, which may pass `uint32_t`.
-  auto ReadOptionalByteCountField(const json& obj, const char* name,
-    std::optional<serio::ByteCount>& target, std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    const auto& value = obj.at(name);
-    if (!value.is_number_unsigned() || value.get<uint64_t>() == 0U) {
-      errors << "ERROR: '" << name << "' must be a positive integer\n";
-      return false;
-    }
-    target = serio::ByteCount { value.get<uint64_t>() };
-    return true;
-  }
-
-  auto ReadFloatField(const json& obj, const char* name, float& target,
-    std::ostream& errors) -> bool
-  {
-    if (!obj.contains(name)) {
-      return true;
-    }
-    if (!obj.at(name).is_number()) {
-      errors << "ERROR: '" << name << "' must be a number\n";
-      return false;
-    }
-    target = obj.at(name).get<float>();
-    return true;
+    return valid;
   }
 
   //! True for a job named by its virtual path: one that cooks exactly one
@@ -824,29 +601,31 @@ namespace {
   }
 
   //! Reads the identity a job cooks.
-  auto ReadJobVirtualPath(const json& job, ImportManifestJob& manifest_job,
-    std::ostream& errors) -> bool
+  /*!
+   The schema checks the value of `virtual_path`; which jobs name one is a rule
+   of the job type.
+  */
+  auto ReadJobVirtualPath(const json& job, const json::json_pointer& job_ptr,
+    ImportManifestJob& manifest_job, const Findings& findings) -> bool
   {
     const auto identified = IsIdentifiedJob(manifest_job.job_type);
     if (!job.contains("virtual_path")) {
       if (identified) {
-        errors << "ERROR [import.manifest.virtual_path_missing]: "
-               << manifest_job.job_type
-               << " job requires 'virtual_path', the identity of what it "
-                  "cooks\n";
+        findings.Error(manifest_codes::kVirtualPathMissing,
+          fmt::format("{} job requires 'virtual_path', the identity of what it "
+                      "cooks",
+            manifest_job.job_type),
+          job_ptr.to_string());
         return false;
       }
       return true;
     }
     if (!identified) {
-      errors << "ERROR [import.manifest.virtual_path_not_allowed]: "
-             << manifest_job.job_type
-             << " job produces several assets and takes no 'virtual_path'\n";
-      return false;
-    }
-    if (!job.at("virtual_path").is_string()
-      || job.at("virtual_path").get_ref<const std::string&>().empty()) {
-      errors << "ERROR: job.virtual_path must be a non-empty string\n";
+      findings.Error(manifest_codes::kVirtualPathNotAllowed,
+        fmt::format(
+          "{} job produces several assets and takes no 'virtual_path'",
+          manifest_job.job_type),
+        (job_ptr / "virtual_path").to_string());
       return false;
     }
     manifest_job.virtual_path = job.at("virtual_path").get<std::string>();
@@ -857,116 +636,67 @@ namespace {
     return true;
   }
 
-  auto ApplyTextureOverrides(const json& obj, TextureImportSettings& settings,
-    std::ostream& errors) -> bool
+  auto ApplyTextureOverrides(const json& obj, TextureImportSettings& settings)
+    -> void
   {
     if (obj.contains("sources")) {
-      if (!obj.at("sources").is_array()) {
-        errors << "ERROR: 'sources' must be an array\n";
-        return false;
-      }
       for (const auto& mapping_json : obj.at("sources")) {
         TextureSourceMapping mapping;
-        if (!ReadStringField(mapping_json, "file", mapping.file, errors)) {
-          return false;
-        }
-        ReadUInt16Field(mapping_json, "layer", mapping.layer, errors);
-        ReadUInt16Field(mapping_json, "mip", mapping.mip, errors);
-        ReadUInt16Field(mapping_json, "slice", mapping.slice, errors);
+        ReadValue(mapping_json, "file", mapping.file);
+        ReadValue(mapping_json, "layer", mapping.layer);
+        ReadValue(mapping_json, "mip", mapping.mip);
+        ReadValue(mapping_json, "slice", mapping.slice);
         settings.sources.push_back(std::move(mapping));
       }
     }
-    if (!ReadStringField(obj, "preset", settings.preset, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "intent", settings.intent, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "color_space", settings.color_space, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "output_format", settings.output_format, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "data_format", settings.data_format, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "mip_policy", settings.mip_policy, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "mip_filter", settings.mip_filter, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "bc7_quality", settings.bc7_quality, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "packing_policy", settings.packing_policy, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "cube_layout", settings.cube_layout, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "hdr_handling", settings.hdr_handling, errors)) {
-      return false;
-    }
-    if (!ReadFloatField(obj, "exposure_ev", settings.exposure_ev, errors)) {
-      return false;
-    }
-    if (!ReadUIntField(obj, "max_mips", settings.max_mip_levels, errors)) {
-      return false;
-    }
-    if (!ReadUIntField(obj, "max_size", settings.max_size, errors)) {
-      return false;
-    }
-    if (!ReadUIntField(
-          obj, "cube_face_size", settings.cube_face_size, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "flip_y", settings.flip_y, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "force_rgba", settings.force_rgba, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(
-          obj, "flip_normal_green", settings.flip_normal_green, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(
-          obj, "renormalize", settings.renormalize_normals, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "bake_hdr", settings.bake_hdr_to_ldr, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "cubemap", settings.cubemap, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(
-          obj, "equirect_to_cube", settings.equirect_to_cube, errors)) {
-      return false;
-    }
-    return true;
+    ReadValue(obj, "preset", settings.preset);
+    ReadValue(obj, "intent", settings.intent);
+    ReadValue(obj, "color_space", settings.color_space);
+    ReadValue(obj, "output_format", settings.output_format);
+    ReadValue(obj, "data_format", settings.data_format);
+    ReadValue(obj, "mip_policy", settings.mip_policy);
+    ReadValue(obj, "mip_filter", settings.mip_filter);
+    ReadValue(obj, "bc7_quality", settings.bc7_quality);
+    ReadValue(obj, "packing_policy", settings.packing_policy);
+    ReadValue(obj, "cube_layout", settings.cube_layout);
+    ReadValue(obj, "hdr_handling", settings.hdr_handling);
+    ReadValue(obj, "exposure_ev", settings.exposure_ev);
+    ReadValue(obj, "max_mips", settings.max_mip_levels);
+    ReadValue(obj, "max_size", settings.max_size);
+    ReadValue(obj, "cube_face_size", settings.cube_face_size);
+    ReadValue(obj, "flip_y", settings.flip_y);
+    ReadValue(obj, "force_rgba", settings.force_rgba);
+    ReadValue(obj, "flip_normal_green", settings.flip_normal_green);
+    ReadValue(obj, "renormalize", settings.renormalize_normals);
+    ReadValue(obj, "bake_hdr", settings.bake_hdr_to_ldr);
+    ReadValue(obj, "cubemap", settings.cubemap);
+    ReadValue(obj, "equirect_to_cube", settings.equirect_to_cube);
   }
 
-  // The schema has checked the types; the rules it cannot state are checked
-  // here.
-  auto ReadGeometryDefaults(const json& obj, SceneImportSettings& settings,
-    std::ostream& errors) -> bool
+  //! Reads the `geometry_defaults` of the object at `owner`.
+  /*!
+   The schema has checked their shape and the form of a surface id. What it
+   cannot state is checked here: the LOD policy's thresholds and error lists,
+   and a surface id that is not nil.
+  */
+  auto ReadGeometryDefaults(const json& obj, const json::json_pointer& owner,
+    SceneImportSettings& settings, const Findings& findings) -> bool
   {
     if (!obj.contains("geometry_defaults")) {
       return true;
     }
     for (const auto& [anchor, entry] : obj.at("geometry_defaults").items()) {
+      const auto anchor_ptr = owner / "geometry_defaults" / anchor;
       auto defaults = GeometryImportDefaults {};
       if (entry.contains("lod_policy")) {
         defaults.lod_policy = internal::ReadLodPolicy(entry.at("lod_policy"));
         if (!defaults.lod_policy.has_value()) {
-          errors << "ERROR: geometry_defaults '" << anchor
-                 << "': lod_policy thresholds decrease or its screen-space "
-                    "error lists differ in length\n";
+          findings.Error(manifest_codes::kLodPolicyInvalid,
+            fmt::format("geometry_defaults '{}': lod_policy thresholds "
+                        "decrease or its screen-space error lists differ in "
+                        "length",
+              anchor),
+            (anchor_ptr / "lod_policy").to_string());
           return false;
         }
       }
@@ -974,8 +704,10 @@ namespace {
         for (const auto& [id, values] : entry.at("surfaces").items()) {
           const auto surface_id = data::SurfaceId::FromString(id);
           if (!surface_id.has_value() || surface_id.value().IsNil()) {
-            errors << "ERROR: geometry_defaults '" << anchor
-                   << "': invalid surface ID '" << id << "'\n";
+            findings.Error(manifest_codes::kSurfaceIdInvalid,
+              fmt::format(
+                "geometry_defaults '{}': invalid surface ID '{}'", anchor, id),
+              (anchor_ptr / "surfaces" / id).to_string());
             return false;
           }
           auto& surface = defaults.surfaces[surface_id.value()];
@@ -992,579 +724,686 @@ namespace {
     return true;
   }
 
-  auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
-    std::ostream& errors) -> bool
+  auto ApplySceneOverrides(const json& obj, const json::json_pointer& owner,
+    SceneImportSettings& settings, const Findings& findings) -> bool
   {
     if (obj.contains("content_flags")) {
       const auto& flags = obj.at("content_flags");
-      if (!flags.is_object()) {
-        errors << "ERROR: content_flags must be an object\n";
-        return false;
-      }
-      ReadBoolField(flags, "textures", settings.import_textures, errors);
-      ReadBoolField(flags, "materials", settings.import_materials, errors);
-      ReadBoolField(flags, "geometry", settings.import_geometry, errors);
-      ReadBoolField(flags, "scene", settings.import_scene, errors);
+      ReadValue(flags, "textures", settings.import_textures);
+      ReadValue(flags, "materials", settings.import_materials);
+      ReadValue(flags, "geometry", settings.import_geometry);
+      ReadValue(flags, "scene", settings.import_scene);
     }
 
-    if (!ReadStringField(obj, "unit_policy", settings.unit_policy, errors)) {
-      return false;
-    }
-    if (!ReadFloatField(obj, "unit_scale", settings.unit_scale, errors)) {
-      return false;
-    }
+    ReadValue(obj, "unit_policy", settings.unit_policy);
+    ReadValue(obj, "unit_scale", settings.unit_scale);
     settings.unit_scale_set
       = settings.unit_scale_set || obj.contains("unit_scale");
-    if (!ReadFloatField(obj, "gltf_omitted_light_range_m",
-          settings.gltf_omitted_light_range_m, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "gltf_scene", settings.gltf_scene, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "up_axis", settings.up_axis, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "import_lights", settings.import_lights, errors)
-      || !ReadBoolField(obj, "import_cameras", settings.import_cameras, errors)
-      || !ReadFloatField(
-        obj, "light_intensity_scale", settings.light_intensity_scale, errors)
-      || !ReadFloatField(obj, "normals_smoothing_angle_deg",
-        settings.normals_smoothing_angle_deg, errors)
-      || !ReadBoolField(obj, "generate_lods", settings.generate_lods, errors)
-      || !ReadUIntField(obj, "lod_levels", settings.lod_levels, errors)
-      || !ReadFloatField(
-        obj, "lod_reduction_percent", settings.lod_reduction_percent, errors)) {
-      return false;
-    }
+    ReadValue(
+      obj, "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m);
+    ReadValue(obj, "gltf_scene", settings.gltf_scene);
+    ReadValue(obj, "up_axis", settings.up_axis);
+    ReadValue(obj, "import_lights", settings.import_lights);
+    ReadValue(obj, "import_cameras", settings.import_cameras);
+    ReadValue(obj, "light_intensity_scale", settings.light_intensity_scale);
+    ReadValue(
+      obj, "normals_smoothing_angle_deg", settings.normals_smoothing_angle_deg);
+    ReadValue(obj, "generate_lods", settings.generate_lods);
+    ReadValue(obj, "lod_levels", settings.lod_levels);
+    ReadValue(obj, "lod_reduction_percent", settings.lod_reduction_percent);
     if (obj.contains("material_remap")) {
       for (const auto& [name, target] : obj.at("material_remap").items()) {
         settings.material_remap.insert_or_assign(
           name, target.get<std::string>());
       }
     }
-    if (!ReadGeometryDefaults(obj, settings, errors)) {
+    if (!ReadGeometryDefaults(obj, owner, settings, findings)) {
       return false;
     }
-    if (obj.contains("bake_transforms")
-      && (!ReadBoolField(
-        obj, "bake_transforms", settings.bake_transforms, errors))) {
-      return false;
-    }
-
-    if (!ReadStringField(
-          obj, "normals_policy", settings.normals_policy, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "tangents_policy", settings.tangents_policy, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "node_pruning", settings.node_pruning, errors)) {
-      return false;
-    }
+    ReadValue(obj, "bake_transforms", settings.bake_transforms);
+    ReadValue(obj, "normals_policy", settings.normals_policy);
+    ReadValue(obj, "tangents_policy", settings.tangents_policy);
+    ReadValue(obj, "node_pruning", settings.node_pruning);
 
     // Apply texture overrides from the same object (flat structure)
-    if (!ApplyTextureOverrides(obj, settings.texture_defaults, errors)) {
-      return false;
-    }
+    ApplyTextureOverrides(obj, settings.texture_defaults);
 
     if (obj.contains("texture_overrides")) {
-      const auto& overrides = obj.at("texture_overrides");
-      if (!overrides.is_object()) {
-        errors << "ERROR: 'texture_overrides' must be an object\n";
-        return false;
-      }
-      for (auto it = overrides.begin(); it != overrides.end(); ++it) {
+      for (const auto& [name, overrides] :
+        obj.at("texture_overrides").items()) {
         // Start with the defaults for this job
-        TextureImportSettings tex_settings = settings.texture_defaults;
-        if (!ApplyTextureOverrides(it.value(), tex_settings, errors)) {
-          return false;
-        }
-        settings.texture_overrides[it.key()] = std::move(tex_settings);
+        auto texture = settings.texture_defaults;
+        ApplyTextureOverrides(overrides, texture);
+        settings.texture_overrides[name] = std::move(texture);
       }
     }
-
     return true;
   }
 
-  auto ApplyScriptAssetOverrides(const json& obj,
-    ScriptAssetImportSettings& settings, std::ostream& errors) -> bool
+  auto ApplyScriptAssetOverrides(
+    const json& obj, ScriptAssetImportSettings& settings) -> void
   {
-    if (!ReadBoolField(obj, "compile", settings.compile_scripts, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "compile_mode", settings.compile_mode, errors)) {
-      return false;
-    }
-    return ReadStringField(
-      obj, "script_storage", settings.script_storage, errors);
+    ReadValue(obj, "compile", settings.compile_scripts);
+    ReadValue(obj, "compile_mode", settings.compile_mode);
+    ReadValue(obj, "script_storage", settings.script_storage);
   }
 
-  auto ApplyScriptingSidecarOverrides(const json& obj,
-    ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
+  //! The settings every job type with a cooked root and a name takes.
+  template <typename Settings>
+  auto ApplyOutputAndName(const json& obj, Settings& settings) -> void
   {
-    return ReadStringField(obj, "target_scene_virtual_path",
-             settings.target_scene_virtual_path, errors)
-      && ReadStringArrayField(
-        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
+    ReadValue(obj, "output", settings.cooked_root);
+    ReadValue(obj, "name", settings.job_name);
   }
 
-  auto ApplyPhysicsSidecarOverrides(const json& obj,
-    PhysicsSidecarImportSettings& settings, std::ostream& errors) -> bool
+  //! The settings of a job type that can also be verbose.
+  template <typename Settings>
+  auto ApplyCommonOverrides(const json& obj, Settings& settings) -> void
   {
-    if (!ReadStringField(obj, "target_scene_virtual_path",
-          settings.target_scene_virtual_path, errors)) {
-      return false;
-    }
-    auto backend_text = std::string {};
-    if (!ReadStringField(obj, "physics_backend", backend_text, errors)) {
-      return false;
-    }
-    if (!backend_text.empty()) {
-      if (backend_text == "jolt") {
-        settings.physics_backend = core::meta::physics::PhysicsBackend::kJolt;
-      } else if (backend_text == "physx") {
-        settings.physics_backend = core::meta::physics::PhysicsBackend::kPhysX;
-      } else if (backend_text == "none") {
-        settings.physics_backend = core::meta::physics::PhysicsBackend::kNone;
+    ApplyOutputAndName(obj, settings);
+    ReadValue(obj, "verbose", settings.verbose);
+  }
+
+  template <typename Settings>
+  auto ApplyCookedContextRoots(const json& obj, Settings& settings) -> void
+  {
+    ReadValue(obj, "cooked_context_roots", settings.cooked_context_roots);
+  }
+
+  auto ApplyInputOverrides(const json& obj, InputImportSettings& settings)
+    -> void
+  {
+    ReadValue(obj, "output", settings.cooked_root);
+    ApplyCookedContextRoots(obj, settings);
+  }
+
+  auto ApplyScriptingSidecarOverrides(
+    const json& obj, ScriptingSidecarImportSettings& settings) -> void
+  {
+    ReadValue(
+      obj, "target_scene_virtual_path", settings.target_scene_virtual_path);
+    ApplyCookedContextRoots(obj, settings);
+  }
+
+  auto ApplyPhysicsSidecarOverrides(
+    const json& obj, PhysicsSidecarImportSettings& settings) -> void
+  {
+    ReadValue(
+      obj, "target_scene_virtual_path", settings.target_scene_virtual_path);
+    if (obj.contains("physics_backend")) {
+      using core::meta::physics::PhysicsBackend;
+      const auto& backend
+        = obj.at("physics_backend").get_ref<const std::string&>();
+      if (backend == "jolt") {
+        settings.physics_backend = PhysicsBackend::kJolt;
+      } else if (backend == "physx") {
+        settings.physics_backend = PhysicsBackend::kPhysX;
       } else {
-        errors << "ERROR: 'physics_backend' must be one of "
-                  "'jolt'|'physx'|'none'\n";
+        settings.physics_backend = PhysicsBackend::kNone;
+      }
+    }
+  }
+
+  auto ApplyPipelineConcurrency(
+    const json& obj, ImportPipelineConcurrency& target) -> void
+  {
+    ReadValue(obj, "workers", target.workers);
+    ReadValue(obj, "queue_capacity", target.queue_capacity);
+  }
+
+  auto ApplyConcurrencyOverrides(const json& obj, ImportConcurrency& target)
+    -> void
+  {
+    const auto apply
+      = [&obj](const char* name, ImportPipelineConcurrency& pipeline) -> void {
+      if (obj.contains(name)) {
+        ApplyPipelineConcurrency(obj.at(name), pipeline);
+      }
+    };
+    apply("texture", target.texture);
+    apply("buffer", target.buffer);
+    apply("material", target.material);
+    apply("mesh_build", target.mesh_build);
+    apply("geometry", target.geometry);
+    apply("scene", target.scene);
+  }
+
+  //! The section `name` of the manifest's `defaults`, when it has one.
+  auto FindSection(const json& defaults, const char* name) -> const json*
+  {
+    const auto section = defaults.find(name);
+    return section == defaults.end() ? nullptr : &*section;
+  }
+
+  //! Reads the manifest's `defaults`, whose shape the schema has checked.
+  auto ReadDefaults(const json& defaults, ImportManifestDefaults& result,
+    const Findings& findings) -> bool
+  {
+    const auto owner = json::json_pointer {} / "defaults";
+    if (!ReadSourceKey(defaults, owner, result.source_key, findings)) {
+      return false;
+    }
+
+    if (const auto* texture = FindSection(defaults, "texture")) {
+      ApplyCommonOverrides(*texture, result.texture);
+      ApplyTextureOverrides(*texture, result.texture);
+    }
+
+    if (const auto* scene = FindSection(defaults, "scene")) {
+      ApplyCommonOverrides(*scene, result.fbx);
+      ApplyCommonOverrides(*scene, result.gltf);
+      const auto scene_ptr = owner / "scene";
+      if (!ApplySceneOverrides(*scene, scene_ptr, result.fbx, findings)
+        || !ApplySceneOverrides(*scene, scene_ptr, result.gltf, findings)) {
         return false;
       }
     }
+
+    if (const auto* script = FindSection(defaults, "script")) {
+      ApplyCommonOverrides(*script, result.script);
+      ApplyScriptAssetOverrides(*script, result.script);
+    }
+
+    if (const auto* sidecar = FindSection(defaults, "scripting_sidecar")) {
+      ApplyCommonOverrides(*sidecar, result.scripting_sidecar);
+      ApplyScriptingSidecarOverrides(*sidecar, result.scripting_sidecar);
+    }
+
+    if (const auto* sidecar = FindSection(defaults, "physics_sidecar")) {
+      ApplyCommonOverrides(*sidecar, result.physics_sidecar);
+      ApplyPhysicsSidecarOverrides(*sidecar, result.physics_sidecar);
+    }
+
+    if (const auto* input = FindSection(defaults, "input")) {
+      ApplyInputOverrides(*input, result.input);
+    }
+
+    if (const auto* material = FindSection(defaults, "material_descriptor")) {
+      ApplyOutputAndName(*material, result.material_descriptor);
+      ApplyCookedContextRoots(*material, result.material_descriptor);
+    }
+
+    if (const auto* material
+      = FindSection(defaults, "physics_material_descriptor")) {
+      ApplyOutputAndName(*material, result.physics_material_descriptor);
+    }
+
+    if (const auto* shape
+      = FindSection(defaults, "collision_shape_descriptor")) {
+      ApplyOutputAndName(*shape, result.collision_shape_descriptor);
+    }
+
+    if (const auto* geometry = FindSection(defaults, "geometry_descriptor")) {
+      ApplyOutputAndName(*geometry, result.geometry_descriptor);
+      ApplyCookedContextRoots(*geometry, result.geometry_descriptor);
+    }
+
+    if (const auto* scene = FindSection(defaults, "scene_descriptor")) {
+      ApplyOutputAndName(*scene, result.scene_descriptor);
+      ApplyCookedContextRoots(*scene, result.scene_descriptor);
+    }
+
+    if (const auto* buffers = FindSection(defaults, "buffer_container")) {
+      ApplyOutputAndName(*buffers, result.buffer_container);
+    }
     return true;
   }
 
-  auto ApplyCommonOverrides(const json& obj, TextureImportSettings& settings,
-    std::ostream& errors) -> bool
+  //! Gives every job type's settings the cooked root the manifest names.
+  auto ApplyManifestOutput(
+    const std::string& output, ImportManifestDefaults& defaults) -> void
   {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+    defaults.texture.cooked_root = output;
+    defaults.fbx.cooked_root = output;
+    defaults.gltf.cooked_root = output;
+    defaults.script.cooked_root = output;
+    defaults.scripting_sidecar.cooked_root = output;
+    defaults.physics_sidecar.cooked_root = output;
+    defaults.input.cooked_root = output;
+    defaults.buffer_container.cooked_root = output;
+    defaults.material_descriptor.cooked_root = output;
+    defaults.physics_material_descriptor.cooked_root = output;
+    defaults.collision_shape_descriptor.cooked_root = output;
+    defaults.geometry_descriptor.cooked_root = output;
+    defaults.scene_descriptor.cooked_root = output;
+  }
+
+  //! Gives a job the defaults of the manifest.
+  auto MakeJobFromDefaults(const ImportManifest& manifest) -> ImportManifestJob
+  {
+    ImportManifestJob job {};
+    job.source_key = manifest.defaults.source_key;
+    job.mounts = manifest.mounts;
+    job.texture = manifest.defaults.texture;
+    job.fbx = manifest.defaults.fbx;
+    job.gltf = manifest.defaults.gltf;
+    job.script = manifest.defaults.script;
+    job.scripting_sidecar = manifest.defaults.scripting_sidecar;
+    job.physics_sidecar = manifest.defaults.physics_sidecar;
+    job.input = manifest.defaults.input;
+    job.buffer_container = manifest.defaults.buffer_container;
+    job.material_descriptor = manifest.defaults.material_descriptor;
+    job.physics_material_descriptor
+      = manifest.defaults.physics_material_descriptor;
+    job.collision_shape_descriptor
+      = manifest.defaults.collision_shape_descriptor;
+    job.geometry_descriptor = manifest.defaults.geometry_descriptor;
+    job.scene_descriptor = manifest.defaults.scene_descriptor;
+    job.fbx.texture_defaults = manifest.defaults.texture;
+    job.gltf.texture_defaults = manifest.defaults.texture;
+    return job;
+  }
+
+  //! Sets or clears the file every job type reads its source or descriptor
+  //! from.
+  auto SetJobSourcePath(ImportManifestJob& job, const std::string& path) -> void
+  {
+    job.texture.source_path = path;
+    job.fbx.source_path = path;
+    job.gltf.source_path = path;
+    job.script.source_path = path;
+    job.scripting_sidecar.source_path = path;
+    job.physics_sidecar.source_path = path;
+    job.buffer_container.descriptor_path = path;
+    job.material_descriptor.descriptor_path = path;
+    job.physics_material_descriptor.descriptor_path = path;
+    job.collision_shape_descriptor.descriptor_path = path;
+    job.geometry_descriptor.descriptor_path = path;
+    job.scene_descriptor.descriptor_path = path;
+  }
+
+  //! Reads an input job: its identity, its source and its context roots.
+  auto ReadInputJob(const json& job, const json::json_pointer& job_ptr,
+    const ImportManifest& manifest, ImportManifestJob& manifest_job,
+    const Findings& findings) -> bool
+  {
+    if (!ReadJobVirtualPath(job, job_ptr, manifest_job, findings)) {
       return false;
     }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
+    const auto located
+      = LocateJobSource(*manifest.mounts, job, job_ptr, findings);
+    if (!located.has_value()) {
       return false;
     }
-    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
-      return false;
-    }
+    manifest_job.source_mount_path = located->mount_path;
+    manifest_job.input.source_path = located->file.string();
+    ApplyInputOverrides(job, manifest_job.input);
     return true;
   }
 
-  auto ApplyPipelineConcurrency(const json& obj,
-    ImportPipelineConcurrency& target, std::ostream& errors) -> bool
+  //! Reads the bindings and sources of a job that is not an input job.
+  /*!
+   The schema requires a source or bindings and the right type of bindings
+   for each sidecar. What it does not state is checked here: which job types
+   take `bindings` and `instance_bindings`.
+  */
+  auto ReadSourcesAndBindings(const json& job,
+    const json::json_pointer& job_ptr, const ImportManifest& manifest,
+    ImportManifestJob& manifest_job, const Findings& findings) -> bool
   {
-    if (!ReadUIntField(obj, "workers", target.workers, errors)) {
-      return false;
-    }
-    if (!ReadUIntField(obj, "queue_capacity", target.queue_capacity, errors)) {
-      return false;
-    }
-    return true;
-  }
+    const auto has_source = job.contains("source");
+    const auto has_bindings = job.contains("bindings");
+    const auto is_script_sidecar_job
+      = manifest_job.job_type == "script-sidecar";
+    const auto is_physics_sidecar_job
+      = manifest_job.job_type == "physics-sidecar";
 
-  auto ApplyConcurrencyOverrides(
-    const json& obj, ImportConcurrency& target, std::ostream& errors) -> bool
-  {
-    if (obj.contains("texture")) {
-      if (!obj.at("texture").is_object()) {
-        errors << "ERROR: concurrency.texture must be an object\n";
+    if (has_bindings && !is_script_sidecar_job && !is_physics_sidecar_job) {
+      findings.Error(manifest_codes::kBindingsNotAllowed,
+        "job.bindings is only valid for type 'script-sidecar' or "
+        "'physics-sidecar'",
+        (job_ptr / "bindings").to_string());
+      return false;
+    }
+
+    if (!ReadJobVirtualPath(job, job_ptr, manifest_job, findings)) {
+      return false;
+    }
+
+    if (job.contains("instance_bindings")
+      && (!is_script_sidecar_job || !has_bindings)) {
+      findings.Error(manifest_codes::kInstanceBindingsNotAllowed,
+        "job.instance_bindings is only valid for a 'script-sidecar' job with "
+        "inline bindings",
+        (job_ptr / "instance_bindings").to_string());
+      return false;
+    }
+
+    if (has_source) {
+      const auto located
+        = LocateJobSource(*manifest.mounts, job, job_ptr, findings);
+      if (!located.has_value()) {
         return false;
       }
-      if (!ApplyPipelineConcurrency(
-            obj.at("texture"), target.texture, errors)) {
-        return false;
-      }
+      manifest_job.source_mount_path = located->mount_path;
+      SetJobSourcePath(manifest_job, located->file.string());
+    } else {
+      SetJobSourcePath(manifest_job, {});
     }
-    if (obj.contains("buffer")) {
-      if (!obj.at("buffer").is_object()) {
-        errors << "ERROR: concurrency.buffer must be an object\n";
-        return false;
+
+    manifest_job.scripting_sidecar.inline_bindings_json.clear();
+    manifest_job.physics_sidecar.inline_bindings_json.clear();
+    if (has_bindings && is_script_sidecar_job) {
+      auto sidecar_doc = json::object();
+      sidecar_doc.update({ { "bindings", job.at("bindings") } });
+      if (job.contains("instance_bindings")) {
+        sidecar_doc.update(
+          { { "instance_bindings", job.at("instance_bindings") } });
       }
-      if (!ApplyPipelineConcurrency(obj.at("buffer"), target.buffer, errors)) {
-        return false;
-      }
-    }
-    if (obj.contains("material")) {
-      if (!obj.at("material").is_object()) {
-        errors << "ERROR: concurrency.material must be an object\n";
-        return false;
-      }
-      if (!ApplyPipelineConcurrency(
-            obj.at("material"), target.material, errors)) {
-        return false;
-      }
-    }
-    const bool has_mesh_build = obj.contains("mesh_build");
-    if (has_mesh_build) {
-      if (!obj.at("mesh_build").is_object()) {
-        errors << "ERROR: concurrency.mesh_build must be an object\n";
-        return false;
-      }
-      if (!ApplyPipelineConcurrency(
-            obj.at("mesh_build"), target.mesh_build, errors)) {
-        return false;
-      }
-    }
-    if (obj.contains("geometry")) {
-      if (!obj.at("geometry").is_object()) {
-        errors << "ERROR: concurrency.geometry must be an object\n";
-        return false;
-      }
-      if (!ApplyPipelineConcurrency(
-            obj.at("geometry"), target.geometry, errors)) {
-        return false;
-      }
-    }
-    if (obj.contains("scene")) {
-      if (!obj.at("scene").is_object()) {
-        errors << "ERROR: concurrency.scene must be an object\n";
-        return false;
-      }
-      if (!ApplyPipelineConcurrency(obj.at("scene"), target.scene, errors)) {
-        return false;
-      }
+      manifest_job.scripting_sidecar.inline_bindings_json = sidecar_doc.dump();
+    } else if (has_bindings && is_physics_sidecar_job) {
+      auto sidecar_doc = json::object();
+      sidecar_doc.update({ { "bindings", job.at("bindings") } });
+      manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
     }
     return true;
   }
 
-  auto ApplyCommonSceneOverrides(const json& obj, SceneImportSettings& settings,
-    std::ostream& errors) -> bool
+  //! Applies what the job states over the defaults it started from.
+  auto ApplyJobOverrides(const json& job, const json::json_pointer& job_ptr,
+    const ImportManifest& manifest, ImportManifestJob& manifest_job,
+    const Findings& findings) -> bool
   {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
-      return false;
-    }
-    return true;
-  }
+    ApplyCommonOverrides(job, manifest_job.texture);
+    ApplyCommonOverrides(job, manifest_job.fbx);
+    ApplyCommonOverrides(job, manifest_job.gltf);
+    ApplyCommonOverrides(job, manifest_job.script);
+    ApplyCommonOverrides(job, manifest_job.scripting_sidecar);
+    ApplyCommonOverrides(job, manifest_job.physics_sidecar);
+    ApplyOutputAndName(job, manifest_job.material_descriptor);
+    ApplyOutputAndName(job, manifest_job.physics_material_descriptor);
+    ApplyOutputAndName(job, manifest_job.collision_shape_descriptor);
+    ApplyOutputAndName(job, manifest_job.buffer_container);
+    ApplyOutputAndName(job, manifest_job.geometry_descriptor);
+    ApplyOutputAndName(job, manifest_job.scene_descriptor);
 
-  auto ApplyCommonScriptOverrides(const json& obj,
-    ScriptAssetImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
+    if (!ApplySceneOverrides(job, job_ptr, manifest_job.fbx, findings)
+      || !ApplySceneOverrides(job, job_ptr, manifest_job.gltf, findings)) {
       return false;
     }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
-      return false;
-    }
-    return true;
-  }
+    ApplyCookedContextRoots(job, manifest_job.material_descriptor);
+    ApplyCookedContextRoots(job, manifest_job.geometry_descriptor);
+    ApplyCookedContextRoots(job, manifest_job.scene_descriptor);
+    ApplyTextureOverrides(job, manifest_job.texture);
+    ApplyScriptAssetOverrides(job, manifest_job.script);
 
-  auto ApplyCommonScriptOverrides(const json& obj,
-    ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyCommonScriptOverrides(const json& obj,
-    PhysicsSidecarImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    if (!ReadBoolField(obj, "verbose", settings.verbose, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyCommonInputOverrides(const json& obj, InputImportSettings& settings,
-    std::ostream& errors) -> bool
-  {
-    return ReadStringField(obj, "output", settings.cooked_root, errors)
-      && ReadStringArrayField(
-        obj, "cooked_context_roots", settings.cooked_context_roots, errors);
-  }
-
-  auto ApplyCommonMaterialDescriptorOverrides(const json& obj,
-    MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyMaterialDescriptorOverrides(const json& obj,
-    MaterialDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    return ReadStringArrayField(
-      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
-  }
-
-  auto ApplyCommonPhysicsMaterialDescriptorOverrides(const json& obj,
-    PhysicsMaterialDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyCommonCollisionShapeDescriptorOverrides(const json& obj,
-    CollisionShapeDescriptorImportSettings& settings, std::ostream& errors)
-    -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyCommonBufferContainerOverrides(const json& obj,
-    BufferContainerImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyCommonGeometryDescriptorOverrides(const json& obj,
-    GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplyGeometryDescriptorOverrides(const json& obj,
-    GeometryDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    return ReadStringArrayField(
-      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
-  }
-
-  auto ApplyCommonSceneDescriptorOverrides(const json& obj,
-    SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    if (!ReadStringField(obj, "output", settings.cooked_root, errors)) {
-      return false;
-    }
-    if (!ReadStringField(obj, "name", settings.job_name, errors)) {
-      return false;
-    }
-    return true;
-  }
-
-  auto ApplySceneDescriptorOverrides(const json& obj,
-    SceneDescriptorImportSettings& settings, std::ostream& errors) -> bool
-  {
-    return ReadStringArrayField(
-      obj, "cooked_context_roots", settings.cooked_context_roots, errors);
-  }
-
-} // namespace
-
-namespace {
-
-  auto ParseManifest(std::string_view text,
-    const std::filesystem::path& manifest_directory,
-    const std::string& declared_in, const ImportManifestLoadOptions& options,
-    std::ostream& error_stream) -> std::optional<ImportManifest>;
-
-} // namespace
-
-auto ImportManifest::Load(const std::filesystem::path& manifest_path,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  const auto json_data = ReadJsonFile(manifest_path, error_stream);
-  if (!json_data.has_value()) {
-    return std::nullopt;
-  }
-
-  return ParseManifest(json_data->dump(), manifest_path.parent_path(),
-    manifest_path.string(), options, error_stream);
-}
-
-auto ImportManifest::LoadBatch(
-  const std::span<const std::filesystem::path> manifest_paths,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  auto manifests = std::vector<ImportManifest> {};
-  for (const auto& path : manifest_paths) {
-    auto manifest = Load(path, options, error_stream);
-    if (!manifest.has_value()) {
-      return std::nullopt;
-    }
-    manifests.push_back(std::move(*manifest));
-  }
-  if (manifests.empty()) {
-    error_stream << "ERROR: a batch needs at least one manifest\n";
-    return std::nullopt;
-  }
-
-  auto tables = std::vector<MountTable> {};
-  tables.reserve(manifests.size());
-  for (const auto& manifest : manifests) {
-    tables.push_back(*manifest.mounts);
-  }
-  const auto conflicts = CheckMountNameConflicts(tables);
-  internal::WriteDiagnostics(conflicts, error_stream);
-  if (!conflicts.empty()) {
-    return std::nullopt;
-  }
-
-  auto batch = std::move(manifests.front());
-  const auto same_job
-    = [](const ImportManifestJob& a, const ImportManifestJob& b) -> bool {
-    return a.job_type == b.job_type && !a.source_mount_path.empty()
-      && content::FoldCase(a.source_mount_path)
-      == content::FoldCase(b.source_mount_path)
-      && a.virtual_path == b.virtual_path;
-  };
-  for (auto& manifest : manifests | std::views::drop(1)) {
-    auto aliases = std::unordered_map<std::string, std::string> {};
-    auto added = std::vector<ImportManifestJob> {};
-    for (auto& job : manifest.jobs) {
-      const auto kept = std::ranges::find_if(batch.jobs,
-        [&](const ImportManifestJob& other) { return same_job(other, job); });
-      if (kept != batch.jobs.end()) {
-        aliases.emplace(job.id, kept->id);
-        continue;
+    // The defaults' texture sources come first, then the job's own.
+    const auto inherited = manifest.defaults.texture.sources.size();
+    for (std::size_t index = 0; index < manifest_job.texture.sources.size();
+      ++index) {
+      auto& mapping = manifest_job.texture.sources.at(index);
+      const auto field = index < inherited
+        ? json::json_pointer {} / "defaults" / "texture" / "sources" / index
+          / "file"
+        : job_ptr / "sources" / (index - inherited) / "file";
+      const auto located
+        = LocateSource(*manifest.mounts, mapping.file, field, findings);
+      if (!located.has_value()) {
+        return false;
       }
-      if (!job.id.empty()
-        && std::ranges::contains(batch.jobs, job.id, &ImportManifestJob::id)) {
-        error_stream << "ERROR [batch.job_id_duplicate]: job id '" << job.id
-                     << "' of '" << manifest.mounts->declared_in
-                     << "' names another job of the batch\n";
+      mapping.file = located->file.string();
+      if (manifest_job.source_mount_path.empty()) {
+        manifest_job.source_mount_path = located->mount_path;
+      }
+    }
+    ApplyScriptingSidecarOverrides(job, manifest_job.scripting_sidecar);
+    ApplyPhysicsSidecarOverrides(job, manifest_job.physics_sidecar);
+    return true;
+  }
+
+  //! Reads the job at `index` of the manifest's document.
+  auto ReadJob(const json& entry, const std::size_t index,
+    const ImportManifest& manifest, const std::filesystem::path& manifest_dir,
+    const Findings& findings) -> std::optional<ImportManifestJob>
+  {
+    const auto job_ptr = JobPointer(index);
+    auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
+    auto model_job = json {};
+    if (entry.at("type").get_ref<const std::string&>() == "model") {
+      model_record
+        = ReadModelRecord(entry, *manifest.mounts, job_ptr, findings);
+      if (!model_record) {
         return std::nullopt;
       }
-      added.push_back(std::move(job));
+      model_job = MakeModelJob(entry, *model_record);
     }
-    for (auto& job : added) {
-      for (auto& dependency : job.depends_on) {
-        if (const auto alias = aliases.find(dependency);
-          alias != aliases.end()) {
-          dependency = alias->second;
+    const auto& job = model_record ? model_job : entry;
+
+    auto manifest_job = MakeJobFromDefaults(manifest);
+    if (!ReadSourceKey(job, job_ptr, manifest_job.source_key, findings)) {
+      return std::nullopt;
+    }
+    manifest_job.job_type = job.at("type").get<std::string>();
+    const auto is_input = manifest_job.job_type == "input";
+    if (!ReadJobDependencies(job, job_ptr, is_input, manifest_job, findings)) {
+      return std::nullopt;
+    }
+
+    const auto read = is_input
+      ? ReadInputJob(job, job_ptr, manifest, manifest_job, findings)
+      : ReadSourcesAndBindings(job, job_ptr, manifest, manifest_job, findings)
+        && ApplyJobOverrides(job, job_ptr, manifest, manifest_job, findings);
+    if (!read) {
+      return std::nullopt;
+    }
+    manifest_job.fbx.model_record = model_record;
+    manifest_job.gltf.model_record = std::move(model_record);
+    ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
+    return manifest_job;
+  }
+
+  //! Where a job of a loaded manifest or batch was declared.
+  struct JobOrigin final {
+    std::string source_path;
+    std::size_t index = 0;
+  };
+
+  auto MakeOrigins(const std::string& source_path, const std::size_t count)
+    -> std::vector<JobOrigin>
+  {
+    auto origins = std::vector<JobOrigin> {};
+    origins.reserve(count);
+    for (std::size_t index = 0; index < count; ++index) {
+      origins.push_back(
+        JobOrigin { .source_path = source_path, .index = index });
+    }
+    return origins;
+  }
+
+  //! The jobs of each cycle in `edges`, a job's dependencies by job index: one
+  //! list per cycle, ascending, ordered by their first job.
+  auto FindDependencyCycles(const std::vector<std::vector<std::size_t>>& edges)
+    -> std::vector<std::vector<std::size_t>>
+  {
+    struct Frame final {
+      std::size_t node;
+      std::size_t next;
+    };
+    constexpr auto kUnvisited = std::numeric_limits<std::size_t>::max();
+    const auto count = edges.size();
+    auto order = std::vector<std::size_t>(count, kUnvisited);
+    auto low = std::vector<std::size_t>(count, 0U);
+    auto on_stack = std::vector<bool>(count, false);
+    auto stack = std::vector<std::size_t> {};
+    auto frames = std::vector<Frame> {};
+    auto next_order = std::size_t { 0 };
+    auto cycles = std::vector<std::vector<std::size_t>> {};
+
+    const auto visit = [&](const std::size_t node) -> void {
+      order[node] = next_order;
+      low[node] = next_order;
+      ++next_order;
+      stack.push_back(node);
+      on_stack[node] = true;
+      frames.push_back(Frame { .node = node, .next = 0U });
+    };
+
+    // Tarjan's strongly connected components, without recursion.
+    for (std::size_t root = 0; root < count; ++root) {
+      if (order[root] != kUnvisited) {
+        continue;
+      }
+      visit(root);
+      while (!frames.empty()) {
+        const auto node = frames.back().node;
+        if (frames.back().next < edges[node].size()) {
+          const auto target = edges[node][frames.back().next];
+          ++frames.back().next;
+          if (order[target] == kUnvisited) {
+            visit(target);
+          } else if (on_stack[target]) {
+            low[node] = std::min(low[node], order[target]);
+          }
+          continue;
+        }
+        frames.pop_back();
+        if (!frames.empty()) {
+          const auto parent = frames.back().node;
+          low[parent] = std::min(low[parent], low[node]);
+        }
+        if (low[node] != order[node]) {
+          continue;
+        }
+        auto component = std::vector<std::size_t> {};
+        auto member = kUnvisited;
+        while (member != node) {
+          member = stack.back();
+          stack.pop_back();
+          on_stack[member] = false;
+          component.push_back(member);
+        }
+        if (component.size() > 1U) {
+          std::ranges::sort(component);
+          cycles.push_back(std::move(component));
         }
       }
-      batch.jobs.push_back(std::move(job));
+    }
+    std::ranges::sort(cycles);
+    return cycles;
+  }
+
+  //! Checks the job graph of a manifest or of a merged batch: the ids are
+  //! unique, every dependency names another job, and no jobs depend on each
+  //! other in a cycle.
+  /*!
+   @param jobs The jobs, in order.
+   @param origins Where each job was declared, as `jobs` is ordered: the
+     manifest file and the job's index in its `jobs`.
+   @param diagnostics Receives the errors, each at its job's manifest file.
+  */
+  auto CheckJobGraph(const std::span<const ImportManifestJob> jobs,
+    const std::span<const JobOrigin> origins,
+    std::vector<ImportDiagnostic>& diagnostics) -> void
+  {
+    const auto report
+      = [&](const std::size_t job, const std::string_view code,
+          std::string message, const json::json_pointer& pointer) -> void {
+      diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { code },
+        .message = std::move(message),
+        .source_path = origins[job].source_path,
+        .json_pointer = pointer.to_string(),
+      });
+    };
+
+    auto by_id = std::unordered_map<std::string, std::size_t> {};
+    for (std::size_t job = 0; job < jobs.size(); ++job) {
+      if (jobs[job].id.empty()) {
+        continue;
+      }
+      const auto [first, inserted] = by_id.emplace(jobs[job].id, job);
+      if (inserted) {
+        continue;
+      }
+      const auto& other = origins[first->second];
+      auto where = JobPointer(other.index).to_string();
+      if (other.source_path != origins[job].source_path) {
+        where += " of '" + other.source_path + "'";
+      }
+      report(job, manifest_codes::kJobIdDuplicate,
+        fmt::format(
+          "job id '{}' is also the id of the job at {}", jobs[job].id, where),
+        JobPointer(origins[job].index) / "id");
+    }
+
+    auto edges = std::vector<std::vector<std::size_t>>(jobs.size());
+    for (std::size_t job = 0; job < jobs.size(); ++job) {
+      const auto& depends_on = jobs[job].depends_on;
+      for (std::size_t index = 0; index < depends_on.size(); ++index) {
+        const auto& dependency = depends_on[index];
+        const auto pointer
+          = JobPointer(origins[job].index) / "depends_on" / index;
+        if (dependency == jobs[job].id) {
+          report(job, manifest_codes::kDependencySelf,
+            fmt::format("job '{}' depends on itself", dependency), pointer);
+          continue;
+        }
+        const auto target = by_id.find(dependency);
+        if (target == by_id.end()) {
+          report(job, manifest_codes::kDependencyMissing,
+            fmt::format("job dependency '{}' names no job", dependency),
+            pointer);
+          continue;
+        }
+        edges[job].push_back(target->second);
+      }
+    }
+
+    for (const auto& cycle : FindDependencyCycles(edges)) {
+      auto ids = std::string {};
+      for (const auto job : cycle) {
+        ids += ids.empty() ? "'" : ", '";
+        ids += jobs[job].id + "'";
+      }
+      report(cycle.front(), manifest_codes::kDependencyCycle,
+        fmt::format("jobs form a dependency cycle: {}", ids),
+        JobPointer(origins[cycle.front()].index));
     }
   }
-  return batch;
-}
 
-auto ImportManifest::Parse(const std::string_view text,
-  const std::filesystem::path& manifest_directory,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  return ParseManifest(text, manifest_directory, manifest_directory.string(),
-    options, error_stream);
-}
-
-namespace {
-
-  auto ParseManifest(const std::string_view text,
+  //! Parses a manifest document into its manifest, without checking the job
+  //! graph, which a batch checks once its manifests are merged.
+  auto ParseManifestDocument(const std::string_view text,
     const std::filesystem::path& manifest_directory,
     const std::string& declared_in, const ImportManifestLoadOptions& options,
-    std::ostream& error_stream) -> std::optional<ImportManifest>
+    const Findings& findings) -> std::optional<ImportManifest>
   {
-    std::optional<json> json_data;
+    const auto first_finding = findings.diagnostics->size();
+    auto document = json {};
     try {
-      json_data = json::parse(text);
+      document = json::parse(text);
     } catch (const std::exception& error) {
-      error_stream << "ERROR: invalid manifest JSON: " << error.what() << '\n';
+      findings.Error(manifest_codes::kInvalidJson,
+        fmt::format("the manifest is not valid JSON: {}", error.what()), {});
       return std::nullopt;
     }
 
-    if (ReportEarlyJobKeyWhitelistViolations(*json_data, error_stream)) {
-      return std::nullopt;
-    }
-
-    if (const auto error = SchemaValidator::Instance().Validate(*json_data);
-      error.has_value()) {
-      error_stream << "ERROR: manifest schema validation failed:\n" << *error;
-      if (!error->empty() && error->back() != '\n') {
-        error_stream << "\n";
-      }
-      return std::nullopt;
-    }
-    if (!RequireRelativeFolders(*json_data, error_stream)) {
+    if (!ValidateAgainstSchema(document, findings)
+      || !RequireRelativeFolders(document, findings)) {
       return std::nullopt;
     }
 
     ImportManifest manifest {};
-    manifest.version = json_data->value("version", 1U);
-    if (!ReadSourceKey(
-          *json_data, manifest.defaults.source_key, error_stream)) {
+    manifest.version = document.value("version", 1U);
+    if (!ReadSourceKey(document, json::json_pointer {},
+          manifest.defaults.source_key, findings)) {
       return std::nullopt;
     }
 
-    if (!ReadOptionalUIntField(*json_data, "thread_pool_size",
-          manifest.thread_pool_size, error_stream)) {
-      return std::nullopt;
+    ReadValue(document, "thread_pool_size", manifest.thread_pool_size);
+    ReadValue(document, "max_in_flight_jobs", manifest.max_in_flight_jobs);
+    ReadValue(
+      document, "job_admission_capacity", manifest.job_admission_capacity);
+    if (document.contains("max_source_bytes")) {
+      manifest.max_source_bytes = serio::ByteCount {
+        document.at("max_source_bytes").get<uint64_t>(),
+      };
     }
-    if (!ReadOptionalUIntField(*json_data, "max_in_flight_jobs",
-          manifest.max_in_flight_jobs, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ReadOptionalUIntField(*json_data, "job_admission_capacity",
-          manifest.job_admission_capacity, error_stream)) {
-      return std::nullopt;
-    }
-    if (!ReadOptionalByteCountField(*json_data, "max_source_bytes",
-          manifest.max_source_bytes, error_stream)) {
-      return std::nullopt;
-    }
-    if (json_data->contains("concurrency")) {
-      if (!(*json_data).at("concurrency").is_object()) {
-        error_stream << "ERROR: concurrency must be an object\n";
-        return std::nullopt;
-      }
-      ImportConcurrency concurrency {};
-      if (!ApplyConcurrencyOverrides(
-            (*json_data).at("concurrency"), concurrency, error_stream)) {
-        return std::nullopt;
-      }
+    if (document.contains("concurrency")) {
+      auto concurrency = ImportConcurrency {};
+      ApplyConcurrencyOverrides(document.at("concurrency"), concurrency);
       manifest.concurrency = concurrency;
-    }
-
-    if (manifest.version != 1U) {
-      error_stream << "ERROR: unsupported manifest version: "
-                   << manifest.version << "\n";
-      return std::nullopt;
     }
 
     const auto manifest_dir = std::filesystem::absolute(manifest_directory);
@@ -1573,10 +1412,9 @@ namespace {
       manifest.mounts
         = std::make_shared<const MountTable>(*options.mount_table);
     } else {
-      const auto project_root
-        = json_data->value("project_root", std::string {});
+      const auto project_root = document.value("project_root", std::string {});
       auto declarations
-        = ReadMountDeclarations(*json_data, declared_in, error_stream);
+        = ReadMountDeclarations(document, declared_in, findings);
       if (!declarations.has_value()) {
         return std::nullopt;
       }
@@ -1591,7 +1429,9 @@ namespace {
           .mounts_option = options.mounts_file,
           .owner = options.owner,
         }));
-      internal::WriteDiagnostics(manifest.mounts->diagnostics, error_stream);
+      findings.diagnostics->insert(findings.diagnostics->end(),
+        manifest.mounts->diagnostics.begin(),
+        manifest.mounts->diagnostics.end());
       if (!manifest.mounts->IsValid()) {
         return std::nullopt;
       }
@@ -1599,588 +1439,222 @@ namespace {
     manifest.project_root = manifest.mounts->project_root;
 
     auto manifest_output_root = std::string {};
-    if (!ReadStringField(
-          *json_data, "output", manifest_output_root, error_stream)) {
+    ReadValue(document, "output", manifest_output_root);
+    if (!manifest_output_root.empty()) {
+      ApplyManifestOutput(manifest_output_root, manifest.defaults);
+    }
+
+    if (document.contains("defaults")
+      && !ReadDefaults(document.at("defaults"), manifest.defaults, findings)) {
       return std::nullopt;
     }
-    if (!manifest_output_root.empty()) {
-      manifest.defaults.texture.cooked_root = manifest_output_root;
-      manifest.defaults.fbx.cooked_root = manifest_output_root;
-      manifest.defaults.gltf.cooked_root = manifest_output_root;
-      manifest.defaults.script.cooked_root = manifest_output_root;
-      manifest.defaults.scripting_sidecar.cooked_root = manifest_output_root;
-      manifest.defaults.physics_sidecar.cooked_root = manifest_output_root;
-      manifest.defaults.input.cooked_root = manifest_output_root;
-      manifest.defaults.buffer_container.cooked_root = manifest_output_root;
-      manifest.defaults.material_descriptor.cooked_root = manifest_output_root;
-      manifest.defaults.physics_material_descriptor.cooked_root
-        = manifest_output_root;
-      manifest.defaults.collision_shape_descriptor.cooked_root
-        = manifest_output_root;
-      manifest.defaults.geometry_descriptor.cooked_root = manifest_output_root;
-      manifest.defaults.scene_descriptor.cooked_root = manifest_output_root;
-    }
-
-    if (json_data->contains("defaults")) {
-      const auto& defaults = (*json_data).at("defaults");
-      if (!ReadSourceKey(
-            defaults, manifest.defaults.source_key, error_stream)) {
-        return std::nullopt;
-      }
-      if (!defaults.is_object()) {
-        error_stream << "ERROR: defaults must be an object\n";
-        return std::nullopt;
-      }
-
-      if (defaults.contains("texture")) {
-        const auto& texture_defaults = defaults.at("texture");
-        if (!texture_defaults.is_object()) {
-          error_stream << "ERROR: defaults.texture must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonOverrides(
-              texture_defaults, manifest.defaults.texture, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyTextureOverrides(
-              texture_defaults, manifest.defaults.texture, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("scene")) {
-        const auto& scene_defaults = defaults.at("scene");
-        if (!scene_defaults.is_object()) {
-          error_stream << "ERROR: defaults.scene must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonSceneOverrides(
-              scene_defaults, manifest.defaults.fbx, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyCommonSceneOverrides(
-              scene_defaults, manifest.defaults.gltf, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplySceneOverrides(
-              scene_defaults, manifest.defaults.fbx, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplySceneOverrides(
-              scene_defaults, manifest.defaults.gltf, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("script")) {
-        const auto& script_defaults = defaults.at("script");
-        if (!script_defaults.is_object()) {
-          error_stream << "ERROR: defaults.script must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonScriptOverrides(
-              script_defaults, manifest.defaults.script, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyScriptAssetOverrides(
-              script_defaults, manifest.defaults.script, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("scripting_sidecar")) {
-        const auto& sidecar_defaults = defaults.at("scripting_sidecar");
-        if (!sidecar_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.scripting_sidecar must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonScriptOverrides(sidecar_defaults,
-              manifest.defaults.scripting_sidecar, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyScriptingSidecarOverrides(sidecar_defaults,
-              manifest.defaults.scripting_sidecar, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("physics_sidecar")) {
-        const auto& sidecar_defaults = defaults.at("physics_sidecar");
-        if (!sidecar_defaults.is_object()) {
-          error_stream << "ERROR: defaults.physics_sidecar must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonScriptOverrides(sidecar_defaults,
-              manifest.defaults.physics_sidecar, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyPhysicsSidecarOverrides(sidecar_defaults,
-              manifest.defaults.physics_sidecar, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("input")) {
-        const auto& input_defaults = defaults.at("input");
-        if (!input_defaults.is_object()) {
-          error_stream << "ERROR: defaults.input must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonInputOverrides(
-              input_defaults, manifest.defaults.input, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("material_descriptor")) {
-        const auto& material_defaults = defaults.at("material_descriptor");
-        if (!material_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.material_descriptor must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonMaterialDescriptorOverrides(material_defaults,
-              manifest.defaults.material_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyMaterialDescriptorOverrides(material_defaults,
-              manifest.defaults.material_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("physics_material_descriptor")) {
-        const auto& material_defaults
-          = defaults.at("physics_material_descriptor");
-        if (!material_defaults.is_object()) {
-          error_stream << "ERROR: defaults.physics_material_descriptor must be "
-                          "an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonPhysicsMaterialDescriptorOverrides(material_defaults,
-              manifest.defaults.physics_material_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("collision_shape_descriptor")) {
-        const auto& shape_defaults = defaults.at("collision_shape_descriptor");
-        if (!shape_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.collision_shape_descriptor must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonCollisionShapeDescriptorOverrides(shape_defaults,
-              manifest.defaults.collision_shape_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("geometry_descriptor")) {
-        const auto& geometry_defaults = defaults.at("geometry_descriptor");
-        if (!geometry_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.geometry_descriptor must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonGeometryDescriptorOverrides(geometry_defaults,
-              manifest.defaults.geometry_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplyGeometryDescriptorOverrides(geometry_defaults,
-              manifest.defaults.geometry_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("scene_descriptor")) {
-        const auto& scene_descriptor_defaults = defaults.at("scene_descriptor");
-        if (!scene_descriptor_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.scene_descriptor must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonSceneDescriptorOverrides(scene_descriptor_defaults,
-              manifest.defaults.scene_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-        if (!ApplySceneDescriptorOverrides(scene_descriptor_defaults,
-              manifest.defaults.scene_descriptor, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (defaults.contains("buffer_container")) {
-        const auto& buffer_container_defaults = defaults.at("buffer_container");
-        if (!buffer_container_defaults.is_object()) {
-          error_stream
-            << "ERROR: defaults.buffer_container must be an object\n";
-          return std::nullopt;
-        }
-        if (!ApplyCommonBufferContainerOverrides(buffer_container_defaults,
-              manifest.defaults.buffer_container, error_stream)) {
-          return std::nullopt;
-        }
-      }
-    }
-
     ResolveCookedRootsRelativeToManifest(manifest_dir, manifest.defaults);
 
-    if (!json_data->contains("jobs") || !(*json_data).at("jobs").is_array()) {
-      error_stream << "ERROR: manifest.jobs must be an array\n";
+    const auto& entries = document.at("jobs");
+    manifest.jobs.reserve(entries.size());
+    for (std::size_t index = 0; index < entries.size(); ++index) {
+      auto job
+        = ReadJob(entries.at(index), index, manifest, manifest_dir, findings);
+      if (job.has_value()) {
+        manifest.jobs.push_back(std::move(*job));
+      }
+    }
+    if (manifest.jobs.size() != entries.size()
+      || HasErrorSince(*findings.diagnostics, first_finding)) {
       return std::nullopt;
     }
-
-    for (const auto& entry : (*json_data).at("jobs")) {
-      if (!entry.is_object()) {
-        error_stream << "ERROR: job entries must be objects\n";
-        return std::nullopt;
-      }
-      auto model_record = std::shared_ptr<const ModelImportRecordContent> {};
-      auto model_job = json {};
-      if (entry.value("type", std::string {}) == "model") {
-        model_record = ReadModelRecord(entry, *manifest.mounts, error_stream);
-        if (!model_record) {
-          return std::nullopt;
-        }
-        model_job = MakeModelJob(entry, *model_record);
-      }
-      const auto& job = model_record ? model_job : entry;
-      const auto job_field = fmt::format("/jobs/{}", manifest.jobs.size());
-
-      ImportManifestJob manifest_job {};
-      manifest_job.source_key = manifest.defaults.source_key;
-      if (!ReadSourceKey(job, manifest_job.source_key, error_stream)) {
-        return std::nullopt;
-      }
-      manifest_job.mounts = manifest.mounts;
-      manifest_job.texture = manifest.defaults.texture;
-      manifest_job.fbx = manifest.defaults.fbx;
-      manifest_job.gltf = manifest.defaults.gltf;
-      manifest_job.script = manifest.defaults.script;
-      manifest_job.scripting_sidecar = manifest.defaults.scripting_sidecar;
-      manifest_job.physics_sidecar = manifest.defaults.physics_sidecar;
-      manifest_job.input = manifest.defaults.input;
-      manifest_job.buffer_container = manifest.defaults.buffer_container;
-      manifest_job.material_descriptor = manifest.defaults.material_descriptor;
-      manifest_job.physics_material_descriptor
-        = manifest.defaults.physics_material_descriptor;
-      manifest_job.collision_shape_descriptor
-        = manifest.defaults.collision_shape_descriptor;
-      manifest_job.geometry_descriptor = manifest.defaults.geometry_descriptor;
-      manifest_job.scene_descriptor = manifest.defaults.scene_descriptor;
-      manifest_job.fbx.texture_defaults = manifest.defaults.texture;
-      manifest_job.gltf.texture_defaults = manifest.defaults.texture;
-
-      if (!job.contains("type") || !job.at("type").is_string()) {
-        error_stream << "ERROR: job.type is required and must be a string\n";
-        return std::nullopt;
-      }
-      manifest_job.job_type = job.at("type").get<std::string>();
-      if (manifest_job.job_type.empty()) {
-        error_stream << "ERROR: job.type must not be empty\n";
-        return std::nullopt;
-      }
-
-      if (manifest_job.job_type != "input") {
-        if (!CollectJobDependencies(job, manifest_job.job_type, false,
-              manifest_job.id, manifest_job.depends_on, error_stream)) {
-          return std::nullopt;
-        }
-      }
-
-      if (manifest_job.job_type == "input") {
-        for (auto it = job.begin(); it != job.end(); ++it) {
-          if (!IsAllowedInputJobKey(it.key())) {
-            error_stream
-              << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
-              << "' is not allowed for input jobs; allowed keys are "
-                 "'id', 'type', 'source', 'virtual_path', 'depends_on', "
-                 "'output', 'cooked_context_roots', 'source_key'\n";
-            return std::nullopt;
-          }
-        }
-        if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
-          return std::nullopt;
-        }
-
-        if (!job.contains("source") || !job.at("source").is_string()) {
-          error_stream << "ERROR: input job.source is required and must be a "
-                          "string\n";
-          return std::nullopt;
-        }
-        if (!job.contains("id") || !job.at("id").is_string()) {
-          error_stream << "ERROR [input.manifest.job_id_missing]: input job.id "
-                          "is required and must be a string\n";
-          return std::nullopt;
-        }
-
-        const auto located
-          = LocateJobSource(*manifest.mounts, job, job_field, error_stream);
-        if (!located.has_value()) {
-          return std::nullopt;
-        }
-        manifest_job.source_mount_path = located->mount_path;
-        manifest_job.input.source_path = located->file.string();
-        if (!ApplyCommonInputOverrides(job, manifest_job.input, error_stream)) {
-          return std::nullopt;
-        }
-        if (!CollectJobDependencies(job, "input", true, manifest_job.id,
-              manifest_job.depends_on, error_stream)) {
-          return std::nullopt;
-        }
-
-        ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
-
-        manifest.jobs.push_back(std::move(manifest_job));
-        continue;
-      }
-
-      if (manifest_job.job_type == "physics-sidecar") {
-        for (auto it = job.begin(); it != job.end(); ++it) {
-          if (!IsAllowedPhysicsSidecarJobKey(it.key())) {
-            error_stream << "ERROR [physics.manifest.key_not_allowed]: key '"
-                         << it.key() << "' is not allowed for physics-sidecar "
-                         << "jobs\n";
-            return std::nullopt;
-          }
-        }
-      }
-
-      const auto has_source = job.contains("source");
-      const auto has_bindings = job.contains("bindings");
-      const auto is_script_sidecar_job
-        = manifest_job.job_type == "script-sidecar";
-      const auto is_physics_sidecar_job
-        = manifest_job.job_type == "physics-sidecar";
-      const auto is_sidecar_job
-        = is_script_sidecar_job || is_physics_sidecar_job;
-
-      if (has_bindings && !is_sidecar_job) {
-        error_stream << "ERROR: job.bindings is only valid for type "
-                        "'script-sidecar' or 'physics-sidecar'\n";
-        return std::nullopt;
-      }
-
-      if (!has_source && !has_bindings) {
-        if (is_script_sidecar_job) {
-          error_stream << "ERROR: script-sidecar job requires 'source' or "
-                          "'bindings'\n";
-        } else if (is_physics_sidecar_job) {
-          error_stream << "ERROR: physics-sidecar job requires 'source' or "
-                          "'bindings'\n";
-        } else {
-          error_stream
-            << "ERROR: job.source is required and must be a string\n";
-        }
-        return std::nullopt;
-      }
-
-      if (has_source && !job.at("source").is_string()) {
-        error_stream << "ERROR: job.source must be a string\n";
-        return std::nullopt;
-      }
-
-      if (is_sidecar_job && (has_source == has_bindings)) {
-        error_stream << "ERROR: "
-                     << (is_script_sidecar_job ? "script-sidecar"
-                                               : "physics-sidecar")
-                     << " job requires exactly one of 'source' or 'bindings'\n";
-        return std::nullopt;
-      }
-
-      if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
-        return std::nullopt;
-      }
-
-      const auto has_instance_bindings = job.contains("instance_bindings");
-      if (has_instance_bindings
-        && (!is_script_sidecar_job || !has_bindings
-          || !job.at("instance_bindings").is_array())) {
-        error_stream
-          << "ERROR: job.instance_bindings is only valid as an array "
-             "of a 'script-sidecar' job with inline bindings\n";
-        return std::nullopt;
-      }
-
-      if (has_bindings) {
-        if (is_script_sidecar_job && !job.at("bindings").is_array()) {
-          error_stream
-            << "ERROR: script-sidecar job.bindings must be an array\n";
-          return std::nullopt;
-        }
-        if (is_physics_sidecar_job && !job.at("bindings").is_object()) {
-          error_stream
-            << "ERROR: physics-sidecar job.bindings must be an object\n";
-          return std::nullopt;
-        }
-      }
-
-      if (has_source) {
-        const auto located
-          = LocateJobSource(*manifest.mounts, job, job_field, error_stream);
-        if (!located.has_value()) {
-          return std::nullopt;
-        }
-        manifest_job.source_mount_path = located->mount_path;
-        manifest_job.texture.source_path = located->file.string();
-        manifest_job.fbx.source_path = manifest_job.texture.source_path;
-        manifest_job.gltf.source_path = manifest_job.texture.source_path;
-        manifest_job.script.source_path = manifest_job.texture.source_path;
-        manifest_job.scripting_sidecar.source_path
-          = manifest_job.texture.source_path;
-        manifest_job.physics_sidecar.source_path
-          = manifest_job.texture.source_path;
-        manifest_job.buffer_container.descriptor_path
-          = manifest_job.texture.source_path;
-        manifest_job.material_descriptor.descriptor_path
-          = manifest_job.texture.source_path;
-        manifest_job.physics_material_descriptor.descriptor_path
-          = manifest_job.texture.source_path;
-        manifest_job.collision_shape_descriptor.descriptor_path
-          = manifest_job.texture.source_path;
-        manifest_job.geometry_descriptor.descriptor_path
-          = manifest_job.texture.source_path;
-        manifest_job.scene_descriptor.descriptor_path
-          = manifest_job.texture.source_path;
-      } else {
-        manifest_job.texture.source_path.clear();
-        manifest_job.fbx.source_path.clear();
-        manifest_job.gltf.source_path.clear();
-        manifest_job.script.source_path.clear();
-        manifest_job.scripting_sidecar.source_path.clear();
-        manifest_job.physics_sidecar.source_path.clear();
-        manifest_job.buffer_container.descriptor_path.clear();
-        manifest_job.material_descriptor.descriptor_path.clear();
-        manifest_job.physics_material_descriptor.descriptor_path.clear();
-        manifest_job.collision_shape_descriptor.descriptor_path.clear();
-        manifest_job.geometry_descriptor.descriptor_path.clear();
-        manifest_job.scene_descriptor.descriptor_path.clear();
-      }
-
-      if (has_bindings && is_script_sidecar_job) {
-        auto sidecar_doc = json::object();
-        sidecar_doc.update({ { "bindings", job.at("bindings") } });
-        if (has_instance_bindings) {
-          sidecar_doc.update(
-            { { "instance_bindings", job.at("instance_bindings") } });
-        }
-        manifest_job.scripting_sidecar.inline_bindings_json
-          = sidecar_doc.dump();
-        manifest_job.physics_sidecar.inline_bindings_json.clear();
-      } else if (has_bindings && is_physics_sidecar_job) {
-        auto sidecar_doc = json::object();
-        sidecar_doc.update({ { "bindings", job.at("bindings") } });
-        manifest_job.physics_sidecar.inline_bindings_json = sidecar_doc.dump();
-        manifest_job.scripting_sidecar.inline_bindings_json.clear();
-      } else {
-        manifest_job.scripting_sidecar.inline_bindings_json.clear();
-        manifest_job.physics_sidecar.inline_bindings_json.clear();
-      }
-
-      if (!ApplyCommonOverrides(job, manifest_job.texture, error_stream)) {
-        return std::nullopt;
-      }
-
-      if (!ApplyCommonSceneOverrides(job, manifest_job.fbx, error_stream)) {
-        return std::nullopt;
-      }
-
-      if (!ApplyCommonSceneOverrides(job, manifest_job.gltf, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(job, manifest_job.script, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(
-            job, manifest_job.scripting_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonScriptOverrides(
-            job, manifest_job.physics_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonMaterialDescriptorOverrides(
-            job, manifest_job.material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonPhysicsMaterialDescriptorOverrides(
-            job, manifest_job.physics_material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonCollisionShapeDescriptorOverrides(
-            job, manifest_job.collision_shape_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonBufferContainerOverrides(
-            job, manifest_job.buffer_container, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonGeometryDescriptorOverrides(
-            job, manifest_job.geometry_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyCommonSceneDescriptorOverrides(
-            job, manifest_job.scene_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-
-      if (!ApplySceneOverrides(job, manifest_job.fbx, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneOverrides(job, manifest_job.gltf, error_stream)) {
-        return std::nullopt;
-      }
-      manifest_job.fbx.model_record = model_record;
-      manifest_job.gltf.model_record = model_record;
-      if (!ApplyMaterialDescriptorOverrides(
-            job, manifest_job.material_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyGeometryDescriptorOverrides(
-            job, manifest_job.geometry_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplySceneDescriptorOverrides(
-            job, manifest_job.scene_descriptor, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyTextureOverrides(job, manifest_job.texture, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyScriptAssetOverrides(job, manifest_job.script, error_stream)) {
-        return std::nullopt;
-      }
-      for (auto& mapping : manifest_job.texture.sources) {
-        const auto located = LocateSource(
-          *manifest.mounts, mapping.file, job_field + "/sources", error_stream);
-        if (!located.has_value()) {
-          return std::nullopt;
-        }
-        mapping.file = located->file.string();
-        if (manifest_job.source_mount_path.empty()) {
-          manifest_job.source_mount_path = located->mount_path;
-        }
-      }
-      if (!ApplyScriptingSidecarOverrides(
-            job, manifest_job.scripting_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-      if (!ApplyPhysicsSidecarOverrides(
-            job, manifest_job.physics_sidecar, error_stream)) {
-        return std::nullopt;
-      }
-
-      ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
-
-      manifest.jobs.push_back(std::move(manifest_job));
-    }
-
     return manifest;
   }
 
+  //! Reads the manifest file at `path` and parses it, without checking the job
+  //! graph.
+  auto LoadManifestFile(const std::filesystem::path& path,
+    const ImportManifestLoadOptions& options, const Findings& findings)
+    -> std::optional<ImportManifest>
+  {
+    const auto bytes = serio::ReadPublishedFile(path, kMaxImportMetadataBytes);
+    if (!bytes) {
+      findings.Error(manifest_codes::kReadFailed,
+        fmt::format("failed to read manifest '{}': {}", path.string(),
+          bytes.error().message()),
+        {});
+      return std::nullopt;
+    }
+    const auto content = bytes->Unsigned();
+    const auto text = std::string(content.begin(), content.end());
+    return ParseManifestDocument(
+      text, path.parent_path(), path.string(), options, findings);
+  }
+
 } // namespace
+
+auto ImportManifest::Load(const std::filesystem::path& manifest_path,
+  const ImportManifestLoadOptions& options,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportManifest>
+{
+  const auto first_finding = diagnostics.size();
+  const auto source_path = manifest_path.string();
+  auto manifest = LoadManifestFile(manifest_path, options,
+    Findings {
+      .diagnostics = make_observer(&diagnostics),
+      .source_path = source_path,
+    });
+  if (!manifest.has_value()) {
+    return std::nullopt;
+  }
+  CheckJobGraph(manifest->jobs, MakeOrigins(source_path, manifest->jobs.size()),
+    diagnostics);
+  if (HasErrorSince(diagnostics, first_finding)) {
+    return std::nullopt;
+  }
+  return manifest;
+}
+
+auto ImportManifest::Load(const std::filesystem::path& manifest_path,
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
+{
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto manifest = Load(manifest_path, options, diagnostics);
+  internal::WriteDiagnostics(diagnostics, error_stream);
+  return manifest;
+}
+
+auto ImportManifest::LoadBatch(
+  const std::span<const std::filesystem::path> manifest_paths,
+  const ImportManifestLoadOptions& options,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportManifest>
+{
+  const auto first_finding = diagnostics.size();
+  if (manifest_paths.empty()) {
+    const auto source_path = std::string {};
+    Findings {
+      .diagnostics = make_observer(&diagnostics),
+      .source_path = source_path,
+    }
+      .Error(
+        manifest_codes::kBatchEmpty, "a batch needs at least one manifest", {});
+    return std::nullopt;
+  }
+
+  auto manifests = std::vector<ImportManifest> {};
+  for (const auto& path : manifest_paths) {
+    const auto source_path = path.string();
+    auto manifest = LoadManifestFile(path, options,
+      Findings {
+        .diagnostics = make_observer(&diagnostics),
+        .source_path = source_path,
+      });
+    if (manifest.has_value()) {
+      manifests.push_back(std::move(*manifest));
+    }
+  }
+  if (manifests.size() != manifest_paths.size()) {
+    return std::nullopt;
+  }
+
+  auto tables = std::vector<MountTable> {};
+  tables.reserve(manifests.size());
+  for (const auto& manifest : manifests) {
+    tables.push_back(*manifest.mounts);
+  }
+  const auto conflicts = CheckMountNameConflicts(tables);
+  diagnostics.insert(diagnostics.end(), conflicts.begin(), conflicts.end());
+  if (!conflicts.empty()) {
+    return std::nullopt;
+  }
+
+  auto batch = std::move(manifests.front());
+  auto origins
+    = MakeOrigins(manifest_paths.front().string(), batch.jobs.size());
+  const auto same_job
+    = [](const ImportManifestJob& a, const ImportManifestJob& b) -> bool {
+    return a.job_type == b.job_type && !a.source_mount_path.empty()
+      && content::FoldCase(a.source_mount_path)
+      == content::FoldCase(b.source_mount_path)
+      && a.virtual_path == b.virtual_path;
+  };
+  for (std::size_t position = 1; position < manifests.size(); ++position) {
+    auto& manifest = manifests[position];
+    const auto source_path = manifest_paths[position].string();
+    auto aliases = std::unordered_map<std::string, std::string> {};
+    auto added = std::vector<std::size_t> {};
+    for (std::size_t index = 0; index < manifest.jobs.size(); ++index) {
+      const auto& job = manifest.jobs[index];
+      const auto kept = std::ranges::find_if(batch.jobs,
+        [&](const ImportManifestJob& other) { return same_job(other, job); });
+      if (kept != batch.jobs.end()) {
+        aliases.emplace(job.id, kept->id);
+        continue;
+      }
+      added.push_back(index);
+    }
+    for (const auto index : added) {
+      auto& job = manifest.jobs[index];
+      for (auto& dependency : job.depends_on) {
+        if (const auto alias = aliases.find(dependency);
+          alias != aliases.end()) {
+          dependency = alias->second;
+        }
+      }
+      batch.jobs.push_back(std::move(job));
+      origins.push_back(
+        JobOrigin { .source_path = source_path, .index = index });
+    }
+  }
+
+  CheckJobGraph(batch.jobs, origins, diagnostics);
+  if (HasErrorSince(diagnostics, first_finding)) {
+    return std::nullopt;
+  }
+  return batch;
+}
+
+auto ImportManifest::LoadBatch(
+  const std::span<const std::filesystem::path> manifest_paths,
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
+{
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto batch = LoadBatch(manifest_paths, options, diagnostics);
+  internal::WriteDiagnostics(diagnostics, error_stream);
+  return batch;
+}
+
+auto ImportManifest::Parse(const std::string_view text,
+  const std::filesystem::path& manifest_directory,
+  const ImportManifestLoadOptions& options,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportManifest>
+{
+  const auto first_finding = diagnostics.size();
+  const auto source_path = std::string {};
+  auto manifest = ParseManifestDocument(text, manifest_directory,
+    manifest_directory.string(), options,
+    Findings {
+      .diagnostics = make_observer(&diagnostics),
+      .source_path = source_path,
+    });
+  if (!manifest.has_value()) {
+    return std::nullopt;
+  }
+  CheckJobGraph(manifest->jobs, MakeOrigins(source_path, manifest->jobs.size()),
+    diagnostics);
+  if (HasErrorSince(diagnostics, first_finding)) {
+    return std::nullopt;
+  }
+  return manifest;
+}
+
+auto ImportManifest::Parse(const std::string_view text,
+  const std::filesystem::path& manifest_directory,
+  const ImportManifestLoadOptions& options, std::ostream& error_stream)
+  -> std::optional<ImportManifest>
+{
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto manifest = Parse(text, manifest_directory, options, diagnostics);
+  internal::WriteDiagnostics(diagnostics, error_stream);
+  return manifest;
+}
 
 auto ImportManifestJob::SetCookedRoot(const std::string& cooked_root) -> void
 {

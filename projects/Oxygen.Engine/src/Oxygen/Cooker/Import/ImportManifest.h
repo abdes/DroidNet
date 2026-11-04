@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
@@ -37,6 +38,67 @@
 namespace oxygen::content::import {
 
 struct ImportSourceAnalysis;
+
+//! The diagnostic codes of loading a manifest.
+/*!
+ Each diagnostic's `source_path` is the manifest file (empty for text without
+ one) and its `json_pointer` locates the value in that file.
+*/
+namespace manifest_codes {
+  //! The manifest file cannot be read.
+  inline constexpr std::string_view kReadFailed = "manifest.read_failed";
+  //! The manifest text is not JSON.
+  inline constexpr std::string_view kInvalidJson = "manifest.invalid_json";
+  //! One issue the manifest schema finds, at the pointer of the offending
+  //! value; an object that holds a key its job type does not take is the
+  //! offending value, not the key.
+  inline constexpr std::string_view kSchemaValidationFailed
+    = "manifest.schema_validation_failed";
+  //! The schema validator itself fails.
+  inline constexpr std::string_view kSchemaValidatorFailure
+    = "manifest.schema_validator_failure";
+  //! A batch has no manifest.
+  inline constexpr std::string_view kBatchEmpty = "manifest.batch_empty";
+  //! Two jobs of a manifest or of a batch share an id.
+  inline constexpr std::string_view kJobIdDuplicate
+    = "manifest.job_id_duplicate";
+  //! A `depends_on` entry names no job.
+  inline constexpr std::string_view kDependencyMissing
+    = "manifest.dependency_missing";
+  //! A job depends on itself.
+  inline constexpr std::string_view kDependencySelf
+    = "manifest.dependency_self";
+  //! Jobs depend on each other in a cycle; reported once per cycle.
+  inline constexpr std::string_view kDependencyCycle
+    = "manifest.dependency_cycle";
+  //! A `depends_on` entry is only whitespace.
+  inline constexpr std::string_view kDependencyEmpty
+    = "manifest.dependency_empty";
+  //! A `source_key` is not a canonical UUIDv7.
+  inline constexpr std::string_view kSourceKeyInvalid
+    = "manifest.source_key_invalid";
+  //! A geometry default's LOD policy breaks a rule the schema cannot state.
+  inline constexpr std::string_view kLodPolicyInvalid
+    = "manifest.lod_policy_invalid";
+  //! A geometry default's surface id is the nil id.
+  inline constexpr std::string_view kSurfaceIdInvalid
+    = "manifest.surface_id_invalid";
+  //! A job type that has no sidecar takes `bindings`.
+  inline constexpr std::string_view kBindingsNotAllowed
+    = "manifest.bindings_not_allowed";
+  //! `instance_bindings` without a script sidecar's inline bindings.
+  inline constexpr std::string_view kInstanceBindingsNotAllowed
+    = "manifest.instance_bindings_not_allowed";
+  //! A job that cooks one asset names no `virtual_path`.
+  inline constexpr std::string_view kVirtualPathMissing
+    = "import.manifest.virtual_path_missing";
+  //! A job that cooks several assets names a `virtual_path`.
+  inline constexpr std::string_view kVirtualPathNotAllowed
+    = "import.manifest.virtual_path_not_allowed";
+  //! An input job's `id` is only whitespace.
+  inline constexpr std::string_view kInputJobIdMissing
+    = "input.manifest.job_id_missing";
+} // namespace manifest_codes
 
 struct ImportManifestJob {
   std::string job_type;
@@ -167,11 +229,23 @@ struct ImportManifest {
    `path.absolute_committed`, a source in no mount with
    `import.source_outside_mount`.
 
+   The jobs must have unique ids, name only jobs in `depends_on` and not
+   depend on each other in a cycle.
+
    @param manifest_path Path to the JSON manifest file.
    @param options What the command line gives: the root, the mounts file.
-   @param error_stream Stream for reporting parsing and validation errors.
-   @return A populated ImportManifest on success, or std::nullopt on failure.
+   @param diagnostics Receives every diagnostic, each located in the file by
+     `manifest_codes` and the codes of the mount contract.
+   @return A populated ImportManifest on success, or std::nullopt when any
+     diagnostic is an error.
   */
+  OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
+    const ImportManifestLoadOptions& options,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<ImportManifest>;
+
+  //! Loads a manifest and writes its diagnostics to `error_stream`, one line
+  //! each.
   OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
     const ImportManifestLoadOptions& options = {},
     std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
@@ -183,16 +257,35 @@ struct ImportManifest {
    (`mount.name_conflict`, before any job runs). The jobs are merged in order;
    a job that cooks the same source to the same identity with the same type as
    an earlier one is cooked once, and the dependencies on it follow the kept
-   job. Two different jobs with one id fail (`batch.job_id_duplicate`).
+   job. Two different jobs with one id fail (`manifest.job_id_duplicate`). The
+   job graph is checked once the jobs are merged; a diagnostic about a job
+   names the manifest that declared it and the job's index in it.
 
    The first manifest gives the batch's scheduling settings.
   */
+  OXGN_COOK_NDAPI static auto LoadBatch(
+    std::span<const std::filesystem::path> manifest_paths,
+    const ImportManifestLoadOptions& options,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<ImportManifest>;
+
+  //! Loads a batch and writes its diagnostics to `error_stream`.
   OXGN_COOK_NDAPI static auto LoadBatch(
     std::span<const std::filesystem::path> manifest_paths,
     const ImportManifestLoadOptions& options = {},
     std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
 
   //! Parses the same native manifest schema with an explicit path base.
+  /*!
+   The diagnostics have no `source_path`: the text has no file.
+  */
+  OXGN_COOK_NDAPI static auto Parse(std::string_view text,
+    const std::filesystem::path& manifest_directory,
+    const ImportManifestLoadOptions& options,
+    std::vector<ImportDiagnostic>& diagnostics)
+    -> std::optional<ImportManifest>;
+
+  //! Parses the text and writes its diagnostics to `error_stream`.
   OXGN_COOK_NDAPI static auto Parse(std::string_view text,
     const std::filesystem::path& manifest_directory,
     const ImportManifestLoadOptions& options, std::ostream& error_stream)

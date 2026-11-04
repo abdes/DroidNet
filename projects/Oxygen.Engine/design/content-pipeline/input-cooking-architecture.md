@@ -376,7 +376,7 @@ Validation invariants:
    `report`.
 5. allowed `input` job keys are exactly: `id`, `type`, `source`, `virtual_path`,
    `depends_on`, `output`, `layout`, `source_key`. Any other key is rejected
-   with diagnostic `input.manifest.key_not_allowed`.
+   with diagnostic `manifest.schema_validation_failed`.
 6. `id` must be unique across all jobs in the manifest.
 7. every `depends_on` id must exist in the same manifest.
 8. no dependency cycles are allowed.
@@ -406,10 +406,10 @@ Batch execution is dependency-aware:
 1. ImportTool builds a DAG from `id` + `depends_on`.
 2. Validation checks before dispatch:
    - unique `id` values across all jobs (diagnostic:
-     `input.manifest.job_id_duplicate`).
+     `manifest.job_id_duplicate`).
    - every `depends_on` target exists in the manifest (diagnostic:
-     `input.manifest.dep_missing_target`).
-   - no cycles in the dependency graph (diagnostic: `input.manifest.dep_cycle`).
+     `manifest.dependency_missing`).
+   - no cycles in the dependency graph (diagnostic: `manifest.dependency_cycle`).
 3. Jobs are dispatched only when all predecessors have succeeded.
 4. If a predecessor job fails, all transitive dependents are skipped with
    deterministic diagnostics (failure propagation). Skipped jobs report
@@ -1093,12 +1093,12 @@ Required diagnostics:
 11. `input.import.index_registration_failed`
 12. `input.import.skipped_predecessor_failed`
 13. `input.manifest.job_id_missing`
-14. `input.manifest.job_id_duplicate`
-15. `input.manifest.dep_missing_target`
-16. `input.manifest.dep_cycle`
+14. `manifest.job_id_duplicate`
+15. `manifest.dependency_missing`
+16. `manifest.dependency_cycle`
 17. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code
     stability)
-18. `input.manifest.key_not_allowed`
+18. `manifest.schema_validation_failed`
 
 ## 12. Current-format contract
 

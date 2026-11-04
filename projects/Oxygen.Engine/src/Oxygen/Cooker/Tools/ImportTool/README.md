@@ -651,7 +651,7 @@ Required:
 Several manifests run as one batch with one mount table: `mount.name_conflict`
 is reported before any job runs, a job cooking the same source to the same
 identity is cooked once, and a repeated job id fails with
-`batch.job_id_duplicate`.
+`manifest.job_id_duplicate`.
 
 Optional:
 

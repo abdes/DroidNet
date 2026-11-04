@@ -162,7 +162,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
@@ -251,7 +251,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsLayoutField)
     // Assert
     EXPECT_FALSE(manifest.has_value()) << document.dump();
     EXPECT_THAT(
-      errors.str(), ::testing::HasSubstr("manifest schema validation failed"));
+      errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
     EXPECT_THAT(errors.str(), ::testing::HasSubstr("layout"));
   }
 }

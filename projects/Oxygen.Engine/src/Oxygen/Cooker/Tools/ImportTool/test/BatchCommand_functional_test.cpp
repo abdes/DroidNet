@@ -832,8 +832,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(
-    messages, ::testing::HasSubstr("physics.manifest.dependency_cycle"));
+  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -887,7 +886,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   const auto messages = Messages();
   EXPECT_THAT(messages,
-    ::testing::Not(::testing::HasSubstr("physics.manifest.dependency_cycle")));
+    ::testing::Not(::testing::HasSubstr("manifest.dependency_cycle")));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -929,7 +928,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_THAT(messages, ::testing::HasSubstr("top-level 'bindings'"));
 }
 
-NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)
 {
   const auto root = MakeScenarioDir("input_dep_cycle");
   const auto manifest_path = root / "import-manifest.json";
@@ -961,7 +960,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleStillUsesLegacyCode)
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("input.manifest.dep_cycle"));
+  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -996,11 +995,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("input.manifest.dep_cycle"));
+  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
 }
 
-NOLINT_TEST_F(BatchCommandPhysicsDagTest,
-  DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic)
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, MissingDependencyIsRefusedByTheManifest)
 {
   const auto root = MakeScenarioDir("physics_duplicate_missing_dep");
   const auto manifest_path = root / "import-manifest.json";
@@ -1030,13 +1029,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_EQ(
-    CountOccurrences(messages, "physics.manifest.dependency_missing_target"),
-    1U);
+  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_missing"));
 }
 
-NOLINT_TEST_F(BatchCommandPhysicsDagTest,
-  PhysicsDuplicateJobIdsUsePhysicsManifestDiagnosticNamespace)
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, DuplicateJobIdsAreRefusedByTheManifest)
 {
   const auto root = MakeScenarioDir("physics_duplicate_job_ids");
   const auto manifest_path = root / "import-manifest.json";
@@ -1075,10 +1072,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(
-    messages, ::testing::HasSubstr("physics.manifest.job_id_duplicate"));
-  EXPECT_THAT(messages,
-    ::testing::Not(::testing::HasSubstr("input.manifest.job_id_duplicate")));
+  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.job_id_duplicate"));
 }
 
 //! Several `--manifest` options are one batch: the jobs of every manifest run

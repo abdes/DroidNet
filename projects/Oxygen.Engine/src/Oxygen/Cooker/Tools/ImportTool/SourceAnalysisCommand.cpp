@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <exception>
 #include <expected>
 #include <filesystem>
@@ -16,6 +17,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -25,11 +27,14 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
+#include <Oxygen/Core/Version.h>
 
 namespace oxygen::content::import::tool {
 
@@ -98,11 +103,62 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
       global_options_->writer->Error(message);
     }
   };
-  auto manifest_errors = std::ostringstream {};
+  const auto destination = std::filesystem::path(report_path_);
+  const auto aliases = [&](const std::filesystem::path& source) -> bool {
+    if (source.empty()) {
+      return false;
+    }
+    return base::PathIdentityKey(std::filesystem::weakly_canonical(source))
+      == base::PathIdentityKey(std::filesystem::weakly_canonical(destination))
+      || (std::filesystem::exists(source)
+        && std::filesystem::exists(destination)
+        && std::filesystem::equivalent(source, destination));
+  };
+  if (aliases(manifest_path) || aliases(captured_inputs_path_)) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
+  // Writes the report, refusing one that would overwrite a file it read.
+  const auto write_report = [&](const ImportSourceAnalysis& report)
+    -> std::expected<void, std::error_code> {
+    for (const auto& job : report.jobs) {
+      if (aliases(job.source_path)
+        || std::ranges::any_of(job.accessed_paths, aliases)
+        || std::ranges::any_of(job.files,
+          [&](const auto& file) -> bool { return aliases(file.path); })) {
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
+    }
+    if (!destination.parent_path().empty()) {
+      std::filesystem::create_directories(destination.parent_path());
+    }
+    auto output
+      = std::ofstream(base::ToNativePath(destination), std::ios::binary);
+    output << report.ToJson() << '\n';
+    output.close();
+    if (!output) {
+      return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
+    return {};
+  };
+
+  auto manifest_diagnostics = std::vector<ImportDiagnostic> {};
   const auto manifest
-    = ImportManifest::Load(manifest_path, options, manifest_errors);
+    = ImportManifest::Load(manifest_path, options, manifest_diagnostics);
   if (!manifest.has_value()) {
-    report_error(manifest_errors.view());
+    // A refused manifest is reported too, with its errors and no jobs.
+    auto errors = std::ostringstream {};
+    internal::WriteDiagnostics(manifest_diagnostics, errors);
+    report_error(errors.view());
+    const auto written = write_report(ImportSourceAnalysis {
+      .producer_version = std::string { oxygen::version::Version() },
+      .jobs = {},
+      .diagnostics = std::move(manifest_diagnostics),
+      .complete = false,
+    });
+    if (!written.has_value()) {
+      return written;
+    }
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
@@ -122,21 +178,6 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
   }
-  const auto report = manifest->AnalyzeSources({}, captured_inputs);
-  const auto destination = std::filesystem::path(report_path_);
-  const auto aliases = [&](const std::filesystem::path& source) -> bool {
-    if (source.empty()) {
-      return false;
-    }
-    return base::PathIdentityKey(std::filesystem::weakly_canonical(source))
-      == base::PathIdentityKey(std::filesystem::weakly_canonical(destination))
-      || (std::filesystem::exists(source)
-        && std::filesystem::exists(destination)
-        && std::filesystem::equivalent(source, destination));
-  };
-  if (aliases(manifest_path) || aliases(captured_inputs_path_)) {
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-  }
   if (captured_inputs) {
     for (const auto& input : captured_inputs->Inputs()) {
       if (aliases(input.logical_path)
@@ -151,32 +192,10 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
   }
-  for (const auto& job : report.jobs) {
-    if (aliases(job.source_path)) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
-    for (const auto& path : job.accessed_paths) {
-      if (aliases(path)) {
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
-      }
-    }
-    for (const auto& file : job.files) {
-      if (aliases(file.path)) {
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
-      }
-    }
-  }
-  if (!destination.parent_path().empty()) {
-    std::filesystem::create_directories(destination.parent_path());
-  }
-  auto output
-    = std::ofstream(base::ToNativePath(destination), std::ios::binary);
-  output << report.ToJson() << '\n';
-  output.close();
-  if (!output) {
-    return std::unexpected(std::make_error_code(std::errc::io_error));
+  auto report = manifest->AnalyzeSources({}, captured_inputs);
+  report.diagnostics = std::move(manifest_diagnostics);
+  if (const auto written = write_report(report); !written.has_value()) {
+    return written;
   }
   if (!report.complete) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));

@@ -13,6 +13,7 @@
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
@@ -67,6 +68,50 @@ NOLINT_TEST(
   EXPECT_FALSE(request->physics->inline_bindings_json.empty());
 }
 
+//! The job chooses the backend it cooks for, and the defaults can too.
+NOLINT_TEST(ImportManifestPhysicsSidecarTest, ReadsThePhysicsBackend)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "physics_backend" / "import_manifest.json";
+
+  WriteText(manifest_path,
+    R"({
+      "version": 1,
+      "output": ".cooked",
+      "mounts": [{ "name": "Scenes", "path": "." }],
+      "defaults": { "physics_sidecar": { "physics_backend": "none" } },
+      "jobs": [
+        {
+          "type": "physics-sidecar",
+          "physics_backend": "physx",
+          "target_scene_virtual_path": "/Scenes/TestScene.oscene",
+          "bindings": {}
+        },
+        {
+          "type": "physics-sidecar",
+          "target_scene_virtual_path": "/Scenes/Other.oscene",
+          "bindings": {}
+        }
+      ]
+    })");
+
+  auto errors = std::ostringstream {};
+  const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_EQ(manifest->jobs.size(), 2U);
+
+  using oxygen::core::meta::physics::PhysicsBackend;
+  EXPECT_EQ(manifest->jobs.at(0).physics_sidecar.physics_backend,
+    PhysicsBackend::kPhysX);
+  EXPECT_EQ(manifest->jobs.at(1).physics_sidecar.physics_backend,
+    PhysicsBackend::kNone);
+  auto request_errors = std::ostringstream {};
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  EXPECT_EQ(request->options.physics.backend, PhysicsBackend::kPhysX);
+}
+
 NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   RejectsPhysicsSidecarJobWhenSourceAndBindingsBothSpecified)
 {
@@ -94,9 +139,8 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   auto errors = std::ostringstream {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("physics-sidecar job requires exactly one of "
-                         "'source' or 'bindings'"));
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(
@@ -124,7 +168,7 @@ NOLINT_TEST(
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
   EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("physics.manifest.key_not_allowed"));
+    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestPhysicsSidecarTest,
@@ -145,6 +189,12 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
           "type": "physics-sidecar",
           "source": "scene.physics-sidecar.json",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene"
+        },
+        {
+          "id": "scene.main",
+          "type": "scene-descriptor",
+          "source": "scene.oscene.json",
+          "virtual_path": "/Scenes/TestScene.oscene"
         }
       ]
     })");
@@ -152,7 +202,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   auto errors = std::ostringstream {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
-  ASSERT_EQ(manifest->jobs.size(), 1U);
+  ASSERT_EQ(manifest->jobs.size(), 2U);
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);

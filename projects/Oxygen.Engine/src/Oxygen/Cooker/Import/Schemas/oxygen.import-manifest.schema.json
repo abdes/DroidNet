@@ -15,17 +15,20 @@
     "thread_pool_size": {
       "description": "Worker threads of the import's CPU work pool. Default: the processor count.",
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "max_in_flight_jobs": {
       "description": "Jobs processed at once. Default: the processor count.",
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 4294967295
     },
     "job_admission_capacity": {
       "description": "Jobs admitted and not yet finished; further jobs are held back until one finishes.",
       "type": "integer",
       "minimum": 1,
+      "maximum": 4294967295,
       "default": 64
     },
     "max_source_bytes": {
@@ -195,12 +198,14 @@
         "workers": {
           "description": "Worker coroutines of the pipeline.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "queue_capacity": {
           "description": "Bounded capacity of the pipeline's work queues.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         }
       },
       "additionalProperties": false
@@ -517,6 +522,7 @@
                 "output",
                 "name",
                 "verbose",
+                "physics_backend",
                 "source_key"
               ]
             }
@@ -619,15 +625,18 @@
               },
               "layer": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               },
               "mip": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               },
               "slice": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               }
             },
             "required": ["file"],
@@ -681,16 +690,19 @@
         },
         "max_mips": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "max_size": {
           "description": "The largest width or height of the stored texture; a larger source drops its largest mips. Absent: the source size.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "cube_face_size": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "flip_y": {
           "type": "boolean"
@@ -869,10 +881,6 @@
         "verbose": {
           "type": "boolean"
         },
-        "physics_backend": {
-          "type": "string",
-          "enum": ["jolt", "physx", "none"]
-        },
         "target_scene_virtual_path": {
           "type": "string"
         },
@@ -885,6 +893,10 @@
     "physics_sidecar_settings": {
       "type": "object",
       "properties": {
+        "physics_backend": {
+          "type": "string",
+          "enum": ["jolt", "physx", "none"]
+        },
         "output": {
           "type": "string"
         },
@@ -985,6 +997,10 @@
     "job_settings": {
       "type": "object",
       "properties": {
+        "physics_backend": {
+          "type": "string",
+          "enum": ["jolt", "physx", "none"]
+        },
         "type": {
           "enum": [
             "texture",
@@ -1033,15 +1049,18 @@
               },
               "layer": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               },
               "mip": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               },
               "slice": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "maximum": 65535
               }
             },
             "required": ["file"],
@@ -1100,16 +1119,19 @@
         },
         "max_mips": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "max_size": {
           "description": "The largest width or height of the stored texture; a larger source drops its largest mips. Absent: the source size.",
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "cube_face_size": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 1,
+          "maximum": 4294967295
         },
         "flip_y": {
           "type": "boolean"

@@ -1179,6 +1179,22 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
 {
   using nlohmann::json;
   auto serialized_jobs = json::array();
+  const auto serialize_diagnostics
+    = [](const std::vector<ImportDiagnostic>& diagnostics) -> json {
+    auto array = json::array();
+    for (const auto& diagnostic : diagnostics) {
+      array.push_back({
+        { "severity", to_string(diagnostic.severity) },
+        { "code", diagnostic.code },
+        { "message", diagnostic.message },
+        { "source_path", diagnostic.source_path },
+        { "object_path", diagnostic.object_path },
+        { "json_pointer", diagnostic.json_pointer },
+        { "object_name", diagnostic.object_name },
+      });
+    }
+    return array;
+  };
   const auto logical
     = [](const std::vector<ImportLogicalDependency>& dependencies)
     -> nlohmann::json {
@@ -1241,18 +1257,6 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
         { "reads", std::move(reads) },
       });
     }
-    auto diagnostics = json::array();
-    for (const auto& diagnostic : job.diagnostics) {
-      diagnostics.push_back({
-        { "severity", to_string(diagnostic.severity) },
-        { "code", diagnostic.code },
-        { "message", diagnostic.message },
-        { "source_path", diagnostic.source_path },
-        { "object_path", diagnostic.object_path },
-        { "json_pointer", diagnostic.json_pointer },
-        { "object_name", diagnostic.object_name },
-      });
-    }
     auto serialized = json {
       { "id", job.id },
       { "job_type", job.job_type },
@@ -1263,7 +1267,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
       { "files", std::move(files) },
       { "observations", std::move(observations) },
       { "accessed_paths", std::move(accessed) },
-      { "diagnostics", std::move(diagnostics) },
+      { "diagnostics", serialize_diagnostics(job.diagnostics) },
     };
     if (const auto& model = job.model; model.has_value()) {
       serialized["model"] = ModelJson(*model);
@@ -1275,6 +1279,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
     { "producer_version", producer_version },
     { "complete", complete },
     { "jobs", std::move(serialized_jobs) },
+    { "diagnostics", serialize_diagnostics(diagnostics) },
   }
     .dump(2);
 }

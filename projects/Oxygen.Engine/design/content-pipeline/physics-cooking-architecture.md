@@ -666,7 +666,7 @@ Examples of required diagnostics:
 7. `physics.sidecar.node_ref_out_of_bounds`
 8. `physics.sidecar.shape_ref_not_collision_shape`
 9. `physics.sidecar.constraint_ref_unresolved`
-10. `physics.manifest.key_not_allowed`
+10. `manifest.schema_validation_failed`
 
 Diagnostics must remain concise and author-helpful (no ocean boiling).
 
@@ -791,8 +791,8 @@ Import-time diagnostics (examples):
 10. `physics.sidecar.shape_ref_not_collision_shape`
 11. `physics.sidecar.material_ref_not_physics_material`
 12. `physics.sidecar.constraint_ref_unresolved`
-13. `physics.manifest.key_not_allowed`
-14. `physics.manifest.dependency_cycle`
+13. `manifest.schema_validation_failed`
+14. `manifest.dependency_cycle`
 
 Runtime/load-time diagnostics parity (from `pak_physics` contract):
 

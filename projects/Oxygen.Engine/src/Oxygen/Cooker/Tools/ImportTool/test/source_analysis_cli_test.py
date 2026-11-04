@@ -86,6 +86,34 @@ class SourceAnalysisCliTests(unittest.TestCase):
         self.assertEqual(len(data["jobs"]), 2)
         self.assertFalse((self.root / ".cooked").exists())
 
+    def test_refused_manifest_is_reported_with_located_diagnostics(self):
+        manifest = self.manifest(
+            [
+                {
+                    "id": "second",
+                    "type": "script",
+                    "source": "a.luau",
+                    "virtual_path": "/Content/a.oscript",
+                    "depends_on": ["missing"],
+                },
+            ]
+        )
+        report = self.root / "report.json"
+
+        result = self.analyze(manifest, report)
+
+        self.assertNotEqual(result.returncode, 0)
+        analysis = json.loads(report.read_text(encoding="utf-8"))
+        self.assertFalse(analysis["complete"])
+        self.assertEqual(analysis["jobs"], [])
+        refusal = next(
+            diagnostic
+            for diagnostic in analysis["diagnostics"]
+            if diagnostic["code"] == "manifest.dependency_missing"
+        )
+        self.assertEqual(refusal["json_pointer"], "/jobs/0/depends_on/0")
+        self.assertEqual(Path(refusal["source_path"]), manifest)
+
     def test_refused_job_cannot_overwrite_its_primary_source(self):
         # A shape naming its own mount by an absolute path is refused.
         text = (

@@ -15,6 +15,9 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="Jobs">Source-attributed dependencies, observations and diagnostics.</param>
 public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<NativeSourceAnalysisJob> Jobs)
 {
+    /// <summary>Gets what the manifest itself reports, before any job; a refused manifest has no jobs and its errors here.</summary>
+    public ImmutableArray<DiagnosticRecord> Diagnostics { get; init; } = [];
+
     /// <summary>Validates and detaches native facts; the report's display version is not a cache identity.</summary>
     /// <param name="json">The native report bytes decoded as UTF-8.</param>
     /// <param name="operationId">The owning operation's diagnostic identity.</param>
@@ -38,7 +41,10 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
             throw new InvalidDataException("The native source-analysis completion state contradicts its job results.");
         }
 
-        return new(complete, jobs);
+        return new(complete, jobs)
+        {
+            Diagnostics = [.. root.GetProperty("diagnostics").EnumerateArray().Select(issue => ReadDiagnostic(issue, operationId))],
+        };
     }
 
     private static NativeSourceAnalysisJob ReadJob(JsonElement item, Guid operationId)
@@ -53,22 +59,7 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
                 ReadPath(file.GetProperty("path")),
                 file.GetProperty("required").GetBoolean()))],
             [.. item.GetProperty("observations").EnumerateArray().Select(ReadObservation)],
-            [.. item.GetProperty("diagnostics").EnumerateArray().Select(issue => new DiagnosticRecord
-            {
-                OperationId = operationId,
-                Domain = FailureDomain.AssetImport,
-                Severity = issue.GetProperty("severity").GetString() switch
-                {
-                    "Info" => DiagnosticSeverity.Info,
-                    "Warning" => DiagnosticSeverity.Warning,
-                    _ => DiagnosticSeverity.Error,
-                },
-                Code = issue.GetProperty("code").GetString()!,
-                Message = issue.GetProperty("message").GetString()!,
-                AffectedPath = issue.GetProperty("source_path").GetString(),
-                TechnicalMessage = Location(issue),
-                AffectedEntity = NativeSourceObject.Read(issue),
-            })])
+            [.. item.GetProperty("diagnostics").EnumerateArray().Select(issue => ReadDiagnostic(issue, operationId))])
         {
             Model = item.TryGetProperty("model", out var model) ? ModelSourceFacts.Read(model) : null,
         };
@@ -79,6 +70,24 @@ public sealed record NativeSourceAnalysisReport(bool Complete, ImmutableArray<Na
             item.GetProperty("kind").GetString()!,
             item.GetProperty("json_pointer").GetString()!,
             item.GetProperty("required").GetBoolean()))];
+
+    private static DiagnosticRecord ReadDiagnostic(JsonElement issue, Guid operationId)
+        => new()
+        {
+            OperationId = operationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = issue.GetProperty("severity").GetString() switch
+            {
+                "Info" => DiagnosticSeverity.Info,
+                "Warning" => DiagnosticSeverity.Warning,
+                _ => DiagnosticSeverity.Error,
+            },
+            Code = issue.GetProperty("code").GetString()!,
+            Message = issue.GetProperty("message").GetString()!,
+            AffectedPath = issue.GetProperty("source_path").GetString(),
+            TechnicalMessage = Location(issue),
+            AffectedEntity = NativeSourceObject.Read(issue),
+        };
 
     // Where a diagnostic points: its place in the JSON source, else the model object.
     private static string? Location(JsonElement issue)

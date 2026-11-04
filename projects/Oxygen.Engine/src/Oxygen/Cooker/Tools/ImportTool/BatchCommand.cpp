@@ -1110,21 +1110,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
   std::unordered_map<std::string, size_t> job_id_to_index {};
   job_id_to_index.reserve(jobs.size());
-  const auto has_physics_jobs
-    = std::ranges::any_of(jobs, [](const auto& job) -> auto {
-        return IsPhysicsDomainJobType(job.job_type);
-      });
+  // The manifest refused duplicate ids and missing dependencies.
   for (size_t index = 0; index < jobs.size(); ++index) {
-    const auto& job_id = jobs.at(index).job_id;
-    if (job_id.empty()) {
-      continue;
-    }
-    if (!job_id_to_index.emplace(job_id, index).second) {
-      writer->Error(fmt::format("ERROR [{}]: duplicate job id '{}'",
-        has_physics_jobs ? "physics.manifest.job_id_duplicate"
-                         : "input.manifest.job_id_duplicate",
-        job_id));
-      ++validation_failures;
+    if (const auto& job_id = jobs.at(index).job_id; !job_id.empty()) {
+      job_id_to_index.emplace(job_id, index);
     }
   }
 
@@ -1143,22 +1132,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   std::vector<size_t> dependency_remaining(jobs.size(), 0U);
   for (size_t index = 0; index < jobs.size(); ++index) {
     auto unique_producers = std::unordered_set<size_t> {};
-    auto missing_dep_ids = std::unordered_set<std::string> {};
     for (const auto& dep_id : jobs.at(index).depends_on) {
       const auto it = job_id_to_index.find(dep_id);
-      if (it == job_id_to_index.end()) {
-        if (!missing_dep_ids.insert(dep_id).second) {
-          continue;
-        }
-        writer->Error(
-          fmt::format("ERROR [{}]: job '{}' depends on missing id '{}'",
-            has_physics_jobs ? "physics.manifest.dependency_missing_target"
-                             : "input.manifest.dep_missing_target",
-            JobLabel(jobs.at(index), index), dep_id));
-        ++validation_failures;
-        continue;
-      }
-
+      CHECK_F(it != job_id_to_index.end(),
+        "The manifest refuses a dependency on a missing job: {}", dep_id);
       const auto producer_index = it->second;
       if (!unique_producers.insert(producer_index).second) {
         continue;
@@ -1199,10 +1176,11 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
       }
     }
     if (visited != jobs.size()) {
+      // The manifest refused cycles of its own edges; the edges the batch
+      // infers from references can still close one.
       writer->Error(
-        fmt::format("ERROR [{}]: dependency cycle detected in batch jobs",
-          has_physics_jobs ? "physics.manifest.dependency_cycle"
-                           : "input.manifest.dep_cycle"));
+        "ERROR [manifest.dependency_cycle]: the jobs' references form a "
+        "dependency cycle");
       ++validation_failures;
     }
   }
