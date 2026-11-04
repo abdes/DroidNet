@@ -661,17 +661,20 @@ reproducible, and every material property the engine renders is authorable.
 - `GeometryPipeline_tangents`: MikkTSpace tangents match the renderer's
   convention, including mirrored UVs and degenerate triangles.
 - `MeshBuildPipeline.cpp` (2 200 lines), `MeshOptimization`, `LodGeneration`:
-  vertex and index limits pick the right index width; LOD policies validate;
+  cooked indices are always 32-bit (`:1662`), though the format also has 16-bit
+  indices; vertex and index limits are checked; LOD policies validate;
   optimization is deterministic.
-- `BufferSource` JSON input: product names are relative; digests come from
+- `BufferSource` JSON input: a product's `virtual_path` resolves against the
+  identity of its container or geometry. `BufferPipeline`: digests come from
   the bytes stored.
-- `MaterialPipeline.h:60`: `header.streaming_priority` and
+- `MaterialPipeline.h:62`: `header.streaming_priority` and
   `header.variant_flags` are not wired from import settings. The V0.1 rule is
   that every engine capability is authorable, so these are gaps to close or
   record.
-- `MaterialPipeline.cpp:199` (single UV set) and `:281` (alpha cutoff not
-  clamped): confirm the behaviour on sources with several UV sets and with an
-  out-of-range cutoff.
+- `MaterialPipeline.cpp:195` (one UV transform per material) and `:270` (a
+  masked material's out-of-range alpha cutoff is clamped and warns; the TODO at
+  `:278` leaves a cutoff of zero or less alone): confirm the behaviour on sources
+  with several UV sets and with those cutoffs.
 
 ## R13. Scenes and physics
 
