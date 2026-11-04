@@ -267,6 +267,100 @@ public sealed class EditorSchemaOverlayTests
         }
     }
 
+    /// <summary>
+    /// Verifies an overlay cannot declare a property its engine schema refuses.
+    /// </summary>
+    [TestMethod]
+    public void OverlayOnlyPropertyIsFound()
+    {
+        var engine = JsonNode.Parse("""
+            {
+              "definitions": { "pair": { "properties": { "kept": { "type": "number" } } } },
+              "properties": {
+                "name": { "type": "string" },
+                "pair": { "$ref": "#/definitions/pair" },
+                "list": { "items": { "properties": { "value": {} } } }
+              },
+              "allOf": [{ "then": { "properties": { "branch": {} } } }]
+            }
+            """)!.AsObject();
+        var overlay = JsonNode.Parse("""
+            {
+              "properties": {
+                "name": { "x-editor-label": "Name" },
+                "branch": { "x-editor-label": "Branch" },
+                "pair": { "properties": { "kept": {}, "gone": {} } },
+                "list": { "items": { "properties": { "value": {}, "extra": {} } } },
+                "invented": { "x-editor-label": "Invented" }
+              },
+              "definitions": { "missing": {}, "editor_own": {} }
+            }
+            """)!.AsObject();
+
+        var found = EditorSchemaOverlay.FindOverlayOnlyPaths(engine, overlay);
+
+        _ = found.Should().BeEquivalentTo("/invented", "/list/*/extra", "/pair/gone", "#/definitions/missing");
+    }
+
+    /// <summary>
+    /// Verifies a reference to another schema file is taken as declaring what lies under it.
+    /// </summary>
+    [TestMethod]
+    public void WhatLiesUnderAnotherSchemaFileIsTakenAsDeclared()
+    {
+        var engine = JsonNode.Parse("""{ "properties": { "other": { "$ref": "other.schema.json" } } }""")!.AsObject();
+        var overlay = JsonNode.Parse("""{ "properties": { "other": { "properties": { "deep": {} } } } }""")!.AsObject();
+
+        _ = EditorSchemaOverlay.FindOverlayOnlyPaths(engine, overlay).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Verifies every installed overlay only annotates what its engine schema declares.
+    /// </summary>
+    [TestMethod]
+    public void AllEditorOverlaysOnlyNarrowTheirEngineSchemas()
+    {
+        var schemaRoot = FindSchemaRoot();
+        foreach (var overlayPath in Directory.GetFiles(schemaRoot, "*.editor.schema.json", SearchOption.TopDirectoryOnly))
+        {
+            var overlayFileName = Path.GetFileName(overlayPath);
+            var engineFileName = overlayFileName.Replace(".editor.schema.json", ".schema.json", StringComparison.OrdinalIgnoreCase);
+
+            var found = EditorSchemaOverlay.FindOverlayOnlyPaths(
+                LoadSchema(schemaRoot, engineFileName),
+                LoadSchema(schemaRoot, overlayFileName));
+
+            _ = found.Should().BeEmpty($"{overlayFileName} must annotate only what its engine schema declares");
+        }
+    }
+
+    /// <summary>
+    /// Verifies a document validates through an overlay exactly as through its engine schema.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    [TestMethod]
+    [DataRow("{}")]
+    [DataRow("[]")]
+    [DataRow("1")]
+    [DataRow("""{ "zz_unknown_key": 1 }""")]
+    [DataRow("""{ "local_position": [0, 0, 0] }""")]
+    [DataRow("""{ "local_position": "not a vector" }""")]
+    [DataRow("""{ "name": "Wood", "domain": "opaque" }""")]
+    [DataRow("""{ "name": 7 }""")]
+    [DataRow("""{ "version": 1, "name": "Empty", "nodes": [] }""")]
+    public void OverlayValidatesAsItsEngineSchema(string document)
+    {
+        var catalog = EditorSchemaCatalog.LoadFromDirectory(FindSchemaRoot());
+        var instance = JsonNode.Parse(document);
+        foreach (var overlayPath in Directory.GetFiles(FindSchemaRoot(), "*.editor.schema.json", SearchOption.TopDirectoryOnly))
+        {
+            var engineFileName = Path.GetFileName(overlayPath).Replace(".editor.schema.json", ".schema.json", StringComparison.OrdinalIgnoreCase);
+
+            _ = catalog.ValidateAgainstMerged(engineFileName, instance)
+                .Should().Be(catalog.ValidateAgainstEngine(engineFileName, instance), engineFileName);
+        }
+    }
+
     private static JsonObject LoadSchema(string schemaRoot, string fileName)
         => JsonNode.Parse(File.ReadAllText(Path.Combine(schemaRoot, fileName)))!.AsObject();
 

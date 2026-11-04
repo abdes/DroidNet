@@ -241,9 +241,12 @@ clear tooling feedback:
   location.
 - `script.asset.compile_failed`: the compiler failed without a diagnostic or
   produced no bytecode.
-- `script.sidecar.payload_invalid`: Emits detailed contextual keys dynamically
-  pointing directly mapping back sequentially like `bindings[0].node_index`
-  enabling exact issue correction directly mapped into UI elements.
+- `script.sidecar.schema_validation_failed`: a sidecar value the
+  `oxygen.scripting-sidecar.schema.json` schema refuses, located by its JSON
+  pointer such as `/bindings/0/node_index`; a bare array of rows is checked in
+  its object form, so its pointers start with `/bindings/<i>`.
+  `script.sidecar.schema_validator_failure` reports a failure of the validator
+  itself.
 - `script.sidecar.patch_map_invariant_failure`: Bounds verifications isolating
   global pointer alignment mismatches isolating race conflicts cleanly.
 - Pipeline gracefully catches `nlohmann::json` parsing failures via safe

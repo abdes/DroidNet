@@ -1,0 +1,320 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen Scripting Sidecar",
+  "description": "The script bindings of one scene. A bare array of rows is the same document as {\"bindings\": [...]}; the cooker reads it in the object form, so the pointers it reports are the object form's.",
+  "type": "object",
+  "required": ["bindings"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional self-reference to this schema file."
+    },
+    "bindings": {
+      "type": "array",
+      "description": "The scripts attached to the scene's own nodes.",
+      "items": {
+        "$ref": "#/definitions/binding"
+      }
+    },
+    "instance_bindings": {
+      "type": "array",
+      "description": "Changes to the slots of nodes that an instanced scene brings in.",
+      "items": {
+        "$ref": "#/definitions/instance_binding"
+      }
+    }
+  },
+  "definitions": {
+    "u32": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "i32": {
+      "type": "integer",
+      "minimum": -2147483648,
+      "maximum": 2147483647
+    },
+    "scene_node_index": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967294,
+      "description": "A scene node index; 4294967295 is the unset value of the cooked format."
+    },
+    "slot_id": {
+      "type": "string",
+      "description": "The UUID of the script slot. The cooker refuses a text that is not a UUID or is nil."
+    },
+    "number": {
+      "type": "number"
+    },
+    "binding": {
+      "type": "object",
+      "required": ["node_index", "slot_id", "script_virtual_path"],
+      "properties": {
+        "node_index": {
+          "$ref": "#/definitions/u32"
+        },
+        "slot_id": {
+          "$ref": "#/definitions/slot_id"
+        },
+        "script_virtual_path": {
+          "$ref": "oxygen.reference.schema.json#/definitions/reference"
+        },
+        "execution_order": {
+          "$ref": "#/definitions/i32"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/param"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "instance_binding": {
+      "type": "object",
+      "required": ["node_index", "node_path", "slot_id"],
+      "properties": {
+        "node_index": {
+          "$ref": "#/definitions/u32"
+        },
+        "node_path": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One node ID per nesting level below the instance root. The cooker refuses an item that is not a non-nil UUID.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "slot_id": {
+          "$ref": "#/definitions/slot_id"
+        },
+        "params": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/param"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "param": {
+      "type": "object",
+      "required": ["key", "type", "value"],
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[^\\x00]*$"
+        },
+        "type": {
+          "enum": [
+            "bool",
+            "int32",
+            "float",
+            "string",
+            "vec2",
+            "vec3",
+            "vec4",
+            "asset",
+            "node"
+          ]
+        },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "bool"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "int32"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "$ref": "#/definitions/i32"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "float"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "string"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "string",
+                "pattern": "^[^\\x00]*$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "vec2"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                  "$ref": "#/definitions/number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "vec3"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                  "$ref": "#/definitions/number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "vec4"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "array",
+                "minItems": 4,
+                "maxItems": 4,
+                "items": {
+                  "$ref": "#/definitions/number"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "asset"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "$ref": "oxygen.reference.schema.json#/definitions/reference"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": {
+              "type": {
+                "const": "node"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "$ref": "#/definitions/node_param"
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "node_param": {
+      "type": "object",
+      "required": ["node"],
+      "properties": {
+        "node": {
+          "$ref": "#/definitions/scene_node_index"
+        },
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "description": "One node ID per level, naming a node the instance rooted at 'node' brings in. The cooker refuses an item that is not a non-nil UUID.",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

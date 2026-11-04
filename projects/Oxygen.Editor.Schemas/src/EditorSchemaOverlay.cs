@@ -17,6 +17,10 @@ public static class EditorSchemaOverlay
     /// </summary>
     public const string AnnotationPrefix = "x-editor-";
 
+    private const string EditorDefinitionPrefix = "editor_";
+
+    private const string LocalDefinitionsPrefix = "#/definitions/";
+
     /// <summary>
     /// Standard JSON Schema composition keywords that the overlay is
     /// allowed to use for structure. Anything outside this set, that does
@@ -98,6 +102,129 @@ public static class EditorSchemaOverlay
         return [.. coveragePaths
             .Where(path => !hidden.Contains(path) && !HasCompleteAnnotation(annotations, path)).Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// Finds what an overlay annotates that its engine schema does not have, so that an overlay only narrows.
+    /// </summary>
+    /// <param name="engineSchema">The engine schema.</param>
+    /// <param name="overlay">The overlay schema.</param>
+    /// <returns>The overlay's property and definition pointers the engine schema does not declare.</returns>
+    /// <remarks>
+    /// The engine's local references and its <c>allOf</c>, <c>anyOf</c>, <c>oneOf</c>, <c>then</c> and <c>else</c>
+    /// branches are followed. A reference to another schema file cannot be read here, so what lies under one is
+    /// taken as declared. A definition named with <c>editor_</c> holds the editor's own metadata, which annotates no
+    /// engine field.
+    /// </remarks>
+    public static IReadOnlyList<string> FindOverlayOnlyPaths(JsonObject engineSchema, JsonObject overlay)
+    {
+        ArgumentNullException.ThrowIfNull(engineSchema);
+        ArgumentNullException.ThrowIfNull(overlay);
+
+        var result = new List<string>();
+        CheckOverlayNode(overlay, [engineSchema], engineSchema, string.Empty, result);
+        if (overlay["definitions"] is JsonObject definitions)
+        {
+            var engineDefinitions = engineSchema["definitions"] as JsonObject;
+            foreach (var (key, child) in definitions.Where(static entry => !entry.Key.StartsWith(EditorDefinitionPrefix, StringComparison.Ordinal)))
+            {
+                var pointer = $"#/definitions/{EncodePointerSegment(key)}";
+                if (engineDefinitions?[key] is not JsonObject declared)
+                {
+                    result.Add(pointer);
+                }
+                else if (child is JsonObject childObject)
+                {
+                    CheckOverlayNode(childObject, [declared], engineSchema, pointer, result);
+                }
+            }
+        }
+
+        return [.. result.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
+    private static void CheckOverlayNode(
+        JsonObject overlayNode,
+        List<JsonObject> engineNodes,
+        JsonObject engineSchema,
+        string pointer,
+        List<string> result)
+    {
+        var branches = new List<JsonObject>();
+        var open = false;
+        foreach (var node in engineNodes)
+        {
+            open |= CollectEngineBranches(node, engineSchema, branches, []);
+        }
+
+        if (overlayNode["properties"] is JsonObject properties)
+        {
+            foreach (var (key, child) in properties)
+            {
+                var childPointer = $"{pointer}/{EncodePointerSegment(key)}";
+                var declared = branches.Select(branch => (branch["properties"] as JsonObject)?[key]).OfType<JsonObject>().ToList();
+                if (declared.Count == 0 && !open)
+                {
+                    result.Add(childPointer);
+                }
+                else if (child is JsonObject childObject)
+                {
+                    CheckOverlayNode(childObject, declared, engineSchema, childPointer, result);
+                }
+            }
+        }
+
+        if (overlayNode["items"] is JsonObject items)
+        {
+            var declared = branches.Select(branch => branch["items"]).OfType<JsonObject>().ToList();
+            CheckOverlayNode(items, declared, engineSchema, $"{pointer}/*", result);
+        }
+
+        if (overlayNode["allOf"] is JsonArray allOf)
+        {
+            foreach (var entry in allOf.OfType<JsonObject>())
+            {
+                CheckOverlayNode(entry, engineNodes, engineSchema, pointer, result);
+            }
+        }
+    }
+
+    // Adds `node` and every branch it composes; true when one lies in another schema file.
+    private static bool CollectEngineBranches(JsonObject node, JsonObject engineSchema, List<JsonObject> branches, HashSet<string> visited)
+    {
+        var open = false;
+        branches.Add(node);
+        if (node["$ref"]?.GetValue<string>() is { } reference)
+        {
+            if (!reference.StartsWith(LocalDefinitionsPrefix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var name = reference[LocalDefinitionsPrefix.Length..];
+            if (visited.Add(name) && (engineSchema["definitions"] as JsonObject)?[name] is JsonObject definition)
+            {
+                open |= CollectEngineBranches(definition, engineSchema, branches, visited);
+            }
+        }
+
+        foreach (var keyword in new[] { "allOf", "anyOf", "oneOf" })
+        {
+            foreach (var entry in (node[keyword] as JsonArray)?.OfType<JsonObject>() ?? [])
+            {
+                open |= CollectEngineBranches(entry, engineSchema, branches, visited);
+            }
+        }
+
+        foreach (var keyword in new[] { "then", "else" })
+        {
+            if (node[keyword] is JsonObject entry)
+            {
+                open |= CollectEngineBranches(entry, engineSchema, branches, visited);
+            }
+        }
+
+        return open;
     }
 
     private static void Walk(JsonObject node, string pointer, Dictionary<string, EditorAnnotation> result)

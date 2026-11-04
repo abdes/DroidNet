@@ -413,6 +413,8 @@ Shipped JSON schemas:
 - source-of-truth: `src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json`
 - source-of-truth:
   `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.scripting-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.material-descriptor.schema.json`
@@ -420,6 +422,7 @@ Shipped JSON schemas:
 - installed for users as: `schemas/oxygen.scene-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.input.schema.json`
 - installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
+- installed for users as: `schemas/oxygen.scripting-sidecar.schema.json`
 
 Editor association examples (VSCode):
 
@@ -455,6 +458,10 @@ Repository checkout:
     {
       "fileMatch": ["*.physics-sidecar.json"],
       "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
+    },
+    {
+      "fileMatch": ["*.script-sidecar.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scripting-sidecar.schema.json"
     }
   ]
 }
@@ -492,6 +499,10 @@ Installed package layout:
     {
       "fileMatch": ["*.physics-sidecar.json"],
       "url": "./schemas/oxygen.physics-sidecar.schema.json"
+    },
+    {
+      "fileMatch": ["*.script-sidecar.json"],
+      "url": "./schemas/oxygen.scripting-sidecar.schema.json"
     }
   ]
 }

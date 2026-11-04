@@ -522,8 +522,8 @@ return Script
       .scene_virtual_path = scene_asset->virtual_path,
     }));
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "script.sidecar.param_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "script.sidecar.schema_validation_failed"));
   }
 
   INSTANTIATE_TEST_SUITE_P(InvalidParams, ScriptingSidecarRejectedParamTest,

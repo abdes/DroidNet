@@ -1,297 +1,264 @@
 {
-    "clangd.arguments": [
-        "--compile-commands-dir=${command:cmake.buildDirectory}/clangd/${command:cmake.buildType}"
-    ],
-    "cmake.postConfigureTask": "Oxygen: prepare clangd databases",
-    "C_Cpp.clang_format_style": "file",
-    "C_Cpp.codeAnalysis.clangTidy.args": [
-        "--config-file=${workspaceFolder}/.clang-tidy"
-    ],
-    "C_Cpp.codeAnalysis.clangTidy.enabled": false,
-    "C_Cpp.codeAnalysis.exclude": {
-        "**/*.h.in": true
-    },
-    "C_Cpp.default.compileCommands": "${command:cmake.buildDirectory}/compile_commands.json",
-    "C_Cpp.default.defines": [
-        "LOGURU_USE_FMTLIB=1"
-    ],
-    "C_Cpp.default.includePath": [
-        "${workspaceFolder}/src",
-        "~/.conan2/**"
-    ],
-    "C_Cpp.default.intelliSenseMode": "",
-    "C_Cpp.default.cppStandard": "c++23",
-    "C_Cpp.default.cStandard": "c17",
-    "C_Cpp.intelliSenseEngine": "disabled",
-    "C_Cpp.errorSquiggles": "disabled",
-    "[cmake]": {
-        "editor.formatOnSave": false,
-        "editor.formatOnType": false
-    },
-    "C_Cpp.default.browse.path": [
-        "${workspaceFolder}/src",
-        "~/.conan2/**"
-    ],
-    "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
-    "files.exclude": {
-        "**/out": false
-    },
-    "search.exclude": {
-        "**/out": true
-    },
-    "[cpp]": {
-        "editor.defaultFormatter": "xaver.clang-format",
-        "editor.formatOnSave": true
-    },
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter",
-        "editor.formatOnSave": true
-    },
-    "black-formatter.args": [
-        "--line-length",
-        "80"
-    ],
-    "github.copilot.chat.codesearch.enabled": true,
-    "github.copilot.chat.commitMessageGeneration.instructions": [
-        {
-            "text": "Use conventional commit message format. Write concise commit messages that describe the changes made rather than the implementation details."
-        }
-    ],
-    "powershell.codeFormatting.preset": "OTBS",
-    "terminal.integrated.defaultProfile.windows": "PowerShell",
-    "terminal.integrated.profiles.windows": {
-        "Command Prompt": {
-            "path": [
-                "${env:windir}\\Sysnative\\cmd.exe",
-                "${env:windir}\\System32\\cmd.exe"
-            ],
-            "args": [],
-            "icon": "terminal-cmd"
-        },
-        "Git Bash": {
-            "source": "Git Bash"
-        },
-        "PowerShell": {
-            "source": "PowerShell",
-            "icon": "terminal-powershell",
-            "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-            "args": [
-                "-NoExit",
-                "-File",
-                "${workspaceFolder}\\.vscode\\default-profile.ps1"
-            ]
-        }
-    },
-    "testMate.cpp.log.logpanel": true,
-    "testMate.cpp.test.executables": "out/build-ninja/bin/Debug/*.Tests.exe",
-    "testMate.cpp.test.stderrDecorator": false,
-    "yaml.schemas": {
-        "src/Oxygen/Core/Bindless/Spec.schema.json": [
-            "**/Spec.yaml"
-        ]
-    },
-    "json.schemas": [
-        {
-            "fileMatch": [
-                "import-manifest*.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.texture.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.material.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.input.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.input-action.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.physics-sidecar.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.geometry.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.scene.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.buffers.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.shape.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.physics-material.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
-        },
-        {
-            "fileMatch": [
-                "*.resource.json"
-            ],
-            "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
-        }
-    ],
-    "yaml.validate": true,
-    "cmake.useCMakePresets": "always",
-    "editor.rulers": [
-        80,
-        {
-            "column": 100,
-            "color": "#118baa"
-        },
-        {
-            "column": 120,
-            "color": "#ffcc00"
-        },
-        {
-            "column": 130,
-            "color": "#ff0000"
-        }
-    ],
-    "files.associations": {
-        "*.def": "cpp",
-        "*.impl": "cpp",
-        "*.ipp": "cpp",
-        "algorithm": "cpp",
-        "any": "cpp",
-        "array": "cpp",
-        "atomic": "cpp",
-        "bit": "cpp",
-        "bitset": "cpp",
-        "cctype": "cpp",
-        "cfenv": "cpp",
-        "charconv": "cpp",
-        "chrono": "cpp",
-        "cinttypes": "cpp",
-        "clocale": "cpp",
-        "cmath": "cpp",
-        "codecvt": "cpp",
-        "compare": "cpp",
-        "complex": "cpp",
-        "concepts": "cpp",
-        "condition_variable": "cpp",
-        "coroutine": "cpp",
-        "csignal": "cpp",
-        "cstdarg": "cpp",
-        "cstddef": "cpp",
-        "cstdint": "cpp",
-        "cstdio": "cpp",
-        "cstdlib": "cpp",
-        "cstring": "cpp",
-        "ctime": "cpp",
-        "cwchar": "cpp",
-        "deque": "cpp",
-        "exception": "cpp",
-        "expected": "cpp",
-        "fstream": "cpp",
-        "format": "cpp",
-        "forward_list": "cpp",
-        "functional": "cpp",
-        "future": "cpp",
-        "gsl_algorithm": "cpp",
-        "gsl_assert": "cpp",
-        "gsl_byte": "cpp",
-        "gsl_util": "cpp",
-        "initializer_list": "cpp",
-        "iomanip": "cpp",
-        "ios": "cpp",
-        "iosfwd": "cpp",
-        "iostream": "cpp",
-        "istream": "cpp",
-        "iterator": "cpp",
-        "limits": "cpp",
-        "list": "cpp",
-        "locale": "cpp",
-        "map": "cpp",
-        "memory": "cpp",
-        "multi_span": "cpp",
-        "mutex": "cpp",
-        "new": "cpp",
-        "numbers": "cpp",
-        "numeric": "cpp",
-        "optional": "cpp",
-        "ostream": "cpp",
-        "pointers": "cpp",
-        "print": "cpp",
-        "queue": "cpp",
-        "random": "cpp",
-        "ranges": "cpp",
-        "ratio": "cpp",
-        "regex": "cpp",
-        "resumable": "cpp",
-        "set": "cpp",
-        "shared_mutex": "cpp",
-        "source_location": "cpp",
-        "span": "cpp",
-        "sstream": "cpp",
-        "stack": "cpp",
-        "stdexcept": "cpp",
-        "stop_token": "cpp",
-        "streambuf": "cpp",
-        "string": "cpp",
-        "string_span": "cpp",
-        "string_view": "cpp",
-        "strstream": "cpp",
-        "system_error": "cpp",
-        "thread": "cpp",
-        "tuple": "cpp",
-        "type_traits": "cpp",
-        "typeindex": "cpp",
-        "typeinfo": "cpp",
-        "unordered_map": "cpp",
-        "unordered_set": "cpp",
-        "utility": "cpp",
-        "valarray": "cpp",
-        "variant": "cpp",
-        "vector": "cpp",
-        "xfacet": "cpp",
-        "xhash": "cpp",
-        "xiosbase": "cpp",
-        "xlocale": "cpp",
-        "xlocbuf": "cpp",
-        "xlocinfo": "cpp",
-        "xlocmes": "cpp",
-        "xlocmon": "cpp",
-        "xlocnum": "cpp",
-        "xloctime": "cpp",
-        "xmemory": "cpp",
-        "xtr1common": "cpp",
-        "xtree": "cpp",
-        "xstring": "cpp",
-        "xutility": "cpp",
-        "filesystem": "cpp"
+  "clangd.arguments": [
+    "--compile-commands-dir=${command:cmake.buildDirectory}/clangd/${command:cmake.buildType}"
+  ],
+  "cmake.postConfigureTask": "Oxygen: prepare clangd databases",
+  "C_Cpp.clang_format_style": "file",
+  "C_Cpp.codeAnalysis.clangTidy.args": [
+    "--config-file=${workspaceFolder}/.clang-tidy"
+  ],
+  "C_Cpp.codeAnalysis.clangTidy.enabled": false,
+  "C_Cpp.codeAnalysis.exclude": {
+    "**/*.h.in": true
+  },
+  "C_Cpp.default.compileCommands": "${command:cmake.buildDirectory}/compile_commands.json",
+  "C_Cpp.default.defines": ["LOGURU_USE_FMTLIB=1"],
+  "C_Cpp.default.includePath": ["${workspaceFolder}/src", "~/.conan2/**"],
+  "C_Cpp.default.intelliSenseMode": "",
+  "C_Cpp.default.cppStandard": "c++23",
+  "C_Cpp.default.cStandard": "c17",
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.errorSquiggles": "disabled",
+  "[cmake]": {
+    "editor.formatOnSave": false,
+    "editor.formatOnType": false
+  },
+  "C_Cpp.default.browse.path": ["${workspaceFolder}/src", "~/.conan2/**"],
+  "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+  "files.exclude": {
+    "**/out": false
+  },
+  "search.exclude": {
+    "**/out": true
+  },
+  "[cpp]": {
+    "editor.defaultFormatter": "xaver.clang-format",
+    "editor.formatOnSave": true
+  },
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true
+  },
+  "black-formatter.args": ["--line-length", "80"],
+  "github.copilot.chat.codesearch.enabled": true,
+  "github.copilot.chat.commitMessageGeneration.instructions": [
+    {
+      "text": "Use conventional commit message format. Write concise commit messages that describe the changes made rather than the implementation details."
     }
+  ],
+  "powershell.codeFormatting.preset": "OTBS",
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+  "terminal.integrated.profiles.windows": {
+    "Command Prompt": {
+      "path": [
+        "${env:windir}\\Sysnative\\cmd.exe",
+        "${env:windir}\\System32\\cmd.exe"
+      ],
+      "args": [],
+      "icon": "terminal-cmd"
+    },
+    "Git Bash": {
+      "source": "Git Bash"
+    },
+    "PowerShell": {
+      "source": "PowerShell",
+      "icon": "terminal-powershell",
+      "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "args": [
+        "-NoExit",
+        "-File",
+        "${workspaceFolder}\\.vscode\\default-profile.ps1"
+      ]
+    }
+  },
+  "testMate.cpp.log.logpanel": true,
+  "testMate.cpp.test.executables": "out/build-ninja/bin/Debug/*.Tests.exe",
+  "testMate.cpp.test.stderrDecorator": false,
+  "yaml.schemas": {
+    "src/Oxygen/Core/Bindless/Spec.schema.json": ["**/Spec.yaml"]
+  },
+  "json.schemas": [
+    {
+      "fileMatch": ["import-manifest*.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json"
+    },
+    {
+      "fileMatch": ["*.texture.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.texture-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.material.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.material-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.input.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json"
+    },
+    {
+      "fileMatch": ["*.input-action.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json"
+    },
+    {
+      "fileMatch": ["*.physics-sidecar.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json"
+    },
+    {
+      "fileMatch": ["*.script-sidecar.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scripting-sidecar.schema.json"
+    },
+    {
+      "fileMatch": ["*.geometry.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.geometry-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.scene.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.buffers.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.buffer-container.schema.json"
+    },
+    {
+      "fileMatch": ["*.shape.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.collision-shape-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.physics-material.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
+    },
+    {
+      "fileMatch": ["*.resource.json"],
+      "url": "./src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json"
+    }
+  ],
+  "yaml.validate": true,
+  "cmake.useCMakePresets": "always",
+  "editor.rulers": [
+    80,
+    {
+      "column": 100,
+      "color": "#118baa"
+    },
+    {
+      "column": 120,
+      "color": "#ffcc00"
+    },
+    {
+      "column": 130,
+      "color": "#ff0000"
+    }
+  ],
+  "files.associations": {
+    "*.def": "cpp",
+    "*.impl": "cpp",
+    "*.ipp": "cpp",
+    "algorithm": "cpp",
+    "any": "cpp",
+    "array": "cpp",
+    "atomic": "cpp",
+    "bit": "cpp",
+    "bitset": "cpp",
+    "cctype": "cpp",
+    "cfenv": "cpp",
+    "charconv": "cpp",
+    "chrono": "cpp",
+    "cinttypes": "cpp",
+    "clocale": "cpp",
+    "cmath": "cpp",
+    "codecvt": "cpp",
+    "compare": "cpp",
+    "complex": "cpp",
+    "concepts": "cpp",
+    "condition_variable": "cpp",
+    "coroutine": "cpp",
+    "csignal": "cpp",
+    "cstdarg": "cpp",
+    "cstddef": "cpp",
+    "cstdint": "cpp",
+    "cstdio": "cpp",
+    "cstdlib": "cpp",
+    "cstring": "cpp",
+    "ctime": "cpp",
+    "cwchar": "cpp",
+    "deque": "cpp",
+    "exception": "cpp",
+    "expected": "cpp",
+    "fstream": "cpp",
+    "format": "cpp",
+    "forward_list": "cpp",
+    "functional": "cpp",
+    "future": "cpp",
+    "gsl_algorithm": "cpp",
+    "gsl_assert": "cpp",
+    "gsl_byte": "cpp",
+    "gsl_util": "cpp",
+    "initializer_list": "cpp",
+    "iomanip": "cpp",
+    "ios": "cpp",
+    "iosfwd": "cpp",
+    "iostream": "cpp",
+    "istream": "cpp",
+    "iterator": "cpp",
+    "limits": "cpp",
+    "list": "cpp",
+    "locale": "cpp",
+    "map": "cpp",
+    "memory": "cpp",
+    "multi_span": "cpp",
+    "mutex": "cpp",
+    "new": "cpp",
+    "numbers": "cpp",
+    "numeric": "cpp",
+    "optional": "cpp",
+    "ostream": "cpp",
+    "pointers": "cpp",
+    "print": "cpp",
+    "queue": "cpp",
+    "random": "cpp",
+    "ranges": "cpp",
+    "ratio": "cpp",
+    "regex": "cpp",
+    "resumable": "cpp",
+    "set": "cpp",
+    "shared_mutex": "cpp",
+    "source_location": "cpp",
+    "span": "cpp",
+    "sstream": "cpp",
+    "stack": "cpp",
+    "stdexcept": "cpp",
+    "stop_token": "cpp",
+    "streambuf": "cpp",
+    "string": "cpp",
+    "string_span": "cpp",
+    "string_view": "cpp",
+    "strstream": "cpp",
+    "system_error": "cpp",
+    "thread": "cpp",
+    "tuple": "cpp",
+    "type_traits": "cpp",
+    "typeindex": "cpp",
+    "typeinfo": "cpp",
+    "unordered_map": "cpp",
+    "unordered_set": "cpp",
+    "utility": "cpp",
+    "valarray": "cpp",
+    "variant": "cpp",
+    "vector": "cpp",
+    "xfacet": "cpp",
+    "xhash": "cpp",
+    "xiosbase": "cpp",
+    "xlocale": "cpp",
+    "xlocbuf": "cpp",
+    "xlocinfo": "cpp",
+    "xlocmes": "cpp",
+    "xlocmon": "cpp",
+    "xlocnum": "cpp",
+    "xloctime": "cpp",
+    "xmemory": "cpp",
+    "xtr1common": "cpp",
+    "xtree": "cpp",
+    "xstring": "cpp",
+    "xutility": "cpp",
+    "filesystem": "cpp"
+  }
 }

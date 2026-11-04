@@ -30,6 +30,8 @@ namespace {
   constexpr auto kSlotA = "00000000-0000-4000-8000-00000000000a";
   constexpr auto kSlotB = "00000000-0000-4000-8000-00000000000b";
   constexpr auto kNodeId = "00000000-0000-4000-8000-0000000000c1";
+  constexpr auto kNilId = "00000000-0000-0000-0000-000000000000";
+  constexpr auto kSchemaFailed = "script.sidecar.schema_validation_failed";
 
   auto Row(const std::string_view slot = kSlotA, const uint32_t node = 0)
     -> json
@@ -172,76 +174,94 @@ namespace {
   NOLINT_TEST(
     ScriptingSidecarPreparationTest, RefusesARootThatIsNeitherObjectNorArray)
   {
-    ExpectRefused(json(5), "script.sidecar.payload_invalid", "");
+    ExpectRefused(json(5), kSchemaFailed, "");
   }
 
   NOLINT_TEST(
     ScriptingSidecarPreparationTest, RefusesMissingOrMalformedBindings)
   {
-    ExpectRefused(json::object(), "script.sidecar.payload_invalid", "");
-    ExpectRefused(
-      json { { "bindings", 1 } }, "script.sidecar.payload_invalid", "");
+    ExpectRefused(json::object(), kSchemaFailed, "");
+    ExpectRefused(json { { "bindings", 1 } }, kSchemaFailed, "/bindings");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAMalformedRowAtItsPointer)
   {
-    ExpectRefused(json::array({ Row(), 3 }), "script.sidecar.payload_invalid",
-      "/bindings/1");
+    ExpectRefused(json::array({ Row(), 3 }), kSchemaFailed, "/bindings/1");
 
     auto no_node = Row();
     no_node.erase("node_index");
-    ExpectRefused(json::array({ no_node }), "script.sidecar.payload_invalid",
-      "/bindings/0");
+    ExpectRefused(json::array({ no_node }), kSchemaFailed, "/bindings/0");
 
     auto no_script = Row();
     no_script.erase("script_virtual_path");
-    ExpectRefused(json::array({ Row(kSlotB), no_script }),
-      "script.sidecar.payload_invalid", "/bindings/1");
+    ExpectRefused(
+      json::array({ Row(kSlotB), no_script }), kSchemaFailed, "/bindings/1");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAnInvalidSlotId)
   {
     ExpectRefused(json::array({ Row("not-a-uuid") }),
       "script.sidecar.slot_id_invalid", "/bindings/0/slot_id");
-    ExpectRefused(json::array({ Row("00000000-0000-0000-0000-000000000000") }),
+    ExpectRefused(json::array({ Row(kNilId) }),
       "script.sidecar.slot_id_invalid", "/bindings/0/slot_id");
 
     auto no_slot = Row();
     no_slot.erase("slot_id");
-    ExpectRefused(json::array({ no_slot }), "script.sidecar.slot_id_invalid",
-      "/bindings/0/slot_id");
+    ExpectRefused(json::array({ no_slot }), kSchemaFailed, "/bindings/0");
+
+    auto number_slot = Row();
+    number_slot["slot_id"] = 7;
+    ExpectRefused(
+      json::array({ number_slot }), kSchemaFailed, "/bindings/0/slot_id");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAnInvalidExecutionOrder)
   {
     auto fractional = Row();
     fractional["execution_order"] = 1.5;
-    ExpectRefused(json::array({ fractional }), "script.sidecar.payload_invalid",
-      "/bindings/0");
+    ExpectRefused(json::array({ fractional }), kSchemaFailed,
+      "/bindings/0/execution_order");
 
     auto huge = Row();
     huge["execution_order"] = 4294967296LL;
     ExpectRefused(
-      json::array({ huge }), "script.sidecar.payload_invalid", "/bindings/0");
+      json::array({ huge }), kSchemaFailed, "/bindings/0/execution_order");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesMalformedParams)
   {
     auto not_array = Row();
     not_array["params"] = 1;
-    ExpectRefused(json::array({ not_array }), "script.sidecar.payload_invalid",
-      "/bindings/0/params");
+    ExpectRefused(
+      json::array({ not_array }), kSchemaFailed, "/bindings/0/params");
 
     auto bad_type = Row();
     bad_type["params"] = json::array({ Param("a", "quaternion", 1) });
-    ExpectRefused(json::array({ bad_type }), "script.sidecar.param_invalid",
-      "/bindings/0/params/0");
+    ExpectRefused(
+      json::array({ bad_type }), kSchemaFailed, "/bindings/0/params/0/type");
 
     auto bad_value = Row();
     bad_value["params"]
       = json::array({ Param("ok", "bool", true), Param("a", "int32", "x") });
-    ExpectRefused(json::array({ bad_value }), "script.sidecar.param_invalid",
-      "/bindings/0/params/1");
+    ExpectRefused(
+      json::array({ bad_value }), kSchemaFailed, "/bindings/0/params/1/value");
+
+    auto out_of_range = Row();
+    out_of_range["params"] = json::array({ Param("a", "int32", 2147483648LL) });
+    ExpectRefused(json::array({ out_of_range }), kSchemaFailed,
+      "/bindings/0/params/0/value");
+  }
+
+  NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesANodeParamPathOfBadIds)
+  {
+    auto bad_path = Row();
+    bad_path["params"] = json::array({
+      Param("target", "node",
+        json { { "node", 2 }, { "path", json::array({ kNilId }) } }),
+    });
+
+    ExpectRefused(json::array({ bad_path }), "script.sidecar.param_invalid",
+      "/bindings/0/params/0");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAKeyOverriddenTwice)
@@ -258,7 +278,7 @@ namespace {
   {
     ExpectRefused(
       json { { "bindings", json::array() }, { "instance_bindings", 1 } },
-      "script.sidecar.payload_invalid", "/instance_bindings");
+      kSchemaFailed, "/instance_bindings");
 
     const auto valid = json {
       { "node_index", 1 },
@@ -274,12 +294,16 @@ namespace {
 
     auto no_node = valid;
     no_node.erase("node_index");
-    ExpectRefused(with_rows(no_node), "script.sidecar.payload_invalid",
-      "/instance_bindings/0");
+    ExpectRefused(with_rows(no_node), kSchemaFailed, "/instance_bindings/0");
 
     auto no_path = valid;
     no_path["node_path"] = json::array();
-    ExpectRefused(with_rows(no_path), "script.sidecar.node_path_invalid",
+    ExpectRefused(
+      with_rows(no_path), kSchemaFailed, "/instance_bindings/0/node_path");
+
+    auto nil_path = valid;
+    nil_path["node_path"] = json::array({ kNilId });
+    ExpectRefused(with_rows(nil_path), "script.sidecar.node_path_invalid",
       "/instance_bindings/0/node_path");
 
     auto bad_slot = valid;

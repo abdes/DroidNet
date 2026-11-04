@@ -11,7 +11,6 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,12 +19,15 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/StableId.h>
@@ -79,92 +81,52 @@ namespace {
     size_t first_;
   };
 
+  //! Reads the value of a param whose shape the schema has checked.
   using ScriptParamParserFn = bool (*)(
     const nlohmann::json& value, SidecarParam& out, std::string& error);
 
   auto ParseBoolParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     auto& out = param.record;
-    if (!value.is_boolean()) {
-      error = "bool param requires boolean value";
-      return false;
-    }
     out.type = script::ScriptParamType::kBool;
     out.value.as_bool = value.get<bool>() ? uint8_t { 1U } : uint8_t { 0U };
     return true;
   }
 
   auto ParseInt32ParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     auto& out = param.record;
-    if (!value.is_number_integer()) {
-      error = "int32 param requires integer value";
-      return false;
-    }
-    const auto parsed = value.get<int64_t>();
-    if (parsed < std::numeric_limits<int32_t>::min()
-      || parsed > std::numeric_limits<int32_t>::max()) {
-      error = "int32 param value is out of range";
-      return false;
-    }
     out.type = script::ScriptParamType::kInt32;
-    out.value.as_int32 = static_cast<int32_t>(parsed);
+    out.value.as_int32 = value.get<int32_t>();
     return true;
   }
 
   auto ParseFloatParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     auto& out = param.record;
-    if (!value.is_number()) {
-      error = "float param requires numeric value";
-      return false;
-    }
     out.type = script::ScriptParamType::kFloat;
     out.value.as_float = value.get<float>();
     return true;
   }
 
   auto ParseStringParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
-    auto& out = param.record;
-    if (!value.is_string()) {
-      error = "string param requires string value";
-      return false;
-    }
     param.string_value = value.get<std::string>();
-    if (param.string_value.contains('\0')) {
-      error = "string param value holds a NUL character";
-      return false;
-    }
-    out.type = script::ScriptParamType::kString;
+    param.record.type = script::ScriptParamType::kString;
     return true;
   }
 
   template <size_t N>
   auto ParseVectorParamValue(const nlohmann::json& value,
-    script::ScriptParamRecord& out, const script::ScriptParamType param_type,
-    const std::string_view type_name, std::string& error) -> bool
+    script::ScriptParamRecord& out, const script::ScriptParamType param_type)
+    -> bool
   {
-    if (!value.is_array()) {
-      error = std::string(type_name) + " param requires array value";
-      return false;
-    }
-    if (value.size() != N) {
-      error = std::string(type_name) + " param requires array size "
-        + std::to_string(N);
-      return false;
-    }
     auto components = std::array<float, N> {};
     for (size_t i = 0; i < N; ++i) {
-      if (!value.at(i).is_number()) {
-        error = std::string(type_name)
-          + " param array must contain numeric elements";
-        return false;
-      }
       components.at(i) = value.at(i).get<float>();
     }
     std::ranges::copy(components, std::begin(out.value.as_vec));
@@ -173,49 +135,40 @@ namespace {
   }
 
   auto ParseVec2ParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     return ParseVectorParamValue<2>(
-      value, param.record, script::ScriptParamType::kVec2, "vec2", error);
+      value, param.record, script::ScriptParamType::kVec2);
   }
 
   auto ParseVec3ParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     return ParseVectorParamValue<3>(
-      value, param.record, script::ScriptParamType::kVec3, "vec3", error);
+      value, param.record, script::ScriptParamType::kVec3);
   }
 
   auto ParseVec4ParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
     return ParseVectorParamValue<4>(
-      value, param.record, script::ScriptParamType::kVec4, "vec4", error);
+      value, param.record, script::ScriptParamType::kVec4);
   }
 
   auto ParseAssetParamValue(const nlohmann::json& value, SidecarParam& param,
-    std::string& error) -> bool
+    std::string& /*error*/) -> bool
   {
-    if (!value.is_string() || value.get<std::string>().empty()) {
-      error = "asset param requires a virtual path string value";
-      return false;
-    }
     param.record.type = script::ScriptParamType::kAsset;
     param.asset_virtual_path = value.get<std::string>();
     return true;
   }
 
   //! A node reference: `{ "node": index, "path": [node IDs] }`, the path
-  //! naming a node the instance rooted at `node` brings in.
+  //! naming a node the instance rooted at `node` brings in. The schema states
+  //! the shape; the IDs of the path are checked here.
   auto ParseNodeParamValue(const nlohmann::json& value, SidecarParam& param,
     std::string& error) -> bool
   {
-    if (!value.is_object() || !value.contains("node")
-      || !value.at("node").is_number_unsigned()
-      || value.at("node").get<uint64_t>() >= script::kUnsetNodeParam) {
-      error = "node param requires a node reference with a scene node index";
-      return false;
-    }
     if (value.contains("path")) {
       auto path = internal::ParseNodePath(value.at("path"));
       if (!path.has_value()) {
@@ -286,58 +239,28 @@ namespace {
     return it == kScriptParamParsers.end() ? nullptr : &(*it);
   }
 
+  //! Reads one param the schema accepted.
   auto ParseScriptParamRecord(
     const nlohmann::json& param, SidecarParam& out, std::string& error) -> bool
   {
-    if (!param.is_object()) {
-      error = "Param record must be an object";
-      return false;
-    }
-    if (!param.contains("key") || !param.at("key").is_string()) {
-      error = "Param record requires string field 'key'";
-      return false;
-    }
-    if (!param.contains("type") || !param.at("type").is_string()) {
-      error = "Param record requires string field 'type'";
-      return false;
-    }
-    if (!param.contains("value")) {
-      error = "Param record requires field 'value'";
-      return false;
-    }
-
-    const auto key = param.at("key").get<std::string>();
-    if (key.empty()) {
-      error = "Param key must not be empty";
-      return false;
-    }
-    if (key.contains('\0')) {
-      error = "Param key holds a NUL character";
-      return false;
-    }
-    out.key = key;
-
+    out.key = param.at("key").get<std::string>();
     const auto type = param.at("type").get<std::string>();
-    const auto& value = param.at("value");
     const auto* parser = FindScriptParamParser(type);
-    if (parser == nullptr || parser->parse_fn == nullptr) {
+    if (parser == nullptr) {
+      // The schema lists the types of the table, so this is a mismatch of the
+      // two.
       error = "Unsupported param type '" + type + "'";
       return false;
     }
-    return parser->parse_fn(value, out, error);
+    return parser->parse_fn(param.at("value"), out, error);
   }
 
   //! Reads a row's `params`, each key once; reports every violation.
   auto ParseRowParams(ErrorSink& errors, const nlohmann::json& binding,
-    const JsonPointer& location, std::vector<SidecarParam>& params) -> bool
+    const JsonPointer& location, std::vector<SidecarParam>& params) -> void
   {
     if (!binding.contains("params")) {
-      return true;
-    }
-    if (!binding.at("params").is_array()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Row field 'params' must be an array", location / "params");
-      return false;
+      return;
     }
     for (size_t j = 0; j < binding.at("params").size(); ++j) {
       auto parsed_param = SidecarParam {};
@@ -362,7 +285,6 @@ namespace {
       }
       params.push_back(std::move(parsed_param));
     }
-    return true;
   }
 
   //! The sidecar in its object form: a bare array of rows is `bindings`.
@@ -374,34 +296,46 @@ namespace {
     return parsed;
   }
 
-  //! Reads one `bindings` row, or reports why it cannot be read.
+  auto ScriptingSidecarSchemaValidator()
+    -> nlohmann::json_schema::json_validator&
+  {
+    thread_local auto validator = internal::MakeJsonSchemaValidator(
+      nlohmann::json::parse(kScriptingSidecarSchema));
+    return validator;
+  }
+
+  //! Reports every way `doc` departs from the sidecar schema.
+  auto ValidateSchema(ErrorSink& errors, const nlohmann::json& doc) -> bool
+  {
+    constexpr auto kSchemaDiagConfig
+      = internal::JsonSchemaValidationDiagnosticConfig {
+          .validation_failed_code = "script.sidecar.schema_validation_failed",
+          .validation_failed_prefix = "Schema validation failed: ",
+          .validator_failure_code = "script.sidecar.schema_validator_failure",
+          .validator_failure_prefix
+          = "Scripting schema validation engine failure: ",
+        };
+
+    return internal::ValidateJsonSchemaWithDiagnostics(
+      ScriptingSidecarSchemaValidator(), doc, kSchemaDiagConfig,
+      [&errors](const std::string_view code, std::string message,
+        const std::string& json_pointer) -> void {
+        errors.Add(
+          std::string(code), std::move(message), JsonPointer { json_pointer });
+      });
+  }
+
+  //! Reads one `bindings` row the schema accepted, or reports why it cannot
+  //! be read.
   auto ParseBindingRow(ErrorSink& errors, const nlohmann::json& binding,
     const size_t index) -> std::optional<ScriptingSidecarBindingRow>
   {
     const auto location = JsonPointer {} / "bindings" / index;
-    if (!binding.is_object()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Binding row must be an object", location);
-      return std::nullopt;
-    }
-    if (!binding.contains("node_index")
-      || !binding.at("node_index").is_number_unsigned()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Binding row requires unsigned field 'node_index'", location);
-      return std::nullopt;
-    }
-    const auto slot_id = binding.contains("slot_id")
-      ? internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"))
-      : std::nullopt;
+    const auto slot_id
+      = internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"));
     if (!slot_id.has_value()) {
       errors.Add("script.sidecar.slot_id_invalid",
         "Binding row requires a non-nil UUID 'slot_id'", location / "slot_id");
-      return std::nullopt;
-    }
-    if (!binding.contains("script_virtual_path")
-      || !binding.at("script_virtual_path").is_string()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Binding row requires string field 'script_virtual_path'", location);
       return std::nullopt;
     }
 
@@ -412,50 +346,27 @@ namespace {
     row.script_virtual_path
       = binding.at("script_virtual_path").get<std::string>();
     if (binding.contains("execution_order")) {
-      if (!binding.at("execution_order").is_number_integer()) {
-        errors.Add("script.sidecar.payload_invalid",
-          "Binding row field 'execution_order' must be integer", location);
-        return std::nullopt;
-      }
-      const auto order = binding.at("execution_order").get<int64_t>();
-      if (order < std::numeric_limits<int32_t>::min()
-        || order > std::numeric_limits<int32_t>::max()) {
-        errors.Add("script.sidecar.payload_invalid",
-          "Binding row field 'execution_order' is out of int32 range",
-          location);
-        return std::nullopt;
-      }
-      row.execution_order = static_cast<int32_t>(order);
+      row.execution_order = binding.at("execution_order").get<int32_t>();
     }
-    if (!ParseRowParams(errors, binding, location, row.params)) {
-      return std::nullopt;
-    }
+    ParseRowParams(errors, binding, location, row.params);
     return row;
   }
 
-  //! Reads one `instance_bindings` row, or reports why it cannot be read.
+  //! Reads one `instance_bindings` row the schema accepted, or reports why it
+  //! cannot be read.
   auto ParseInstanceRow(ErrorSink& errors, const nlohmann::json& binding,
     const size_t index) -> std::optional<ScriptingSidecarInstanceRow>
   {
     const auto location = JsonPointer {} / "instance_bindings" / index;
-    if (!binding.is_object() || !binding.contains("node_index")
-      || !binding.at("node_index").is_number_unsigned()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Instance binding row requires unsigned field 'node_index'", location);
-      return std::nullopt;
-    }
-    auto path = binding.contains("node_path")
-      ? internal::ParseNodePath(binding.at("node_path"))
-      : std::unexpected(size_t { 0 });
+    auto path = internal::ParseNodePath(binding.at("node_path"));
     if (!path.has_value()) {
       errors.Add("script.sidecar.node_path_invalid",
         "Instance binding row requires a 'node_path' of non-nil node IDs",
         location / "node_path");
       return std::nullopt;
     }
-    const auto slot_id = binding.contains("slot_id")
-      ? internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"))
-      : std::nullopt;
+    const auto slot_id
+      = internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"));
     if (!slot_id.has_value()) {
       errors.Add("script.sidecar.slot_id_invalid",
         "Instance binding row requires a non-nil UUID 'slot_id'",
@@ -469,9 +380,7 @@ namespace {
       .params = {},
       .source_index = index,
     };
-    if (!ParseRowParams(errors, binding, location, row.params)) {
-      return std::nullopt;
-    }
+    ParseRowParams(errors, binding, location, row.params);
     return row;
   }
 
@@ -529,15 +438,10 @@ auto PrepareScriptingSidecarDocument(const std::string_view bytes,
     return std::nullopt;
   }
 
-  if (!parsed.is_object() && !parsed.is_array()) {
-    errors.Add("script.sidecar.payload_invalid",
-      "Sidecar document root must be a JSON object or an array of rows");
-    return std::nullopt;
-  }
+  // The schema checks the object form, so its pointers are `/bindings/<i>`
+  // for a bare array too.
   const auto doc = NormalizeDocument(std::move(parsed));
-  if (!doc.contains("bindings") || !doc.at("bindings").is_array()) {
-    errors.Add("script.sidecar.payload_invalid",
-      "Sidecar document requires array field 'bindings'");
+  if (!ValidateSchema(errors, doc)) {
     return std::nullopt;
   }
 
@@ -550,12 +454,6 @@ auto PrepareScriptingSidecarDocument(const std::string_view bytes,
   }
 
   if (doc.contains("instance_bindings")) {
-    if (!doc.at("instance_bindings").is_array()) {
-      errors.Add("script.sidecar.payload_invalid",
-        "Sidecar field 'instance_bindings' must be an array",
-        JsonPointer {} / "instance_bindings");
-      return std::nullopt;
-    }
     const auto& instance_bindings = doc.at("instance_bindings");
     for (size_t i = 0; i < instance_bindings.size(); ++i) {
       if (auto row = ParseInstanceRow(errors, instance_bindings.at(i), i)) {

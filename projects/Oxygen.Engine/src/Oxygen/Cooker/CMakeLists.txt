@@ -90,6 +90,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.input.schema.json"
     kPhysicsSidecarSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-sidecar.schema.json"
+    kScriptingSidecarSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.scripting-sidecar.schema.json"
     kPhysicsMaterialDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.physics-material-descriptor.schema.json"
     kCollisionShapeDescriptorSchema
