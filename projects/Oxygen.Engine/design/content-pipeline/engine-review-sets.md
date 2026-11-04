@@ -551,14 +551,15 @@ order, and produce the same output whatever the concurrency.
 
 **Critical points.**
 
-- Determinism: the same inputs give byte-identical cooked output with one
-  worker or many; table row order does not depend on completion order.
+- Validity at any concurrency: a cook is equally valid with one worker or many,
+  each binding resolves to the right content, and a rebuild over the same root
+  does not churn rows. Row order may follow completion order; byte-identical
+  output between fresh cooks is not a goal.
 - Cancellation: `CancelJob` and `CancelAll` cancel at every stage, leave no
   partial publication, and report a cancelled outcome distinct from failure.
 - `WorkDispatcher.cpp` (2 000 lines): no deadlock when every worker waits on a
-  dependency; `WorkPayloadStore` has no limit of its own, so the pipeline
-  queues' back-pressure (`queue_capacity` in `ImportConcurrency`) must bound the
-  payloads it holds.
+  dependency; `queue_capacity` in `ImportConcurrency` bounds the work in flight
+  per pipeline, and a plan holds one source's data, up to the source limit.
 - `ImportSourceSnapshot`: a source changed during an import is detected, not
   half-read.
 - `ImportReport`: diagnostics, products and telemetry are complete for
@@ -691,7 +692,7 @@ when it must.
 ## R14. Scripting, input and audio
 
 **Files.** `Cooker/Import/Internal/Pipelines/{Script*,InputImport*}`,
-`Cooker/Import/Internal/Jobs/{Script*,Input*,Audio*}`;
+`Cooker/Import/Internal/Jobs/{Script*,Input*}`;
 `Cooker/Docs/Import/scripting_pipelines.md`.
 
 **Objectives.** Script assets, scripting sidecars and input contexts cook
@@ -706,9 +707,8 @@ explicit.
   format.
 - Input references end with `.oiact`; local action names and relative
   references are unambiguous (`InputImportPipeline.cpp`).
-- `AudioImportJob.cpp`: five TODOs, no read, no pipeline, no emission.
-  Establish whether an audio job is reachable from a manifest or the CLI; if
-  it is, it must refuse with a code instead of reporting success.
+- Audio is not an import kind in V0.1: no job, plan kind or importer exists. A
+  manifest or the CLI cannot request one; confirm it is refused with a code.
 
 ## R15. Pak build and pak tools
 

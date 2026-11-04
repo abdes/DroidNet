@@ -1,6 +1,5 @@
 # Import File I/O
 
-**Status:** Current
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
@@ -29,19 +28,27 @@ struct ReadOptions {
 
 class IAsyncFileReader {
 public:
+  auto ReadFile(const std::filesystem::path& path)  // whole file
+    -> co::Co<Result<serio::ByteBuffer>>;
   virtual auto ReadFile(const std::filesystem::path& path,
-    ReadOptions options = {}) -> co::Co<Result<serio::ByteBuffer>> = 0;
+    ReadOptions options) -> co::Co<Result<serio::ByteBuffer>> = 0;
   virtual auto GetFileInfo(const std::filesystem::path& path)
     -> co::Co<Result<FileInfo>> = 0;
   virtual auto Exists(const std::filesystem::path& path)
     -> co::Co<Result<bool>> = 0;
+  virtual auto SourceLimit() const noexcept -> serio::ByteCount = 0;
 };
 
-auto CreateAsyncFileReader(serio::IoDriver& driver)
+auto CreateAsyncFileReader(serio::IoDriver& driver,
+  serio::ByteCount source_limit = kDefaultMaxSourceBytes)
   -> std::unique_ptr<IAsyncFileReader>;
 ```
 
 - A range is clamped to the file: an offset past the end reads nothing.
+- `SourceLimit()` is the most bytes one read returns. A read whose result (the
+  whole file, or the clamped range) passes it fails with
+  `serio::Error::kTooLarge` before anything is allocated; it is never clipped.
+  The service passes `Config::max_source_bytes`.
 - `GetFileInfo` and `Exists` are file system metadata, not bytes, and stay
   `std::filesystem` queries.
 - Cancelling the awaiting task cancels the pending read.
@@ -50,7 +57,7 @@ auto CreateAsyncFileReader(serio::IoDriver& driver)
 
 Ports return `Result<T>`, whose error is a `std::error_code`. Callers compare
 it with Serio's conditions (`serio::Error::kNotFound`, `kAccessDenied`,
-`kIsDirectory`) or with `std::errc` (`invalid_argument` for an empty path,
+`kIsDirectory`, `kTooLarge`) or with `std::errc` (`invalid_argument` for an empty path,
 `operation_canceled`). A caller that reports an error names the path in its own
 diagnostic.
 

@@ -1,2692 +1,515 @@
-# Async Import Pipeline Architecture (v2)
+# Async Import Pipeline
 
-**Status:** Approved Design
-**Author:** GitHub Copilot
-**Date:** 2026-01-15
-**Supersedes:** async_import_pipeline.md, texture_work_pipeline.md
+The Cooker imports content on a dedicated import thread. It runs its own event
+loop and a `co::ThreadPool` for CPU-bound work, and is decoupled from the
+application's threads. `AsyncImportService` is the public, thread-safe entry
+point. Each submission becomes one job: it reads its sources, cooks them in
+compute-only pipelines, writes the cooked files through emitters, and publishes
+them in a loose cooked root.
 
----
+Related documents:
 
-## Executive Summary
+- [async_file_io.md](async_file_io.md): source reads and cooked writes.
+- [async_import_planner.md](async_import_planner.md): dependency plan of a model
+  import.
+- [Model import publication](#model-import-publication) and
+  [source analysis](#source-analysis-and-input-observations) below.
 
-This document specifies an asynchronous content import pipeline for the Oxygen
-Engine. The design uses OxCo structured concurrency with a **dedicated import
-thread** running its own event loop and ThreadPool, completely decoupled from
-the main application thread.
+## At a glance
 
-Model imports use [immutable publication](#model-import-publication);
-the editor continues to own its broader project publication transaction.
-[Source analysis](#source-analysis-and-input-observations) shares preparation and
-input observation with native cooking.
+| Part                                                | Scope           | Role                                                      |
+| --------------------------------------------------- | --------------- | --------------------------------------------------------- |
+| `AsyncImportService`                                | One per owner   | Thread-safe API; owns the import thread and its objects   |
+| `ImportEventLoop`                                   | Import thread   | ASIO `io_context` and the one `serio::IoDriver`           |
+| `AsyncImporter`                                     | Import thread   | Bounded job channel; runs up to `max_in_flight_jobs` jobs |
+| `ImportJob`                                         | Per job         | Job nursery, cancellation, observed reads, final report   |
+| `ImportSession`                                     | Per job         | Emitters, diagnostics, index and table participation      |
+| Pipelines                                           | Per job         | Compute-only cooking on the ThreadPool                    |
+| Emitters                                            | Per session     | Reserve rows and ranges, write cooked files               |
+| `LooseCookedIndexRegistry`, `ResourceTableRegistry` | Per cooked root | Cohort of the jobs writing one root                       |
+
+```mermaid
+flowchart TB
+    subgraph app["Caller threads"]
+        API["AsyncImportService<br/>SubmitImport / CancelJob / Stop"]
+    end
+    subgraph imp["Import thread"]
+        direction TB
+        AI["AsyncImporter"]
+        subgraph job["ImportJob"]
+            direction TB
+            PL["Pipelines"]
+            SES["ImportSession"]
+            EM["Emitters"]
+            PL --> SES --> EM
+        end
+        AI --> job
+        DRV["serio::IoDriver"]
+        EM -.-> DRV
+        SES -.->|"source reads"| DRV
+    end
+    TP["co::ThreadPool"]
+    API -->|"posts the job"| AI
+    PL -.->|"CPU work"| TP
+```
+
+## Rules
+
+- All import coroutines run on the import thread. A coroutine that awaits
+  `ThreadPool::Run` resumes on the import thread, so emitter and session state
+  is mutated from one thread. The table aggregator of a cooked root is shared by
+  its jobs and takes its own mutex.
+- The ThreadPool does CPU-bound work only (decoding, mips, BC7, mesh
+  processing, hashing). File reads and cooked writes go through the loop's
+  `serio::IoDriver`.
+- Pipelines do not write cooked files. They return in-memory results that the
+  job hands to an emitter.
+- Cancellation is cooperative: the job nursery is cancelled, and work items
+  carry a `std::stop_token`.
+- Callbacks run directly on the import thread. A callback that blocks holds up
+  every job; callers marshal to their own threads.
+
+## AsyncImportService
+
+### Configuration
+
+| Field                     | Default                  | Meaning                                                                                                    |
+| ------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `thread_pool_size`        | `hardware_concurrency()` | Worker threads of the import `ThreadPool`                                                                  |
+| `max_in_flight_jobs`      | `hardware_concurrency()` | Jobs running at once                                                                                       |
+| `job_admission_capacity`  | 64                       | Jobs admitted and not yet finished; also the capacity of the job channel                                   |
+| `concurrency`             | `ImportConcurrency{}`    | Per-pipeline workers and queue capacities                                                                  |
+| `max_source_bytes`        | `kDefaultMaxSourceBytes` | Most bytes read from one source file or range (`import.source_too_large`)                                  |
+| `script_compile_callback` | empty                    | Compiler for compile-enabled script imports; without it they fail with `script.asset.compiler_unavailable` |
+| `cooked_storage`          | `RealCookerStorage()`    | Where every job reads and writes the indexes, tables and descriptors of cooked roots                       |
+
+`kDefaultMaxSourceBytes` is 2,147,483,647. `ImportConcurrency` has one
+`{workers, queue_capacity}` entry per plan item kind. Defaults are texture 2/64,
+buffer 2/64, material 2/64, mesh build 2/32, geometry 1/16, scene 1/8. A
+submission may carry its own `ImportConcurrency`; a manifest does too
+(`ImportManifest::concurrency`). Every capacity must be at least 1; otherwise
+the job is refused with `import.concurrency_invalid`.
+
+### API
+
+All public methods are thread-safe. `ImportJobId` is a `NamedType<uint64_t>`
+(`Import/ImportJobId.h`); `kInvalidJobId` is 0.
+
+| Method                                                                      | Effect                                                                                               |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `SubmitImport(request, on_complete, on_progress, concurrency)`              | Detects the importer from the request, creates the job, returns its id; `std::nullopt` when rejected |
+| `SubmitImport(request, on_complete, on_progress, job_factory, concurrency)` | The same with a caller-supplied job factory (custom and test jobs)                                   |
+| `SubmitModelImport(record, on_complete, on_progress)`                       | Cooks and publishes one prepared `ModelImportRecord` attempt                                         |
+| `SubmitManifest(manifest, on_item_complete, on_progress)`                   | Submits every item of an `ImportManifest`; returns the ids of the accepted ones                      |
+| `CancelJob(id)`                                                             | Requests cancellation; `false` when the job already finished or the id is unknown                    |
+| `CancelAll()`                                                               | Requests cancellation of every admitted job                                                          |
+| `RequestShutdown()`                                                         | Stops accepting jobs, cancels every job, returns without waiting                                     |
+| `Stop()`                                                                    | `RequestShutdown()`, then joins the import thread; safe to call repeatedly                           |
+| `IsStopped()`, `IsAcceptingJobs()`, `IsJobActive(id)`                       | State queries                                                                                        |
+| `ActiveJobCount()`, `RunningJobCount()`, `PendingJobCount()`                | Queued plus running, running, and queued jobs; 0 once the import thread's objects are closed         |
+
+`SubmitImport` returns `std::nullopt`, without calling any callback, when the
+service is shutting down, the import thread is not running, the format is
+unknown, `job_admission_capacity` jobs are already admitted, or the factory
+returns no job. A caller that is refused for capacity retries after a job
+finishes.
+
+The `ImportCompletionCallback` signature is
+`void(ImportJobId, const ImportReport&)`; `ProgressEventCallback` is
+`void(const ProgressEvent&)`. Progress events carry an `ImportPhase`
+(`kPending`, `kLoading`, `kPlanning`, `kWorking`, `kFinalizing`, `kComplete`,
+`kCancelled`, `kFailed`) and the job-started, job-finished, item-started,
+item-finished and item-collected kinds.
+
+### Job kinds
+
+`ImporterOf(request)` selects the job by importer. Audio is not an import kind.
+
+| Importer                                         | Job                                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| glTF / GLB, FBX                                  | `GlbImportJob`, `FbxImportJob` over `ModelImportJob` in `Import/Internal/Jobs/ModelImportJob.h` (plan-driven) |
+| Texture                                          | `TextureImportJob`                                                                                            |
+| Buffer container                                 | `BufferContainerImportJob`                                                                                    |
+| Material, physics material descriptors           | `MaterialDescriptorImportJob`, `PhysicsMaterialDescriptorImportJob`                                           |
+| Collision shape, geometry, scene descriptors     | `CollisionShapeDescriptorImportJob`, `GeometryDescriptorImportJob`, `SceneDescriptorImportJob`                |
+| Script asset, scripting sidecar, physics sidecar | `ScriptAssetImportJob`, `ScriptingSidecarImportJob`, `PhysicsSidecarImportJob`                                |
+| Input                                            | `InputImportJob`                                                                                              |
+
+Every job derives from `ImportJob` and implements `ExecuteAsync()`. Model jobs
+build an `ImportPlanner` plan and run it in a `WorkDispatcher`; the other jobs
+create one pipeline with `CreatePipeline<...>` and feed it directly.
+
+### Outcome
+
+`ImportReport::success` is true only when the job finished and its output is
+published. `ImportReport::cancelled` is true when a stop request ended the job;
+`success` is then false and nothing of the job is published.
+
+Every job, whether it ran or not, ends with exactly one final progress event
+(`kJobFinished`, phase `kComplete`, `kFailed` or `kCancelled`) and then one
+completion callback:
+
+- A job that was dropped from the queue at shutdown completes as cancelled.
+- A job refused with `import.queue_full` (the channel has no room) or
+  `import.concurrency_invalid` completes as failed with that code.
+- A cancelled job completes with `cancelled`, the diagnostics it had gathered
+  and the diagnostic `import.canceled`.
+- An exception becomes `import.exception`. A callback that throws is logged; it
+  affects neither the service nor the job's outcome.
+
+### Cancellation
+
+`CancelJob` and `CancelAll` trigger each job's `co::Event` on the import thread,
+which cancels the job nursery and requests stop on the job's stop token.
+Cancellation must always run on the import thread; the service posts it there.
+`RequestShutdown` does the same for every job and then stops the importer: its
+channel closes, queued jobs complete as cancelled and the nursery is cancelled,
+while each running job reports its own completion.
+
+A cancellation that arrives once a job's commit has started loses: completion
+wins (see [Publication](#publication)).
+
+### Lifetime
+
+`Stop()` must complete (`IsStopped()` is true) before the destructor runs; the
+destructor `CHECK`s it and aborts otherwise.
+
+The public methods that reach the import thread's objects hold a shared lock
+over them. When the import loop ends, the import thread takes the lock
+exclusively and marks the objects closed, so no caller reaches them from then
+on. It runs what callers had already posted, so a job that got in still
+completes. It then finalizes the resource tables and, again under the exclusive
+lock, destroys the thread pool, importer, registries, file reader and event loop
+in that order.
+
+## Jobs
+
+### AsyncImporter
+
+`AsyncImporter` is a `co::LiveObject` in the import thread's nursery. Its
+channel holds up to `job_admission_capacity` jobs and a semaphore admits
+`max_in_flight_jobs` at a time. For each job it activates the job's nursery,
+calls `Run()` and waits for the job to complete or for its cancel event.
+
+### ImportJob
+
+`ImportJob` is a `co::LiveObject` that owns the job nursery. It owns the
+session and any standalone pipelines; they are joined and destroyed before the
+job completes. It provides `StartTask`, `StartPipeline`, `CreatePipeline`,
+`StopToken`, progress reporting and the readers and registries a job needs.
+
+Every job reads sources through an `ImportSourceSnapshot`, which decorates the
+service's `IAsyncFileReader` and records what the job read (see
+[Source reads](#source-reads)). If the request has no `cooked_root`,
+`ImportRequest::ResolveCookedRoot()` derives one from the source path and the
+mount of the job's identity (`OutputMountRoot`), ending in the mount's name; a
+cooked root holds one mount, and the writer refuses another with
+`import.output_mount_mixed`.
+
+### ImportSession
+
+The session is the job's access point to infrastructure and output: the
+reader, the `IoDriver`, the `cooked::ImportStorage`, the nursery the emitters
+write in, the ThreadPool, diagnostics, and the job's participation in the
+cohort of its cooked root. Emitters are created lazily: texture, buffer,
+physics resource, asset and resource-descriptor emitters.
+
+Diagnostics may be added from any thread. The session's emitters start their
+writes in the job's nursery, so cancelling the job cancels them.
+
+## Pipelines
+
+Pipelines are concrete classes that satisfy the `ImportPipeline` concept
+(`Import/Internal/ImportPipeline.h`); there is no common base class, because
+their inputs and outputs differ. Each has a `WorkItem`, a `WorkResult`, a
+static `kItemKind`, and:
+
+- `Start(co::Nursery&)`, called once;
+- `Submit(WorkItem)` (bounded; suspends when the input queue is full),
+  `TrySubmit`, `Close()`;
+- `Collect()`, which suspends until a result exists; a closed, drained output
+  yields an empty result with `success = false`;
+- `HasPending()`, `PendingCount()`, `GetProgress()` and the output queue size
+  and capacity.
+
+A `WorkItem` carries a `std::stop_token`; a cancelled item yields a result with
+`success = false`. Results carry diagnostics and telemetry.
+
+`PlanItemKind` lists the kinds the planner schedules: `Texture`, `Buffer`,
+`Material`, `MeshBuild`, `Geometry` and `Scene`. The standalone jobs also run
+descriptor, script, physics and input pipelines.
+
+### Back-pressure and memory
+
+`queue_capacity` bounds the in-flight work of a pipeline: the items it has
+decoded and cooked and not yet handed on. The `WorkDispatcher` submits a ready
+item only while its kind has capacity, and fails the import with
+`import.plan.capacity_blocked` if ready work exists but nothing can take it. A
+model's plan holds the model's source data for the whole plan, bounded by
+`max_source_bytes`. Every capacity must be at least 1.
+
+## Model import plan
+
+A glTF or FBX adapter parses the source once and translates the parser's
+structures (cgltf, ufbx) into the pipelines' `WorkItem` storage, owned by the
+job's `WorkPayloadStore`. The job registers plan items and dependencies in an
+`ImportPlanner`, calls `MakePlan()` and runs the plan in a `WorkDispatcher`:
+
+- The dispatcher owns the pipelines of the run, submits ready items round-robin
+  across kinds that have capacity, collects results, emits them through the
+  session and marks the consumers' readiness trackers.
+- A scene becomes ready after its geometry, geometry after its mesh build and
+  materials, materials after their textures.
+- Mesh build records, for every submesh, the offset of its material key.
+  Geometry finalization receives the resolved keys and patches
+  `SubMeshDesc::material_asset_key` at that offset.
+- An import with no pending work that is not complete fails with
+  `import.plan.deadlock`.
+
+[async_import_planner.md](async_import_planner.md) describes the planner.
+
+## Emitters and cooked writes
+
+An emitter's `Emit()` returns a stable index at once and starts the write; it
+does not wait for I/O. Rows come from the per-root `ResourceTableAggregator`:
+
+- `Acquire(row, alignment)` reuses a row whose fields (SHA-256 included, every
+  field but the offset) match and whose offset satisfies the alignment.
+  Otherwise it reserves the next aligned range of the data file, appends the
+  row and returns the range. A new row's padding and payload are written with
+  `AsyncWriteAt` at explicit offsets; ranges never overlap, and writes may
+  complete in any order.
+- Each emitter has a `WriteGroup`: writes are tasks of the session's nursery,
+  the first error is kept (`WriteFailure` names the file), and `Finalize()`
+  joins them.
+- The texture table reserves index 0 for the fallback texture.
+- Asset descriptors record their `content_hash` through
+  `data::StampDescriptorHash` when `AssetEmitter` emits them; resource payloads
+  are `HashedBytes`, whose SHA-256 is computed on the ThreadPool when they are
+  built, and the row records it.
+
+[async_file_io.md](async_file_io.md) describes `ImportStorage`.
+
+## Publication
+
+### Index and tables
+
+A cooked root holds `container.index.bin`, the resource tables and data files,
+and the asset descriptors:
+
+```text
+container.index.bin
+Resources/textures.table  textures.data
+Resources/buffers.table   buffers.data
+Materials/*.omat   Geometry/*.ogeo   Scenes/*.oscene
+```
+
+The index is written last because its file records carry final sizes and
+digests. Row indices only grow: a re-cook of a source appends new rows and the
+index points at the fresh ones, and a complete re-cook retires the outputs its
+source no longer produces. The pak step packs only the resources its assets
+reach and remaps their indices.
+
+### Finalize
+
+`ImportSession::Finalize()` ends a job in this order:
+
+1. Finalize every emitter, joining its writes. A failed resource data write
+   (texture, buffer, physics) is remembered.
+2. Verify the job's observed source reads (`import.source_changed` if one
+   changed). A cancellation here unwinds with nothing published.
+3. End the participation in the resource tables: a failed resource write aborts
+   it instead.
+4. Prepare the report: check every output exists and read what the report needs.
+   Anything that can still fail the job happens here, before its first
+   registration, so a job that fails here leaves the cohort and stops no one.
+5. Register what the job produced in the cooked root's index writer. The writer
+   takes nothing back, so a refusal here (`import.identity_collision`,
+   `import.output_mount_mixed`) stops the cohort.
+6. End the index participation. The cohort's index is written once; every
+   participant learns the published source identity.
+
+Once the commit starts, completion wins over cancellation, and nothing after it
+can make the job a failure: a successful report means the output is published. A
+job that emits nothing is not a failure.
+
+### Cohort
+
+Jobs on one cooked root form a cohort and publish one index commit.
+
+- A failed participant (errors reported through its session) leaves without
+  contributing, and registers no asset; the other participants still publish.
+- A participant that is interrupted, or a resource data write that fails, aborts
+  the whole cohort: the rows it reserved may have no bytes. The other
+  participants fail with `import.cooked_root_interrupted`, publish nothing and
+  can run again.
+- A failed or cancelled job publishes nothing: it registers no asset in the
+  index. Rows it added may remain in the table, unreferenced; a retry reuses
+  them.
+- A model record job (see below) has its own registries for its generation.
+
+### Order of rows
+
+Output is valid at any concurrency. Row order follows completion order, so two
+fresh cooks of the same sources are not byte-identical, and nothing may depend
+on a row order. A rebuild over an existing root reuses rows.
+
+## Source reads
+
+`ImportSourceSnapshot` implements `IAsyncFileReader` over the service's reader.
+It records every byte range a job reads, and presence, absence and metadata
+probes. A missing file is a fact; denied access and I/O failures stay errors.
+Contradictory observations invalidate the attempt.
+
+`ParserRead` scopes the synchronous reads of glTF and FBX parsers through the
+same observer. Cooked asset references use a separate cooked reader and mount
+resolution.
+
+`Verify()` seals collection and rechecks the consumed bytes right before the
+commit: it reuses full-read hashes, qualifies range-only reads with bounded
+chunks and fails with `ImportSourceChanged` if a source changed or can no longer
+be checked. `Observations()` exports owned facts only after a successful
+verification.
+
+`ImportRequest::captured_inputs` optionally supplies an immutable
+`CapturedInputSet`. Its logical authored paths map to private captured files
+with expected size, SHA-256 and original metadata, or to presence and absence
+probes. Resource naming keeps the authored paths; reads use the captured files,
+and verification never substitutes the live originals. A path the capture does
+not list is treated as absent, like any missing file: reads return not found and
+probes report it missing. A model's texture that is absent binds the error
+texture with a warning, because a missing file is never fatal for a model. A
+descriptor or a parser read of such a path fails as a missing file does. A
+captured file that is unreadable invalidates the attempt.
+
+`ImportSourceDocument` reads a document for request preparation and batch
+dependency preflight: it keeps logical paths, validates the captured size and
+digest and returns the bytes with a pending observation. Builders attach those
+to `ImportRequest::preparation_inputs`; the job's snapshot inherits them, and
+`Verify()` rechecks them.
 
 ## Source analysis and input observations
 
-Status: native source analysis and captured batch execution are validated.
-Editor integration remains ED-M08.1.9.3.
-
-Native preparation owns descriptor validation,
-logical references and recipe-dependent output naming. Batch analysis invokes
-that preparation without cooking or emitting files. Import jobs consume the same
-interpretation; analysis must not add a second descriptor parser or a no-op cook.
-
-`MaterialSource`, `GeometrySource` and `SceneSource` retain owned source values
-and symbolic references before cooked linking. The model adapters prepare named
-materials, geometry variants and texture uses before producing payloads.
-Metadata parsing omits external glTF geometry buffers and FBX layout witnesses.
+Native preparation owns descriptor validation, logical references and
+recipe-dependent output naming. Batch analysis calls the same preparation
+without cooking or writing files; import jobs consume the same interpretation.
 `SceneImportSettings::Prepare` and `TextureImportSettings::Prepare` apply native
-recipe rules without file I/O or a cooked destination; execution builders attach
-the destination afterward.
+recipe rules without file I/O or a cooked destination.
 
 `ImportManifest::AnalyzeSources` analyzes material, texture, geometry and scene
-descriptors, standalone textures, and glTF/FBX sources. The same operation is
-available from ImportTool:
+descriptors, standalone textures and glTF/FBX sources. ImportTool exposes it:
 
 ```text
 Oxygen.Cooker.ImportTool.exe analyze-sources --manifest imports.json --report analysis.json
-```
-
-`--root` selects the authoring root for relative paths, as it does for `batch`.
-Both commands accept `--captured-inputs captures.json`. Replacement analysis reads
-incoming captured bytes under the retained logical paths, leaving published
-sources untouched until publication. Output identities do not depend on the
-capture directory. No cooked destination is needed. The
-[report schema](../../Import/Schemas/oxygen.source-analysis.schema.json) separates
-declared outputs, logical references, file dependencies and verified observations.
-Model texture files and outputs are optional because native cooking supports
-error-index and placeholder recovery. Cubemap discovery records selected faces
-and the rejected suffix probes. Cooking performs payload validation and resolves
-cooked references.
-
-A texture job's identity comes from the job's `virtual_path`; a texture
-descriptor never states one, and a descriptor with a `virtual_path` field fails
-schema validation. A job with no identity is refused with
-`import.asset_virtual_path_missing`, in analysis and in cooking. A reference in
-an authored file is an absolute virtual path in another mount or text relative
-to the folder of the referring file, resolved against the job identity (for a
-sidecar, the identity of its target scene). A descriptor's `source` and
-`sources[].file` follow the same grammar and name files. Tools need not rewrite
-descriptors to assign project asset paths.
-
-The caller binds the report to its toolchain artifact fingerprint;
-`producer_version` is a display version. The CLI protects declared and accessed
-inputs from report-path aliases, including after failed verification. With a
-capture map, this also protects the map itself and every declared logical and
-captured file, including entries unused by the current frontier.
-`accessed_paths` serves that protection; `observations` carries verified facts.
-
-`ImportSourceSnapshot`, the existing reader and parser-buffer observer, records
-byte ranges and presence/absence/metadata observations. A missing file
-is a fact; denied access and I/O failures remain errors. Contradictory observations
-invalidate an attempt. Collection seals before verification, including probes
-that suspend; cancellation releases active-operation ownership.
-`Observations()` exports owned facts only after successful verification.
-Overlapping verification and failed observation bookkeeping invalidate the
-snapshot, preventing partial proof reports.
-
-`ImportRequest::captured_inputs` optionally supplies an immutable
-`CapturedInputSet`: logical authored paths map to private captured files, expected
-size/digest and original metadata, or to explicit presence/absence probes.
-Resource naming continues to use authored paths. Reads use captured files;
-verification never substitutes live originals. Undeclared reads invalidate the
-operation even when a texture importer recovers with a placeholder.
-Captured absence and directory facts reproduce the native file error so optional
-texture recovery remains available. Positive probes carry no byte permission.
-`ParserRead` scopes synchronous glTF reads through the same observer.
-Cooked asset references use the separate cooked reader and mount resolution.
-Verification checks consumed captures only, reuses full-read hashes and qualifies
-range-only reads with bounded chunks.
-
-`ImportSourceDocument` is the shared synchronous reader for request preparation
-and batch dependency preflight. It preserves logical paths, validates captured
-size/digest and returns the exact document bytes with a pending observation.
-Builders attach those observations to `ImportRequest::preparation_inputs`;
-job admission transfers them into the snapshot before execution. Final
-verification also covers ordinary, uncaptured descriptor and provenance reads.
-Cooked resource reads in jobs and pipelines use their separate cooked reader.
-
-Captured execution uses the same manifest and source names as ordinary imports:
-
-```text
 Oxygen.Cooker.ImportTool.exe batch --manifest imports.json --captured-inputs captures.json
 ```
 
-The [capture schema](../../Import/Schemas/oxygen.captured-inputs.schema.json)
-requires absolute logical and captured paths. File entries carry their expected
-SHA-256, size and original metadata; presence-only and absence entries carry no
-bytes. Duplicate identities, inconsistent facts and unknown fields are rejected
-before preparation. Analysis provides original metadata for declared files;
-negative cubemap search candidates remain presence-only observations.
+`--root` selects the authoring root for relative paths, and `--captured-inputs`
+supplies a capture map for either command. The
+[report schema](../../Import/Schemas/oxygen.source-analysis.schema.json)
+separates declared outputs, logical references, file dependencies and verified
+observations; the
+[capture schema](../../Import/Schemas/oxygen.captured-inputs.schema.json)
+requires absolute logical and captured paths, SHA-256, size and original
+metadata for files, and no bytes for presence-only and absence entries.
+Duplicate identities, inconsistent facts and unknown fields are rejected before
+preparation. The report does not predict byte offsets or replace validation of
+the cooked output. `accessed_paths` lets a caller protect declared and accessed
+inputs from report-path aliases; `observations` carries verified facts.
 
-Descriptor preparation consumes observed bytes and their source location.
-Source adapters use the same observation boundary for parser-owned reads.
-Logical asset references and physical input files remain distinct. Reports carry
-per-job declared outputs, typed logical references, attributed input proofs,
-producer/schema identity, completeness and diagnostics. They do not predict
-internal byte offsets or replace post-cook output validation.
-
-The editor resolves project/library references and batches each newly discovered
-frontier. It captures the reported source closure and compares those bytes with
-the observations before cooking. Native cooking rejects reads outside the
-captured contract. Analysis may read whole files while cooking reads ranges;
-qualification compares source membership and consumed content, not identical
-I/O schedules. Passive editor status uses existing dependency facts.
-
-UE5.7 references informing these boundaries are `InterchangeTranslatorBase`
-(native translation before asset production), `FCookDependency` (separate file
-and package/build dependencies), and `UAssetImportData` (reuse precomputed source
-hashes). Oxygen's coherent read and negative-probe checks remain explicit;
-filename-based cached hashes do not establish them.
+A texture job's identity is the job's `virtual_path`; a texture descriptor never
+states one. A job with no identity is refused with
+`import.asset_virtual_path_missing`. A reference in an authored file is an
+absolute virtual path in another mount, or text relative to the folder of the
+referring file, resolved against the job identity (for a sidecar, the identity
+of its target scene).
 
 ## Model import publication
 
-A glTF or FBX model imported from its model import record, the model's
-authored file at `<model identity>.import.json` in the model's mount, holds its
-source, settings and source identity there, and what its imports established:
-surface provenance, node continuity, published nodes and source fingerprint.
-Original external files are read inputs; importing never writes metadata beside
-them.
+A glTF or FBX model imported from its model import record holds its source,
+settings and identity there, and what its imports established: surface
+provenance, node continuity, published nodes and the source fingerprint. The
+record is `<model identity>.import.json` in the model's mount
+(`/Content/Models/Ship.glb` has `Models/Ship.glb.import.json` in the `Content`
+mount's folder; schema `oxygen.model-import.schema.json`). Original external
+files are read inputs; importing never writes metadata beside them.
 
-Each attempt cooks into a new private directory under
-`<generations_root>/<source_identity>/<generation-id>`. The generations root is
-a folder the caller owns and names; it is never derived from the project,
-whose output folders may belong to another publisher (an editor project's
-`.cooked/` belongs to the editor). An attempt neither modifies a published
-generation nor copies an earlier aggregate root. After successful native
-validation and the check that the source bytes did not change, the publisher
-writes the record's new provenance, published nodes and fingerprint, then
-selects the generation in `<generations_root>/<source_identity>/head.json`.
-Record changes or a competing publication fail the expected-revision check and
-leave the previous generation selected. Failed or interrupted attempts remain
-unselected and leave the record unchanged.
+`ModelImportRecord` reads and writes the record. `Prepare` reserves one unique
+attempt, which is submitted once with `AsyncImportService::SubmitModelImport`.
+The identity is the record's location (`RecordPathOf`, `IdentityOf`); its
+`source` is a file reference from the record. The selected generation is
+publication state, kept in the caller's
+`<generations_root>/<source_identity>/head.json`, never in the record. See the
+editor's
+[scene instances](../../../../../../../design/editor/lld/scene-instances.md).
+
+Each attempt cooks into a new private directory
+`<generations_root>/<source_identity>/<generation-id>`. The generations root
+belongs to the caller and is never derived from the project. An attempt neither
+modifies a published generation nor copies an earlier root. Staging imports
+reject writes into marked generation roots.
+
+A model record job verifies its sources right before its record publishes:
+after the candidate is validated and before `Publish`. Publication writes the
+record's new provenance, published nodes and fingerprint, then selects the
+generation in `head.json`. A competing change to the record fails the
+expected-revision check and leaves the previous generation selected. A failed or
+interrupted attempt stays unselected and leaves the record unchanged. The
+generation's registries belong to the job.
 
 A batch's `model` jobs run the same records but never write them: each report
 returns the fields the import established (`model_import`), and the host commits
 them with its own publication.
 
-`AsyncImportService::SubmitImport` is the staging primitive used by project
-transactions. The model import entry point owns record preparation, isolated
-cooking and publication for native hosts; DemoShell and CLI consume that same
-API and schema. The editor keeps its existing project coordinator and uses the
-shared native provenance value.
+Content mounts immutable generation paths, and replaced generations stay
+available to assets and reads that reference them. `ReclaimUnusedGenerations`
+runs before a model job's work: under the record lock it removes only UUID-named
+private generations of that source whose exclusive marker lock can be acquired;
+selected, mounted and in-flight generations remain.
 
-`ModelImportRecord` reads and writes a model's import record
-(`oxygen.model-import.schema.json`; `/Content/Models/Ship.glb` has
-`Models/Ship.glb.import.json` in the `Content` mount's folder), the one store of
-a model's import state for the editor and the ImportTool: source, settings,
-source identity, surface provenance, node continuity, published nodes and
-source fingerprint. The identity is the record's location
-(`RecordPathOf`, `IdentityOf`); its `source` is a file reference from the
-record (`MountTable::LocateReference`). Lookups that need every record scan
-the `*.import.json` files of the bound `Source` mounts. `Prepare` reserves one unique attempt, and
-`AsyncImportService::SubmitModelImport` executes it. The selected
-generation is publication state, kept in the caller's
-`<generations_root>/<source_identity>/head.json`, never in the record. See the editor's
-[scene instances](../../../../../../../design/editor/lld/scene-instances.md)
-NGN14. A prepared attempt is
-submitted once. Staging imports reject writes into marked generation roots.
-Source bytes consumed during import are checked again before publication.
+DemoShell and ImportTool consume this same API and schema. DemoShell's ad-hoc
+imports are records in its scratch project's own `Scratch` mount, never in the
+read-only examples mount, and their generations live in that project's
+`.cooked/ModelGenerations`. It persists the records it mounts in
+`content.mounts.import_records` and resolves each one's selected generation when
+it restores them, so an external reimport does not strand it on an old directory.
 
 Physical I/O uses [Base filesystem paths](../../../Base/Docs/Filesystem.md),
-including parser callbacks and generated output. Authored paths and identities
-keep their logical spelling. Emitter failures retain the original file path and
-error (`WriteFailure`) through session finalization; each emitter joins its own
-writes, so one emitter's failure never hides another's.
+including parser callbacks and generated output; authored paths and identities
+keep their logical spelling.
 
-DemoShell's ad-hoc imports are records in its scratch project's own writable
-`Scratch` mount (`/Scratch/DCC/Ship.glb.import.json`), never in the read-only
-examples mount, and their generations live in the scratch project's
-`.cooked/ModelGenerations`.
-DemoShell persists model import record paths (`content.library.import_records`)
-and the active scene's record (`content.active_scene.import_record`). It resolves
-the current generation when restoring the library, so external CLI reimports
-do not strand the UI on a historical directory. The source-browser folder is
-independent from the app-owned Content destination.
+## Errors
 
-Content mounts immutable generation paths. Replaced generations remain available
-to referenced assets and in-flight reads. Publication does not delete them;
-reclamation requires the owning Content lifetime to release them.
-`ReclaimUnusedGenerations` checks selection under the record lock, then removes
-only UUID-named private generations for that source whose exclusive marker lock
-can be acquired. Import workers run this cleanup before new work; selected,
-mounted and in-flight generations remain. Model import jobs own their registries
-per generation, and their emitters start cooked writes in the job's nursery.
-Cancellation cancels and joins that job's writes before destroying its
-session/emitters, without cancelling or draining another job. One source namespace belongs to one authored record. Hosts expose
-the selected generation without adding workspace-selection UI.
+- Results of I/O are `Result<T>` with `std::error_code`; cooked-write failures
+  name the file (`WriteFailure`). Exceptions inside a coroutine are caught at
+  the job boundary and become `import.exception` (or a specific code such as
+  `import.source_changed` and `import.cooked_root_busy`).
+- A ThreadPool exception is rethrown in the awaiting coroutine.
+- Each diagnostic code has one constant. Most are in `ImportCodes.h`
+  (`import_codes`), next to the owners of a family such as `mount_codes` and
+  `model_record_codes`. Missing optional inputs warn and recover; a missing file is never fatal for a
+  model.
 
-Acceptance: interrupted/failed cooks preserve the selected record and all prior
-bytes; concurrent publishers cannot overwrite each other's accepted generation;
-source/settings edits invalidate an in-flight candidate; deleting derived
-generations preserves SurfaceIds after recook from recorded provenance; old readers
-remain valid through generation replacement.
-
-### Core Principles
-
-1. **Dedicated Import Thread**: The importer runs on its own thread with an
-   independent ASIO-style event loop. This eliminates any coupling with the
-   application's frame-based event loop.
-
-2. **ThreadPool for CPU-Bound Work Only**: BC7 encoding, mip generation, and
-   image processing offload to ThreadPool. File I/O uses an async abstraction.
-
-3. **Callbacks on Import Thread**: Completion and progress callbacks run on the
-   import thread. Callers marshal to UI threads if needed.
-
-4. **Cooperative Cancellation**: Per-job and per-importer cancellation via
-   explicit job cancellation signals and stop-token propagation to work items.
-   Importer shutdown cancels the AsyncImporter LiveObject nursery.
-
-5. **Thread-Safe Public API**: All public methods are safe to call from any
-   thread. Internal synchronization uses thread-safe channels.
-
-6. **Preserve Sync Path**: Existing synchronous helpers are reused; new async
-   methods wrap them without modification.
-
-7. **REUSE EXISTING TYPES**: Never duplicate types that already exist in the
-   `oxygen::content::import` namespace.
-
-8. **No Polymorphic Resource Pipelines**: Each resource type (texture, audio,
-   mesh) has its own strongly-typed pipeline. No common `IResourcePipeline`
-   interface—inputs and outputs are too different.
-
-9. **Preserve Existing Importer Architecture**: The production-quality
-   `Importer` interface and associated PODs (`ImportRequest`, `ImportReport`,
-   `CookedContentWriter`) are the foundation. Async is an enhancement, not a
-   replacement.
-
-10. **Pipelines are Pure Compute**: Resource pipelines (TexturePipeline,
-    AudioPipeline, etc.) perform CPU-bound cooking only. They do NOT perform
-    I/O or commit results. Emitters handle all I/O.
-
-11. **Planner-Driven Readiness**: A job-level planner owns the dependency
-    graph and per-asset readiness tracking. Pipelines only run once required
-    dependencies are ready per the planner’s schedule.
-
-12. **Geometry Material Patching**: Mesh build captures a table of
-    `{surface, material_key_offset}` for each submesh while serializing the
-    descriptor. Geometry finalization receives only the resolved material keys
-    for the mesh’s `surfaces_used` and patches
-    `SubMeshDesc::material_asset_key` directly by offset. The planner guarantees
-    these materials are ready before geometry finalization runs.
-
-13. **Direct Adapter Translation**: Format adapters (FBX/glTF) translate
-    native parser structures (ufbx/cgltf) directly into pipeline `WorkItem`
-    storage with no intermediate scene graph. The job owns the storage and
-    registers plan items and dependencies via `ImportPlanner`.
-
-14. **Hash Ownership**: the descriptor header `content_hash` is recorded by
-    `AssetEmitter::Emit`/`EmitSync` in every descriptor they emit, through
-    `data::StampDescriptorHash` (SHA-256 of the whole descriptor with that
-    field zeroed). Pipelines have no descriptor-hash step. Loaders and
-    `content::ValidateAssetDescriptor` refuse a descriptor whose header does
-    not record it (`kMissingDigest` / `kDigestMismatch`). Resource payload
-    Resource payloads are `HashedBytes` (`Cooker/Import/HashedBytes.h`): bytes
-    plus their SHA-256, computed when constructed, immutable after. Producers
-    construct them on the ThreadPool, and always. The invariant is that all
-    dependencies are ready and the full payload is known before hashing.
-    Emitters record `Sha256()` in the resource row; no import reads a data
-    file again to hash it.
-
-15. **One Lazy Emitter Per Resource Type Per Session**: ImportSession owns
-    emitters (TextureEmitter, BufferEmitter, AssetEmitter). Created lazily on
-    first use. Emitter.Emit() returns a stable index immediately and queues
-    async I/O in the background.
-
-16. **Log-Structured Allocation (Append Semantics)**: Re-importing an asset
-    allocates NEW space with a NEW index (append-like). Old data remains but is
-    stale. Allocation is done by reserving explicit offsets and writing with
-    `AsyncWriteAt` to avoid interleaving. The index file is always accurate: a
-    re-cook retires the outputs its source no longer produces. The pak step
-    compacts the tables: its planner packs only the resources the assets bind
-    or loaders reach by key, and remaps their indices.
-
----
-
-## ⚠️ CRITICAL: Existing Types to Reuse ⚠️
-
-These types ALREADY EXIST in `src/Oxygen/Cooker/Import/`. **DO NOT REDEFINE:**
-
-| Type               | Header                | Description                                   |
-| ------------------ | --------------------- | --------------------------------------------- |
-| `ImportRequest`    | `ImportRequest.h`     | Source path, cooked root, options             |
-| `ImportReport`     | `ImportReport.h`      | Result with success flag, diagnostics, counts |
-| `ImportDiagnostic` | `ImportDiagnostics.h` | Warning/error with severity, code, message    |
-| `ImportSeverity`   | `ImportDiagnostics.h` | `kInfo`, `kWarning`, `kError`                 |
-| `ImportOptions`    | `ImportOptions.h`     | Import configuration options                  |
-
-**Only define NEW types that don't exist:**
-
-- `ImportJobId` (uint64_t alias)
-- `ImportPhase` (enum for async progress tracking)
-- `ImportProgress` (struct for UI callbacks)
-- Callback type aliases
-
----
-
-## Existing Importer Architecture (Production Quality)
-
-The current sync import architecture is **production quality** and serves as
-the foundation for async enhancement. These interfaces are preserved.
-
-### Core Interfaces
+## Example
 
 ```cpp
-// Importer.h - Backend interface (FBX, glTF, etc.)
-class Importer {
-public:
-  virtual ~Importer() = default;
-  [[nodiscard]] virtual auto Name() const noexcept -> std::string_view = 0;
-  [[nodiscard]] virtual auto Supports(ImportFormat format) const noexcept -> bool = 0;
-  virtual auto Import(const ImportRequest& request, CookedContentWriter& out) -> void = 0;
-};
-
-// AssetImporter.h - Façade with backend registry
-class AssetImporter {
-public:
-  AssetImporter();  // Registers built-in backends
-  explicit AssetImporter(std::vector<std::unique_ptr<Importer>> backends);
-  [[nodiscard]] auto ImportToLooseCooked(const ImportRequest& request) -> ImportReport;
-protected:
-  [[nodiscard]] virtual auto DetectFormat(const std::filesystem::path& path) const -> ImportFormat;
-};
-
-// CookedContentWriter.h - Output abstraction
-class CookedContentWriter {
-public:
-  virtual auto AddDiagnostic(ImportDiagnostic diag) -> void = 0;
-  virtual auto WriteAssetDescriptor(key, type, path, relpath, bytes) -> void = 0;
-  virtual auto WriteFile(kind, relpath, bytes) -> void = 0;
-  virtual auto RegisterExternalFile(kind, relpath, digest) -> void = 0;
-  virtual auto RegisterExternalDataFile(kind, relpath) -> void = 0;
-  virtual auto OnMaterialsWritten(count) -> void = 0;
-  virtual auto OnGeometryWritten(count) -> void = 0;
-  virtual auto OnScenesWritten(count) -> void = 0;
-};
-```
-
-### Key PODs
-
-```cpp
-// ImportRequest.h
-struct ImportRequest {
-  std::filesystem::path source_path;
-  std::optional<std::filesystem::path> cooked_root;
-  std::optional<data::SourceKey> source_key;
-  ImportOptions options;
-};
-
-// ImportReport.h
-struct ImportReport {
-  std::filesystem::path cooked_root;
-  data::SourceKey source_key;
-  std::vector<ImportDiagnostic> diagnostics;
-  uint32_t materials_written = 0;
-  uint32_t geometry_written = 0;
-  uint32_t scenes_written = 0;
-  bool success = false;
-};
-```
-
-### Why This Matters for Async
-
-The async design **enhances** this architecture:
-
-- `Importer::Import()` remains the sync entry point
-- Async orchestration lives in job actors (`ImportJob::ExecuteAsync()`)
-- `AsyncImporter` schedules jobs on the import thread
-- Jobs may invoke existing backends and pipelines as needed for parallel cooking
-
----
-
-## Architecture Overview
-
-```mermaid
-%%{init: {'flowchart': {'wrap': false, 'padding': 30}}}%%
-graph TB
-    subgraph AppThread["APPLICATION THREAD"]
-        direction TB
-        AppCode["Application Code"]
-
-        subgraph AsyncService["AsyncImportService (public thread-safe API)"]
-            direction TB
-            API["SubmitImport / CancelJob / CancelAll / Shutdown"]
-        end
-
-        AppCode -->|"thread-safe SubmitImport"| AsyncService
-    end
-
-    subgraph ImportThread["IMPORT THREAD<br/><small>Import Event Loop - ASIO</small>"]
-        direction TB
-
-        AsyncImporter["AsyncImporter (LiveObject) - manages job scheduling"]
-
-        subgraph JobScope["ImportJob (per-job, owns child nursery)"]
-            direction TB
-
-            ImportSession["ImportSession (created by ImportJob)"]
-
-            JobPipelines["Job Pipelines: TexturePipeline / AudioPipeline / MeshPipeline"]
-
-            Emitters["Emitters: TextureEmitter / BufferEmitter / AssetEmitter"]
-
-            JobPipelines -->|"runs pipelines"| ImportSession
-            ImportSession -->|"collect results"| Emitters
-            ImportSession -.->|"reads sources"| AsyncFileReader
-            ImportSession -.->|"cooked storage"| ImportStorage
-        end
-
-        IoDriver["serio::IoDriver - owned by ImportEventLoop"]
-        ImportStorage["cooked::ImportStorage - PublishAsync / OpenData"]
-        AsyncFileReader["IAsyncFileReader - FileSourceReader"]
-
-        AsyncImporter -->|"creates & schedules"| JobScope
-        Emitters -.->|"writes in the job nursery"| ImportStorage
-        ImportStorage -.->|"awaits through"| IoDriver
-        AsyncFileReader -.->|"awaits through"| IoDriver
-    end
-
-    ThreadPool["co::ThreadPool<br/><small>CPU-bound worker threads</small>"]
-
-    AsyncService -->|"submits job"| AsyncImporter
-    %% Callbacks are invoked on the import thread; UI marshalling is optional.
-    JobPipelines -.->|"offloads CPU work"| ThreadPool
-
-    style AppThread stroke:#666,stroke-width:4px
-    style ImportThread stroke:#666,stroke-width:4px
-    style AsyncService stroke:#ff9800,stroke-width:3px
-    style AsyncImporter stroke:#9c27b0,stroke-width:3px
-    style JobScope stroke:#2196f3,stroke-width:3px
-    style ImportSession stroke:#4caf50,stroke-width:2px
-    style JobPipelines stroke:#00bcd4,stroke-width:2px
-    style Emitters stroke:#8bc34a,stroke-width:2px
-    style ThreadPool stroke:#607d8b,stroke-width:2px
-    style IoDriver stroke:#607d8b,stroke-width:2px
-    style ImportStorage stroke:#607d8b,stroke-width:2px
-```
-
-### Actor Summary
-
-| Actor                  | Scope     | Owns                                                              | Role                                                  |
-| ---------------------- | --------- | ----------------------------------------------------------------- | ----------------------------------------------------- |
-| **AsyncImportService** | Singleton | Import thread, AsyncImporter                                      | Thread-safe public API                                |
-| **AsyncImporter**      | Shared    | Job channel + scheduler                                           | Import-thread job runner                              |
-| **ImportJob**          | Per-job   | Child nursery, cancellation signal, ImportSession, pipelines      | Single job actor: owns one job’s lifetime + resources |
-| **ImportSession**      | Per-job   | Source reader, driver, storage, ThreadPool, Emitters, Diagnostics | Per-import output + infra access                      |
-| **TexturePipeline**    | Per-job   | Internal queues + worker tasks                                    | Pure compute: decode/transcode → in-memory payload    |
-| **TextureEmitter**     | Per-job   | `textures.data`, `textures.table`                                 | Async I/O: Emit() → index + background write          |
-| **BufferEmitter**      | Per-job   | `buffers.data`, `buffers.table`                                   | Async I/O for geometry/animation buffers              |
-| **AssetEmitter**       | Per-job   | `*.omat`, `*.ogeo`, `*.oscene`                                    | Async I/O for asset descriptors                       |
-| **LooseCookedWriter**  | Per-job   | `container.index.bin`                                             | Finalization: write index file LAST                   |
-
----
-
-## Component Design
-
-### 0. Format Adapters + Planner Integration
-
-Format adapters (FBX, glTF) parse the source once and translate the native
-parser structures (ufbx/cgltf) directly into pipeline `WorkItem` storage
-owned by the job. Adapters do **not** construct a secondary scene graph.
-
-Planner integration is explicit and job-driven:
-
-- The job registers plan items, dependencies, and `WorkPayloadHandle` values
-  that point to job-owned `WorkItem` storage.
-- The job executes `PlanStep`s from `ImportPlanner::MakePlan()` and awaits
-  each step’s `prerequisites` before submitting the corresponding work item
-  to the pipeline.
-- Readiness is marked by emitters (or job code) using the planner’s
-  `ReadinessTracker`, allowing dependent steps (e.g., scene) to proceed.
-
-This keeps pipelines compute-only and preserves deterministic dependency
-gating without additional abstraction layers.
-
-### 1. AsyncImportService (Thread-Safe Public API)
-
-#### Purpose and Scope
-
-`AsyncImportService` is the application-facing façade for asynchronous content
-import. It provides a thread-safe API for submitting import jobs from any thread
-(e.g., main UI thread, game thread) and receiving completion notifications on
-the import thread. Callers marshal to UI threads if needed.
-
-**Key responsibilities:**
-
-- Accept import requests from any thread
-- Manage the dedicated import thread lifecycle
-- Invoke completion callbacks on the import thread
-- Coordinate graceful shutdown and cancellation
-
-#### New Types
-
-The service reuses existing progress/event types declared in `ImportProgress.h`
-and introduces only minimal identifiers:
-
-```cpp
-// Job identification
-using ImportJobId = uint64_t;
-inline constexpr ImportJobId kInvalidJobId = 0;
-
-// Import phases (current implementation)
-// See `ImportProgress.h` for the canonical enum and helpers.
-// enum class ImportPhase : uint8_t { kPending, kLoading, kPlanning, kWorking, kFinalizing, kComplete, kCancelled, kFailed };
-
-// Progress events
-// Progress updates are communicated via `ProgressEvent` (header + payload).
-// See `MakePhaseProgress`, `MakeItemStarted`, `MakeItemCollected` helpers in `ImportProgress.h`.
-
-// Callback types
-using ImportCompletionCallback = std::function<void(ImportJobId, const ImportReport&)>; // invoked once per job
-using ProgressEventCallback = std::function<void(const ProgressEvent&)>; // invoked for phase/item updates
-```
-
-**Design note:** `ImportReport` is passed by `const&` because it contains `std::filesystem::path` and other heavyweight members. Callbacks are delivered on the caller's thread when that thread supports `ThreadNotification` (the service will marshal results back when possible); otherwise callbacks are invoked on the import thread. Callers should still marshal to their UI thread if required by their application model.
-
-#### Configuration
-
-```cpp
-struct Config {
-  uint32_t thread_pool_size = std::thread::hardware_concurrency();
-  uint32_t max_in_flight_jobs = std::thread::hardware_concurrency();
-  uint32_t job_admission_capacity = 64;
-  ImportConcurrency concurrency{}; // per-pipeline workers & queue capacities
-  serio::ByteCount max_source_bytes = kDefaultMaxSourceBytes;
-};
-```
-
-The config specifies global resources shared across all import jobs:
-
-- **thread_pool_size**: Number of worker threads for CPU-bound cooking (BC7, mip gen, etc.)
-- **max_in_flight_jobs**: Maximum number of jobs processed concurrently by the importer (default is hardware_concurrency; defaults to 1 in some deployments)
-- **job_admission_capacity**: Maximum number of jobs admitted and not yet finished (default 64). A submission beyond it is refused; the batch command defers it until a job finishes (backpressure).
-- **concurrency**: Per-pipeline concurrency knobs (`ImportConcurrency`) that control worker counts and queue capacities for texture/buffer/material/mesh/scene pipelines.
-- **max_source_bytes**: The most bytes a job reads from one source file or range (default 2,147,483,647, `kDefaultMaxSourceBytes`). The service's file reader refuses a larger read with `serio::Error::kTooLarge` before allocating (`IAsyncFileReader::SourceLimit()`), and the parsers that read their own files (the cgltf file callback, the FBX path loader) apply the same limit. The job reports `import.source_too_large`.
-
-#### Core API
-
-**Job submission:**
-
-```cpp
-auto SubmitImport(
-  ImportRequest request,
-  ImportCompletionCallback on_complete,
-  ProgressEventCallback on_progress = nullptr,
-  const std::optional<ImportConcurrency>& concurrency_override = std::nullopt
-) -> std::optional<ImportJobId>;
-```
-
-- Thread-safe; callable from any thread
-- Returns a valid `ImportJobId` on success, or `std::nullopt` if the request is rejected (shutdown, unknown format, importer not ready, or queue full)
-- Callbacks are delivered on the caller's thread when possible via `ThreadNotification`; otherwise they are invoked on the import thread
-- Cancellation is reported via `on_complete` with `report.success = false` and diagnostic code `"import.canceled"`
-
-**Cancellation:**
-
-```cpp
-auto CancelJob(ImportJobId job_id) -> bool;  // Cancel specific job
-auto CancelAll() -> void;                    // Cancel all jobs
-auto RequestShutdown() -> void;              // Begin graceful shutdown
-```
-
-- `CancelJob` returns `false` if job already completed
-- `CancelAll` cancels all pending and in-flight jobs
-- `RequestShutdown` signals the import thread to stop; destructor waits for completion
-
-**Status query:**
-
-```cpp
-auto IsJobActive(ImportJobId job_id) const -> bool;
-```
-
-Thread-safe check if job is still pending or executing.
-
-#### Threading Model
-
-```mermaid
-sequenceDiagram
-    participant App as Application Thread
-    participant Service as AsyncImportService
-    participant Channel as Thread-Safe Channel
-    participant Importer as AsyncImporter<br/>(Import Thread)
-    participant Job as ImportJob
-
-    App->>+Service: SubmitImport(request, callbacks)
-    Service->>Service: Generate JobId
-    Service->>Channel: Push JobEntry
-    Service-->>-App: Return JobId (immediate)
-
-    Note over App: Non-blocking return<br/>Job queued for execution
-
-    Channel->>+Importer: Dequeue JobEntry
-    Importer->>+Job: Create & Execute
-    Note over Job: Parse, Cook, Emit<br/>(Parallel Pipelines)
-    Job->>Job: session.Finalize()
-    Job-->>-Importer: ImportReport
-
-    Importer->>App: on_complete(job_id, report)
-    Note over App: Caller may marshal to UI thread if desired
-
-    deactivate Importer
-```
-
-**Key invariants:**
-
-- Service owns the import thread and blocks in destructor until thread exits
-- All callbacks are invoked on the import thread
-- Internal synchronization uses lock-free channels; no application-visible locks
-
-#### Implementation Pattern
-
-The service uses the Pimpl idiom to hide implementation details:
-
-```cpp
-class AsyncImportService final {
-public:
-  explicit AsyncImportService(Config config = {});
-  ~AsyncImportService();
-
-  // Public API methods...
-
-private:
-  struct Impl;
-  std::unique_ptr<Impl> impl_;
-};
-```
-
-`Impl` contains:
-
-- `ImportEventLoop` running on dedicated thread
-- `detail::AsyncImporter` (LiveObject)
-- Thread-safe channel for job submission
-- Job ID generator and active job tracking
-
-#### Cancellation Semantics
-
-**Unified completion path:** Both successful completion and cancellation invoke the same `on_complete` callback. Cancellation is distinguished by:
-
-```cpp
-// Cancelled job produces this report:
-ImportReport report {
-  .success = false,
-  .diagnostics = {
-    ImportDiagnostic {
-      .severity = ImportSeverity::kError,
-      .code = "import.canceled",
-      .message = "Import canceled by user"
-    }
-  }
-};
-```
-
-This eliminates dual callback paths and simplifies application code.
-
-#### Shutdown Sequence
-
-1. `RequestShutdown()` signals import thread to stop accepting jobs
-2. Import thread cancels all in-flight jobs
-3. Destructor blocks until import thread exits
-4. All pending callbacks are flushed before destruction
-
-**Non-blocking shutdown initiation:** `RequestShutdown()` returns immediately; only destructor blocks.
-
-### 2. Resource Pipeline Architecture
-
-Resource pipelines (texture, audio, mesh) are **NOT polymorphic**. Each has its
-own strongly-typed API because inputs and outputs are fundamentally different.
-
-#### Why No Common Interface
-
-| Pipeline | Input                     | Processing                 | Output                                              |
-| -------- | ------------------------- | -------------------------- | --------------------------------------------------- |
-| Texture  | bytes + TextureImportDesc | decode, mips, BC7          | CookedTexturePayload (in-memory)                    |
-| Audio    | bytes + AudioImportDesc   | decode, resample, compress | CookedAudioPayload (in-memory)                      |
-| Mesh     | scene graph + options     | optimize, pack             | CookedMeshPayload / CookedBufferPayload (in-memory) |
-
-A polymorphic `IResourcePipeline<T>` adds complexity without value.
-
-#### Universal Pipeline Stages (Internal)
-
-All resource pipelines follow these internal stages.
-
-Important: **acquiring bytes is not a pipeline responsibility**.
-Pipelines are compute-only and operate on bytes already in memory.
-
-```text
-┌──────────────────────┐     ┌─────────┐     ┌───────────┐
-│ Acquire source bytes │ ──▶ │ Decode  │ ──▶ │ Transcode │
-│ (Importer / caller)  │     └─────────┘     └───────────┘
-└──────────────────────┘          │                │
-                                  ▼                ▼
-                                CPU-bound        CPU-bound
-                                (ThreadPool)     (ThreadPool)
-```
-
-1. **Acquire bytes** (outside pipeline)
-
-- From file via `IAsyncFileReader` (importer-owned I/O)
-- From embedded buffers (FBX/glTF embedded textures)
-
-1. **Decode**: Parse format
-   - PNG/JPG/EXR → ScratchImage
-   - WAV/FLAC → audio samples
-   - (format-specific, CPU-bound)
-
-2. **Transcode**: Transform to runtime format
-   - Mip generation, BC7 compression
-   - Audio resampling, codec encoding
-   - (format-specific, CPU-bound, often parallelizable)
-
-3. ~~**Commit**: Write to cooked output~~ **NO! Pipelines don't commit!**
-
-- Pipeline returns an in-memory cooked payload (e.g., `CookedTexturePayload`)
-- Caller passes it to the appropriate emitter (e.g., `TextureEmitter`) for async I/O
-- See **Principle 10**: Pipelines are pure compute
-
-These stages are **internal**. The external API is simpler.
-
-#### Concurrency, Ownership, and Lifetime (Definitive)
-
-These rules apply to **all** resource pipelines (texture, audio, mesh, etc.).
-
-**Future-proof job model (required):** each import job runs inside a dedicated
-**child nursery** of `detail::AsyncImporter`.
-
-- The job’s child nursery is the job’s definitive lifetime boundary.
-- All job-scoped work (including pipeline workers) is started in that child
-  nursery so cancellation can be cascaded by cancelling the nursery.
-
-This model supports both current sequential processing and future concurrent
-job execution without changing pipeline APIs.
-
-**Nursery ownership (do not conflate lifetimes):** there are two distinct
-lifetimes.
-
-1. **Import-thread lifetime (long-lived)**
-   - Owner: `detail::AsyncImporter` (a `co::LiveObject`).
-   - Nursery: the nursery opened by `AsyncImporter::ActivateAsync()`.
-   - Purpose: owns long-lived background tasks for the import thread (e.g. job
-     loop, service shutdown coordination).
-
-2. **Single-job lifetime (short-lived, cancellable)**
-
-- Owner: `detail::ImportJob`.
-- Nursery: a child nursery created per job.
-- Purpose: owns job-scoped tasks, including:
-  - the importer’s job coroutine,
-  - any helper coroutines for acquisition/submission/collection,
-  - job-scoped pipeline instances and their worker coroutines.
-
-**Pipeline instancing:** pipeline instances are **job-scoped**.
-
-- Each job constructs its own pipeline instances (e.g. `TexturePipeline`) and
-  starts them in the job’s child nursery.
-- A pipeline instance therefore does not require job tagging or result routing.
-
-Why this matters:
-
-- Cancellation is unambiguous: cancelling the job’s nursery cancels everything
-  job-owned, including pipeline workers.
-- The design is future-proof for parallel jobs: jobs are isolated by nursery
-  boundaries and pipeline instances.
-
-#### Pipeline External API Pattern
-
-Pipelines follow the `ImportPipeline` pattern used throughout the
-implementation. Each pipeline is concrete (no runtime polymorphism) and is
-started inside a job's child nursery.
-
-- `Start(nursery)` spawns worker coroutines
-- bounded `Submit` + `Collect`
-- results contain diagnostics, telemetry, and a `success` flag
-
-Key points:
-
-- Pipelines do **not** provide a direct `Cancel()` API; cancellation is
-  expressed by cancelling the job nursery and by checking per-item stop tokens
-  (`WorkItem::stop_token`).
-- Pipelines are job-scoped: they are created, started, drained, and destroyed
-  within the job’s child nursery.
-- The implemented concept (`ImportPipeline`) requires a static `kItemKind` and
-  the methods below; see `Internal/ImportPipeline.h` for the authoritative
-  definition.
-
-Minimal required API (conceptual):
-
-- `static constexpr PlanItemKind kItemKind`
-- `Start(co::Nursery& nursery) -> void`
-- `Submit(WorkItem) -> co::Co<>`
-- `Collect() -> co::Co<WorkResult>`
-- `HasPending() -> bool`, `PendingCount() -> size_t`
-- `GetProgress() -> PipelineProgress`
-- `OutputQueueSize()/OutputQueueCapacity()` (optional helpers for load reporting)
-
-Operational semantics (implemented baseline):
-
-- `Start()` must be called exactly once on import thread.
-- `Submit()` should not be called after `Close()`.
-- `Collect()` suspends until a result is ready; a closed output yields a sentinel result.
-- Cancellation is propagated by `WorkItem.stop_token` and by cancelling the job nursery.
-
-##### Operational Semantics (Current Implementation Baseline)
-
-These behaviors reflect the established pattern in
-`src/Oxygen/Cooker/Import/Async/Pipelines/BufferPipeline.cpp` and are the
-baseline that new pipelines should follow unless explicitly documented
-otherwise:
-
-- `Start()` is called exactly once. Calling `Start()` more than once is invalid.
-- `Submit()` is intended to be used only before `Close()`; callers should
-  avoid submitting after closing the input channel.
-- `TrySubmit()` returns `false` when the input channel is closed or full.
-- `PendingCount()` tracks submitted work that has not yet been collected
-  (including canceled items). `HasPending()` is derived from this counter.
-- `Collect()` suspends until a result is available. If the output channel is
-  closed, it returns a sentinel `WorkResult` with `success = false` and empty
-  fields. Callers should treat this as end-of-stream.
-- Cancellation is propagated via `WorkItem.stop_token`; canceled work yields a
-  `WorkResult` with `success = false`.
-
-#### ImportPipeline Concept
-
-The implementation uses a compile-time concept (`ImportPipeline`) to verify pipeline APIs. It enforces the `Start/Submit/Collect` pattern and progress/query helpers without requiring runtime polymorphism. See `src/Oxygen/Cooker/Import/Internal/ImportPipeline.h` for the canonical definition. Example responsibilities include:
-
-- `T::kItemKind` (PlanItemKind)
-- `Start(co::Nursery&)`, `Submit(WorkItem)`, `Collect()`
-- `HasPending()`, `PendingCount()`, `GetProgress()`
-
-This yields compile-time safety while keeping pipelines concrete and efficient.
-
-#### Progress Abstraction
-
-```cpp
-struct PipelineProgress {
-  size_t submitted = 0;     // Total items submitted
-  size_t completed = 0;     // Items fully processed
-  size_t failed = 0;        // Items that errored
-  size_t in_flight = 0;     // Currently processing
-  float throughput = 0.0f;  // Items per second (rolling average)
-};
-
-#### PipelineProgress Invariants (Required)
-
-- All counters (`submitted`, `completed`, `failed`, `in_flight`) are
-  non-negative and use `0` as a valid default state.
-- `submitted` is monotonically non-decreasing and increments only when a work
-  item is successfully accepted (i.e. `Submit()` or `TrySubmit()` succeeds).
-- `completed` is monotonically non-decreasing and increments when a collected
-  `WorkResult` has `success = true`.
-- `failed` is monotonically non-decreasing and increments when a collected
-  `WorkResult` has `success = false` (including cancellations).
-- `in_flight` is derived as:
-  `in_flight = submitted - completed - failed`.
-- `in_flight` must never be negative. When the pipeline is closed and fully
-  drained, `in_flight` must be `0` and `submitted = completed + failed`.
-- `throughput` is non-negative and may be `0.0f` when no samples are available
-  (e.g. `submitted == 0`).
-```
-
-### 3. Work Item Extraction Pattern
-
-The sync code already demonstrates the correct pattern for building pipeline
-work items from import metadata. The async code follows the same approach.
-
-#### Sync Pattern (Existing - in TextureEmitter.cpp)
-
-```cpp
-// Sync: Extract texture work from FBX material
-auto GetOrCreateTextureResourceIndexWithCooker(
-  const ImportRequest& request,
-  CookedContentWriter& cooked_out,
-  TextureEmissionState& state,
-  const ufbx_texture* texture,
-  const CookerConfig& config) -> uint32_t
-{
-  // 1. Resolve source (embedded vs file)
-  const auto* file_tex = ResolveFileTexture(texture);
-  std::span<const std::byte> source_bytes = ...;
-
-  // 2. Build work descriptor from config
-  auto desc = MakeImportDescFromConfig(config, texture_id);
-
-  // 3. Cook synchronously
-  auto cooked = CookTextureWithFallback(source_bytes, config, texture_id);
-
-  // 4. Commit to output
-  const auto data_offset = AppendResource(state.appender, cooked.payload, ...);
-  state.table.push_back(cooked.desc);
-
-  return index;
-}
-```
-
-#### Async Pattern (New)
-
-```cpp
-// Async: Same extraction, different dispatch
-// Note: This is a helper; the actual Submit happens in the job
-
-//! `resolved_path` is the texture file resolved against the source file, as
-//! `FbxAdapter` resolves it.
-TexturePipeline::WorkItem MakeTextureWorkItem(
-  const std::filesystem::path& resolved_path, const CookerConfig& config)
-{
-  // 1. The correlation id of a file texture is its normalized path.
-  const auto source_id = NormalizeTexturePathId(resolved_path);
-
-  // 2. Build the WorkItem: the pipeline reads a file source itself, through
-  //    the session's reader, into a serio::ByteBuffer it owns.
-  return TexturePipeline::WorkItem {
-    .source_id = source_id,
-    .source_path = resolved_path,
-    .desc = MakeImportDescFromConfig(config, source_id),
-  };
-}
-
-// Usage in ImportJob::ExecuteAsync():
-//   co_await pipeline.Submit(MakeTextureWorkItem(resolved_path, config));
-```
-
-#### Commit Responsibility
-
-**Pipelines do NOT commit to CookedContentWriter.** They return processed data.
-
-| Component | Responsibility                                                        |
-| --------- | --------------------------------------------------------------------- |
-| Pipeline  | Decode → Transcode → return `CookedTexturePayload` (in-memory)        |
-| Job       | Receive result → call `session.TextureEmitter().Emit()` → track index |
-
-This separation:
-
-- Keeps pipelines stateless (no external references)
-- Serializes commits on the import thread (thread-safe)
-- Mirrors sync architecture (cooker returns, emitter commits)
-
-```cpp
-// In job collection loop:
-auto result = co_await pipeline.Collect();
-if (result.success) {
-  // JOB commits, not pipeline
-  auto table_idx = session.TextureEmitter().Emit(std::move(*result.cooked));
-  texture_indices[result.source_id] = table_idx;
-}
-```
-
-#### Key Insight
-
-The **metadata extraction** is identical between sync and async:
-
-- `ResolveFileTexture()` - same
-- `MakeImportDescFromConfig()` - same
-- `TextureIdString()` - same
-
-Only the **dispatch** differs:
-
-- Sync: `CookTextureWithFallback()` → blocks until done
-- Async: `pipeline.Submit()` → returns immediately, collect later
-
-### 4. AsyncImporter (Internal LiveObject)
-
-Runs inside the import thread's nursery.
-
-**Implementation update (2026-01-15):** ImportSession creation is owned by the
-job. The session carries access to async I/O and the ThreadPool, so the importer
-itself no longer owns file-writer references.
-
-If a job request does not specify `ImportRequest.cooked_root`, the current
-implementation derives it from `ImportRequest.source_path` and the mount of the
-job's identity (`ImportRequest::OutputMountRoot`), ensuring the cooked root
-directory ends with the mount's name (`Content` for `/Content/...`). A cooked
-root holds one mount; the writer refuses another mount in it
-(`import.output_mount_mixed`). If the source path cannot be resolved (e.g.,
-synthetic test paths), it falls back to the process temp directory and still
-appends the mount's name.
-
-```cpp
-namespace oxygen::content::import::detail {
-
-class AsyncImporter final : public co::LiveObject {
-public:
-  struct Config {
-    size_t channel_capacity = 64;
-  };
-
-  struct JobEntry {
-    ImportJobId job_id;
-    std::shared_ptr<ImportJob> job;
-    std::shared_ptr<co::Event> cancel_event;
-  };
-
-  explicit AsyncImporter(Config config = {});
-  [[nodiscard]] auto SubmitJob(JobEntry entry) -> co::Co<>;
-};
-
-} // namespace oxygen::content::import::detail
-```
-
-**JobEntry ownership contract:** `JobEntry` is a thin envelope that transports
-the concrete `ImportJob` instance (constructed by `AsyncImportService`) plus a
-cancellation token/event. All job-specific data (request, callbacks, identity,
-progress state, and job metadata) lives inside `ImportJob`, not in the entry.
-
-### 5. ImportSession (Per-Job State + Emitters)
-
-Each import job gets its own session. The session owns emitters, tracks I/O,
-and provides the single access point for infrastructure services: the source
-reader, the import loop's `serio::IoDriver`, the cooked-file storage
-(`cooked::ImportStorage`), the nursery the emitters write in, and the
-ThreadPool. The session stores non-owning handles via `oxygen::observer_ptr` or
-owning smart pointers, but never raw reference members.
-
-```cpp
-namespace oxygen::content::import {
-
-//! Per-import-job state including lazy emitters and I/O tracking.
-/*!
- The session provides a clean boundary between:
- - AsyncImporter (shared compute infrastructure)
- - Per-job output state (emitters, diagnostics, pending writes)
-
- Emitters are created lazily on first use. The session calls Finalize()
- to join all writes and write the index file.
-*/
-class ImportSession {
-public:
-  //! `writes` is the nursery the emitters start their writes in. It outlives
-  //! the session's emitters; the session never closes it.
-  ImportSession(const ImportRequest& request,
-    observer_ptr<IAsyncFileReader> file_reader,
-    observer_ptr<serio::IoDriver> driver, observer_ptr<co::Nursery> writes,
-    observer_ptr<co::ThreadPool> thread_pool,
-    observer_ptr<ResourceTableRegistry> table_registry,
-    observer_ptr<LooseCookedIndexRegistry> index_registry,
-    observer_ptr<IAsyncFileReader> cooked_reader = {});
-
-  //=== Infrastructure ===//
-
-  [[nodiscard]] auto FileReader() const noexcept
-    -> observer_ptr<IAsyncFileReader>;
-  [[nodiscard]] auto Driver() const noexcept -> observer_ptr<serio::IoDriver>;
-  [[nodiscard]] auto Storage() const noexcept
-    -> observer_ptr<cooked::ImportStorage>;
-
-  //=== Lazy Emitters ===//
-
-  //! Get texture emitter (created on first call).
-  [[nodiscard]] auto TextureEmitter() -> TextureEmitter&;
-
-  //! Get buffer emitter (created on first call).
-  [[nodiscard]] auto BufferEmitter() -> BufferEmitter&;
-
-  //! Get asset descriptor emitter (created on first call).
-  [[nodiscard]] auto AssetEmitter() -> AssetEmitter&;
-
-  //=== Diagnostics ===//
-
-  auto AddDiagnostic(ImportDiagnostic diag) -> void;
-
-  //=== Finalization ===//
-
-  //! Join every emitter's writes, publish tables, write the index file.
-  /*!
-   @return ImportReport with success flag and diagnostics.
-  */
-  [[nodiscard]] auto Finalize() -> co::Co<ImportReport>;
-};
-
-} // namespace oxygen::content::import
-```
-
-`Finalize()` finalizes each emitter the session created. An emitter whose
-`Finalize()` returns a `WriteFailure` becomes an error diagnostic whose message
-names the file and the reason (for example
-`import.texture_emitter_finalize_failed`).
-
-#### Emitter Write Path
-
-An emitter does not own a file or a writer. Its table aggregator
-(`ResourceTableAggregator`, one per resource kind) owns the table and the data
-file's reserved size, and opens the data file once through the storage:
-
-```cpp
-// Opened on first use, created when missing, never truncated, sharing writes.
-auto DataFile() -> Result<serio::AnyAsyncDevice*>;  // storage->OpenData(...)
-
-// The only entry for a row. The aggregator computes the dedup key from every
-// field of the row except `data_offset` and reuses a row with that key only
-// when its offset satisfies `alignment`. Otherwise it reserves the next aligned
-// range of the data file, sets `row.data_offset`, appends the row and returns
-// the reservation (reservation_start, aligned_offset, padding_size). Throws
-// std::logic_error after finalization.
-auto Acquire(Descriptor row, uint64_t alignment)
-  -> AcquireResult;  // { index, is_new, reservation }
-```
-
-`ReserveDataRange` is private to the aggregator.
-
-Each emitter holds a `WriteGroup`, the writes it has in flight. The group
-starts every write as a task of the import session's nursery and keeps the
-first error:
-
-```cpp
-class WriteGroup final {
-public:
-  explicit WriteGroup(co::Nursery& nursery) noexcept;
-
-  //! Starts `write` of the file `path` in the nursery.
-  auto Start(std::filesystem::path path, co::Co<Result<void>> write) -> void;
-
-  //! Records a write that failed before it started.
-  auto Fail(const std::filesystem::path& path, std::error_code error) -> void;
-
-  //! Waits for every write started; the first failure, if any.
-  [[nodiscard]] auto Join() -> co::Co<Result<void, WriteFailure>>;
-
-  [[nodiscard]] auto ErrorCount() const noexcept -> size_t;
-  [[nodiscard]] auto Running() const noexcept -> size_t;
-};
-
-//! A cooked write that failed: the file it wrote and why.
-struct WriteFailure {
-  std::filesystem::path path;
-  std::error_code error;
-  [[nodiscard]] auto Message() const -> std::string;
-};
-```
-
-#### Emitter Implementation (Shape)
-
-```cpp
-// Emit() assigns the index, reserves the range and starts the writes.
-// No blocking: the index is valid the moment Emit() returns.
-auto BufferEmitter::Emit(CookedBufferPayload cooked) -> uint32_t {
-  // 0. An empty payload is refused (std::invalid_argument).
-  // 1. Acquire the row: stable index, dedup and, for a new row, the aligned
-  //    range of the data file. The row records cooked.data.Sha256().
-  const auto acquired = table_aggregator_.Acquire(row, alignment);
-  if (!acquired.is_new) {
-    return acquired.index;  // Reused row: no write.
-  }
-  const auto& range = acquired.reservation;
-
-  // 2. Start the writes in the session's nursery; the data lives in the
-  //    write coroutine.
-  if (range.padding_size > 0) {
-    QueueDataWrite(WriteKind::kPadding, std::nullopt,
-      range.reservation_start, std::vector<std::byte>(range.padding_size));
-  }
-  QueueDataWrite(WriteKind::kPayload, acquired.index, range.aligned_offset,
-    std::move(cooked.data));
-  return acquired.index;  // The caller can use this NOW.
-}
-
-auto BufferEmitter::QueueDataWrite(WriteKind kind,
-  std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
-  -> void {
-  const auto file = table_aggregator_.DataFile();
-  if (!file) {
-    writes_.Fail(data_path_, file.error());
-    return;
-  }
-  writes_.Start(
-    data_path_, WriteData(*file, kind, index, offset, std::move(data)));
-}
-
-auto BufferEmitter::WriteData(serio::AnyAsyncDevice* file, WriteKind kind,
-  std::optional<uint32_t> index, uint64_t offset, std::vector<std::byte> data)
-  -> co::Co<Result<void>> {
-  co_return co_await file->AsyncWriteAt(
-    serio::ByteOffset { offset }, std::span<const std::byte>(data));
-}
-
-// Joins the writes; the tables are published by the table aggregator.
-auto BufferEmitter::Finalize() -> co::Co<Result<void, WriteFailure>> {
-  co_return co_await writes_.Join();
-}
-```
-
-#### Cooked Write Contracts (ImportStorage)
-
-Emitters depend on `cooked::ImportStorage`, the role of `CookerStorage` that
-awaits its writes through the import loop's driver. The real file system and the
-in-memory test storage implement it:
-
-```cpp
-// Whole-file atomic replacement (buffered durability): descriptors, tables.
-auto PublishAsync(serio::IoDriver& driver, std::filesystem::path path,
-  std::span<const std::byte> bytes) -> co::Co<Result<void>>;
-
-// A data file for writes at reserved offsets: created when missing, never
-// truncated, sharing reads and writes.
-auto OpenData(serio::IoDriver& driver, const std::filesystem::path& path)
-  -> Result<serio::AnyAsyncDevice>;
-```
-
-**Contracts / guarantees:**
-
-- **No implicit append**: callers provide the file offset
-  (`AsyncWriteAt(serio::ByteOffset, bytes)`).
-- **Concurrency safety**: concurrent `AsyncWriteAt` calls on one data file are
-  allowed as long as their byte ranges do not overlap. Overlapping writes
-  produce undefined final content.
-- **Completion ordering**: writes may complete out of order.
-- **Atomic publication**: `PublishAsync` replaces the whole file atomically; a
-  cancelled or failed publication leaves the destination as it was.
-- **Error reporting**: errors are `std::error_code` values in a `Result`
-  (compared with `serio::Error` conditions or `std::errc`); no exceptions cross
-  async boundaries. The `WriteFailure` returned by `Finalize()` names the file.
-- **Cancellation**: cancelling the session's nursery cancels the writes through
-  the driver; the nursery joins them before the storage goes away.
-
-#### Emitter Contracts and Design Principles
-
-The current emitters (notably `BufferEmitter` and `TextureEmitter`) follow these
-rules to be correct under concurrent async I/O while keeping the caller API
-simple:
-
-1. **Stable index returned immediately**: `Emit()` assigns and returns an index
-   synchronously, before any I/O completes.
-2. **Dedup by every field but the offset**: the aggregator keys a row on all
-   its fields except `data_offset` (including the SHA-256); an empty payload is
-   refused. If a row with the key exists and its offset satisfies the requested
-   alignment, `Emit()` returns the existing index and starts no additional
-   write.
-3. **Append semantics via allocation**: `Acquire()` reserves a unique range at
-   the end of the data file for a new row.
-4. **Alignment-aware layout**: the reservation computes `aligned_offset` and
-   optional `padding_size`; padding is written as zero bytes at the reserved
-   start.
-5. **Table/index stability**: the table entry is recorded before (or alongside)
-   starting writes, so the returned index and descriptor mapping are stable
-   immediately after `Emit()` returns.
-6. **Explicit-offset writes only**: both padding and payload are written with
-   `AsyncWriteAt(offset, bytes)` on the aggregator's data file, opened once.
-7. **The write owns its buffers**: payload and padding are moved into the write
-   coroutine that the `WriteGroup` starts, so they live until it completes.
-8. **Error accounting**: the `WriteGroup` counts every failed write and keeps
-   the first one (file path and `std::error_code`).
-9. **Finalize defines the durability boundary**: `Finalize()` joins all writes
-   and returns `Result<void, WriteFailure>`; the tables are then published with
-   `PublishAsync`, and only then does the session write `container.index.bin`
-   last.
-10. **Single-threaded mutation**: emitter internal tables and maps are mutated
-    on the import thread; the writes run on the same event loop.
-
-TextureEmitter-specific rule:
-
-- **Index 0 reserved for fallback**: `EnsureFallbackTexture()` guarantees the
-  fallback texture exists at index 0 before emitting user textures.
-
-### 6. Job-Based Orchestration (ImportJob)
-
-The sync `Importer` interface remains unchanged and continues to support the
-existing synchronous path. The async path is driven by job actors (e.g.
-`FbxImportJob`, `GlbImportJob`, `TextureImportJob`) which orchestrate pipelines
-and emitters on the import thread.
-
-### 6. FbxImportJob Async Orchestration Example (Maximum Parallelism)
-
-For a 32-core CPU, we want **all cores busy** and **streaming emission**.
-This example shows the optimal pattern for a complex FBX with 28 textures,
-3 meshes, 12 materials, and 4 animation clips.
-
-#### Material Readiness Tracker
-
-```cpp
-//! Tracks which materials are ready to emit (all textures processed).
-class MaterialReadinessTracker {
-public:
-  explicit MaterialReadinessTracker(const Scene& scene) {
-    // Build dependency graph: material → required texture source_ids
-    for (size_t i = 0; i < scene.materials.size(); ++i) {
-      auto& mat = scene.materials[i];
-      MaterialDep dep { .material_idx = i };
-
-      for (const auto& slot : mat.texture_slots) {
-        if (!slot.source_id.empty()) {
-          dep.pending_textures.insert(slot.source_id);
-          texture_to_materials_[slot.source_id].push_back(i);
-        }
-      }
-
-      if (dep.pending_textures.empty()) {
-        // No textures - ready immediately
-        ready_queue_.push(i);
-      } else {
-        material_deps_.push_back(std::move(dep));
-      }
-    }
-  }
-
-  //! Mark a texture as ready. Returns indices of materials now ready to emit.
-  auto MarkTextureReady(const std::string& source_id) -> std::vector<size_t> {
-    std::vector<size_t> newly_ready;
-
-    for (auto mat_idx : texture_to_materials_[source_id]) {
-      auto& dep = material_deps_[mat_idx];
-      dep.pending_textures.erase(source_id);
-
-      if (dep.pending_textures.empty() && !dep.emitted) {
-        dep.emitted = true;
-        newly_ready.push_back(mat_idx);
-      }
-    }
-
-    return newly_ready;
-  }
-
-private:
-  struct MaterialDep {
-    size_t material_idx;
-    std::unordered_set<std::string> pending_textures;
-    bool emitted = false;
-  };
-
-  std::vector<MaterialDep> material_deps_;
-  std::unordered_map<std::string, std::vector<size_t>> texture_to_materials_;
-  std::queue<size_t> ready_queue_;  // Materials with no texture deps
-};
-```
-
-#### Optimal Concurrent Import (Using Session + Emitters)
-
-```cpp
-auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
-{
-  // The job's session: its reader, driver, writes nursery and registries.
-  auto& session = Session();
-  auto& pool = *session.ThreadPool();
-  TexturePipeline tex_pipe(pool, {/* config */});
-  StartPipeline(tex_pipe);
-
-  // Get emitters from session (lazy creation)
-  auto& tex_emitter = session.TextureEmitter();
-  auto& asset_emitter = session.AssetEmitter();
-  auto& buf_emitter = session.BufferEmitter();
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Phase 1: Parse FBX (sequential, ~50ms)
-  // ═══════════════════════════════════════════════════════════════════════
-  auto scene = co_await pool.Run([&] {
-    return ParseFbxScene(request.source_path);
-  });
-
-  // Build material dependency tracker
-  MaterialReadinessTracker material_tracker(scene);
-
-  // Shared state (safe: all coroutines resume on import thread)
-  std::unordered_map<std::string, uint32_t> texture_indices;
-  std::unordered_map<size_t, uint32_t> material_indices;
-  std::vector<uint32_t> mesh_indices(scene.meshes.size());
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Phase 2: SUBMIT ALL WORK IMMEDIATELY (saturate 32 cores)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // Submit all textures to pipeline
-  std::unordered_set<std::string> submitted_textures;
-  for (const auto* tex : scene.textures) {
-    auto work = MakeTextureWorkItem(tex, request);
-    if (submitted_textures.insert(work.source_id).second) {
-      tex_pipe.Submit(std::move(work));
-    }
-  }
-  // 28 texture jobs now in ThreadPool queue
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Phase 3: CONCURRENT COLLECTION WITH STREAMING EMISSION
-  // ═══════════════════════════════════════════════════════════════════════
-  //
-  // Pipeline cooks → Emitter emits (async I/O) → index returned immediately
-  // No blocking on I/O anywhere in this loop!
-  //
-  co::Nursery nursery;
-
-  //=== Stream A: Texture Collection → Emit → Material Emission ===//
-  nursery.Start([&]() -> co::Co<> {
-    while (tex_pipe.HasPending()) {
-      auto result = co_await tex_pipe.Collect();
-
-      if (result.success) {
-        // EMIT texture via emitter (returns index IMMEDIATELY, I/O is async)
-        auto idx = tex_emitter.Emit(std::move(result.cooked_data));
-        texture_indices[result.source_id] = idx;
-
-        // Emit any materials that are now ready
-        for (auto mat_idx : material_tracker.MarkTextureReady(result.source_id)) {
-          auto mat_desc = BuildMaterialDescriptor(scene.materials[mat_idx],
-                                                   texture_indices);
-          asset_emitter.Emit(AssetType::kMaterial, std::move(mat_desc));
-        }
-      } else {
-        for (const auto& diag : result.diagnostics) {
-          session.AddDiagnostic(diag);
-        }
-      }
-    }
-  });
-
-  //=== Stream B: Geometry Processing (parallel on ThreadPool) ===//
-  for (size_t i = 0; i < scene.meshes.size(); ++i) {
-    nursery.Start([&, i]() -> co::Co<> {
-      // CPU-heavy work on ThreadPool
-      auto processed = co_await pool.Run([&, i] {
-        return ProcessMesh(scene.meshes[i]);  // tangents, skinning, etc.
-      });
-      // EMIT via emitter (returns index IMMEDIATELY)
-      mesh_indices[i] = buf_emitter.Emit(std::move(processed));
-    });
-  }
-  // 3 mesh jobs now in ThreadPool queue
-
-  //=== Stream C: Animation Baking (parallel on ThreadPool) ===//
-  for (const auto* anim : scene.animations) {
-    nursery.Start([&, anim]() -> co::Co<> {
-      auto baked = co_await pool.Run([&] {
-        return BakeAnimation(anim);
-      });
-      buf_emitter.Emit(std::move(baked));
-    });
-  }
-  // 4 animation jobs now in ThreadPool queue
-
-  // Total: 28 + 3 + 4 = 35 jobs for 32 cores (work-stealing balances load)
-
-  // ═══════════════════════════════════════════════════════════════════════
-  // Phase 4: Wait for ALL compute streams to complete
-  // ═══════════════════════════════════════════════════════════════════════
-  co_await nursery.Join();
-
-  // Note: I/O may still be in flight! That's fine.
-  // session.Finalize() will wait for all I/O before writing index file.
-}
-
-// Called by the job after compute completes:
-// co_await session.Finalize();  // Waits for I/O, flushes tables, writes index
-```
-
-#### Flow Summary
-
-```text
-┌────────────────────────────────────────────────────────────────────────────┐
-│ FbxImportJob::ExecuteAsync                                                 │
-├────────────────────────────────────────────────────────────────────────────┤
-│ 1. Parse FBX → scene graph                                                 │
-│ 2. Submit all textures to TexturePipeline (28 jobs → ThreadPool)           │
-│ 3. For each collected cooked texture:                                      │
-│    - tex_emitter.Emit() → index (immediate) + async I/O (background)       │
-│    - Check material readiness → asset_emitter.Emit() if ready              │
-│ 4. For each mesh: pool.Run() → buf_emitter.Emit()                          │
-│ 5. nursery.Join() → all compute done                                       │
-│ 6. Return (I/O may still be in flight!)                                    │
-├────────────────────────────────────────────────────────────────────────────┤
-│ ImportJob calls session.Finalize()                                         │
-├────────────────────────────────────────────────────────────────────────────┤
-│ 7. Join each emitter's WriteGroup (tex, buf, asset emitters)               │
-│ 8. Publish table files (PublishAsync, one atomic write each)               │
-│ 9. Write container.index.bin (LooseCookedWriter::Finish())                 │
-│ 10. Return ImportReport                                                    │
-└────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 7. Append-Style Allocation (AsyncWriteAt), Deferred Index File Pattern
-
-**The existing architecture is already optimal!** Let me trace how it works:
-
-#### Loose Cooked Structure
-
-```text
-container.index.bin     ← Written by: ImportSession::Finalize() → LooseCookedWriter::Finish()
-Resources/
-  textures.table        ← Written by: TextureEmitter::Finalize()
-  textures.data         ← Written by: TextureEmitter::Emit() (async I/O)
-  buffers.table         ← Written by: BufferEmitter::Finalize()
-  buffers.data          ← Written by: BufferEmitter::Emit() (async I/O)
-Materials/
-  *.omat                ← Written by: AssetEmitter::Emit() (async I/O)
-Geometry/
-  *.ogeo                ← Written by: AssetEmitter::Emit() (async I/O)
-Scenes/
-  *.oscene              ← Written by: AssetEmitter::Emit() (async I/O)
-```
-
-#### WHO Does WHAT (Sync vs Async)
-
-**Sync Path (Existing - Unchanged):**
-
-| File                  | Cooked By            | Emitted By        | Method                       |
-| --------------------- | -------------------- | ----------------- | ---------------------------- |
-| `textures.data`       | FbxImporter (inline) | FbxImporter       | `AppendResource()`           |
-| `textures.table`      | —                    | FbxImporter       | `out.WriteFile()`            |
-| `buffers.data`        | FbxImporter (inline) | FbxImporter       | `AppendResource()`           |
-| `buffers.table`       | —                    | FbxImporter       | `out.WriteFile()`            |
-| `*.omat`              | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
-| `*.ogeo`              | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
-| `*.oscene`            | —                    | FbxImporter       | `out.WriteAssetDescriptor()` |
-| `container.index.bin` | —                    | LooseCookedWriter | `Finish()`                   |
-
-**Async Path (New - Pipelines + Emitters):**
-
-| File                  | Cooked By           | Emitted By         | Method                    | When         |
-| --------------------- | ------------------- | ------------------ | ------------------------- | ------------ |
-| `textures.data`       | **TexturePipeline** | **TextureEmitter** | `Emit()` async I/O        | Streaming    |
-| `textures.table`      | —                   | **TextureEmitter** | `Finalize()`              | Session end  |
-| `buffers.data`        | **ThreadPool**      | **BufferEmitter**  | `Emit()` async I/O        | Streaming    |
-| `buffers.table`       | —                   | **BufferEmitter**  | `Finalize()`              | Session end  |
-| `*.omat`              | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per material |
-| `*.ogeo`              | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per geometry |
-| `*.oscene`            | —                   | **AssetEmitter**   | `Emit()` async I/O        | Per scene    |
-| `container.index.bin` | —                   | **ImportSession**  | `Finalize()` → `Finish()` | **LAST**     |
-
-**Key Differences:**
-
-- **Sync**: Importer cooks inline AND emits via blocking I/O
-- **Async**: Pipeline cooks → Emitter emits via async I/O → index returned immediately
-- **Sync**: Single thread, sequential
-- **Async**: 32+ cores cooking, async I/O overlapped, no blocking
-
-#### Emitter Responsibilities
-
-| Emitter          | Owns                              | `Emit()` Does                        | `Finalize()` Does         |
-| ---------------- | --------------------------------- | ------------------------------------ | ------------------------- |
-| `TextureEmitter` | `textures.data`, `textures.table` | Assign index, queue async data write | Wait for I/O, flush table |
-| `BufferEmitter`  | `buffers.data`, `buffers.table`   | Assign index, queue async data write | Wait for I/O, flush table |
-| `AssetEmitter`   | `*.omat`, `*.ogeo`, `*.oscene`    | Queue async descriptor write         | Wait for all writes       |
-
-#### Log-Structured Allocation (Re-import Support)
-
-```text
-Fresh import:    T1→0, T2→1, T3→2
-Re-import T2:    T2'→3 (NEW data appended, NEW index)
-                 Old data at offset 1 is STALE (not referenced)
-Index file:      T1→0, T2→3, T3→2 (ACCURATE, always points to fresh data)
-Pak step:        Pack only reached resources, remap indices
-```
-
-Counter-based index assignment is CORRECT because:
-
-- Each import session uses monotonic counter
-- Re-import appends new data with new indices
-- Index file is always written LAST with accurate mappings
-- Stale data stays in the loose root; the pak step leaves it out
-
-#### The Index File (`container.index.bin`)
-
-The index file is a **binary manifest** containing:
-
-1. **IndexHeader** (256 bytes) - magic, version, section offsets
-2. **String table** - all paths as null-terminated UTF-8
-3. **AssetEntry[]** - each asset with its key, descriptor path, virtual path
-4. **FileRecord[]** - metadata about resource files including **their sizes**
-   and SHA-256 digests (resource data files record an all-zero digest; each
-   resource in them is verified against its table row's SHA-256)
-
-```cpp
-// From LooseCookedIndexFormat.h
-struct FileRecord {
-  FileKind kind;           // kTexturesTable, kTexturesData, etc.
-  uint32_t relpath_offset; // "Resources/textures.table"
-  SizeT size;              // MUST know final size!
-  ...
-};
-```
-
-**The index file MUST be written LAST** because `FileRecord::size` requires
-knowing the final size of each `.table` and `.data` file.
-
-#### The Data Flow
-
-```text
-┌─────────────────────────────────────────────────────────────────────────┐
-│ DURING IMPORT (streaming)                                               │
-├─────────────────────────────────────────────────────────────────────────┤
-│ textures.data  ← Reserve range + AsyncWriteAt, get stable offset        │
-│ table vector   ← Push descriptor entries (in memory, ~100 bytes each)  │
-│ texture index  ← Just the vector position (stable at push time)         │
-├─────────────────────────────────────────────────────────────────────────┤
-│ AFTER ALL COOKING COMPLETE                                              │
-├─────────────────────────────────────────────────────────────────────────┤
-│ textures.table ← Write table vector to file (know final size)           │
-│ buffers.table  ← Write table vector to file (know final size)           │
-│ *.omat, *.ogeo ← Write descriptor files                                 │
-├─────────────────────────────────────────────────────────────────────────┤
-│ LAST                                                                    │
-├─────────────────────────────────────────────────────────────────────────┤
-│ container.index.bin ← Write index with all file sizes and paths         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-#### Why This Works
-
-**Offsets and table indices are stable at Emit() time.** Materials can
-reference `table_index` immediately because:
-
-- Index is assigned synchronously (counter increment)
-- Data write is queued as async I/O (non-blocking)
-- Table entry is added in memory (tiny: ~100 bytes)
-- The `.table` file is written once at session end
-- The index file is written LAST with all sizes
-
-**Memory for table entries**: 28 textures × 100 bytes = **2.8KB** (not 280MB!)
-
-#### Finalization: Writing the Index File
-
-After all async I/O completes, `ImportSession::Finalize()` writes `container.index.bin`:
-
-```cpp
-// LooseCookedWriter finalization (simplified)
-auto LooseCookedWriter::Finalize() -> void {
-  // Build string table from all paths
-  StringTable strings;
-  for (const auto& asset : asset_entries_) {
-    // Add descriptor paths, virtual paths
-  }
-  for (const auto& file : file_records_) {
-    // Add file relpaths
-  }
-
-  // Build file records with FINAL sizes
-  std::vector<FileRecord> records;
-  for (const auto& [kind, relpath] : registered_files_) {
-    records.push_back({
-      .kind = kind,
-      .relpath_offset = strings.Offset(relpath),
-      .size = std::filesystem::file_size(root_ / relpath),  // Now we know!
-      .sha256 = digest,  // Registered by the producer; never re-read here
-    });
-  }
-
-  // Write index header + sections
-  IndexHeader header;
-  header.string_table_offset = ...;
-  header.asset_entries_offset = ...;
-  header.file_records_offset = ...;
-
-  WriteToFile(root_ / "container.index.bin", header, strings, assets, records);
-}
-```
-
-#### Concurrent Emission to Data File
-
-The bottleneck is NOT the data—it's sequential I/O which is fast.
-The bottleneck would be if multiple producers try to append using a shared file
-position (or if async writes interleave).
-
-**Options:**
-
-A) **Single-threaded allocation, concurrent AsyncWriteAt** (current design):
-All coroutines resume on import thread → serialized reservations and table
-mutation, while file I/O completes concurrently via `AsyncWriteAt()` tasks of
-the session's nursery.
-
-B) **Mutex-protected appends**:
-
-```cpp
-auto Append(std::span<const std::byte> bytes) -> uint64_t {
-  std::scoped_lock lock(mutex_);
-  auto offset = current_offset_;
-  stream_.write(...);
-  current_offset_ += bytes.size();
-  return offset;
-}
-```
-
-C) **Reserve offsets, parallel AsyncWriteAt** (same core idea as emitters):
-
-```cpp
-// Phase 1: Reserve offset ranges (fast, serialized)
-const auto range = ReserveAlignedRange(size, alignment);
-
-// Phase 2: Write at explicit offset (safe concurrency)
-writes.Start(path,
-  file->AsyncWriteAt(serio::ByteOffset { range.aligned_offset }, payload_bytes));
-```
-
-For most cases, **Option A** (single-threaded allocation on import thread) is sufficient
-because:
-
-- I/O is fast (~GB/s on NVMe)
-- Cooking remains the dominant cost
-- Explicit-offset writes avoid append interleaving
-
-#### Updated FbxImportJob Flow
-
-```cpp
-auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport> {
-  // The job's session: its reader, driver, writes nursery and registries.
-  auto& session = Session();
-  auto& pool = *session.ThreadPool();
-  TexturePipeline tex_pipe(pool, {/* config */});
-  StartPipeline(tex_pipe);
-
-  // Emit via emitter (tables in memory, data via AsyncWriteAt)
-  auto& tex_emitter = session.TextureEmitter();
-
-  auto scene = co_await pool.Run([&] { return ParseFbxScene(...); });
-  MaterialReadinessTracker tracker(scene);
-
-  // Submit all textures to pipeline
-  for (const auto* tex : scene.textures) {
-    tex_pipe.Submit(MakeTextureWorkItem(tex));
-  }
-
-  co::Nursery nursery;
-
-  // Texture → Material stream
-  nursery.Start([&]() -> co::Co<> {
-    while (tex_pipe.HasPending()) {
-      auto result = co_await tex_pipe.Collect();
-
-      // Reserve range + start the write task (fast, on import thread)
-      auto idx = tex_emitter.Emit(std::move(result.cooked_data));
-      texture_indices[result.source_id] = idx;
-
-      // Materials can reference idx NOW
-      for (auto mat_idx : tracker.MarkTextureReady(result.source_id)) {
-        EmitMaterial(scene.materials[mat_idx], texture_indices, mat_state);
-      }
-    }
-  });
-
-  // Mesh/animation streams (parallel on ThreadPool)
-  for (size_t i = 0; i < scene.meshes.size(); ++i) {
-    nursery.Start([&, i]() -> co::Co<> {
-      auto processed = co_await pool.Run([&] { return ProcessMesh(...); });
-      mesh_indices[i] = buf_state.EmitBuffer(std::move(processed));
-    });
-  }
-
-  co_await nursery.Join();
-
-  // Scene graph
-  EmitSceneGraph(scene, mesh_indices, material_indices, out);
-
-  // session.Finalize() (called by ImportJob) joins the emitters' writes and
-  // publishes the tables (tiny, one atomic write each).
-}
-```
-
-#### Memory Usage
-
-| Component                  | Size    | Notes                           |
-| -------------------------- | ------- | ------------------------------- |
-| Texture table (28 entries) | ~2.8 KB | In memory                       |
-| Buffer table (10 entries)  | ~1 KB   | In memory                       |
-| Material descriptors       | ~5 KB   | In memory                       |
-| Texture data               | 280 MB  | **Written to disk immediately** |
-| Buffer data                | 50 MB   | **Written to disk immediately** |
-
-**Total RAM**: ~10 KB for tables, **NOT** 280 MB for data!
-
-#### Timeline
-
-```text
-TIME (ms) →    0    200   400   600   800   1000  1200  1400  1600  1800  2000
-              ├─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┼─────┤
-Parse FBX     ██░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-              │
-Cores 0-27    │ ████████████████████████████████████████████████████████████
-(textures)    │ BC7 encode → reserve+AsyncWriteAt to .data (streaming)
-              │
-Import thread │ ░░░collect→startWrite░░collect→startWrite░░collect→startWrite░░░░░░░
-              │ (coroutines interleave, each write submission is fast)
-              │
-Tables flush  │ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░█
-              │                                                   (~1ms)
-              └─────────────────────────────────────────────────────────────┘
-                                                              TOTAL: ~2000ms
-```
-
-The data write submissions are **interleaved** with cooking; OS I/O completion
-overlaps with compute, and explicit-offset writes avoid append interleaving.
-
-#### Key Design Points Summary
-
-1. **Submit everything upfront**: All 35 jobs hit ThreadPool immediately.
-   Work-stealing keeps 32 cores saturated.
-
-2. **Concurrent coroutines via Nursery**: Streams A, B, C run "in parallel"
-   on the import thread. They interleave when suspended on co_await.
-
-3. **Reserve + write immediately**: reserve a unique range and queue
-   `AsyncWriteAt()` to `.data`. No implicit append; no interleaving.
-
-4. **Buffer only table entries**: Table descriptors (~100 bytes each) are
-   kept in memory and flushed once at the end.
-
-5. **Indices are stable at Emit() time**: When `Emit()` returns an index,
-   materials can reference it immediately.
-
-6. **Streaming material emission**: Materials emit as soon as their textures
-   are ready. No waiting for all textures.
-
-7. **Memory usage is minimal**: ~10KB for tables, NOT 280MB for data.
-
-8. **Thread-safe by construction**: All coroutines resume on import thread.
-   Allocation + table mutation is serialized without explicit locks; I/O is
-   concurrent via non-overlapping `AsyncWriteAt()`.
-
-### 8. Import Event Loop
-
-A minimal ASIO-based event loop for the import thread.
-
-```cpp
-namespace oxygen::content::import::detail {
-
-//! ASIO-based event loop for the import thread.
-class ImportEventLoop {
-public:
-  ImportEventLoop();
-  ~ImportEventLoop();
-
-  OXYGEN_MAKE_NON_COPYABLE(ImportEventLoop)
-  OXYGEN_MAKE_NON_MOVABLE(ImportEventLoop)
-
-  //! Get the underlying ASIO io_context.
-  [[nodiscard]] auto IoContext() -> asio::io_context&;
-
-  //! The IO driver of the io_context: files opened through it are awaited
-  //! by coroutines running on this loop.
-  [[nodiscard]] auto Driver() noexcept -> serio::IoDriver&;
-
-  //! Run the event loop (blocks until stopped).
-  auto Run() -> void;
-
-  //! Request the event loop to stop.
-  auto Stop() -> void;
-
-  //! Post a callback to run on this event loop.
-  template <typename F>
-  auto Post(F&& f) -> void;
-
-private:
-  asio::io_context io_context_;
-  serio::IoDriver driver_;  // over io_context_; destroyed by the loop
-  asio::executor_work_guard<asio::io_context::executor_type> work_guard_;
-};
-
-} // namespace oxygen::content::import::detail
-
-// EventLoopTraits specialization
-namespace oxygen::co {
-
-template <>
-struct EventLoopTraits<content::import::detail::ImportEventLoop> {
-  static auto EventLoopId(content::import::detail::ImportEventLoop& loop)
-    -> EventLoopID
-  {
-    return EventLoopID(&loop.IoContext());
-  }
-
-  static auto Run(content::import::detail::ImportEventLoop& loop) -> void
-  {
-    loop.Run();
-  }
-
-  static auto Stop(content::import::detail::ImportEventLoop& loop) -> void
-  {
-    loop.Stop();
-  }
-
-  static auto IsRunning(content::import::detail::ImportEventLoop&) noexcept
-    -> bool
-  {
-    return true; // Simplified; real impl checks thread ID
-  }
-};
-
-//! ThreadNotification for ImportEventLoop.
-template <>
-class ThreadNotification<content::import::detail::ImportEventLoop> {
-public:
-  ThreadNotification(content::import::detail::ImportEventLoop& loop,
-    void (*fn)(void*), void* arg)
-    : loop_(loop)
-    , fn_(fn)
-    , arg_(arg)
-  {
-  }
-
-  auto Post(content::import::detail::ImportEventLoop&,
-    void (*fn)(void*), void* arg) noexcept -> void
-  {
-    loop_.Post([fn, arg]() { fn(arg); });
-  }
-
-private:
-  content::import::detail::ImportEventLoop& loop_;
-  void (*fn_)(void*);
-  void* arg_;
-};
-
-} // namespace oxygen::co
-```
-
----
-
-## Enhancing Existing Texture Import Code
-
-The existing `TextureImporter.h/cpp` (2800+ lines) and `TextureCooker.h/cpp`
-(1200+ lines) are production quality. The async enhancement **wraps** this
-code, it does not replace it.
-
-### Existing Sync API (Preserved)
-
-```cpp
-// TextureImporter.h - HIGH-LEVEL API (unchanged)
-auto ImportTexture(path, policy) -> Result<TextureImportResult, Error>;
-auto ImportTexture(path, preset, policy) -> Result<TextureImportResult, Error>;
-auto ImportTexture(path, desc, policy) -> Result<TextureImportResult, Error>;
-auto ImportCubeMap(...) -> Result<TextureImportResult, Error>;
-auto ImportTextureArray(...) -> Result<TextureImportResult, Error>;
-
-// TextureCooker.h - PIPELINE STAGES (unchanged)
-auto CookTexture(bytes, desc, policy) -> Result<CookedTexturePayload, Error>;
-namespace detail {
-  auto DecodeSource(bytes, desc) -> Result<ScratchImage, Error>;
-  auto ConvertToWorkingFormat(image, desc) -> Result<ScratchImage, Error>;
-  auto ApplyContentProcessing(image, desc) -> Result<ScratchImage, Error>;
-  auto GenerateMips(image, desc) -> Result<ScratchImage, Error>;
-  auto ConvertToOutputFormat(image, desc) -> Result<ScratchImage, Error>;
-  auto PackSubresources(image, policy) -> vector<byte>;
-}
-```
-
-### Async Enhancement Strategy
-
-**Option A: Simple Wrapper** (recommended for phase 1)
-
-Wrap the entire sync `CookTexture()` in a ThreadPool task:
-
-```cpp
-// TexturePipeline internal implementation
-auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
-  // Single ThreadPool task for entire cooking
-  const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
-  auto result = co_await thread_pool_->Run([&] {
-    return CookTexture(item.source.bytes, item.desc, policy);
-  });
-
-  if (!result) {
-    co_return WorkResult{
-      .success = false,
-      .diagnostics = { ConvertToDiagnostic(result.error()) },
-    };
-  }
-
-  // Compute-only: return cooked payload in memory. The caller commits via an
-  // emitter (normal imports) or a writer (special standalone convenience APIs).
-  co_return WorkResult{
-    .cooked = std::move(*result),
-    .success = true,
-  };
-}
-```
-
-**Option B: Split Stages** (for fine-grained cancellation)
-
-Split into cancellable stages if needed:
-
-```cpp
-auto TexturePipeline::ProcessItem(WorkItem& item) -> co::Co<WorkResult> {
-  // Stage 1: Decode (can check cancellation between stages)
-  auto decoded = co_await thread_pool_->Run([&] {
-    return detail::DecodeSource(item.source.bytes, item.desc);
-  });
-  if (item.stop_token.stop_requested()) co_return Cancelled();
-
-  // Stage 2: Process (mips, format conversion)
-  auto processed = co_await thread_pool_->Run([&] {
-    auto working = detail::ConvertToWorkingFormat(std::move(*decoded), item.desc);
-    auto content = detail::ApplyContentProcessing(std::move(*working), item.desc);
-    auto mipped = detail::GenerateMips(std::move(*content), item.desc);
-    return detail::ConvertToOutputFormat(std::move(*mipped), item.desc);
-  });
-  if (item.stop_token.stop_requested()) co_return Cancelled();
-
-  // Stage 3: Pack into the final cooked payload (still compute-only)
-  const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
-  auto packed = detail::PackSubresources(*processed, policy);
-  auto cooked = BuildCookedPayload(std::move(packed), item.desc, policy);
-  co_return WorkResult{ .cooked = std::move(cooked), .success = true };
-}
-```
-
-### TexturePipeline Implementation
-
-```cpp
-class TexturePipeline {
-public:
-  explicit TexturePipeline(co::ThreadPool& pool, Config cfg = {});
-
-  auto Submit(WorkItem item) -> void {
-    input_channel_.TrySend(std::move(item));
-    ++pending_;
-  }
-
-  auto Collect() -> co::Co<WorkResult> {
-    auto result = co_await output_channel_.Receive();
-    --pending_;
-    co_return result;
-  }
-
-  [[nodiscard]] auto HasPending() const -> bool { return pending_ > 0; }
-
-private:
-  // Worker coroutine (runs N instances for parallelism)
-  auto Worker() -> co::Co<> {
-    while (auto item = co_await input_channel_.Receive()) {
-      auto result = co_await ProcessItem(*item);
-      output_channel_.TrySend(std::move(result));
-    }
-  }
-
-  co::Channel<WorkItem> input_channel_;
-  co::Channel<WorkResult> output_channel_;
-  std::atomic<size_t> pending_{0};
-  std::shared_ptr<co::ThreadPool> thread_pool_;
-  const ITexturePackingPolicy* policy_;
-};
-```
-
-### Integration with emit/TextureEmitter
-
-The existing `GetOrCreateTextureResourceIndexWithCooker()` in `TextureEmitter.cpp`
-calls `CookTextureWithFallback()` synchronously. For async:
-
-```cpp
-// Async variant for FbxImportJob
-auto GetOrCreateTextureResourceIndexAsync(
-  TexturePipeline& pipeline,
-  const ufbx_texture* texture,
-  const CookerConfig& config) -> co::Co<uint32_t>
-{
-  // Submit to pipeline
-  pipeline.Submit(TexturePipeline::WorkItem{
-    .source_id = TextureIdString(texture),
-    .bytes = ExtractTextureBytes(texture),
-    .bytes_owner = ExtractTextureOwner(texture),
-    .desc = MakeDescFromConfig(config),
-  });
-
-  // Don't wait here - caller collects later for parallelism
-  co_return kPendingIndex;  // Placeholder, real index comes from Collect()
-}
-```
-
----
-
-## Cancellation Design
-
-### Cancellation Granularity
-
-1. **Per-Importer (Shutdown)**: Cancelling the AsyncImporter's nursery cancels
-   all in-flight jobs. Used during service shutdown.
-
-2. **Per-Job**: Each job owns a cancellation signal and a job child nursery.
-   Cancelling the job cancels the job nursery, which cascades to all job-scoped
-   tasks including pipeline workers.
-
-### How to Cancel a Job
-
-`AsyncImportService::CancelJob(job_id)` performs a thread-safe request that is
-handled on the import thread:
-
-1. Look up the `ImportJob` state for `job_id`.
-2. Signal cancellation (e.g. trigger `cancel_event` and/or request-stop on a
-   stop source that feeds `WorkItem.stop_token`).
-3. Cancel the job child nursery.
-4. The job finishes and reports completion via `on_complete(job_id, report)`.
-   For cancellation, `report.success=false` and includes diagnostic code
-   `"import.canceled"`.
-
-This is the definitive mechanism for per-job cancellation.
-
-### Pipeline Cancellation Semantics (Job-Scoped)
-
-Pipelines are **job-scoped** and run inside the job’s child nursery.
-
-- Cancelling the job’s nursery cancels pipeline worker coroutines.
-- Work items must still carry cancellation (`WorkItem.stop_token`) so the
-  synchronous cookers/transcoders can exit cooperatively while running on the
-  ThreadPool.
-- Pipelines do not provide a direct `Cancel()` API; normal per-job cancellation
-  is expressed by cancelling the job nursery and by honoring
-  `WorkItem::stop_token` in pipeline workers.
-
-### Cancellation Flow
-
-```cpp
-// Per-job cancellation pattern (ImportJob is the single job actor)
-// NOTE: completion must be cancellation-safe; do not rely on code after a
-// cancellable co_await to run.
-auto ImportJob::MainAsync() -> co::Co<> {
-  bool report_ready = false;
-  ImportReport report;
-
-  // Ensure on_complete is invoked once even if this coroutine is canceled
-  // by importer shutdown.
-  co_await co::AnyOf(
-    [&]() -> co::Co<> {
-      auto run_job = [&]() -> co::Co<ImportReport> {
-        // Job-scoped pipelines/tasks are started via ImportJob's job-scoped
-        // APIs (nursery is intentionally not exposed).
-        // Actual work is implemented by the concrete job.
-        co_return co_await ExecuteAsync();
-      };
-
-      // OxCo deterministically handles early cancellation: if the job coroutine
-      // hasn't been resumed yet, it is canceled without running.
-      auto [canceled, out] = co_await co::AnyOf(*cancel_event_, run_job());
-      report = canceled.has_value() ? MakeCancelledReport() : std::move(*out);
-      report_ready = true;
-      co_return;
-    }(),
-    co::UntilCancelledAnd([&]() -> co::Co<> {
-      if (!report_ready) {
-        report = MakeCancelledReport();
-        report_ready = true;
-      }
-      co_return;
-    }));
-
-  on_complete_(job_id_, report);
-}
-```
-
-### Encapsulation Rule (No Nursery Leakage)
-
-`ImportJob` owns the job nursery, but does **not** expose it. Concrete jobs use
-"cookie-cutter" job-scoped helpers provided by the base class (e.g.
-`StartTask(...)`, `StartPipeline(...)`, and a `StopToken()` accessor) so all
-jobs share consistent structured-concurrency and cancellation behavior.
-
-### ThreadPool Cancellation
-
-For long-running ThreadPool tasks (e.g., BC7 encoding), use `CancelToken`:
-
-```cpp
-auto result = co_await thread_pool_->Run(
-  [&](co::ThreadPool::CancelToken canceled) {
-    for (auto& block : blocks) {
-      if (canceled) return PartialResult{};
-      EncodeBlock(block);
-    }
-    return FullResult{};
-  });
-```
-
----
-
-## Error Handling
-
-### Principles
-
-1. **No exceptions across thread boundaries**: Results are returned via
-   `oxygen::Result<T, E>` or error codes in the `ImportReport`.
-
-2. **Exceptions within coroutines**: Caught at nursery boundaries and
-   converted to error reports.
-
-3. **File I/O errors**: Returned as `Result<T>` whose error is a
-   `std::error_code` (compared with `serio::Error` conditions or `std::errc`),
-   never thrown. Cooked-write failures carry the file path (`WriteFailure`).
-
-4. **ThreadPool exceptions**: Caught by the awaiter and rethrown on resume;
-   we catch at the coroutine level.
-
-### Error Propagation
-
-```cpp
-auto ProcessJob(JobEntry& job) -> co::Co<ImportReport> {
-  try {
-    auto result = co_await DoImport(job.request);
-    co_return result;
-  } catch (const std::exception& e) {
-    co_return ImportReport{
-      .success = false,
-      .diagnostics = {{ ImportSeverity::kError, e.what() }},
-    };
-  }
-}
-```
-
----
-
-## Thread Safety Model
-
-### The Key Insight: Coroutines on Import Thread
-
-All coroutines spawned in `co::Nursery` run on the **import thread's event loop**.
-When a coroutine calls `co_await pool.Run(...)`, it:
-
-1. Submits work to ThreadPool
-2. **Suspends** (import thread can run other coroutines)
-3. When ThreadPool completes, **resumes on import thread**
-
-This means emission commits (e.g., `session.TextureEmitter().Emit(...)`,
-`session.BufferEmitter().Emit(...)`, `session.AssetEmitter().Emit(...)`) are
-always executed from a single thread. **No locks are needed for emitter state**
-(single-writer commit).
-
-```text
-Import Thread Event Loop (single thread):
-┌─────────────────────────────────────────────────────────────────────┐
-│ Coroutine A (texture collection)     │ RUNNING                     │
-│   auto result = co_await tex.Collect()  │ → SUSPENDS                │
-├─────────────────────────────────────────────────────────────────────┤
-│ Coroutine B (mesh 0)                 │ NOW RUNS                    │
-│   auto mesh = co_await pool.Run(...)    │ → SUSPENDS                │
-├─────────────────────────────────────────────────────────────────────┤
-│ Coroutine C (mesh 1)                 │ NOW RUNS                    │
-│   auto mesh = co_await pool.Run(...)    │ → SUSPENDS                │
-├─────────────────────────────────────────────────────────────────────┤
-│ ... ThreadPool completes mesh 0 ...                                 │
-│ Coroutine B RESUMES on import thread:                               │
-│   buf_emitter.Emit(mesh_buffers)         │ ← serialized!             │
-├─────────────────────────────────────────────────────────────────────┤
-│ ... Pipeline has texture result ...                                 │
-│ Coroutine A RESUMES on import thread:                               │
-│   tex_emitter.Emit(*result.cooked)       │ ← serialized!             │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-### Public API (AsyncImportService)
-
-- All methods protected by `std::mutex`
-- Job submission via `std::atomic` ID generation + thread-safe queue
-- Results invoked on import thread; caller may marshal
-
-### Internal (Import Thread)
-
-- Single-threaded event loop: no locks needed between `co_await` points
-- All coroutines resume on import thread → emitter/session mutation serialized
-- Channel-based communication within the import thread
-- ThreadPool handles its own synchronization
-
-### Cross-Thread Communication
-
-```text
-[App Thread]                    [Import Thread]
-     │                                │
-     │ SubmitImport()                 │
-     │ ─────────────────────────────▶ │ (via thread-safe queue + Post)
-     │                                │
-     │                                │ Nursery spawns coroutines A, B, C
-     │                                │ Each co_awaits ThreadPool
-     │                                │ ◀── results resume on import thread
-     │                                │
-     │                                │ All commits on import thread
-     │                                │ (interleaved, but single-threaded)
-     │                                │
-     │ callback(result)               │
-     │ ◀──────────────────────────────│ (import thread; caller may marshal)
-     │                                │
-```
-
----
-
-## Integration with Existing Code
-
-### File Inventory
-
-These existing files are **preserved and wrapped**, not replaced:
-
-| File                        | Lines | Role in Async                         |
-| --------------------------- | ----- | ------------------------------------- |
-| `Importer.h`                | 55    | Base interface; unchanged (sync path) |
-| `AssetImporter.h/cpp`       | 200   | Façade; unchanged (sync path)         |
-| `ImportRequest.h`           | 55    | POD; unchanged                        |
-| `ImportReport.h`            | 40    | POD; unchanged                        |
-| `CookedContentWriter.h`     | 85    | Interface; unchanged                  |
-| `TextureImporter.h/cpp`     | 2800  | Called by TexturePipeline             |
-| `TextureCooker.h/cpp`       | 1200  | Called by TexturePipeline             |
-| `emit/TextureEmitter.h/cpp` | 450   | Sync path preserved                   |
-| `Async/Jobs/*.h/.cpp`       | —     | Job-based async orchestration         |
-
-### Preserved Sync Path
-
-```cpp
-// This path remains unchanged and working:
-AssetImporter importer;
-auto report = importer.ImportToLooseCooked(request);
-
-// Internally:
-//   1. DetectFormat() → ImportFormat::kFbx
-//   2. Find FbxImporter backend
-//   3. FbxImporter::Import(request, writer)
-//      - ParseFbx()
-//      - For each texture: CookTextureWithFallback() [SYNC]
-//      - EmitMaterials(), EmitGeometry(), EmitScene()
-```
-
-### Async Path (New)
-
-```cpp
-// New async entry point:
 AsyncImportService service;
-auto job_id = service.SubmitImport(request, on_complete);
-
-// Internally:
-//   1. Post to import thread
-//   2. DetectFormat() → ImportFormat::kFbx
-//   3. Create FbxImportJob (or GlbImportJob/TextureImportJob)
-//   4. Job executes:
-//      - Parse via ThreadPool
-//      - For each texture: pipeline.Submit() [PARALLEL]
-//      - Collect textures, emit materials as ready
-//      - EmitGeometry(), EmitScene()
-```
-
-### Job Migration Path
-
-Jobs migrate incrementally:
-
-1. **Phase 1**: Basic job wiring + session finalization (no parallelism)
-2. **Phase 2**: FbxImportJob uses TexturePipeline for parallel cooking
-3. **Phase 3**: GlbImportJob adopts the same pipeline pattern
-
----
-
-## Configuration
-
-```cpp
-struct AsyncImportService::Config {
-  //! Thread pool size for CPU-bound work.
-  uint32_t thread_pool_size = std::thread::hardware_concurrency();
-
-  //! Concurrent texture cooking tasks.
-  uint32_t texture_pipeline_workers = 2;
-
-  //! Backpressure threshold for texture queue.
-  uint32_t texture_queue_capacity = 64;
-
-  //! Maximum concurrent import jobs.
-  /*!
-   Current implementation processes jobs sequentially.
-   This knob is reserved for future multi-job concurrency.
-  */
-  uint32_t max_concurrent_jobs = 1;
-
-  //! File read buffer size for async I/O.
-  size_t file_read_buffer_size = 64 * 1024;
-};
-```
-
----
-
-## Lifecycle
-
-### Startup
-
-```cpp
-// Application startup
-AsyncImportService import_service(config);
-
-// Service constructor:
-// 1. Create ImportEventLoop
-// 2. Spawn import thread
-// 3. In import thread:
-//    a. Create ThreadPool(event_loop, config.thread_pool_size)
-//    b. Create AsyncImporter LiveObject
-//    c. Activate AsyncImporter in root nursery
-//    d. Run event loop
-```
-
-### Shutdown
-
-```cpp
-// Application shutdown
-import_service.RequestShutdown();
-// Destructor blocks until complete
-
-// Shutdown sequence:
-// 1. RequestShutdown() posts stop request to import thread
-// 2. Import thread:
-//    a. Cancels root nursery (cascades to all jobs)
-//    b. Waits for all jobs to complete/cancel
-//    c. Stops event loop
-// 3. Join import thread
-// 4. Destructor completes
-```
-
----
-
-## Example Usage
-
-See `Examples/AsyncImport/` for a complete demonstration.
-
-```cpp
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
-
-int main() {
-  using namespace oxygen::content::import;
-
-  // Create import service
-  AsyncImportService importer({
-    .thread_pool_size = 4,
-    .texture_pipeline_workers = 2,
+const auto id = service.SubmitImport(
+  ImportRequest {
+    .source_path = "models/sponza.fbx",
+    .cooked_root = "H:/cooked/sponza",
+  },
+  [](ImportJobId job, const ImportReport& report) {
+    // Runs on the import thread.
+    LOG_F(INFO, "job {}: success={} cancelled={}", job, report.success,
+      report.cancelled);
   });
-
-  // Submit import
-  auto job_id = importer.SubmitImport(
-    ImportRequest{
-      .source_path = "models/sponza.fbx",
-      .cooked_root = "cooked/sponza/",
-    },
-    [](ImportJobId id, ImportReport report) {
-      if (report.success) {
-        std::cout << "Import " << id << " complete!\n";
-      } else {
-        std::cout << "Import " << id << " failed.\n";
-      }
-    }
-  );
-
-  // Wait for completion (real app would have event loop)
-  std::this_thread::sleep_for(std::chrono::seconds(30));
-
-  // Cleanup
-  importer.RequestShutdown();
-  return 0;
-}
+// ...
+service.Stop();   // required before the destructor
 ```
 
----
+## See also
 
-## Standalone Asset Imports (Non-Scene)
-
-Not all imports involve scenes. The design supports importing individual assets:
-
-### Supported Standalone Import Types
-
-1. **Textures**: HDRi, JPG, PNG, DDS → Cooked texture asset
-2. **Audio** (future): WAV, FLAC → Compressed audio asset
-3. **Shaders** (future): HLSL → Compiled shader blob
-
-### API for Standalone Texture Import
-
-```cpp
-//! Import a standalone texture (not part of a scene).
-[[nodiscard]] auto SubmitTextureImport(
-  TextureImportRequest request,
-  ImportCompletionCallback on_complete,
-  ImportProgressCallback on_progress = nullptr) -> ImportJobId;
-
-struct TextureImportRequest {
-  std::filesystem::path source_path;   //!< Source texture file
-  std::filesystem::path output_path;   //!< Cooked output path
-  TextureImportOptions options;        //!< Compression, mips, format, etc.
-};
-```
-
-### Internal Routing
-
-A standalone texture request runs as a `TextureImportJob`, like any import: the
-job reads its sources through the session's `IAsyncFileReader` into
-`serio::ByteBuffer`s, cooks them through the `TexturePipeline`, and emits the
-result through the session's `TextureEmitter`, whose writes go to the cooked
-root's `textures.data` through `cooked::ImportStorage`. There is no separate
-standalone write path.
-
----
-
-## Manifest-Driven Imports (Built-In)
-
-Manifests are a first-class **importer feature** (not a tool-only concern) and
-represent a batch of import jobs with shared defaults and per-job overrides.
-They are designed to be consumed by both sync and async import paths and to
-expand into standard `ImportRequest` jobs with deterministic behavior.
-
-### Design Principles and Required Features
-
-- **Versioned schema with strict validation** and clear diagnostics (job index,
-  source path, and JSON pointer for invalid fields).
-- **Defaults + overrides model**: global defaults, per-job overrides, and
-  explicit `job_type` routing (texture, fbx, glb, etc.).
-- **Path resolution**: relative paths resolved against the manifest root or an
-  explicit override; paths normalized for stable `texture_id` generation.
-- **Deterministic expansion**: job order preserved; duplicate job definitions
-  produce deterministic dedupe keys and diagnostics.
-- **Texture settings parity**: intent, color space, output/data format, mip
-  policy/filter, BC7 quality, packing policy, cube layout/face size, flip Y,
-  force RGBA, cubemap, equirect-to-cube, HDR handling, exposure, normal map
-  flips/renorm, and mip filter space.
-- **Multi-source texture inputs**: explicit cube faces, 2D array layers,
-  3D depth slices, pre-authored mips, and single-image layout extraction.
-- **Async-compatibility**: manifest expansion yields `WorkItem`s and job
-  descriptors without performing I/O; pipelines and emitters remain unchanged.
-- **Dry-run + reporting hooks**: optional validation-only runs and JSON report
-  output consistent with per-job telemetry.
-- **Forward evolution**: additive fields permitted without breaking older
-  parsers; unknown fields must be rejected or ignored based on schema version.
-- **Uniform diagnostics**: error codes align with importer diagnostics (e.g.,
-  `import.manifest.invalid`, `texture.settings.invalid`, `import.canceled`).
-
-## Extensibility for New Asset Types
-
-### Adding New Pipelines (Concept-Checked)
-
-New asset types follow the same **pattern** as TexturePipeline. Each is a
-concrete class with its own types, verified at compile-time via concepts.
-
-```cpp
-// AudioPipeline - satisfies ResourcePipeline concept
-class AudioPipeline {
-public:
-  struct WorkItem {
-    std::string source_id;      // Correlation key (e.g., audio path)
-    std::span<const std::byte> bytes;
-    std::shared_ptr<const void> bytes_owner;
-    AudioImportDesc desc;       // sample rate, codec, channels, etc.
-    std::stop_token stop_token;
-  };
-
-  struct WorkResult {
-    std::string source_id;      // Echoed from WorkItem
-    std::optional<CookedAudioPayload> cooked;
-    std::vector<ImportDiagnostic> diagnostics;
-    bool success;
-  };
-
-  auto Start(co::Nursery& nursery) -> void;
-  auto Submit(WorkItem item) -> co::Co<>;
-  auto TrySubmit(WorkItem item) -> bool;
-  auto Collect() -> co::Co<WorkResult>;
-  [[nodiscard]] auto HasPending() const -> bool;
-  [[nodiscard]] auto PendingCount() const -> size_t;
-  [[nodiscard]] auto GetProgress() const -> PipelineProgress;
-  auto Close() -> void;
-  auto Cancel() -> void;
-};
-
-// Verified at compile time
-static_assert(ResourcePipeline<AudioPipeline>);
-```
-
-### Adding to AsyncImporter
-
-When a new pipeline is added:
-
-1. Add member variable
-2. Add typed accessor
-3. Add static_assert for concept check
-
-```cpp
-class AsyncImporter {
-  TexturePipeline texture_pipeline_;
-  AudioPipeline audio_pipeline_;      // NEW
-
-public:
-  auto Textures() -> TexturePipeline& { return texture_pipeline_; }
-  auto Audio() -> AudioPipeline& { return audio_pipeline_; }  // NEW
-};
-
-// Compile-time verification
-static_assert(ResourcePipeline<TexturePipeline>);
-static_assert(ResourcePipeline<AudioPipeline>);
-```
-
-### Generic Pipeline Utilities
-
-The concept enables generic utilities without polymorphism:
-
-```cpp
-//! Wait for all pending items in any pipeline.
-template <ResourcePipeline P>
-auto DrainPipeline(P& pipeline) -> co::Co<std::vector<typename P::WorkResult>> {
-  std::vector<typename P::WorkResult> results;
-  results.reserve(pipeline.PendingCount());
-
-  while (pipeline.HasPending()) {
-    results.push_back(co_await pipeline.Collect());
-  }
-
-  co_return results;
-}
-
-//! Get aggregate progress from multiple pipelines.
-template <ResourcePipeline... Ps>
-auto AggregateProgress(Ps&... pipelines) -> PipelineProgress {
-  PipelineProgress total{};
-  ((total.submitted += pipelines.GetProgress().submitted,
-    total.completed += pipelines.GetProgress().completed,
-    total.failed += pipelines.GetProgress().failed,
-    total.in_flight += pipelines.GetProgress().in_flight), ...);
-  return total;
-}
-```
-
----
-
-## Performance Summary
-
-### When to Use Which Pattern
-
-| Scenario                         | Pattern                      | Notes                                               |
-| -------------------------------- | ---------------------------- | --------------------------------------------------- |
-| Complex FBX/glTF (many textures) | Nursery + streaming emission | See FbxImportJob example above                      |
-| Simple asset (few textures)      | Sequential collect is fine   | Overhead of tracking not worth it                   |
-| Standalone texture import        | Direct pipeline, no nursery  | Single item, no dependencies                        |
-| Batch cooking (no UI)            | Either works                 | Streaming for throughput, sequential for simplicity |
-
-### Core Utilization
-
-| Item Count                            | Cores | Efficiency                |
-| ------------------------------------- | ----- | ------------------------- |
-| 28 textures + 3 meshes + 4 animations | 32    | ~100% (work-stealing)     |
-| 8 textures + 1 mesh                   | 32    | ~25% (not enough work)    |
-| 100 textures                          | 32    | ~100% (pipeline keeps up) |
-
-For maximum throughput on high-core-count machines:
-
-1. Submit ALL work upfront (don't wait for dependencies)
-2. Use `co::Nursery` for concurrent collection streams
-3. Emit incrementally as dependencies resolve
-4. Scene graph emits last (needs all indices)
-
----
-
-## Implementation status & Remaining TODOs
-
-The implementation covers the core async import pipeline (import thread/event
-loop, `AsyncImporter`, `ImportSession`, `TexturePipeline`, `TextureEmitter`,
-`ThreadPool` integration, Windows file reader/writer, and job orchestration).
-The following concise set of items remain to complete or extend the architecture
-(kept as tracked TODOs):
-
-- **High priority**
-  - Implement `AudioPipeline` and `AudioEmitter` and wire `AudioImportJob`
-    (Phase 6 TODOs in `Internal/Jobs/AudioImportJob.cpp`).
-  - Add pipeline-level tests (Texture/Buffer/Material) for correctness under
-    cancellation, error propagation, and `Finalize()` semantics.
-  - Complete manifest validation and tooling: strict schema evolution, dry-run
-    reporting output, and improved path resolution.
-
-- **Medium priority**
-  - Add a shader/compile pipeline (shader asset cooking) and test harness.
-  - Address `MaterialPipeline` TODOs (e.g., `header.streaming_priority`,
-    `header.variant_flags`, and multi-UV support).
-  - Harden multi-job concurrency behavior and expose tuning/observability for
-    `max_in_flight_jobs` and per-pipeline concurrency knobs.
-
-- **Low priority / Future**
-  - Enhance per-item telemetry and progress reporting (input/output queue
-    samples, rolling throughput) surfaced via `ProgressEvent`.
-  - Add content-hash coverage across pipelines (testable).
-  - Expand packing policies and presets across platforms and add more
-    performance benchmarks and regressions tests.
-
-> Note: These TODOs are intentionally high-level. When work begins, create
-> focused issues referencing the relevant files (examples:
-> `Internal/Jobs/AudioImportJob.cpp`, `Internal/Pipelines/MaterialPipeline.h`,
-> `ImportManifest.{h,cpp}`) and include unit/integration tests that assert
-> correctness and robustness.
-
----
-
-## See Also
-
-- [async_file_io.md](async_file_io.md) - Import source reads and cooked writes
-- [implementation_plan.md](implementation_plan.md) - Phased implementation
-- [OxCo/Docs/ThreadPool.md](../src/Oxygen/OxCo/Docs/ThreadPool.md) - ThreadPool usage
-- [OxCo/Docs/Live_Objects.md](../src/Oxygen/OxCo/Docs/Live_Objects.md) - LiveObject pattern
+- [async_file_io.md](async_file_io.md)
+- [async_import_planner.md](async_import_planner.md)
+- [OxCo ThreadPool](../../../OxCo/Docs/ThreadPool.md)
