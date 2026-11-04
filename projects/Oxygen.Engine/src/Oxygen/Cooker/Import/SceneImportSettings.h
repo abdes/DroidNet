@@ -53,16 +53,18 @@ struct SceneImportSettings {
   bool import_scene = true;
 
   std::string unit_policy;
-  float unit_scale = 1.0F;
+  float unit_scale = CoordinateConversionPolicy {}.unit_scale;
   bool unit_scale_set = false;
   bool bake_transforms = false;
-  float gltf_omitted_light_range_m = 4096.0F;
+  float gltf_omitted_light_range_m
+    = ImportOptions::kDefaultGltfOmittedLightRangeM;
   std::string gltf_scene;
   std::string up_axis;
   bool import_lights = true;
   bool import_cameras = true;
-  float light_intensity_scale = 1.0F;
-  float normals_smoothing_angle_deg = 60.0F;
+  float light_intensity_scale = ImportOptions::kDefaultLightIntensityScale;
+  float normals_smoothing_angle_deg
+    = ImportOptions::kDefaultNormalsSmoothingAngleDeg;
   bool generate_lods = LodGenerationOptions {}.enabled;
   uint32_t lod_levels = LodGenerationOptions {}.levels;
   float lod_reduction_percent = LodGenerationOptions {}.reduction_percent;

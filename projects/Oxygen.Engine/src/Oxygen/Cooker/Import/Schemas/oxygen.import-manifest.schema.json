@@ -223,6 +223,18 @@
           "if": {
             "properties": {
               "type": {
+                "enum": ["gltf", "fbx"]
+              }
+            }
+          },
+          "then": {
+            "$ref": "#/definitions/model_job_keys"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
                 "const": "model"
               }
             }
@@ -993,6 +1005,65 @@
         }
       },
       "additionalProperties": false
+    },
+    "model_job_keys": {
+      "description": "The keys of a gltf or fbx job, and so of a model import record's settings, which are that job's without the keys the record and its publisher own.",
+      "propertyNames": {
+        "enum": [
+          "bake_hdr",
+          "bake_transforms",
+          "bc7_quality",
+          "color_space",
+          "content_flags",
+          "cooked_context_roots",
+          "cube_face_size",
+          "cube_layout",
+          "cubemap",
+          "data_format",
+          "depends_on",
+          "equirect_to_cube",
+          "exposure_ev",
+          "flip_normal_green",
+          "flip_y",
+          "force_rgba",
+          "generate_lods",
+          "geometry_defaults",
+          "gltf_omitted_light_range_m",
+          "gltf_scene",
+          "hdr_handling",
+          "id",
+          "import_cameras",
+          "import_lights",
+          "intent",
+          "light_intensity_scale",
+          "lod_levels",
+          "lod_reduction_percent",
+          "material_remap",
+          "max_mips",
+          "max_size",
+          "mip_filter",
+          "mip_policy",
+          "name",
+          "node_pruning",
+          "normals_policy",
+          "normals_smoothing_angle_deg",
+          "output",
+          "output_format",
+          "packing_policy",
+          "preset",
+          "renormalize",
+          "source",
+          "source_key",
+          "tangents_policy",
+          "texture_overrides",
+          "type",
+          "unit_policy",
+          "unit_scale",
+          "up_axis",
+          "verbose",
+          "virtual_path"
+        ]
+      }
     },
     "job_settings": {
       "type": "object",

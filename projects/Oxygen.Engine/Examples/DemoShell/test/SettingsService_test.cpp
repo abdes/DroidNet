@@ -198,7 +198,6 @@ namespace {
     auto& o = profile.options;
     o.import_content
       = ImportContentFlags::kGeometry | ImportContentFlags::kScene;
-    o.ignore_non_mesh_primitives = false;
     o.node_pruning = NodePruningPolicy::kDropEmptyNodes;
     o.coordinate.unit_normalization
       = UnitNormalizationPolicy::kApplyCustomFactor;
@@ -243,7 +242,6 @@ namespace {
 
     const auto& ro = restored.options;
     EXPECT_EQ(ro.import_content, o.import_content);
-    EXPECT_FALSE(ro.ignore_non_mesh_primitives);
     EXPECT_EQ(ro.node_pruning, o.node_pruning);
     EXPECT_EQ(
       ro.coordinate.unit_normalization, o.coordinate.unit_normalization);

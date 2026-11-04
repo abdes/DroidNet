@@ -207,8 +207,6 @@ namespace {
     EXPECT_FALSE(prepared.has_value());
     EXPECT_TRUE(
       HasDiagnosticCode(diagnostics, "physics.shape.schema_validation_failed"));
-    EXPECT_FALSE(
-      HasDiagnosticCode(diagnostics, "physics.shape.compound_child_invalid"));
   }
 
 } // namespace

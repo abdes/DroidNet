@@ -67,7 +67,6 @@
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
-#include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/AtomicFile.h>
@@ -831,16 +830,11 @@ namespace {
     ReadValue(
       obj, "target_scene_virtual_path", settings.target_scene_virtual_path);
     if (obj.contains("physics_backend")) {
-      using core::meta::physics::PhysicsBackend;
-      const auto& backend
-        = obj.at("physics_backend").get_ref<const std::string&>();
-      if (backend == "jolt") {
-        settings.physics_backend = PhysicsBackend::kJolt;
-      } else if (backend == "physx") {
-        settings.physics_backend = PhysicsBackend::kPhysX;
-      } else {
-        settings.physics_backend = PhysicsBackend::kNone;
-      }
+      // The schema lists the backends.
+      const auto backend = ParsePhysicsBackend(
+        obj.at("physics_backend").get_ref<const std::string&>());
+      CHECK_F(backend.has_value(), "The schema refuses an unknown backend");
+      settings.physics_backend = *backend;
     }
   }
 

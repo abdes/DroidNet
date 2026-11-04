@@ -483,8 +483,6 @@ auto ContentImportTab::DrawContentGroup() -> void
   ImGui::SameLine();
   cw::CommandCheckbox(*commands_, cc::kImportScene, "Scene",
     HasFlag(options, ImportContentFlags::kScene));
-  cw::CommandCheckbox(*commands_, cc::kIgnoreNonMesh, "Ignore points and lines",
-    options.ignore_non_mesh_primitives);
   cw::ChoiceCombo(*commands_, cc::kNodePruning, "Node pruning",
     options.node_pruning, choices::kNodePruning,
     options.node_pruning != defaults.node_pruning);

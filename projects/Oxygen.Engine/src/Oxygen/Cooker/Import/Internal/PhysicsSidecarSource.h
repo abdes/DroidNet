@@ -102,6 +102,18 @@ struct PhysicsSidecarDocument final {
   std::vector<data::pak::physics::AggregateBindingRecord> aggregates;
 };
 
+//! A reference a physics sidecar's bindings make, as authored.
+struct PhysicsSidecarReference final {
+  std::string written;
+  //! Names a geometry; otherwise a shape or a physics material.
+  bool geometry = false;
+  std::string json_pointer;
+};
+
+//! The references the bindings of a sidecar document make, in document order.
+OXGN_COOK_NDAPI auto PhysicsSidecarReferences(const nlohmann::json& document)
+  -> std::vector<PhysicsSidecarReference>;
+
 //! Validates and interprets sidecar bytes: every rule the document states
 //! alone, with no scene, backend or cooked-resource lookup.
 /*!

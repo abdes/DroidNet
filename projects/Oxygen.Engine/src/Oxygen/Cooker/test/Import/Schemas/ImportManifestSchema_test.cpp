@@ -9,12 +9,16 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -186,5 +190,73 @@ INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestMountsSchemaTest,
       "name",
     }),
   oxygen::cooker::test::SchemaCaseName);
+
+//! The schema's defaults for a model import state what the options default to.
+NOLINT_TEST(ImportManifestSchemaTest, ModelDefaultsMatchTheImportOptions)
+{
+  const auto options = oxygen::content::import::ImportOptions {};
+  for (const auto* section : { "scene_settings", "job_settings" }) {
+    const auto& properties
+      = Schema().at("definitions").at(section).at("properties");
+    const auto number = [&](const char* key) -> float {
+      return properties.at(key).at("default").get<float>();
+    };
+    const auto flag = [&](const char* key) -> bool {
+      return properties.at(key).at("default").get<bool>();
+    };
+    EXPECT_FLOAT_EQ(
+      number("gltf_omitted_light_range_m"), options.gltf_omitted_light_range_m)
+      << section;
+    EXPECT_FLOAT_EQ(number("normals_smoothing_angle_deg"),
+      options.normals_smoothing_angle_deg)
+      << section;
+    EXPECT_FLOAT_EQ(
+      number("light_intensity_scale"), options.light_intensity_scale)
+      << section;
+    EXPECT_EQ(flag("import_lights"), options.import_lights) << section;
+    EXPECT_EQ(flag("import_cameras"), options.import_cameras) << section;
+    EXPECT_EQ(flag("generate_lods"), options.lod_generation.enabled) << section;
+    EXPECT_EQ(properties.at("lod_levels").at("default").get<std::uint32_t>(),
+      options.lod_generation.levels)
+      << section;
+    EXPECT_FLOAT_EQ(
+      number("lod_reduction_percent"), options.lod_generation.reduction_percent)
+      << section;
+  }
+}
+
+//! A model job takes the settings of a model import, not a descriptor's.
+NOLINT_TEST(ImportManifestSchemaTest, ModelJobRefusesDescriptorKeys)
+{
+  auto validator
+    = oxygen::content::import::internal::MakeJsonSchemaValidator(Schema());
+  const auto refused
+    = [&validator](const char* key, const json& value) -> bool {
+    auto job = json {
+      { "type", "gltf" },
+      { "source", "a.glb" },
+      { "virtual_path", "/Content/a" },
+    };
+    job[key] = value;
+    const auto manifest = json {
+      { "version", 1 },
+      { "jobs", json::array({ job }) },
+    };
+    auto issues
+      = std::vector<oxygen::content::import::internal::JsonSchemaIssue> {};
+    auto failure = std::string {};
+    EXPECT_TRUE(oxygen::content::import::internal::CollectJsonSchemaIssues(
+      validator, manifest, issues, failure))
+      << failure;
+    return !issues.empty();
+  };
+
+  EXPECT_FALSE(refused("import_lights", false));
+  EXPECT_FALSE(refused("max_size", 512));
+  EXPECT_TRUE(refused("sources", json::array()));
+  EXPECT_TRUE(refused("derived_from", "/Content/a.glb"));
+  EXPECT_TRUE(refused("compile", true));
+  EXPECT_TRUE(refused("physics_backend", "jolt"));
+}
 
 } // namespace

@@ -439,7 +439,6 @@ Acceptance:
          for scheduling (deduped and order-stable).
        - diagnostics:
          - `physics.manifest.dependency_inference_failed`
-         - `physics.manifest.dependency_unresolved`
          - `physics.manifest.dependency_ambiguous`
          - `manifest.dependency_missing`
          - `manifest.dependency_cycle`
@@ -764,7 +763,6 @@ Build/test execution in this pass:
        - manifest defaults < job settings < CLI overrides.
 2. Dependency diagnostics are explicit and stable:
    - `physics.manifest.dependency_inference_failed`
-   - `physics.manifest.dependency_unresolved`
    - `physics.manifest.dependency_ambiguous`
    - `manifest.dependency_missing`
    - `manifest.dependency_cycle`
@@ -813,7 +811,6 @@ Build/test execution in this pass:
      - `src/Oxygen/Cooker/Import/Internal/ImportSession.h`
      - `src/Oxygen/Cooker/Import/Internal/ImportSession.cpp`
    - batch DAG duplicate suppression for physics diagnostics:
-     - unresolved refs (`physics.manifest.dependency_unresolved`)
      - ambiguous refs (`physics.manifest.dependency_ambiguous`)
      - missing explicit targets (`manifest.dependency_missing`)
        in:

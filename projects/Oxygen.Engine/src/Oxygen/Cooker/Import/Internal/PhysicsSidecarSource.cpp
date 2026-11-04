@@ -1169,4 +1169,49 @@ auto PreparePhysicsSidecarDocument(const std::string_view bytes,
   return parsed;
 }
 
+auto PhysicsSidecarReferences(const nlohmann::json& document)
+  -> std::vector<PhysicsSidecarReference>
+{
+  struct Field final {
+    std::string_view name;
+    bool geometry = false;
+  };
+  constexpr auto kFields = std::array {
+    Field { .name = "shape_ref" },
+    Field { .name = "inner_shape_ref" },
+    Field { .name = "material_ref" },
+    Field { .name = "source_mesh_ref", .geometry = true },
+    Field { .name = "collision_mesh_ref", .geometry = true },
+  };
+  auto references = std::vector<PhysicsSidecarReference> {};
+  const auto bindings = document.find("bindings");
+  if (bindings == document.end() || !bindings->is_object()) {
+    return references;
+  }
+  for (const auto& [kind, rows] : bindings->items()) {
+    if (!rows.is_array()) {
+      continue;
+    }
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+      const auto& row = rows.at(index);
+      if (!row.is_object()) {
+        continue;
+      }
+      const auto location
+        = nlohmann::json::json_pointer {} / "bindings" / kind / index;
+      for (const auto& field : kFields) {
+        const auto value = row.find(field.name);
+        if (value != row.end() && value->is_string()) {
+          references.push_back(PhysicsSidecarReference {
+            .written = value->get<std::string>(),
+            .geometry = field.geometry,
+            .json_pointer = (location / std::string { field.name }).to_string(),
+          });
+        }
+      }
+    }
+  }
+  return references;
+}
+
 } // namespace oxygen::content::import

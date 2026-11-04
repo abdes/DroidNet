@@ -60,6 +60,49 @@ class ImportSessionCliTests(unittest.TestCase):
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
 
+    def test_sidecars_take_inline_bindings_without_a_source(self):
+        for command, bindings in (
+            ("physics-sidecar", '{"bindings":{}}'),
+            ("script-sidecar", '{"bindings":[]}'),
+        ):
+            with self.subTest(command=command):
+                result = subprocess.run(
+                    [str(IMPORT_TOOL), command, "--bindings-inline", bindings],
+                    cwd=self.root,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=20,
+                )
+
+                self.assertNotIn("positional argument", result.stdout + result.stderr)
+
+    def test_physics_sidecar_refuses_an_unknown_backend(self):
+        result = subprocess.run(
+            [
+                str(IMPORT_TOOL),
+                "physics-sidecar",
+                "--bindings-inline",
+                '{"bindings":{}}',
+                "--target-scene-virtual-path",
+                "/Content/Scene.oscene",
+                "--output",
+                str(self.root / ".cooked"),
+                "--physics-backend",
+                "bullet",
+            ],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=20,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--physics-backend", result.stdout + result.stderr)
+
     def test_editor_session_runs_as_a_batch(self):
         session_dir = self.root / "Project"
         write_gltf(session_dir / "Originals" / "Ship", "Hull.gltf")

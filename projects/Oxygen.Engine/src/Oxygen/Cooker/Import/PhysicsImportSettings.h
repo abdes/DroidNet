@@ -6,7 +6,9 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 
@@ -71,5 +73,20 @@ struct PhysicsSidecarImportSettings final {
   core::meta::physics::PhysicsBackend physics_backend
     = core::meta::physics::PhysicsBackend::kJolt;
 };
+
+//! The backend a manifest key or command line names; nothing for any other
+//! text.
+[[nodiscard]] inline auto ParsePhysicsBackend(const std::string_view text)
+  -> std::optional<core::meta::physics::PhysicsBackend>
+{
+  using core::meta::physics::PhysicsBackend;
+  for (const auto backend :
+    { PhysicsBackend::kNone, PhysicsBackend::kJolt, PhysicsBackend::kPhysX }) {
+    if (to_string(backend) == text) {
+      return backend;
+    }
+  }
+  return std::nullopt;
+}
 
 } // namespace oxygen::content::import

@@ -590,10 +590,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_EQ(materials, kMaterialCount);
 }
 
-NOLINT_TEST_F(BatchCommandPhysicsDagTest,
-  PhysicsSidecarUnresolvedInferredRefsEmitDependencyUnresolvedDiagnostic)
+//! A reference no job of the batch produces may be in a cooked root: the batch
+//! refuses nothing, and the cook resolves it or refuses it.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, UnproducedReferenceIsLeftToTheCook)
 {
-  const auto root = MakeScenarioDir("physics_unresolved_refs");
+  const auto root = MakeScenarioDir("physics_unproduced_refs");
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
@@ -617,38 +618,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   const auto messages = Messages();
   EXPECT_THAT(
-    messages, ::testing::HasSubstr("physics.manifest.dependency_unresolved"));
-}
-
-NOLINT_TEST_F(BatchCommandPhysicsDagTest,
-  PhysicsSidecarDuplicateUnresolvedRefsEmitSingleDependencyUnresolvedDiagnostic)
-{
-  const auto root = MakeScenarioDir("physics_unresolved_duplicate_refs");
-  const auto manifest_path = root / "import-manifest.json";
-
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
-      "output": ".cooked",
-      "mounts": [{"name": "Content", "path": "."}],
-      "jobs": [
-        {
-          "id": "physics.sidecar.main",
-          "type": "physics-sidecar",
-          "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
-          "bindings": )"
-      + FloorBindingsText({ 0U, 1U }, "/Cooked/Physics/Materials/floor.opmat")
-      + R"(
-        }
-      ]
-    })");
-
-  const auto result = RunBatch(manifest_path);
-  EXPECT_FALSE(result.has_value());
-
-  const auto messages = Messages();
-  EXPECT_EQ(
-    CountOccurrences(messages, "physics.manifest.dependency_unresolved"), 3U);
+    messages, ::testing::Not(::testing::HasSubstr("physics.manifest.")));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,

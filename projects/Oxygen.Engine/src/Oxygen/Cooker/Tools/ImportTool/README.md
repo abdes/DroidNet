@@ -183,7 +183,8 @@ Scene controls:
   compression
 
 The manifest job and the model import record also hold settings keyed by parts
-of the file, by the names `analyze-sources` reports:
+of the file, by the names `analyze-sources` reports. They have no command line
+flag:
 
 - `material_remap`: a material's name to the virtual path of an existing
   material its surfaces use instead; the replaced material is not produced. A
@@ -581,6 +582,8 @@ Optional:
 - `-i`, `--output <path>`
 - `--name <job-name>`
 - `--report <path>`
+- `--physics-backend <jolt|physx|none>`: the backend to cook for (default
+  `jolt`); the manifest key is `physics_backend`
 
 Reference requirements: the target scene is named by its virtual path, and
 every reference in the payload is an absolute virtual path in another mount or

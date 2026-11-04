@@ -141,11 +141,6 @@ auto ChangedGroups(const ImportProfile& profile)
     ModelImportRecord::MakeSettings(MakeModelImportSettings(profile)));
   auto groups = std::set<ImportSettingsGroup>(
     changed_settings.begin(), changed_settings.end());
-  // The record does not hold what the importer skips before it.
-  if (profile.options.ignore_non_mesh_primitives
-    != defaults.options.ignore_non_mesh_primitives) {
-    groups.insert(ImportSettingsGroup::kContent);
-  }
   if (!SameImporterConfig(profile.importer, defaults.importer)) {
     groups.insert(ImportSettingsGroup::kImporter);
   }
@@ -161,7 +156,6 @@ auto ResetGroup(ImportProfile profile, const ImportSettingsGroup group)
   switch (group) {
   case ImportSettingsGroup::kContent:
     options.import_content = initial.import_content;
-    options.ignore_non_mesh_primitives = initial.ignore_non_mesh_primitives;
     options.node_pruning = initial.node_pruning;
     break;
   case ImportSettingsGroup::kGeometry:

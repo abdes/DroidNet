@@ -42,6 +42,7 @@ auto ScriptingSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .About("Path to the scripting sidecar source file "
                               "(optional when --bindings-inline is provided)")
                        .WithValue<std::string>()
+                       .DefaultValue(std::string {})
                        .StoreTo(&options_.source_path)
                        .Build();
 

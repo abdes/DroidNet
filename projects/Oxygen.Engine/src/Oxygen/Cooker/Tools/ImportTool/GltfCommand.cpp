@@ -13,12 +13,14 @@
 #include <utility>
 
 #include "SourceMountOptions.h"
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GltfCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
@@ -139,7 +141,9 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto omitted_light_range
     = Option::WithKey("omitted-light-range")
-        .About("Range in meters for glTF lights without a range (default 4096)")
+        .About(fmt::format(
+          "Range in meters for glTF lights without a range (default {})",
+          ImportOptions::kDefaultGltfOmittedLightRangeM))
         .Long("omitted-light-range")
         .WithValue<float>()
         .StoreTo(&options_.gltf_omitted_light_range_m)
@@ -187,8 +191,10 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto smoothing_angle
     = Option::WithKey("smoothing-angle")
-        .About("Largest angle in degrees between faces that share a generated "
-               "normal (default 60)")
+        .About(fmt::format(
+          "Largest angle in degrees between faces that share a generated "
+          "normal (default {})",
+          ImportOptions::kDefaultNormalsSmoothingAngleDeg))
         .Long("smoothing-angle")
         .WithValue<float>()
         .StoreTo(&options_.normals_smoothing_angle_deg)
@@ -201,18 +207,22 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                          .StoreTo(&options_.generate_lods)
                          .Build();
 
-  auto lod_levels = Option::WithKey("lod-levels")
-                      .About("LODs generated after LOD 0, from 1 to 7 "
-                             "(default 3)")
-                      .Long("lod-levels")
-                      .WithValue<uint32_t>()
-                      .StoreTo(&options_.lod_levels)
-                      .Build();
+  auto lod_levels
+    = Option::WithKey("lod-levels")
+        .About(fmt::format("LODs generated after LOD 0, from 1 to 7 "
+                           "(default {})",
+          LodGenerationOptions {}.levels))
+        .Long("lod-levels")
+        .WithValue<uint32_t>()
+        .StoreTo(&options_.lod_levels)
+        .Build();
 
   auto lod_reduction
     = Option::WithKey("lod-reduction")
-        .About("Triangles each generated LOD removes, in percent of the "
-               "previous LOD's, from 1 to 99 (default 50)")
+        .About(
+          fmt::format("Triangles each generated LOD removes, in percent of the "
+                      "previous LOD's, from 1 to 99 (default {})",
+            LodGenerationOptions {}.reduction_percent))
         .Long("lod-reduction")
         .WithValue<float>()
         .StoreTo(&options_.lod_reduction_percent)
@@ -234,7 +244,9 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto light_intensity_scale
     = Option::WithKey("light-intensity-scale")
-        .About("Factor applied to every imported light's intensity (default 1)")
+        .About(fmt::format(
+          "Factor applied to every imported light's intensity (default {})",
+          ImportOptions::kDefaultLightIntensityScale))
         .Long("light-intensity-scale")
         .WithValue<float>()
         .StoreTo(&options_.light_intensity_scale)

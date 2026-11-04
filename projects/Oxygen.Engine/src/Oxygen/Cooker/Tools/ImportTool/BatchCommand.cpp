@@ -55,6 +55,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
+#include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
@@ -88,7 +89,8 @@ namespace {
 
   struct PhysicsDependencyRef final {
     std::string virtual_path;
-    std::string object_path;
+    //! Where the job holds the reference, for diagnostics.
+    std::string location;
   };
 
   auto DisplayJobNumber(size_t job_index) -> size_t;
@@ -190,33 +192,6 @@ namespace {
     }
   }
 
-  auto CollectSidecarRefField(const nlohmann::json& bindings_doc,
-    const std::string_view family, const std::string_view field,
-    std::vector<PhysicsDependencyRef>& refs) -> void
-  {
-    if (!bindings_doc.contains(family)) {
-      return;
-    }
-    const auto& rows = bindings_doc.at(family);
-    if (!rows.is_array()) {
-      return;
-    }
-    for (size_t row_index = 0; row_index < rows.size(); ++row_index) {
-      const auto& row = rows.at(row_index);
-      if (!row.is_object()) {
-        continue;
-      }
-      if (!row.contains(field) || !row.at(field).is_string()) {
-        continue;
-      }
-      refs.push_back(PhysicsDependencyRef {
-        .virtual_path = row.at(field).get<std::string>(),
-        .object_path
-        = fmt::format("bindings.{}[{}].{}", family, row_index, field),
-      });
-    }
-  }
-
   //! Resolves the references read in the job's authored file, from `first`
   //! on, against the job's anchor (`ImportRequest::OutputIdentity`), so they
   //! compare with the identities the manifest produces.
@@ -232,7 +207,7 @@ namespace {
       if (!resolved.has_value()) {
         error = fmt::format(
           "'{}' at '{}' is not a reference the engine accepts ({})",
-          ref.virtual_path, ref.object_path,
+          ref.virtual_path, ref.location,
           oxygen::content::to_string(resolved.error()));
         return false;
       }
@@ -263,7 +238,7 @@ namespace {
           refs.push_back(PhysicsDependencyRef {
             .virtual_path
             = descriptor_doc.at("material_ref").get<std::string>(),
-            .object_path = "material_ref",
+            .location = "/material_ref",
           });
         }
         return ResolveAuthoredRefs(job, refs, 0, error);
@@ -281,7 +256,7 @@ namespace {
       if (!job.request.physics->target_scene_virtual_path.empty()) {
         refs.push_back(PhysicsDependencyRef {
           .virtual_path = job.request.physics->target_scene_virtual_path,
-          .object_path = "target_scene_virtual_path",
+          .location = "target_scene_virtual_path",
         });
       }
 
@@ -305,17 +280,15 @@ namespace {
         error = "physics-sidecar 'bindings' must be an object";
         return false;
       }
-      const auto& bindings_doc = doc.at("bindings");
-
       // The target scene above is the manifest's identity; the bindings are
       // references read in the sidecar.
       const auto first_authored = refs.size();
-      CollectSidecarRefField(bindings_doc, "rigid_bodies", "shape_ref", refs);
-      CollectSidecarRefField(
-        bindings_doc, "rigid_bodies", "material_ref", refs);
-      CollectSidecarRefField(bindings_doc, "colliders", "shape_ref", refs);
-      CollectSidecarRefField(bindings_doc, "colliders", "material_ref", refs);
-      CollectSidecarRefField(bindings_doc, "characters", "shape_ref", refs);
+      for (auto& reference : PhysicsSidecarReferences(doc)) {
+        refs.push_back(PhysicsDependencyRef {
+          .virtual_path = std::move(reference.written),
+          .location = std::move(reference.json_pointer),
+        });
+      }
 
       return ResolveAuthoredRefs(job, refs, first_authored, error);
     } catch (const std::exception& ex) {
@@ -412,19 +385,9 @@ namespace {
       auto emitted_ref_diagnostics = std::unordered_set<std::string> {};
       for (const auto& ref : refs) {
         const auto it = producers_by_path.find(ref.virtual_path);
+        // A reference no job of the batch produces orders nothing: the cook
+        // resolves it through the mounted cooked roots, or refuses it.
         if (it == producers_by_path.end()) {
-          const auto diagnostic_key
-            = std::string("unresolved:") + ref.virtual_path;
-          if (!emitted_ref_diagnostics.insert(diagnostic_key).second) {
-            continue;
-          }
-          writer->Error(fmt::format(
-            "ERROR [physics.manifest.dependency_unresolved]: job '{}' "
-            "references '{}' at '{}' but no manifest job produces that "
-            "virtual path",
-            JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
-            ref.object_path));
-          ++validation_failures;
           continue;
         }
 
@@ -451,7 +414,7 @@ namespace {
             "ERROR [physics.manifest.dependency_ambiguous]: job '{}' "
             "reference '{}' at '{}' matches multiple producer jobs: {}",
             JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
-            ref.object_path, producer_list_text));
+            ref.location, producer_list_text));
           ++validation_failures;
           continue;
         }

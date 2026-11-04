@@ -611,7 +611,7 @@ namespace {
           .has_value()) {
       co_return false;
     }
-    // The prepared document is valid JSON with `bindings` by binding kind.
+    // The prepared document is valid JSON.
     const auto document = std::optional { nlohmann::json::parse(text) };
     const auto& scene = settings.target_scene_virtual_path;
     TargetScene(context, scene);
@@ -621,31 +621,10 @@ namespace {
       : scene;
     context.Output(stem + std::string(data::kPhysicsSceneDescriptorExtension),
       Kind::kPhysicsScene);
-    const auto& groups = document->at("bindings");
-    struct ReferenceField final {
-      std::string_view name;
-      Kind kind = Kind::kAsset;
-    };
-    // The reference fields of the bindings, as the physics sidecar cook
-    // resolves them.
-    constexpr auto kFields = std::array {
-      ReferenceField { .name = "shape_ref", .kind = Kind::kAsset },
-      ReferenceField { .name = "inner_shape_ref", .kind = Kind::kAsset },
-      ReferenceField { .name = "material_ref", .kind = Kind::kAsset },
-      ReferenceField { .name = "source_mesh_ref", .kind = Kind::kGeometry },
-      ReferenceField { .name = "collision_mesh_ref", .kind = Kind::kGeometry },
-    };
-    for (const auto& group : groups.items()) {
-      const auto bindings = JsonItems(groups, group.key());
-      for (size_t i = 0; i < bindings.size(); ++i) {
-        const auto location = Pointer {} / "bindings" / group.key() / i;
-        for (const auto& field : kFields) {
-          if (const auto text = JsonString(bindings[i], field.name)) {
-            context.Reference(*text, field.kind,
-              (location / std::string(field.name)).to_string());
-          }
-        }
-      }
+    for (const auto& reference : PhysicsSidecarReferences(*document)) {
+      context.Reference(reference.written,
+        reference.geometry ? Kind::kGeometry : Kind::kAsset,
+        reference.json_pointer);
     }
     co_return true;
   }

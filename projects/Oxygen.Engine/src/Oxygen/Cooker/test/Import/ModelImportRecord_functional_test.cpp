@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/testing/ModelRecord.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -317,7 +318,17 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAnAbsoluteSource)
 //! the identity, the manifest the output. Save names the key it refuses.
 NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
 {
-  for (const auto* key : { "source", "virtual_path", "output", "type" }) {
+  // The keys the schema refuses in a record's settings, which the writer
+  // refuses too.
+  const auto schema = oxygen::cooker::test::LoadSchema(
+    "Import/Schemas/oxygen.model-import.schema.json");
+  const auto& rules
+    = schema.at(json::json_pointer { "/properties/settings/allOf" });
+  const auto rule = std::ranges::find_if(rules,
+    [](const json& candidate) -> bool { return candidate.contains("not"); });
+  ASSERT_NE(rule, rules.end());
+  for (const auto& entry : rule->at("not").at("anyOf")) {
+    const auto key = entry.at("required").at(0).get<std::string>();
     const auto refusal = RefusalOf([&] {
       ModelImportRecord::Save({
         .record_path = record_,
@@ -328,7 +339,7 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
     });
 
     EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
-    EXPECT_EQ(refusal.json_pointer, std::string("/settings/") + key);
+    EXPECT_EQ(refusal.json_pointer, "/settings/" + key);
   }
 }
 

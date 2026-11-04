@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
@@ -29,6 +30,7 @@ public:
 private:
   const GlobalOptions* global_options_ = nullptr;
   PhysicsSidecarImportSettings options_ {};
+  std::string physics_backend_;
 };
 
 } // namespace oxygen::content::import::tool

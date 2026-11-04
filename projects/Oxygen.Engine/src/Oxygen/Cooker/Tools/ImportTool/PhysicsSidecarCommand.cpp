@@ -18,6 +18,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
@@ -42,6 +43,7 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .About("Path to the physics sidecar source file "
                               "(optional when --bindings-inline is provided)")
                        .WithValue<std::string>()
+                       .DefaultValue(std::string {})
                        .StoreTo(&options_.source_path)
                        .Build();
 
@@ -85,6 +87,14 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.target_scene_virtual_path)
         .Build();
 
+  auto physics_backend
+    = Option::WithKey("physics-backend")
+        .About("Backend to cook for: jolt, physx or none (default jolt)")
+        .Long("physics-backend")
+        .WithValue<std::string>()
+        .StoreTo(&physics_backend_)
+        .Build();
+
   return CommandBuilder("physics-sidecar")
     .About("Import a scene physics sidecar")
     .WithPositionalArguments(source_path)
@@ -92,6 +102,7 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(job_name))
     .WithOption(std::move(report))
     .WithOption(std::move(target_scene_virtual_path))
+    .WithOption(std::move(physics_backend))
     .WithOption(std::move(bindings_inline));
 }
 
@@ -106,6 +117,15 @@ auto PhysicsSidecarCommand::Execute() -> std::expected<void, std::error_code>
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
+
+  if (!physics_backend_.empty()) {
+    const auto backend = ParsePhysicsBackend(physics_backend_);
+    if (!backend.has_value()) {
+      writer->Error("ERROR: --physics-backend must be jolt, physx or none");
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+    settings.physics_backend = *backend;
+  }
 
   std::ostringstream err;
   const auto request = internal::BuildPhysicsSidecarRequest(settings, err);

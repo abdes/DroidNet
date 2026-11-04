@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -177,18 +178,8 @@ namespace {
       return false;
     }
 
-    if (type == "compound") {
-      AddError(diagnostics, source_path, "physics.shape.compound_child_invalid",
-        "Nested compound child shapes are not supported",
-        child_path.to_string());
-      return false;
-    }
-    if (!IsAnalyticShapeType(type)) {
-      AddError(diagnostics, source_path, "physics.shape.compound_child_invalid",
-        "Compound children must use analytic shape types only",
-        child_path.to_string());
-      return false;
-    }
+    // The schema's child shape types are the analytic ones.
+    DCHECK_F(IsAnalyticShapeType(type), "unexpected child shape: {}", type);
 
     try {
       if (!CheckAnalyticParameters(child_doc, type)) {

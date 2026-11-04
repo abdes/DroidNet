@@ -273,11 +273,6 @@ namespace {
       cc::kImportMaterials, "Import Materials", ImportContentFlags::kMaterials);
     flag(cc::kImportGeometry, "Import Geometry", ImportContentFlags::kGeometry);
     flag(cc::kImportScene, "Import Scene", ImportContentFlags::kScene);
-    commands.AddBool(Name(cc::kIgnoreNonMesh), "Ignore Non-Mesh Primitives",
-      "Skip points and lines when importing", [vm](const bool v) -> void {
-        EditOptions(
-          vm, [v](auto& o) -> void { o.ignore_non_mesh_primitives = v; });
-      });
     AddChoice<content::import::NodePruningPolicy>(commands, cc::kNodePruning,
       "Node Pruning", "Which empty nodes the importer drops",
       choices::kNodePruning, [vm](const auto v) -> void {

@@ -410,12 +410,19 @@ struct LodGenerationOptions final {
  belong in the domain's descriptor payload, not here.
 */
 struct ImportOptions final {
+  //! Range of a glTF local light with no authored range, in meters.
+  static constexpr float kDefaultGltfOmittedLightRangeM = 4096.0F;
+  //! Factor on every imported light's intensity.
+  static constexpr float kDefaultLightIntensityScale = 1.0F;
+  //! Largest angle, in degrees, between faces that share a smoothed normal.
+  static constexpr float kDefaultNormalsSmoothingAngleDeg = 60.0F;
+
   CoordinateConversionPolicy coordinate = {};
 
   //! Finite support for glTF local lights with no authored range, in meters.
   //! Explicit source ranges are preserved. This is an import approximation of
   //! glTF's unbounded influence, independent of intensity, exposure and scene.
-  float gltf_omitted_light_range_m = 4096.0F;
+  float gltf_omitted_light_range_m = kDefaultGltfOmittedLightRangeM;
 
   //! The glTF scene that becomes the model scene: a scene's name, or `#N` for
   //! the scene at index N. Empty selects the default scene, else the first.
@@ -428,11 +435,11 @@ struct ImportOptions final {
   bool import_cameras = true;
 
   //! The factor every imported light's intensity is multiplied by.
-  float light_intensity_scale = 1.0F;
+  float light_intensity_scale = kDefaultLightIntensityScale;
 
   //! The largest angle, in degrees, between two faces that share a smoothed
   //! normal where a model import generates or recalculates normals.
-  float normals_smoothing_angle_deg = 60.0F;
+  float normals_smoothing_angle_deg = kDefaultNormalsSmoothingAngleDeg;
 
   //! LOD generation for geometries with one LOD.
   LodGenerationOptions lod_generation;
@@ -535,27 +542,6 @@ struct ImportOptions final {
   /*! Default is `kGenerateMissing`. */
   GeometryAttributePolicy tangent_policy
     = GeometryAttributePolicy::kGenerateMissing;
-
-  //! Whether to ignore non-mesh primitives (points/lines).
-  /*!
-   Oxygen Mesh assets are triangle-list based.
-
-  Importers MUST only accept explicit triangle lists:
-  - FBX polygons (n-gons) are rejected.
-  - glTF triangle strips and triangle fans are rejected.
-
-   Separately, source formats may contain primitives that are not mesh geometry
-  in Oxygen today (points, lines, line strips, etc.). These primitives MUST
-  NOT be converted into Mesh geometry, and MUST NOT be merged with triangle
-  meshes.
-
-   When this option is true (default), the importer skips such primitives.
-   When false, the importer MUST fail with a diagnostic if any are encountered.
-
-   @note Future versions may normalize these into dedicated primitive sets with
-    explicit semantics.
-  */
-  bool ignore_non_mesh_primitives = true;
 
   //! Texture import tuning for emission-time cooking.
   /*!

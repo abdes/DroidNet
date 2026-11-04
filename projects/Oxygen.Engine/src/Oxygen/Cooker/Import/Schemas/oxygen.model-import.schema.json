@@ -19,6 +19,9 @@
           "$ref": "oxygen.import-manifest.schema.json#/definitions/job_settings"
         },
         {
+          "$ref": "oxygen.import-manifest.schema.json#/definitions/model_job_keys"
+        },
+        {
           "not": {
             "anyOf": [
               { "required": ["id"] },
