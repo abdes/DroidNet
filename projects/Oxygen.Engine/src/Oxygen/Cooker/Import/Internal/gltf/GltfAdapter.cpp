@@ -50,6 +50,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -64,6 +65,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
+#include <Oxygen/Cooker/Import/Internal/ModelDependency.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
@@ -77,6 +79,7 @@
 #include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/Internal/gltf/GltfDocumentChecks.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfMeshopt.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 #include <Oxygen/Cooker/Import/Naming.h>
@@ -280,6 +283,12 @@ namespace {
       uint64_t size { 0 };
     };
     std::optional<Refused> refused;
+    //! The job, whose rule says which files the document may name.
+    observer_ptr<const ImportRequest> request;
+    //! Why the document's buffer was not read, naming it, when it may not be.
+    std::optional<std::string> nonlocal;
+    //! True until the first read of a parse from a file, which is the model.
+    bool model_pending = false;
   };
 
   // cgltf owns successful reads until file.release; failures retain local RAII.
@@ -297,6 +306,15 @@ namespace {
         return cgltf_result_invalid_options;
       }
       auto& context = *static_cast<CgltfFileContext*>(file_options->user_data);
+      // Every file past the model itself is a buffer the document names.
+      if (!std::exchange(context.model_pending, false)) {
+        if (auto refusal
+          = internal::RefusedModelDependency(*context.request, logical)) {
+          context.nonlocal = "The glTF document names buffer '"
+            + std::string(path) + "', " + *refusal + "; it is not read";
+          return cgltf_result_io_error;
+        }
+      }
       auto observed
         = std::optional<detail::ImportSourceSnapshot::ParserRead> {};
       if (context.snapshot != nullptr) {
@@ -378,16 +396,25 @@ namespace {
     const std::unique_ptr<char[]> bytes(static_cast<char*>(data));
   }
 
-  //! The file context of a parse of `input`: its snapshot's limit, or the
+  //! The most bytes a source of `input` may take: its snapshot's limit, or the
   //! import default without one.
+  auto SourceLimitOf(const AdapterInput& input) -> serio::ByteCount
+  {
+    return input.source_snapshot != nullptr
+      ? input.source_snapshot->SourceLimit()
+      : kDefaultMaxSourceBytes;
+  }
+
+  //! The file context of a parse of `input`, which outlives the context.
   auto MakeCgltfFileContext(const AdapterInput& input) -> CgltfFileContext
   {
-    const auto& snapshot = input.source_snapshot;
     return CgltfFileContext {
-      .snapshot = make_observer(snapshot.get()),
-      .limit
-      = snapshot != nullptr ? snapshot->SourceLimit() : kDefaultMaxSourceBytes,
+      .snapshot = make_observer(input.source_snapshot.get()),
+      .limit = SourceLimitOf(input),
       .refused = std::nullopt,
+      .request = make_observer(&input.request),
+      .nonlocal = std::nullopt,
+      .model_pending = false,
     };
   }
 
@@ -412,23 +439,40 @@ namespace {
         context.refused->size, context.limit,
         std::string(input.object_path_prefix));
     }
+    if (context.nonlocal) {
+      return MakeErrorDiagnostic(
+        std::string(import_codes::kSourceNonlocalDependency), *context.nonlocal,
+        input.source_id_prefix, "/buffers");
+    }
     return MakeParseDiagnostic(input.source_id_prefix, result);
   }
 
-  //! Refuses a document cgltf finds inconsistent, such as a node cycle or an
-  //! accessor past its buffer view, which every later reader would trust.
+  //! Refuses a document whose declared sizes or structure do not hold, which
+  //! every later reader would trust.
+  /*!
+   The checks run before `cgltf_validate`, which trusts the same sizes in its
+   own arithmetic and sparse reads, and walks every node's parents, quadratic in
+   a deep chain. They read no buffer, so a parse that loads none is checked
+   alike.
+  */
   [[nodiscard]] auto ValidateData(CgltfDataPtr data, const AdapterInput& input,
     std::vector<ImportDiagnostic>& diagnostics) -> CgltfDataPtr
   {
-    const auto result = cgltf_validate(data.get());
-    if (result == cgltf_result_success) {
-      return data;
+    const auto source_id = std::string_view { input.source_id_prefix };
+    if (!internal::CheckDeclaredExtents(
+          *data, SourceLimitOf(input), source_id, diagnostics)
+      || !internal::CheckNodeDepth(*data, source_id, diagnostics)) {
+      return { nullptr, &cgltf_free };
     }
-    diagnostics.push_back(
-      MakeErrorDiagnostic(std::string(import_codes::kGltfValidationFailed),
+    const auto result = cgltf_validate(data.get());
+    if (result != cgltf_result_success) {
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kGltfValidationFailed),
         std::string("The glTF document is invalid: ") + ResultToMessage(result),
-        input.source_id_prefix, {}));
-    return { nullptr, &cgltf_free };
+        source_id, {}));
+      return { nullptr, &cgltf_free };
+    }
+    return data;
   }
 
   //! Decodes a loaded document's compressed buffer views, so accessors read
@@ -608,6 +652,7 @@ namespace {
     }
 
     auto file_context = MakeCgltfFileContext(input);
+    file_context.model_pending = true;
     const auto options = MakeCgltfOptions(file_context);
     cgltf_data* data = nullptr;
     const auto parse_result
@@ -619,6 +664,7 @@ namespace {
         MakeLoadDiagnostic(file_context, input, parse_result));
       return { nullptr, &cgltf_free };
     }
+    internal::NormalizeDocumentText(*data, input.source_id_prefix, diagnostics);
 
     if (!load_external_buffers) {
       return ValidateData({ data, &cgltf_free }, input, diagnostics);
@@ -664,6 +710,7 @@ namespace {
         MakeLoadDiagnostic(file_context, input, parse_result));
       return { nullptr, &cgltf_free };
     }
+    internal::NormalizeDocumentText(*data, input.source_id_prefix, diagnostics);
 
     if (!load_external_buffers) {
       return ValidateData({ data, &cgltf_free }, input, diagnostics);
@@ -690,6 +737,10 @@ namespace {
   {
     auto uri = std::string(source_uri);
     uri.resize(cgltf_decode_uri(uri.data()));
+    // Percent escapes can spell bytes no file name holds: nothing is there.
+    if (!string_utils::IsValidUtf8(uri)) {
+      return {};
+    }
     auto path_text = Utf8Path(source_path);
     const auto separator = path_text.find_last_of("/\\");
     path_text.resize(separator == std::string::npos ? 0U : separator + 1U);
@@ -806,19 +857,17 @@ namespace {
     return indices.empty() ? 0 : (max_joint + 1U);
   }
 
-  [[nodiscard]] auto FindSkinForMesh(
-    const cgltf_data& data, const cgltf_mesh& mesh) -> const cgltf_skin*
+  //! Each mesh's skin: that of the first node binding the mesh with one.
+  [[nodiscard]] auto SkinsOfMeshes(const cgltf_data& data)
+    -> std::unordered_map<const cgltf_mesh*, const cgltf_skin*>
   {
-    if (mesh.primitives_count == 0) {
-      return nullptr;
-    }
-
+    auto skins = std::unordered_map<const cgltf_mesh*, const cgltf_skin*> {};
     for (const auto& node : std::span(data.nodes, data.nodes_count)) {
-      if (node.mesh == &mesh && node.skin != nullptr) {
-        return node.skin;
+      if (node.mesh != nullptr && node.skin != nullptr) {
+        skins.try_emplace(node.mesh, node.skin);
       }
     }
-    return nullptr;
+    return skins;
   }
 
   [[nodiscard]] auto BuildSourceId(std::string_view prefix,
@@ -1141,7 +1190,7 @@ namespace {
   };
 
   [[nodiscard]] auto ResolveImageBytes(const cgltf_image& image,
-    const std::filesystem::path& model_path,
+    const std::filesystem::path& external_path,
     const std::shared_ptr<const cgltf_data>& owner,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id,
     std::span<const AdapterInput::ExternalTextureBytes> external_texture_bytes)
@@ -1166,15 +1215,15 @@ namespace {
       }
       return {};
     };
-    if (image.buffer_view != nullptr && image.buffer_view->buffer != nullptr
-      && image.buffer_view->buffer->data != nullptr) {
-      const auto* buffer = image.buffer_view->buffer;
-      const auto buffer_bytes
-        = std::span(static_cast<const std::byte*>(buffer->data), buffer->size);
+    // The decoded bytes of a compressed view, else its bytes in its buffer,
+    // which `CheckDeclaredExtents` holds it inside.
+    if (const auto* view_bytes = image.buffer_view != nullptr
+        ? cgltf_buffer_view_data(image.buffer_view)
+        : nullptr;
+      view_bytes != nullptr) {
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
-          .bytes = buffer_bytes.subspan(
-            image.buffer_view->offset, image.buffer_view->size),
+          .bytes = std::as_bytes(std::span(view_bytes, image.buffer_view->size)),
           .owner = std::static_pointer_cast<const void>(owner),
         },
       };
@@ -1198,7 +1247,6 @@ namespace {
       };
     }
 
-    const auto path = ExternalSourcePath(image.uri, model_path);
     if (!external_texture_bytes.empty()) {
       const auto external_bytes = find_external_bytes(source_id);
       if (external_bytes) {
@@ -1213,7 +1261,7 @@ namespace {
     }
 
     auto placeholder = make_placeholder();
-    placeholder.source_path = path;
+    placeholder.source_path = external_path;
     return placeholder;
   }
 
@@ -1331,6 +1379,7 @@ namespace {
         animated_or_joint.insert(joint);
       }
     }
+    const auto skins = SkinsOfMeshes(data);
     for (size_t index = 0;
       const auto& node : std::span(data.nodes, data.nodes_count)) {
       auto& input = nodes.at(index++);
@@ -1347,7 +1396,7 @@ namespace {
         || node.light != nullptr) {
         input.retain_reason = "attachment or camera/light transform";
       } else if (animated_or_joint.contains(&node)
-        || FindSkinForMesh(data, *node.mesh) != nullptr) {
+        || skins.contains(node.mesh)) {
         input.retain_reason = "animation or skinning transform";
       } else if (std::ranges::any_of(std::span(node.mesh->primitives,
                                        node.mesh->primitives_count),
@@ -1493,6 +1542,8 @@ namespace {
       const auto& mat : std::span(data.materials, data.materials_count)) {
       material_index.emplace(&mat, i++);
     }
+
+    const auto skins = SkinsOfMeshes(data);
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
 
@@ -1690,6 +1741,22 @@ namespace {
           continue;
         }
 
+        // KHR_draco_mesh_compression: an accessor with no view holds no data,
+        // only its decoded shape. A primitive with uncompressed fallback data
+        // has views, and imports from those.
+        if (prim.has_draco_mesh_compression != 0
+          && (positions->buffer_view == nullptr
+            || (prim.indices != nullptr
+              && prim.indices->buffer_view == nullptr))) {
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kGltfPrimitiveDracoSkipped),
+            "glTF primitive holds only Draco-compressed data, which import "
+            "does "
+            "not decode; the primitive is dropped",
+            input.source_id_prefix, mesh_name));
+          continue;
+        }
+
         const auto vertex_count = static_cast<uint32_t>(positions->count);
         if (vertex_count == 0) {
           result.diagnostics.push_back(MakeWarningDiagnostic(
@@ -1789,6 +1856,24 @@ namespace {
         result.diagnostics.push_back(
           MakeWarningDiagnostic(std::string(import_codes::kMeshEmptyPrimitives),
             "glTF mesh has no supported primitives; skipping",
+            input.source_id_prefix, mesh_name));
+        continue;
+      }
+
+      // Primitives may share one accessor, each adding a copy of it: a small
+      // file can ask for far more memory than it has, and more vertices than
+      // an index reaches.
+      const auto mesh_bytes = (total_vertices * sizeof(glm::vec3))
+        + (total_indices * sizeof(uint32_t));
+      if (total_vertices > std::numeric_limits<uint32_t>::max()
+        || total_indices > std::numeric_limits<uint32_t>::max()
+        || serio::ByteCount { mesh_bytes } > SourceLimitOf(input)) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+            "glTF mesh takes " + std::to_string(total_vertices)
+              + " vertices and " + std::to_string(total_indices)
+              + " indices across its primitives, more than an import holds; "
+                "the mesh is dropped",
             input.source_id_prefix, mesh_name));
         continue;
       }
@@ -2123,7 +2208,9 @@ namespace {
           owner->joint_weights.clear();
           owner->inverse_bind_matrices.clear();
         };
-        const auto* skin = FindSkinForMesh(data, *mesh);
+        const auto found_skin = skins.find(mesh);
+        const auto* skin
+          = found_skin != skins.end() ? found_skin->second : nullptr;
         if (skin == nullptr || skin->inverse_bind_matrices == nullptr) {
           drop_skin(import_codes::kMeshMissingInverseBind,
             "glTF skinned mesh missing inverse bind matrices");
@@ -2136,6 +2223,9 @@ namespace {
           } else if (owner->inverse_bind_matrices.size() < joint_count) {
             drop_skin(import_codes::kMeshSkinningBuffersMismatch,
               "glTF skin inverse bind count is smaller than joint count");
+          } else if (skin->joints_count < joint_count) {
+            drop_skin(import_codes::kMeshSkinningBuffersMismatch,
+              "glTF vertices name joints their skin does not have");
           } else {
             owner->joint_remap.resize(joint_count);
             std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
@@ -2271,7 +2361,10 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
     std::string uri(buffer.uri);
     uri.resize(cgltf_decode_uri(uri.data()));
     if (uri.empty() || uri.contains(':') || uri.contains('\0')
-      || uri.starts_with('/') || uri.starts_with('\\')) {
+      || uri.starts_with('/') || uri.starts_with('\\')
+      || internal::RefusedModelDependency(
+        input.request, ExternalSourcePath(buffer.uri, source_path))
+        .has_value()) {
       result.supported = false;
       result.diagnostics.push_back(MakeErrorDiagnostic(
         std::string(import_codes::kSourceNonlocalDependency),
@@ -2287,9 +2380,8 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
   if (result.supported) {
     for (const auto& texture :
       adapter.CollectExternalTextureSources(input, result.diagnostics)) {
-      result.external_files.push_back(
-        texture.resolved_path.lexically_relative(source_path.parent_path())
-          .generic_string());
+      result.external_files.push_back(internal::ModelDependencyReportPath(
+        texture.resolved_path, source_path));
     }
     result.supported = std::ranges::none_of(
       result.diagnostics, [](const auto& diagnostic) -> auto {
@@ -2724,8 +2816,9 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
                                              : std::string_view {};
       item.embedded = image->buffer_view != nullptr || uri.starts_with("data:");
       if (!item.embedded && !uri.empty()) {
-        item.source_path
-          = ExternalSourcePath(image->uri, input.request.source_path);
+        item.source_path = AdmittedTexturePath(input.request,
+          ExternalSourcePath(image->uri, input.request.source_path), source_id,
+          result.diagnostics);
       }
     }
     item.image_key = BuildTextureSourceKey(data, *view.texture);
@@ -2785,9 +2878,9 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     const auto* texture = static_cast<const cgltf_texture*>(source.source_key);
     auto resolved = std::optional<ResolvedTextureSource> {};
     if (const auto* image = SourceImage(*texture); image != nullptr) {
-      resolved = ResolveImageBytes(*image, input.request.source_path,
-        impl_->data_owner, result.diagnostics, source.source_id,
-        input.external_texture_bytes);
+      resolved
+        = ResolveImageBytes(*image, source.source_path, impl_->data_owner,
+          result.diagnostics, source.source_id, input.external_texture_bytes);
     } else {
       result.diagnostics.push_back(
         MakeWarningDiagnostic(std::string(import_codes::kGltfImageMissing),
@@ -2816,7 +2909,7 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     item.source = resolved->bytes;
     item.source_path = std::move(resolved->source_path);
     item.fallback_source_paths
-      = TextureFallbackPaths(input.request.source_path, item.source_path);
+      = TextureFallbackPaths(input.request, item.source_path);
     item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;

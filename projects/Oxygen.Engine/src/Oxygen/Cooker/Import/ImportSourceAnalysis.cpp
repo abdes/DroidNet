@@ -334,8 +334,8 @@ namespace {
       if (!texture.embedded && !texture.source_path.empty()) {
         report.files.push_back(
           { .path = texture.source_path, .required = false });
-        for (auto& fallback : adapters::TextureFallbackPaths(
-               input.request.source_path, texture.source_path)) {
+        for (auto& fallback :
+          adapters::TextureFallbackPaths(input.request, texture.source_path)) {
           report.files.push_back(
             { .path = std::move(fallback), .required = false });
         }

@@ -21,9 +21,9 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Cooker/test/Support/GltfDocuments.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
@@ -39,22 +40,6 @@
 
 namespace oxygen::content::import::test {
 namespace {
-  class TextureSink final : public adapters::TextureWorkItemSink {
-  public:
-    TextureSink() = default;
-    ~TextureSink() override = default;
-    OXYGEN_MAKE_NON_COPYABLE(TextureSink)
-    OXYGEN_MAKE_NON_MOVABLE(TextureSink)
-
-    auto Consume(TexturePipeline::WorkItem item) -> bool override
-    {
-      items.push_back(std::move(item));
-      return true;
-    }
-
-    std::vector<TexturePipeline::WorkItem> items;
-  };
-
   NOLINT_TEST(
     ModelTextureSourceTest, GltfSharesTextureUsesAndDefersExternalReads)
   {
@@ -591,8 +576,10 @@ namespace {
   NOLINT_TEST(TextureFallbackPathsTest, SearchesModelThenParentFolders)
   {
     const auto root = std::filesystem::absolute("pack");
-    const auto paths = adapters::TextureFallbackPaths(
-      root / "Models" / "model.fbx", "C:/artist/temp/wall.png");
+    auto request = ImportRequest {};
+    request.source_path = root / "Models" / "model.fbx";
+    const auto paths
+      = adapters::TextureFallbackPaths(request, "C:/artist/temp/wall.png");
 
     auto expected = std::vector<std::filesystem::path> {
       root / "Models" / "wall.png",
@@ -628,14 +615,16 @@ namespace {
   NOLINT_TEST(TextureFallbackPathsTest, SkipsAuthoredPathAndFolders)
   {
     const auto model = std::filesystem::absolute("pack") / "model.gltf";
+    auto request = ImportRequest {};
+    request.source_path = model;
     const auto authored = model.parent_path() / "wall.png";
-    const auto paths = adapters::TextureFallbackPaths(model, authored);
+    const auto paths = adapters::TextureFallbackPaths(request, authored);
     EXPECT_TRUE(std::ranges::none_of(
       paths, [&](const std::filesystem::path& path) -> bool {
         return base::PathIdentityKey(path) == base::PathIdentityKey(authored);
       }));
     EXPECT_TRUE(adapters::TextureFallbackPaths(
-      model, model.parent_path() / "textures" / "")
+      request, model.parent_path() / "textures" / "")
         .empty());
   }
 } // namespace

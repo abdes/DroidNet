@@ -356,6 +356,7 @@ oxygen_cooker_test(
     "Scenarios/FbxModelImport_functional_test.cpp"
     "Scenarios/GltfModelImport_functional_test.cpp"
     "Scenarios/ModelTextureCapture_functional_test.cpp"
+    "Scenarios/ModelUntrustedInput_functional_test.cpp"
     "Scenarios/ModelValues_functional_test.cpp"
     "Scenarios/PhysicsDomainsParity_functional_test.cpp"
     "Scenarios/PhysicsSidecarRecook_functional_test.cpp"

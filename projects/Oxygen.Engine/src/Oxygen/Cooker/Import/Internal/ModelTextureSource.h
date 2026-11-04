@@ -13,11 +13,15 @@
 #include <map>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ModelDependency.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
@@ -30,29 +34,62 @@ namespace oxygen::content::import::adapters {
 //! authored path is missing: the file of that name beside the model and in its
 //! `textures` and `Textures` folders, then the same in the model folder's
 //! parent, as model-sharing sites lay them out (`Models/` beside `Textures/`).
-//! The authored path and paths naming the same file are never listed twice.
-[[nodiscard]] inline auto TextureFallbackPaths(
-  const std::filesystem::path& model, const std::filesystem::path& texture)
-  -> std::vector<std::filesystem::path>
+//! The authored path and paths naming the same file are never listed twice, nor
+//! is a path the import must not read (`internal::RefusedModelDependency`).
+[[nodiscard]] inline auto TextureFallbackPaths(const ImportRequest& request,
+  const std::filesystem::path& texture) -> std::vector<std::filesystem::path>
 {
   auto paths = std::vector<std::filesystem::path> {};
   if (!texture.has_filename()) {
     return paths;
   }
   auto seen = std::vector<std::string> { base::PathIdentityKey(texture) };
-  const auto folder = model.parent_path();
+  const auto folder = request.source_path.parent_path();
   const auto parent = folder.parent_path();
-  for (const auto& candidate :
-    { folder, folder / "textures", folder / "Textures", parent,
-      parent / "textures", parent / "Textures" }) {
+  for (const auto& candidate : {
+         folder,
+         folder / "textures",
+         folder / "Textures",
+         parent,
+         parent / "textures",
+         parent / "Textures",
+       }) {
     auto path = (candidate / texture.filename()).lexically_normal();
     auto key = base::PathIdentityKey(path);
     if (std::ranges::find(seen, key) == seen.end()) {
       seen.push_back(std::move(key));
-      paths.push_back(std::move(path));
+      if (!internal::RefusedModelDependency(request, path).has_value()) {
+        paths.push_back(std::move(path));
+      }
     }
   }
   return paths;
+}
+
+//! The file an external texture is first read from: the path the model names,
+//! unless the import must not read it. Then the texture is looked for by name
+//! (`TextureFallbackPaths`), with an `import.source.nonlocal_dependency`
+//! warning: a model carries paths from the machine it was authored on.
+[[nodiscard]] inline auto AdmittedTexturePath(const ImportRequest& request,
+  std::filesystem::path authored, const std::string_view source_id,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::filesystem::path
+{
+  const auto refusal = internal::RefusedModelDependency(request, authored);
+  if (!refusal.has_value()) {
+    return authored;
+  }
+  diagnostics.push_back({
+    .severity = ImportSeverity::kWarning,
+    .code = std::string(import_codes::kSourceNonlocalDependency),
+    .message = "The model names texture '" + authored.generic_string() + "', "
+      + *refusal + "; it is not read, and a file of that name near the model "
+      + "is used if there is one",
+    .source_path = std::string(source_id),
+    .object_path = {},
+  });
+  auto fallbacks = TextureFallbackPaths(request, authored);
+  return fallbacks.empty() ? std::filesystem::path {}
+                           : std::move(fallbacks.front());
 }
 
 //! One texture use, before reading its external file or decoding embedded

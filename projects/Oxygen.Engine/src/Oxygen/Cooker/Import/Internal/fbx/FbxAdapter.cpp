@@ -53,6 +53,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
+#include <Oxygen/Cooker/Import/Internal/ModelDependency.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
@@ -848,6 +849,9 @@ namespace {
             continue;
           }
           const auto weight = ItemAt(skin_deformer->weights, weight_index);
+          if (weight.cluster_index >= skin_deformer->clusters.count) {
+            continue;
+          }
           const auto slot = static_cast<glm::uvec4::length_type>(w);
           joints.at(slot) = static_cast<uint32_t>(weight.cluster_index);
           weights.at(slot) = static_cast<float>(weight.weight);
@@ -951,12 +955,13 @@ namespace {
         out.inverse_bind_matrices.reserve(cluster_count);
         out.joint_remap.reserve(cluster_count);
         for (size_t i = 0; i < cluster_count; ++i) {
+          // Vertices name a joint by its index among the clusters, so a missing
+          // cluster keeps its place.
           const auto* cluster = ItemAt(skin_deformer->clusters, i);
-          if (cluster == nullptr) {
-            continue;
-          }
-          out.inverse_bind_matrices.push_back(
-            basis * ToMat4(cluster->geometry_to_bone) * glm::transpose(basis));
+          out.inverse_bind_matrices.push_back(cluster != nullptr
+              ? basis * ToMat4(cluster->geometry_to_bone)
+                * glm::transpose(basis)
+              : glm::mat4 { 1.0F });
           out.joint_remap.push_back(static_cast<uint32_t>(i));
         }
       }
@@ -1443,16 +1448,28 @@ namespace {
     return axes_in_local ? local * to_source : basis * local * to_source;
   }
 
-  [[nodiscard]] auto MakeSceneLoadError(std::string_view source_id,
-    std::string_view error_message) -> ImportDiagnostic
+  //! The diagnostic of a failed ufbx load: its own code for a limit the import
+  //! set, whose message names no such limit.
+  [[nodiscard]] auto MakeSceneLoadError(
+    std::string_view source_id, const ufbx_error& error) -> ImportDiagnostic
   {
-    return ImportDiagnostic {
+    auto diagnostic = ImportDiagnostic {
       .severity = ImportSeverity::kError,
       .code = std::string(import_codes::kFbxParseFailed),
-      .message = std::string(error_message),
+      .message = std::string(ToStringView(error.description)),
       .source_path = std::string(source_id),
       .object_path = {},
     };
+    if (error.type == UFBX_ERROR_NODE_DEPTH_LIMIT) {
+      diagnostic.code = std::string(import_codes::kModelNodeDepthExceeded);
+      diagnostic.message = "The node hierarchy is deeper than "
+        + std::to_string(kMaxModelNodeDepth) + " levels";
+    } else if (error.type == UFBX_ERROR_MEMORY_LIMIT) {
+      diagnostic.code = std::string(import_codes::kFbxMemoryLimitExceeded);
+      diagnostic.message = "The FBX file takes more memory to read than a file "
+                           "of its size can legitimately need";
+    }
+    return diagnostic;
   }
 
   auto FbxSourceLayoutWitness(const ufbx_mesh& mesh) -> base::Sha256Digest
@@ -1517,12 +1534,27 @@ namespace {
     .front = UFBX_COORDINATE_AXIS_UNKNOWN,
   };
 
+  //! The most memory ufbx may take to read a file of `source_bytes`. Compressed
+  //! arrays and the parsed scene grow a file many times, but a small file that
+  //! decompresses without end must fail, not take the machine.
+  [[nodiscard]] constexpr auto UfbxMemoryLimit(const size_t source_bytes)
+    -> size_t
+  {
+    constexpr auto kFloor = size_t { 1024 } * 1024 * 1024;
+    constexpr auto kPerSourceByte = size_t { 32 };
+    return (std::max)(kFloor, source_bytes * kPerSourceByte);
+  }
+
   [[nodiscard]] auto MakeLoadOptions(UfbxCancelContext& cancel_ctx,
-    const CoordinateConversionPolicy& policy) -> ufbx_load_opts
+    const CoordinateConversionPolicy& policy, const size_t source_bytes)
+    -> ufbx_load_opts
   {
     auto opts = ufbx_load_opts {};
     opts.progress_cb.fn = &UfbxProgressCallback;
     opts.progress_cb.user = &cancel_ctx;
+    opts.node_depth_limit = kMaxModelNodeDepth;
+    opts.temp_allocator.memory_limit = UfbxMemoryLimit(source_bytes);
+    opts.result_allocator.memory_limit = UfbxMemoryLimit(source_bytes);
 
     // A chosen up axis replaces the file's axes, so ufbx changes none and the
     // adapter's basis does (OxygenBasis).
@@ -1621,7 +1653,8 @@ namespace {
     FbxSceneSource loaded;
     ufbx_error error {};
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy);
+    auto opts = MakeLoadOptions(
+      cancel_ctx, coordinate_policy, size_error ? size_t { 0 } : size);
 
     // Surface identity hashes the source layout before conversion, which only
     // a second load sees; a metadata parse needs none.
@@ -1644,10 +1677,9 @@ namespace {
         diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
         return {};
       }
-      const auto desc = ToStringView(error.description);
-      DLOG_F(
-        ERROR, "FBX load failed: path='{}' error='{}'", path.string(), desc);
-      diagnostics.push_back(MakeSceneLoadError(input.source_id_prefix, desc));
+      DLOG_F(ERROR, "FBX load failed: path='{}' error='{}'", path.string(),
+        ToStringView(error.description));
+      diagnostics.push_back(MakeSceneLoadError(input.source_id_prefix, error));
       return {};
     }
 
@@ -1692,7 +1724,7 @@ namespace {
     FbxSceneSource loaded;
     ufbx_error error {};
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
-    auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy);
+    auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy, bytes.size());
 
     // Surface identity hashes the source layout before conversion, which only
     // a second load sees; a metadata parse needs none.
@@ -1718,9 +1750,9 @@ namespace {
         diagnostics.push_back(MakeCancelDiagnostic(input.source_id_prefix));
         return {};
       }
-      const auto desc = ToStringView(error.description);
-      DLOG_F(ERROR, "FBX load failed (memory): error='{}'", desc);
-      diagnostics.push_back(MakeSceneLoadError(input.source_id_prefix, desc));
+      DLOG_F(ERROR, "FBX load failed (memory): error='{}'",
+        ToStringView(error.description));
+      diagnostics.push_back(MakeSceneLoadError(input.source_id_prefix, error));
       return {};
     }
 
@@ -2641,9 +2673,8 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   if (result.supported) {
     for (const auto& texture :
       adapter.CollectExternalTextureSources(input, result.diagnostics)) {
-      result.external_files.push_back(
-        texture.resolved_path.lexically_relative(source_path.parent_path())
-          .generic_string());
+      result.external_files.push_back(internal::ModelDependencyReportPath(
+        texture.resolved_path, source_path));
     }
     result.supported = std::ranges::none_of(
       result.diagnostics, [](const auto& diagnostic) -> auto {
@@ -3176,7 +3207,8 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     item.external_texture_id = identity->texture_id;
     item.source_key = identity->file_texture;
     item.desc = std::move(desc);
-    item.source_path = identity->resolved_path;
+    item.source_path = AdmittedTexturePath(input.request,
+      identity->resolved_path, tex_source_id, result.diagnostics);
     item.embedded = identity->embedded;
     item.image_key = identity->texture_id;
     item.ordinal = identity->file_texture->typed_id;
@@ -3305,7 +3337,7 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     item.source = resolved->bytes;
     item.source_path = std::move(resolved->source_path);
     item.fallback_source_paths
-      = TextureFallbackPaths(input.request.source_path, item.source_path);
+      = TextureFallbackPaths(input.request, item.source_path);
     item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;

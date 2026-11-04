@@ -24,6 +24,11 @@ inline constexpr serio::ByteCount kDefaultMaxSourceBytes {
   static_cast<uint64_t>(std::numeric_limits<int32_t>::max()),
 };
 
+//! The deepest node hierarchy a model import accepts: nodes on one path from a
+//! root, the root included. Each level is a stack frame of the import and a
+//! copy of the node's anchor path, so a file cannot choose how deep they go.
+inline constexpr uint32_t kMaxModelNodeDepth = 256U;
+
 //! The most bytes the Cooker reads whole from a metadata file written for
 //! it: a manifest, a mounts file, a tool request, a model import record or
 //! a buffer sidecar.

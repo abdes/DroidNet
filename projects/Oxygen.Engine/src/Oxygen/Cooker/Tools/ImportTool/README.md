@@ -232,8 +232,22 @@ scene, else the first. A selector the file lacks warns
 (`import.gltf_scene_missing`) and the default applies; every scene not imported
 is reported with `import.source_feature_dropped`. Geometry, materials and
 textures are imported for the whole file whichever scene is chosen. A document
-that fails `cgltf_validate` (`gltf.validation_failed`), or whose model scene
-reaches one node twice (`import.gltf_node_reached_twice`), is refused.
+that fails `cgltf_validate` or whose declared accessor and buffer view sizes do
+not hold (`gltf.validation_failed`), or whose model scene reaches one node twice
+(`import.gltf_node_reached_twice`), is refused. Text that is not UTF-8 is
+repaired (`gltf.text_not_utf8`). A primitive that holds only Draco-compressed
+data is dropped (`gltf.primitive.draco_skipped`); one with uncompressed fallback
+data imports from it.
+
+A model is a file from elsewhere, so what it can make the import do is limited.
+A node hierarchy deeper than 256 levels is refused
+(`import.model_node_depth_exceeded`), as is an FBX file that takes more memory to
+read than its size can need (`fbx.memory_limit_exceeded`). A file the model names
+is not read when it is on a network server the model is not on, decided from its
+path alone, or when the job has mounts and the file lies in no source mount
+(`import.source.nonlocal_dependency`). A refused texture is a warning: a file of
+its name near the model is used if there is one. A refused glTF buffer is an
+error.
 
 `analyze-sources` reports, for each `gltf` or `fbx` job, the source's format
 (`gltf`, `glb` or `fbx`) and the version it states (glTF `asset.version`, the

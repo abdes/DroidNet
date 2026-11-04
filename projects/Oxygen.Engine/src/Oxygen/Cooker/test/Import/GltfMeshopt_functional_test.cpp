@@ -15,21 +15,15 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 
 #include <glm/ext/vector_float3.hpp>
 #include <meshoptimizer.h>
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
-#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
-#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/test/Support/GltfDocuments.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -61,63 +55,6 @@ namespace {
   constexpr auto kNormalBits = 8;
   // One step of a signed normalized byte.
   constexpr auto kNormalTolerance = 1.0F / 127.0F;
-
-  class GeometrySink final : public adapters::GeometryWorkItemSink {
-  public:
-    GeometrySink() = default;
-    ~GeometrySink() override = default;
-    OXYGEN_MAKE_NON_COPYABLE(GeometrySink)
-    OXYGEN_MAKE_NON_MOVABLE(GeometrySink)
-
-    auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
-    {
-      items.push_back(std::move(item));
-      return true;
-    }
-
-    std::vector<MeshBuildPipeline::WorkItem> items;
-  };
-
-  [[nodiscard]] auto Base64(const std::span<const unsigned char> bytes)
-    -> std::string
-  {
-    constexpr auto kAlphabet = std::string_view {
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/",
-    };
-    auto out = std::string {};
-    for (std::size_t i = 0; i < bytes.size(); i += 3) {
-      const auto remaining = bytes.size() - i;
-      const auto b0 = static_cast<uint32_t>(bytes[i]);
-      const auto b1 = remaining > 1 ? static_cast<uint32_t>(bytes[i + 1]) : 0U;
-      const auto b2 = remaining > 2 ? static_cast<uint32_t>(bytes[i + 2]) : 0U;
-      const auto triple = (b0 << 16U) | (b1 << 8U) | b2;
-      out.push_back(kAlphabet.at((triple >> 18U) & 0x3FU));
-      out.push_back(kAlphabet.at((triple >> 12U) & 0x3FU));
-      out.push_back(remaining > 1 ? kAlphabet.at((triple >> 6U) & 0x3FU) : '=');
-      out.push_back(remaining > 2 ? kAlphabet.at(triple & 0x3FU) : '=');
-    }
-    return out;
-  }
-
-  [[nodiscard]] auto DataUri(const std::span<const unsigned char> bytes)
-    -> std::string
-  {
-    return "data:application/octet-stream;base64," + Base64(bytes);
-  }
-
-  //! Appends `bytes` to `buffer` at a four-byte boundary; returns the offset.
-  auto Append(std::vector<unsigned char>& buffer,
-    const std::span<const std::byte> bytes) -> std::size_t
-  {
-    while (buffer.size() % 4U != 0U) {
-      buffer.push_back(0);
-    }
-    const auto offset = buffer.size();
-    for (const auto byte : bytes) {
-      buffer.push_back(std::to_integer<unsigned char>(byte));
-    }
-    return offset;
-  }
 
   //! One buffer view's `EXT_meshopt_compression` object.
   struct CompressedView final {
@@ -179,9 +116,11 @@ namespace {
     });
     auto buffer = std::vector<unsigned char> {};
     const auto positions_at
-      = Append(buffer, std::as_bytes(std::span(kPositions)));
-    const auto indices_at = Append(buffer, std::as_bytes(std::span(kIndices)));
-    const auto normals_at = Append(buffer, std::as_bytes(std::span(normals)));
+      = AppendAligned(buffer, std::as_bytes(std::span(kPositions)));
+    const auto indices_at
+      = AppendAligned(buffer, std::as_bytes(std::span(kIndices)));
+    const auto normals_at
+      = AppendAligned(buffer, std::as_bytes(std::span(normals)));
     return json {
       { "asset", { { "version", "2.0" } } },
       {
@@ -284,9 +223,11 @@ namespace {
 
     auto buffer = std::vector<unsigned char> {};
     const auto positions_at
-      = Append(buffer, std::as_bytes(std::span(positions)));
-    const auto indices_at = Append(buffer, std::as_bytes(std::span(indices)));
-    const auto normals_at = Append(buffer, std::as_bytes(std::span(normals)));
+      = AppendAligned(buffer, std::as_bytes(std::span(positions)));
+    const auto indices_at
+      = AppendAligned(buffer, std::as_bytes(std::span(indices)));
+    const auto normals_at
+      = AppendAligned(buffer, std::as_bytes(std::span(normals)));
 
     constexpr auto kPositionsSize = kVertexCount * kPositionStride;
     constexpr auto kIndicesSize = sizeof(kIndices);
@@ -398,42 +339,12 @@ namespace {
       .dump();
   }
 
-  //! What reading `document` gives: its parse and its geometry work items.
-  struct Read final {
-    adapters::GltfAdapter::ParseResult parse;
-    std::vector<MeshBuildPipeline::WorkItem> items;
-  };
-
-  [[nodiscard]] auto ReadDocument(const std::string& document) -> Read
-  {
-    NamingService naming;
-    auto input = adapters::AdapterInput {};
-    input.source_id_prefix = "quad.gltf";
-    input.request.source_path = "quad.gltf";
-    input.naming_service = observer_ptr { &naming };
-    auto adapter = adapters::GltfAdapter {};
-    auto read = Read {
-      .parse = adapter.Parse(
-        std::as_bytes(std::span(document.data(), document.size())), input),
-      .items = {},
-    };
-    if (!read.parse.success) {
-      return read;
-    }
-    auto sink = GeometrySink {};
-    if (adapter.BuildWorkItems(adapters::GeometryWorkTag {}, sink, input)
-          .success) {
-      read.items = std::move(sink.items);
-    }
-    return read;
-  }
-
   //! A glTF file whose geometry uses meshopt compression imports the same
   //! positions, triangles and normals as its uncompressed twin.
   NOLINT_TEST(GltfMeshoptTest, CompressedGeometryReadsAsItsPlainTwin)
   {
-    const auto plain = ReadDocument(PlainDocument());
-    const auto compressed = ReadDocument(CompressedDocument(false));
+    const auto plain = ReadGltfDocument(PlainDocument());
+    const auto compressed = ReadGltfDocument(CompressedDocument(false));
 
     ASSERT_TRUE(plain.parse.success);
     ASSERT_TRUE(compressed.parse.success);
@@ -461,7 +372,7 @@ namespace {
   //! buffer view.
   NOLINT_TEST(GltfMeshoptTest, UndecodableBytesRefuseTheDocument)
   {
-    const auto read = ReadDocument(CompressedDocument(true));
+    const auto read = ReadGltfDocument(CompressedDocument(true));
 
     EXPECT_FALSE(read.parse.success);
     EXPECT_TRUE(HasDiagnosticCode(

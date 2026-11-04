@@ -61,6 +61,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kLodGenerationSkipped = "import.lod_generation.skipped";
   inline constexpr std::string_view kLodGenerationStopped = "import.lod_generation.stopped";
   inline constexpr std::string_view kMaterialRemapTargetMissing = "import.material_remap_target_missing";
+  inline constexpr std::string_view kModelNodeDepthExceeded = "import.model_node_depth_exceeded";
   inline constexpr std::string_view kNameCollision = "import.name_collision";
   inline constexpr std::string_view kNodeContinuityConflict = "import.node_continuity_conflict";
   inline constexpr std::string_view kNodeContinuityCycle = "import.node_continuity_cycle";
@@ -125,6 +126,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kFbxLightUnsupportedType = "fbx.light.unsupported_type";
   inline constexpr std::string_view kFbxLodGroupIgnored = "fbx.lod_group.ignored";
   inline constexpr std::string_view kFbxLodLevelSkipped = "fbx.lod.level_skipped";
+  inline constexpr std::string_view kFbxMemoryLimitExceeded = "fbx.memory_limit_exceeded";
   inline constexpr std::string_view kFbxNormalMapConventionAssumed = "fbx.normal_map_convention_assumed";
   inline constexpr std::string_view kFbxParseFailed = "fbx.parse_failed";
   inline constexpr std::string_view kFbxReadFailed = "fbx.read_failed";
@@ -171,9 +173,11 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kGltfMeshoptDecodeFailed = "gltf.meshopt_decode_failed";
   inline constexpr std::string_view kGltfMissingIndices = "gltf.missing_indices";
   inline constexpr std::string_view kGltfParseFailed = "gltf.parse_failed";
+  inline constexpr std::string_view kGltfPrimitiveDracoSkipped = "gltf.primitive.draco_skipped";
   inline constexpr std::string_view kGltfPrimitiveType = "gltf.primitive.type";
   inline constexpr std::string_view kGltfReadFailed = "gltf.read_failed";
   inline constexpr std::string_view kGltfSceneNotParsed = "gltf.scene.not_parsed";
+  inline constexpr std::string_view kGltfTextNotUtf8 = "gltf.text_not_utf8";
   inline constexpr std::string_view kGltfUnknownFailure = "gltf.unknown_failure";
   inline constexpr std::string_view kGltfValidationFailed = "gltf.validation_failed";
   //! What an input job found.
