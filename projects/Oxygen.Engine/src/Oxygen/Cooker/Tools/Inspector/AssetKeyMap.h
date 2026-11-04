@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -17,8 +18,10 @@ class Command;
 
 namespace oxygen::content::inspection {
 
-//! Identifier of the `oxygen.asset-key-map` report.
-inline constexpr auto kAssetKeyMapSchema = "oxygen.asset-key-map.v1";
+//! The version of the `oxygen.asset-key-map` report.
+inline constexpr uint32_t kAssetKeyMapSchemaVersion = 2;
+//! The version of the `oxygen.asset-key-request` file.
+inline constexpr uint32_t kAssetKeyRequestSchemaVersion = 2;
 
 struct AssetKeyMapOptions {
   std::string input;

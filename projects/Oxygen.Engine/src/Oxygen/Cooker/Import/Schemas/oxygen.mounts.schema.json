@@ -4,7 +4,7 @@
   "description": "A local .mounts.json: where this machine finds named source mounts. Never committed.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version"],
+  "required": ["schema_version"],
   "definitions": {
     "mount_name": {
       "description": "A mount name: the first segment of every mount path in it. It follows the virtual path mount rule, so it never starts with '.'.",
@@ -17,9 +17,9 @@
     "$schema": {
       "type": "string"
     },
-    "version": {
+    "schema_version": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "root": {
       "description": "True stops the search: no .mounts.json above this one is read.",

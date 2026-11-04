@@ -56,7 +56,7 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
     /// <param name="projectRoot">The project root.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The changes that undo this write: each changed mount's previous binding, or its removal.</returns>
-    /// <exception cref="InvalidDataException">The existing file is not a mounts file of version 1.</exception>
+    /// <exception cref="InvalidDataException">The existing file is not a mounts file of schema_version 2.</exception>
     /// <exception cref="StorageWriteConflictException">The file changed while it was being written.</exception>
     public async Task<MountBindings> WriteAsync(IAtomicFileStore files, FileSystemPath projectRoot, CancellationToken cancellationToken)
     {
@@ -69,7 +69,7 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
 
         var path = projectRoot.Combine(ProjectMounts.FileName).FullPath;
         var snapshot = await files.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-        var document = snapshot.Version.Exists ? Read(path, snapshot.Content) : new JsonObject { ["version"] = 1 };
+        var document = snapshot.Version.Exists ? Read(path, snapshot.Content) : new JsonObject { ["schema_version"] = 2 };
         if (document["mounts"] is not JsonObject mounts)
         {
             mounts = [];
@@ -102,9 +102,9 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
         try
         {
             return JsonNode.Parse(content.AsSpan()) is JsonObject document
-                && document["version"] is JsonValue version && version.TryGetValue<int>(out var number) && number == 1
+                && document["schema_version"] is JsonValue version && version.TryGetValue<int>(out var number) && number == 2
                     ? document
-                    : throw new InvalidDataException($"'{path}' is not a mounts file of version 1; fix it before binding a mount.");
+                    : throw new InvalidDataException($"'{path}' is not a mounts file of schema_version 2; fix it before binding a mount.");
         }
         catch (JsonException exception)
         {

@@ -101,17 +101,18 @@ namespace {
   auto ValidateDescriptorVersion(
     SourceContext& context, const nlohmann::json& descriptor_doc) -> bool
   {
-    const auto version_it = descriptor_doc.find("version");
+    const auto version_it = descriptor_doc.find("schema_version");
     const auto invalid_version = version_it == descriptor_doc.end()
       || !version_it->is_number_unsigned()
-      || version_it->get<uint64_t>() != kSceneDescriptorVersion;
+      || version_it->get<uint64_t>() != kSceneDescriptorSchemaVersion;
     if (!invalid_version) {
       return true;
     }
 
     AddDiagnostic(context, ImportSeverity::kError,
       std::string(import_codes::kSceneDescriptorRecookRequired),
-      "Scene descriptor version " + std::to_string(kSceneDescriptorVersion)
+      "Scene descriptor schema_version "
+        + std::to_string(kSceneDescriptorSchemaVersion)
         + " is required; update the authored descriptor and re-cook the scene "
           "content.");
     return false;

@@ -164,19 +164,23 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceIsRecordedAsItsMountPath)
   const auto manifest_path = TempPath("import-manifest.json");
   {
     std::ofstream output(manifest_path);
-    output << ProjectFields({
-                              { "version", 1 },
-                              {
-                                "jobs",
-                                json::array({
-                                  {
-                                    { "type", "material-descriptor" },
-                                    { "source", "Materials/Red.omat.json" },
-                                    { "virtual_path", "/Cooked/Look/Red.omat" },
-                                  },
-                                }),
-                              },
-                            })
+    output << ProjectFields(
+      {
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", "material-descriptor" },
+              { "source", "Materials/Red.omat.json" },
+              { "virtual_path", "/Cooked/Look/Red.omat" },
+            },
+          }),
+        },
+      })
                 .dump();
     ASSERT_TRUE(output.good());
   }
@@ -276,7 +280,10 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
   const auto manifest_path = TempPath("import-manifest.json");
   {
     const auto document = ProjectFields({
-      { "version", 1 },
+      {
+        "schema_version",
+        oxygen::content::import::kImportManifestSchemaVersion,
+      },
       {
         "jobs",
         json::array({
@@ -346,7 +353,10 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
   const auto refused
     = [this](const json& job) -> std::vector<ImportDiagnostic> {
     const auto document = ProjectFields({
-      { "version", 1 },
+      {
+        "schema_version",
+        oxygen::content::import::kImportManifestSchemaVersion,
+      },
       { "jobs", json::array({ job }) },
     });
     std::vector<ImportDiagnostic> errors;
@@ -424,18 +434,22 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
   const auto manifest_path = TempPath("settings-manifest.json");
   {
     std::ofstream output(manifest_path);
-    output << ProjectFields({
-                              { "version", 1 },
-                              {
-                                "jobs",
-                                json::array({
-                                  {
-                                    { "type", "model" },
-                                    { "virtual_path", "/Content/model.fbx" },
-                                  },
-                                }),
-                              },
-                            })
+    output << ProjectFields(
+      {
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", "model" },
+              { "virtual_path", "/Content/model.fbx" },
+            },
+          }),
+        },
+      })
                 .dump();
     ASSERT_TRUE(output.good());
   }
@@ -544,20 +558,24 @@ NOLINT_TEST_F(
     const auto path = TempPath("refused-manifest.json");
     {
       std::ofstream output(path);
-      output << ProjectFields({
-                                { "version", 1 },
-                                {
-                                  "jobs",
-                                  json::array({
-                                    {
-                                      { "type", "fbx" },
-                                      { "source", "model.fbx" },
-                                      { "virtual_path", "/Cooked/model.fbx" },
-                                      { "geometry_defaults", defaults },
-                                    },
-                                  }),
-                                },
-                              })
+      output << ProjectFields(
+        {
+          {
+            "schema_version",
+            oxygen::content::import::kImportManifestSchemaVersion,
+          },
+          {
+            "jobs",
+            json::array({
+              {
+                { "type", "fbx" },
+                { "source", "model.fbx" },
+                { "virtual_path", "/Cooked/model.fbx" },
+                { "geometry_defaults", defaults },
+              },
+            }),
+          },
+        })
                   .dump();
     }
     std::vector<ImportDiagnostic> errors;

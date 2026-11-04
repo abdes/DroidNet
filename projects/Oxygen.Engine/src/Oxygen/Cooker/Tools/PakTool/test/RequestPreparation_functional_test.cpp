@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
@@ -146,7 +147,8 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, ResolvesSourceMountsForSealing)
   std::filesystem::create_directories(content);
   std::filesystem::create_directories(media);
   WriteText(project / ".mounts.json",
-    R"({ "version": 1, "root": true, "mounts": { "Media": ")"
+    oxygen::cooker::test::MountsText(
+      R"({ "root": true, "mounts": { "Media": ")")
       + media.generic_string() + R"(" } })");
   auto options = MakeOptions();
   options.request.output_pak = TempDir() / "release" / "game.pak";
@@ -207,7 +209,8 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsInvalidSourceMounts)
 {
   const auto project = TempDir() / "project";
   std::filesystem::create_directories(project / "Content");
-  WriteText(project / ".mounts.json", R"({ "version": 1, "root": true })");
+  WriteText(project / ".mounts.json",
+    oxygen::cooker::test::MountsText(R"({ "root": true })"));
   auto options = MakeOptions();
   options.request.output_pak = TempDir() / "release" / "game.pak";
   options.request.catalog_output

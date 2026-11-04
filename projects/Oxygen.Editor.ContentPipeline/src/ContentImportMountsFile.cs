@@ -24,8 +24,8 @@ public sealed record ContentImportMountsFile(
     public static ContentImportMountsFile Empty { get; } = new(ImmutableSortedDictionary.Create<string, string>(StringComparer.Ordinal));
 
     /// <summary>Gets the version of the mounts file format.</summary>
-    [JsonPropertyName("version")]
-    public int Version => 1;
+    [JsonPropertyName("schema_version")]
+    public int Version => 2;
 
     /// <summary>Gets a value indicating whether the file stops the walk up the folder hierarchy; it always does.</summary>
     [JsonPropertyName("root")]

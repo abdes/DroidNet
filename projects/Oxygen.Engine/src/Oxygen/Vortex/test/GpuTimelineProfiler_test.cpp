@@ -688,7 +688,8 @@ TEST(GpuTimelineProfilerTest, RecordingRetainsInvalidFramesInExactWindow)
   auto stream = std::ifstream(path);
   const auto report = nlohmann::json::parse(stream);
   stream.close();
-  EXPECT_EQ(report.at("version"), 2);
+  EXPECT_EQ(report.at("schema_version"),
+    oxygen::vortex::internal::kGpuTimelineReportSchemaVersion);
   EXPECT_EQ(report.at("first_frame_seq"), 21);
   EXPECT_EQ(report.at("requested_frames"), 3);
   EXPECT_EQ(report.at("written_frames"), 3);

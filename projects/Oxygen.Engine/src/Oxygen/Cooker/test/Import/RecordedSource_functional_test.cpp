@@ -67,7 +67,10 @@ namespace {
     static auto MaterialManifest(json jobs) -> json
     {
       return {
-        { "version", 1 },
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
         {
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "Content" } } }),
@@ -206,7 +209,10 @@ namespace {
   {
     // Arrange
     const auto placeholder = json {
-      { "version", 1 },
+      {
+        "schema_version",
+        oxygen::content::import::kImportManifestSchemaVersion,
+      },
       { "mounts", json::array({ { { "name", "Studio" } } }) },
       {
         "jobs",
@@ -229,7 +235,7 @@ namespace {
         = TempDir() / ("machine-" + folder.filename().string());
       WriteText(machine / ".mounts.json",
         json {
-          { "version", 1 },
+          { "schema_version", oxygen::content::import::kMountsSchemaVersion },
           { "mounts", { { "Studio", folder.generic_string() } } },
         }
           .dump());

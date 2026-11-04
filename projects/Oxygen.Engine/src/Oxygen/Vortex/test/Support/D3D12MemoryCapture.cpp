@@ -84,7 +84,7 @@ auto D3D12MemoryCapture::Report() const -> nlohmann::json
     });
   }
   return {
-    { "schema", 1U },
+    { "schema_version", 1U },
     { "complete", true },
     { "capacity", capacity_.get() },
     { "samples", std::move(rows) },

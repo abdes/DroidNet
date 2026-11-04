@@ -22,6 +22,9 @@ namespace oxygen::player {
 
 //! A launch file that cannot be read, is not valid JSON, breaks the schema or
 //! names content that does not exist. The message says which and where.
+//! The version a launch file states in `schema_version`.
+inline constexpr uint32_t kLaunchFileSchemaVersion = 4;
+
 class LaunchFileError : public std::runtime_error {
 public:
   using std::runtime_error::runtime_error;

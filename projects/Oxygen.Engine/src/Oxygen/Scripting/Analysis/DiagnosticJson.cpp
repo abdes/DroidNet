@@ -75,10 +75,10 @@ namespace {
   auto DiagnosticFromJson(const json& value)
     -> std::expected<ScriptDiagnostic, std::string>
   {
-    if (const auto version = value.at("version").get<uint32_t>();
-      version != kScriptDiagnosticJsonVersion) {
-      return std::unexpected(
-        fmt::format("unsupported diagnostic version {}", version));
+    if (const auto version = value.value("schema_version", json {});
+      version != kScriptDiagnosticSchemaVersion) {
+      return std::unexpected(fmt::format(
+        "unsupported diagnostic schema_version {}", version.dump()));
     }
     const auto severity_text = value.at("severity").get<std::string>();
     const auto severity = SeverityFromJson(severity_text);
@@ -145,7 +145,7 @@ auto ToJson(const ScriptDiagnostic& diagnostic) -> std::string
     });
   }
   auto value = json {
-    { "version", kScriptDiagnosticJsonVersion },
+    { "schema_version", kScriptDiagnosticSchemaVersion },
     { "severity", to_string(diagnostic.severity) },
     { "code", to_string(diagnostic.code) },
     { "family", to_string(FamilyOf(diagnostic.code)) },

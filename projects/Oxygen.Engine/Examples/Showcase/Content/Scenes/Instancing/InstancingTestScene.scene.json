@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "schema_version": 16,
   "name": "InstancingTestScene",
   "starting_camera": {
     "node": 1

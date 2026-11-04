@@ -43,7 +43,7 @@ public sealed class SourceAnalysisAdapterTests
         var captures = await CaptureAnalyzedSourcesAsync(execution, analysis, this.TestContext.CancellationToken).ConfigureAwait(false);
         var capturedAnalysis = await api.AnalyzeSourcesAsync(execution with { CapturedInputs = captures }, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedAnalysis.Should().BeEquivalentTo(analysis);
-        var manifest = new ContentImportManifest(1, Path.Combine(execution.OperationRoot, "output"), execution.Jobs) { Mounts = mounts };
+        var manifest = new ContentImportManifest(ContentImportManifest.CurrentSchemaVersion, Path.Combine(execution.OperationRoot, "output"), execution.Jobs) { Mounts = mounts };
         var import = new ContentImportExecution(execution.OperationId, execution.InputRoot, execution.OperationRoot, manifest)
         {
             MountsFile = execution.MountsFile,
@@ -176,7 +176,7 @@ public sealed class SourceAnalysisAdapterTests
                 var job = report["jobs"]![0]!;
                 switch (failure)
                 {
-                    case "version": report["version"] = 4; break;
+                    case "version": report["schema_version"] = 5; break;
                     case "path": job["observations"]![0]!["path"] = "relative.json"; break;
                     case "absence": job["observations"]![0]!["exists"] = false; break;
                     case "completion": job["complete"] = false; break;
@@ -376,7 +376,7 @@ public sealed class SourceAnalysisAdapterTests
                 });
             }
 
-            var report = new JsonObject { ["version"] = 3, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs, ["diagnostics"] = new JsonArray() };
+            var report = new JsonObject { ["schema_version"] = 4, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs, ["diagnostics"] = new JsonArray() };
             this.RewriteReport?.Invoke(report);
             await File.WriteAllTextAsync(this.ReportPath, report.ToJsonString(), cancellationToken).ConfigureAwait(false);
             return this.Failure is { } failure ? throw failure : new(this.ExitCode, string.Empty, string.Empty);

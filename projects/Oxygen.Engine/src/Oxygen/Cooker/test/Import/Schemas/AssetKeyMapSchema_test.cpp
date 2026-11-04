@@ -6,6 +6,7 @@
 
 // Covers: Import/Schemas/oxygen.asset-key-map.schema.json
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -62,11 +63,11 @@ auto Without(json document, const std::string_view pointer) -> json
 }
 
 //! The schema identifier the schema owns.
-auto Identifier() -> std::string
+auto Version() -> std::uint32_t
 {
   return Schema()
-    .at(json::json_pointer { "/properties/schema/const" })
-    .get<std::string>();
+    .at(json::json_pointer { "/properties/schema_version/const" })
+    .get<std::uint32_t>();
 }
 
 auto Entry() -> json
@@ -80,7 +81,7 @@ auto Entry() -> json
 auto Valid() -> json
 {
   return json {
-    { "schema", Identifier() },
+    { "schema_version", Version() },
     { "assets", json::array({ Entry() }) },
   };
 }
@@ -103,7 +104,7 @@ constexpr auto kKey = "/assets/0/asset_key: ";
 INSTANTIATE_TEST_SUITE_P(Cases, AssetKeyMapSchemaTest,
   ::testing::Values(
     Accepts("AcceptsEmptyMap",
-      json { { "schema", Identifier() }, { "assets", json::array() } }),
+      json { { "schema_version", Version() }, { "assets", json::array() } }),
     Accepts("AcceptsOneEntry", Valid()),
     Accepts("AcceptsTwoSegmentPath", WithPath("/Content/Brick")),
     Accepts("AcceptsPathWithSpaces", WithPath("/Content/Sniper Rifle/Paint")),
@@ -114,7 +115,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, AssetKeyMapSchemaTest,
           { "asset_key", "00000000-0000-0000-0000-000000000000" },
         })),
 
-    Rejects("RejectsMissingSchema", Without(Valid(), "/schema"), "'schema'"),
+    Rejects("RejectsMissingSchemaVersion", Without(Valid(), "/schema_version"),
+      "'schema_version'"),
     Rejects("RejectsMissingAssets", Without(Valid(), "/assets"), "'assets'"),
     Rejects("RejectsMissingVirtualPath",
       Without(Valid(), "/assets/0/virtual_path"), "'virtual_path'"),
@@ -125,9 +127,10 @@ INSTANTIATE_TEST_SUITE_P(Cases, AssetKeyMapSchemaTest,
     Rejects("RejectsUnknownEntryField",
       With(Valid(), "/assets/0/unknown", true), "'unknown'"),
 
-    Rejects("RejectsOtherSchemaIdentifier",
-      With(Valid(), "/schema", Identifier() + "x"), "/schema: "),
-    Rejects("RejectsNonStringSchema", With(Valid(), "/schema", 1), "/schema: "),
+    Rejects("RejectsOtherSchemaVersion",
+      With(Valid(), "/schema_version", Version() + 1), "/schema_version: "),
+    Rejects("RejectsNonIntegerSchemaVersion",
+      With(Valid(), "/schema_version", "2"), "/schema_version: "),
     Rejects(
       "RejectsNonArrayAssets", With(Valid(), "/assets", "x"), "/assets: "),
     Rejects(

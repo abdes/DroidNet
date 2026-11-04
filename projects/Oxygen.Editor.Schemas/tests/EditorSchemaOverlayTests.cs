@@ -314,7 +314,7 @@ public sealed class EditorSchemaOverlayTests
     [DataRow("""{ "local_position": "not a vector" }""")]
     [DataRow("""{ "name": "Wood", "domain": "opaque" }""")]
     [DataRow("""{ "name": 7 }""")]
-    [DataRow("""{ "version": 1, "name": "Empty", "nodes": [] }""")]
+    [DataRow("""{ "schema_version": 2, "name": "Empty", "nodes": [] }""")]
     public void OverlayValidatesAsItsEngineSchema(string document)
     {
         var catalog = EditorSchemaCatalog.LoadFromDirectory(FindSchemaRoot());

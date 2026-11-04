@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "schema_version": 16,
   "name": "VsmBug1LargePlane",
   "starting_camera": {
     "node": 3

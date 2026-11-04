@@ -289,7 +289,7 @@ editor reads the engine's hierarchy, against the installed
 
 ```json
 {
-  "version": 1,
+  "schema_version": 2,
   "mounts": {
     "Studio": "D:/Studio/SharedContent",
     "VendorCooked": "E:/Vendor/cooked"

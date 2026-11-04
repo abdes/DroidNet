@@ -111,7 +111,7 @@ internal sealed partial class SharedMountCookTests
             this.Studio = Path.Combine(this.folder, "Studio", "Shared");
             _ = Directory.CreateDirectory(this.Studio);
             _ = Directory.CreateDirectory(this.Root);
-            File.WriteAllText(Path.Combine(this.Root, ProjectMounts.FileName), $$$"""{"version":1,"mounts":{"Studio":"{{{this.Studio.Replace('\\', '/')}}}"}}""");
+            File.WriteAllText(Path.Combine(this.Root, ProjectMounts.FileName), $$$"""{"schema_version":2,"mounts":{"Studio":"{{{this.Studio.Replace('\\', '/')}}}"}}""");
             var project = TestProject.Create(new RealFileSystem(), this.Root, [new ProjectMount(TestProject.ContentMount, MountKind.Source, "Content"), new ProjectMount("Studio")]).Context;
             _ = TestProject.SaveProjectFile(project);
             this.Session = new TestSession(project);

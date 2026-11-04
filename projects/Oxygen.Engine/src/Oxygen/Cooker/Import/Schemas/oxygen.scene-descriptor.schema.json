@@ -7,9 +7,9 @@
     "$schema": {
       "type": "string"
     },
-    "version": {
+    "schema_version": {
       "type": "integer",
-      "const": 15
+      "const": 16
     },
     "name": {
       "$ref": "oxygen.name.schema.json#/definitions/segment"
@@ -58,7 +58,7 @@
       "$ref": "#/definitions/references"
     }
   },
-  "required": ["version", "name", "nodes"],
+  "required": ["schema_version", "name", "nodes"],
   "definitions": {
     "uuid": {
       "type": "string",

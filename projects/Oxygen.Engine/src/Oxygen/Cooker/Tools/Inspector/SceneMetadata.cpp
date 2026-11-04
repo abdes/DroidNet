@@ -635,7 +635,7 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
     scenes.push_back(std::move(row));
   }
   const auto report = json {
-    { "schema", kSceneMetadataSchema },
+    { "schema_version", kSceneMetadataSchemaVersion },
     { "source_key", nostd::to_string(content.Summary().source_key) },
     { "complete", failures.empty() },
     { "scenes", std::move(scenes) },

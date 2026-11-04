@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "schema_version": 2,
   "thread_pool_size": 30,
   "concurrency": {
     "texture": { "workers": 12, "queue_capacity": 64 },

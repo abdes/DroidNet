@@ -13,6 +13,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
@@ -36,9 +37,7 @@ NOLINT_TEST(
   const auto manifest_path
     = temp.Path() / "inline_bindings" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -56,7 +55,7 @@ NOLINT_TEST(
           }
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -81,9 +80,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest, ReadsThePhysicsBackend)
   const auto manifest_path
     = temp.Path() / "physics_backend" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{ "name": "Scenes", "path": "." }],
       "defaults": { "physics_sidecar": { "physics_backend": "none" } },
@@ -100,7 +97,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest, ReadsThePhysicsBackend)
           "bindings": {}
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -125,9 +122,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   const auto manifest_path
     = temp.Path() / "both_source_and_bindings" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -140,7 +135,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
           }
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -157,9 +152,7 @@ NOLINT_TEST(
   const auto manifest_path
     = temp.Path() / "rejects_extra_keys" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -169,7 +162,7 @@ NOLINT_TEST(
           "compile": true
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -186,9 +179,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   const auto manifest_path
     = temp.Path() / "orchestration_metadata" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -205,7 +196,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
           "virtual_path": "/Scenes/TestScene.oscene"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -230,9 +221,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   const auto defaults_output
     = manifest_path.parent_path() / "oxygen_manifest_output_defaults_physics";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "oxygen_manifest_output_top_physics",
       "defaults": {
@@ -247,7 +236,7 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
           "target_scene_virtual_path": "/Scenes/TestScene.oscene"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

@@ -95,7 +95,7 @@ public sealed partial class ImportToolContentPipelineApi
         var manifest = File.Create(files.Manifest);
         await using (manifest.ConfigureAwait(false))
         {
-            var document = new Dictionary<string, object> { ["version"] = 1, ["jobs"] = execution.Jobs };
+            var document = new Dictionary<string, object> { ["schema_version"] = 2, ["jobs"] = execution.Jobs };
             if (execution.Mounts is { Count: > 0 } mounts)
             {
                 document["mounts"] = mounts;

@@ -370,7 +370,7 @@ namespace {
     const auto& report = report_.value();
     ASSERT_TRUE(report.complete) << report.ToJson();
     const auto serialized = nlohmann::json::parse(report.ToJson());
-    EXPECT_EQ(serialized.at("version"), ImportSourceAnalysis {}.version);
+    EXPECT_EQ(serialized.at("schema_version"), kSourceAnalysisSchemaVersion);
     EXPECT_EQ(serialized.at("jobs").size(), 2U);
   }
 

@@ -56,6 +56,14 @@ namespace {
   constexpr std::uint32_t kMeasuredViewId = 100U;
   constexpr std::uint32_t kGpuScopeCapacity = 128U;
 
+  //! Collection overhead means nothing in an unoptimized build. The collection
+  //! still compiles in every configuration; only running it needs Release.
+#ifdef NDEBUG
+  constexpr auto kCanMeasureOverhead = true;
+#else
+  constexpr auto kCanMeasureOverhead = false;
+#endif
+
   struct FrameSample {
     unsigned sequence { 0U };
     double wall_ms { 0.0 };
@@ -85,6 +93,7 @@ namespace {
       FailureBackend().SetRecorderNameCollectionEnabled(false);
     }
     auto RunCollection(bool smoke, std::span<const ShadingMode> paths) -> void;
+    auto Collect(bool smoke, std::span<const ShadingMode> paths) -> void;
     auto RenderFrame(bool forward, CpuTimingCapture* cpu,
       D3D12MemoryCapture* memory, MemorySampleId sample) -> FrameSample;
   };
@@ -145,11 +154,16 @@ namespace {
   auto LightingCollectionBenchmark::RunCollection(
     const bool smoke, const std::span<const ShadingMode> paths) -> void
   {
-#ifndef NDEBUG
-    (void)smoke;
-    (void)paths;
-    GTEST_SKIP() << "Collection overhead requires Release.";
-#else
+    if constexpr (kCanMeasureOverhead) {
+      Collect(smoke, paths);
+    } else {
+      GTEST_SKIP() << "Collection overhead requires Release.";
+    }
+  }
+
+  auto LightingCollectionBenchmark::Collect(
+    const bool smoke, const std::span<const ShadingMode> paths) -> void
+  {
     // Frozen authored recipe, matching the mixed-light image qualification.
     constexpr float kPositionStepX = 0.25F;
     constexpr float kPositionStepY = 0.2F;
@@ -353,7 +367,7 @@ namespace {
     const auto adapter = Backend().GetCurrentDevice()->GetAdapterLuid();
     auto manifest = std::ofstream(directory / "manifest.json");
     manifest << nlohmann::json {
-      { "schema", 1U }, { "smoke", smoke }, { "complete", true },
+      { "schema_version", 1U }, { "smoke", smoke }, { "complete", true },
       { "width", kWidth }, { "height", kHeight }, { "lights", kLightCount },
       { "adapter_luid_low", adapter.LowPart }, { "adapter_luid_high", adapter.HighPart },
       { "control", "GPU timeline queries only; no CPU observer or memory sampling" },
@@ -363,7 +377,6 @@ namespace {
     }.dump(2);
     manifest.close();
     ASSERT_TRUE(manifest.good());
-#endif
   }
 
   NOLINT_TEST_F(LightingCollectionBenchmark, DISABLED_CollectionSmoke)

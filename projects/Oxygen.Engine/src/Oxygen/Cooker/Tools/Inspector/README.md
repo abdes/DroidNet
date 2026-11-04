@@ -136,7 +136,7 @@ missing inventories.
 Oxygen.Cooker.Inspector.exe scenes <cooked_root> --output <scenes.json> [--virtual-path <scene>]
 ```
 
-Writes `oxygen.cooked-scenes.v2`: each scene of the root composed, or only the
+Writes `oxygen.cooked-scenes`, `schema_version` 3: each scene of the root composed, or only the
 scene `--virtual-path` names (an unknown path reports no scene). A scene follows
 its instances through the root's other scenes; a scene without instances
 composes to itself, so every row has one shape:
@@ -237,8 +237,8 @@ The report schema is installed as `oxygen.cooked-dependencies.schema.json`.
 Oxygen.Cooker.Inspector.exe asset-keys --input <request.json> --output <map.json>
 ```
 
-The request uses `oxygen.asset-key-request.v1` with a `virtual_paths` array of
-canonical native paths. The `oxygen.asset-key-map.v1` response supplies each
+The request uses `oxygen.asset-key-request`, `schema_version` 2, with a `virtual_paths` array of
+canonical native paths. The `oxygen.asset-key-map` response supplies each
 path and its engine-generated key using `AssetKey::FromVirtualPath`. This is a
 batched metadata operation; source files and cooked containers are not required.
 Invalid requests leave an existing output report untouched. Request and response

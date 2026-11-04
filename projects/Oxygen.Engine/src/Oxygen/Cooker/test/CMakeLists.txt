@@ -79,6 +79,7 @@ oxygen_cooker_test(
     "Import/ScriptingSidecarPreparation_test.cpp"
     "Import/SourceMounts_test.cpp"
     "Import/Schemas/AssetKeyMapSchema_test.cpp"
+    "Import/Schemas/SchemaVersionKey_test.cpp"
     "Import/Schemas/AssetKeyRequestSchema_test.cpp"
     "Import/Schemas/BufferContainerSchema_test.cpp"
     "Import/Schemas/CapturedInputsSchema_test.cpp"
@@ -122,6 +123,7 @@ target_compile_definitions(
     OXYGEN_COOKER_MOUNT_TABLE_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/MountTableCases.json"
     OXYGEN_COOKER_MODEL_IMPORT_RECORD_CASES="${CMAKE_CURRENT_SOURCE_DIR}/Import/ModelImportRecordCases.json"
     OXYGEN_CONTENT_VIRTUAL_PATH_CASES="${CMAKE_CURRENT_SOURCE_DIR}/../../Content/VirtualPathCases.json"
+    OXYGEN_ENGINE_SOURCE_ROOT="${OXYGEN_SOURCE_DIR}/.."
 )
 # Shared builds only: the cooker DLL does not export these internals.
 if(TARGET oxygen-cooker-test-visible-internals)

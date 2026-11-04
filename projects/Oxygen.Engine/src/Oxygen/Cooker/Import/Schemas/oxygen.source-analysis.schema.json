@@ -4,15 +4,15 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version",
+    "schema_version",
     "producer_version",
     "complete",
     "jobs",
     "diagnostics"
   ],
   "properties": {
-    "version": {
-      "const": 3
+    "schema_version": {
+      "const": 4
     },
     "producer_version": {
       "type": "string"

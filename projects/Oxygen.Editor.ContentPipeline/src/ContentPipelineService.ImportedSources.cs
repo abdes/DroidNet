@@ -162,7 +162,7 @@ public sealed partial class ContentPipelineService
             var jobs = models.Select(input => scope.NativeJobs.GetValueOrDefault(input.AssetUri)
                 ?? this.manifestBuilder.BuildJob(input, [], ModelRecordLookup.RelativePath(scope.Project, ModelRecordLookup.Find(scope.Project, input.SourceAbsolutePath)))).ToArray();
             var manifest = new ContentImportManifest(
-                1,
+                ContentImportManifest.CurrentSchemaVersion,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,
                 jobs)
             { Mounts = ContentImportManifestBuilder.CreateMounts(scope.Project) };

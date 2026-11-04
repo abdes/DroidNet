@@ -51,7 +51,10 @@ namespace {
     static auto Manifest(json jobs) -> json
     {
       return {
-        { "version", 1 },
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
         {
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "." } } }),
@@ -138,6 +141,34 @@ namespace {
     EXPECT_EQ(found->severity, ImportSeverity::kError);
     EXPECT_TRUE(found->json_pointer.empty());
     EXPECT_TRUE(found->source_path.empty());
+  }
+
+  NOLINT_TEST_F(ImportManifestDiagnosticsTest, RefusesTheRetiredVersionKey)
+  {
+    // Act
+    const auto outcome = ParseText(R"({ "version": 1, "jobs": [] })");
+
+    // Assert
+    const auto found = Only(outcome, manifest_codes::kSchemaVersion);
+    ASSERT_HAS_VALUE(found);
+    EXPECT_EQ(found->severity, ImportSeverity::kError);
+    EXPECT_EQ(found->json_pointer, "/schema_version");
+    EXPECT_FALSE(outcome.manifest.has_value());
+  }
+
+  NOLINT_TEST_F(ImportManifestDiagnosticsTest, RefusesAnotherSchemaVersion)
+  {
+    // Arrange
+    auto manifest = Manifest(json::array());
+    manifest["schema_version"] = kImportManifestSchemaVersion + 1;
+
+    // Act
+    const auto outcome = Parse(manifest);
+
+    // Assert
+    const auto found = Only(outcome, manifest_codes::kSchemaVersion);
+    ASSERT_HAS_VALUE(found);
+    EXPECT_FALSE(outcome.manifest.has_value());
   }
 
   NOLINT_TEST_F(ImportManifestDiagnosticsTest, ReportsAnUnknownRootKeyAtTheRoot)

@@ -21,6 +21,9 @@
 
 namespace oxygen::examples::light_bench {
 
+//! The version a settings file states in `schema_version`.
+inline constexpr uint32_t kSettingsSchemaVersion = 2;
+
 enum class LightBenchPreset : std::uint8_t {
   kNeutralReference,
   kPointFalloff,

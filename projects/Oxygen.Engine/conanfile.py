@@ -214,9 +214,9 @@ class OxygenConan(ConanFile):
             data = json.loads(capsule.read_text(encoding="utf-8"))
             valid = (
                 isinstance(data, dict)
-                and set(data) == {"schema", "version", "commit", "dirty"}
-                and type(data["schema"]) in (int, float)
-                and data["schema"] == 1
+                and set(data) == {"schema_version", "version", "commit", "dirty"}
+                and type(data["schema_version"]) in (int, float)
+                and data["schema_version"] == 2
                 and data["version"] == version
             )
             if valid:
@@ -230,9 +230,19 @@ class OxygenConan(ConanFile):
                 raise ConanInvalidConfiguration(
                     f"Invalid or mismatched source provenance: {capsule}"
                 )
-            return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
+            return {
+                "schema_version": 2,
+                "version": version,
+                "commit": commit,
+                "dirty": dirty,
+            }
 
-        unknown = {"schema": 1, "version": version, "commit": None, "dirty": None}
+        unknown = {
+            "schema_version": 2,
+            "version": version,
+            "commit": None,
+            "dirty": None,
+        }
 
         def git(*arguments):
             result = subprocess.run(
@@ -259,7 +269,12 @@ class OxygenConan(ConanFile):
             )
         except (OSError, subprocess.CalledProcessError):
             return unknown
-        return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
+        return {
+            "schema_version": 2,
+            "version": version,
+            "commit": commit,
+            "dirty": dirty,
+        }
 
     def export(self):
         # Export freezes the source identity; local install/generate never does.

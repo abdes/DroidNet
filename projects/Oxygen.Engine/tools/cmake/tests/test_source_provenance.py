@@ -95,7 +95,7 @@ class Capsule(TypedDict):
 
 
 def capsule(version: str, commit: str | None, dirty: bool | None) -> Capsule:
-    return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
+    return {"schema_version": 2, "version": version, "commit": commit, "dirty": dirty}
 
 
 @skip_unless(CMAKE and GIT, "CMake and Git are required")
@@ -225,8 +225,8 @@ class ProvenanceTests(ProvenanceTestCase):
         capture(sha256)
         self.assertEqual(self.provenance(), sha256)
         for field, value in (
-            ("schema", True),
-            ("schema", 2),
+            ("schema_version", True),
+            ("schema_version", 1),
             ("version", "1.2.3"),
             ("commit", "abcd"),
             ("dirty", "false"),

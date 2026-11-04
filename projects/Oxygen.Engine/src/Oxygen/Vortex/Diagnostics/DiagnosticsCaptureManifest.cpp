@@ -142,9 +142,8 @@ auto BuildDiagnosticsCaptureManifestJson(
 {
   auto out = std::ostringstream {};
   out << "{\n";
-  Indent(out, 1) << "\"schema\": " << Quote(kDiagnosticsCaptureManifestSchema)
-                 << ",\n";
-  Indent(out, 1) << "\"version\": 1,\n";
+  Indent(out, 1) << "\"schema_version\": "
+                 << kDiagnosticsCaptureManifestSchemaVersion << ",\n";
   Indent(out, 1) << "\"frame\": {\n";
   Indent(out, 2) << "\"index\": " << snapshot.frame_index.get() << ",\n";
   Indent(out, 2) << "\"active_shader_debug_mode\": "

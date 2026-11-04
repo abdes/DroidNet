@@ -30,8 +30,8 @@ function(oxygen_read_source_provenance source_dir prefix)
     if(_error OR NOT _members EQUAL 4)
       message(FATAL_ERROR "Invalid source provenance: ${_capsule}")
     endif()
-    string(JSON _schema_type TYPE "${_json}" schema)
-    string(JSON _schema GET "${_json}" schema)
+    string(JSON _schema_type TYPE "${_json}" schema_version)
+    string(JSON _schema GET "${_json}" schema_version)
     string(JSON _version_type TYPE "${_json}" version)
     string(JSON _version GET "${_json}" version)
     string(JSON _commit_type TYPE "${_json}" commit)
@@ -45,7 +45,7 @@ function(oxygen_read_source_provenance source_dir prefix)
         NOT
           _schema
             EQUAL
-            1
+            2
       OR
         NOT
           _version_type
@@ -198,7 +198,7 @@ function(oxygen_read_source_provenance source_dir prefix)
   endif()
   set(
     _json
-    "{\n  \"schema\": 1,\n  \"version\": \"${META_VERSION}\",\n  \"commit\": ${_commit_json},\n  \"dirty\": ${_dirty}\n}\n"
+    "{\n  \"schema_version\": 2,\n  \"version\": \"${META_VERSION}\",\n  \"commit\": ${_commit_json},\n  \"dirty\": ${_dirty}\n}\n"
   )
   foreach(_part VERSION VERSION_MAJOR VERSION_MINOR VERSION_PATCH)
     set(${prefix}_${_part} "${META_${_part}}" PARENT_SCOPE)

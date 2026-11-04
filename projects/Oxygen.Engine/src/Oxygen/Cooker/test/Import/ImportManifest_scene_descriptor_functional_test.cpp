@@ -16,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
@@ -44,8 +45,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     MakeCurrentSceneDescriptor(
       R"({"name":"Scene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})")
       .dump());
-  WriteText(path, R"({
-    "version":1,"output":"out",
+  WriteText(path, oxygen::cooker::test::ManifestText(R"({
+    "output":"out",
     "mounts":[{"name":"Content","path":"."}],
     "defaults":{"scene_descriptor":{"cooked_context_roots":["Libraries/Low"]}},
     "jobs":[
@@ -54,7 +55,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       {"type":"scene-descriptor","source":"scene.json",
        "virtual_path":"/Cooked/Scenes/High.oscene",
        "cooked_context_roots":["Libraries/High","out"]}
-    ]})");
+    ]})"));
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
@@ -83,8 +84,8 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
     MakeCurrentSceneDescriptor(
       R"({"name":"Scene","nodes":[{"id":"00000000-0000-4000-8000-000000000001","name":"Root"}]})")
       .dump());
-  WriteText(path, R"({
-    "version":1,"output":"out",
+  WriteText(path, oxygen::cooker::test::ManifestText(R"({
+    "output":"out",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"type":"scene-descriptor","source":"scene.json",
@@ -92,7 +93,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
       {"type":"scene-descriptor","source":"scene.json",
        "virtual_path":"/Cooked/Scenes/Named.oscene",
        "cooked_context_roots":["Libraries/High"]}
-    ]})");
+    ]})"));
   auto errors = std::vector<ImportDiagnostic> {};
   auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
@@ -126,6 +127,10 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
          json::array({ "" }),
        }) {
     const auto document = json {
+      {
+        "schema_version",
+        oxygen::content::import::kImportManifestSchemaVersion,
+      },
       {
         "jobs",
         json::array({
@@ -165,8 +170,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })")
       .dump());
 
-  const auto* const manifest_json = R"({
-      "version": 1,
+  const auto manifest_json = oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked",
       "defaults": {
@@ -182,7 +186,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
           "name": "demo-scene-job"
         }
       ]
-    })";
+    })");
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::vector<ImportDiagnostic> {};
@@ -223,9 +227,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })")
       .dump());
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "scene-cooked",
       "jobs": [
@@ -243,7 +245,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
           "depends_on": ["geo.cube"]
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -271,9 +273,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "rejects_disallowed_key" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -282,7 +282,7 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
           "intent": "albedo"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

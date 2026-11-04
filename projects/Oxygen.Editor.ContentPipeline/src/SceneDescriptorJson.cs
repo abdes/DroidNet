@@ -22,7 +22,7 @@ internal static class SceneDescriptorJson
 
 internal sealed record NativeSceneDescriptor(
     [property: JsonPropertyName("$schema")] string Schema,
-    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("schema_version")] int Version,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("nodes")] IReadOnlyList<NativeSceneNode> Nodes,
     [property: JsonPropertyName("starting_camera")] NativeNodeRef? StartingCamera,

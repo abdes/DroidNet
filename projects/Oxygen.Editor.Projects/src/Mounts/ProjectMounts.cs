@@ -161,10 +161,11 @@ public static class ProjectMounts
 
     private static bool IsAccepted(JsonElement root, FileSystemPath path, MountTableBuilder builder)
     {
-        if (root.TryGetProperty("version", out var version) && version.ValueKind == JsonValueKind.Number
-            && !(version.TryGetInt32(out var number) && number == 1))
+        var hasVersion = root.TryGetProperty("schema_version", out var version);
+        if (!hasVersion || !(version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out var number) && number == 2))
         {
-            builder.Report(MountCodes.FileVersion, $"'{path}' has version {version.GetRawText()}; only version 1 is read.", file: path);
+            var stated = hasVersion ? version.GetRawText() : "none";
+            builder.Report(MountCodes.FileVersion, $"'{path}' has schema_version {stated}; only schema_version 2 is read.", file: path);
             return false;
         }
 

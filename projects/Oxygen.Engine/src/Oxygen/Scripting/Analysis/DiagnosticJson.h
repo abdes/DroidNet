@@ -17,7 +17,7 @@
 namespace oxygen::scripting {
 
 //! Version of the JSON form written by `ToJson`.
-inline constexpr uint32_t kScriptDiagnosticJsonVersion = 1;
+inline constexpr uint32_t kScriptDiagnosticSchemaVersion = 2;
 
 //! Writes a diagnostic as one JSON object.
 /*!

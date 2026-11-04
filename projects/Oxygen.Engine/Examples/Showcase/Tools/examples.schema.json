@@ -4,14 +4,14 @@
   "title": "Oxygen examples catalog",
   "description": "The one list of the examples project's examples. Tools, CMake and tests read it.",
   "type": "object",
-  "required": ["version", "examples"],
+  "required": ["schema_version", "examples"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
       "type": "string"
     },
-    "version": {
-      "const": 1
+    "schema_version": {
+      "const": 2
     },
     "examples": {
       "type": "array",

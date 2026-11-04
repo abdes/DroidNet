@@ -69,8 +69,10 @@ NOLINT_TEST_F(
     paths.push_back("/Content/Materials/M" + std::to_string(index) + ".omat");
   }
   paths.push_back("/Game/Physics/Materials/Rubber.opmat");
-  ASSERT_EQ(Run({ { "schema", "oxygen.asset-key-request.v1" },
-              { "virtual_paths", paths } }),
+  ASSERT_EQ(
+    Run({ { "schema_version",
+            oxygen::content::inspection::kAssetKeyRequestSchemaVersion },
+      { "virtual_paths", paths } }),
     0);
   const auto report = Read();
   EXPECT_THAT(oxygen::cooker::test::ValidateJson(
@@ -78,8 +80,8 @@ NOLINT_TEST_F(
                   "Import/Schemas/oxygen.asset-key-map.schema.json"),
                 report),
     ::testing::IsEmpty());
-  EXPECT_EQ(
-    report.at("schema"), oxygen::content::inspection::kAssetKeyMapSchema);
+  EXPECT_EQ(report.at("schema_version"),
+    oxygen::content::inspection::kAssetKeyMapSchemaVersion);
   ASSERT_EQ(report.at("assets").size(), paths.size());
   for (size_t index = 0; index < paths.size(); ++index) {
     const auto path = paths.at(index).get<std::string>();
@@ -94,7 +96,10 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(InspectorAssetKeyMapTest, InvalidRequestsPreserveExistingReport)
 {
   const auto valid = json {
-    { "schema", "oxygen.asset-key-request.v1" },
+    {
+      "schema_version",
+      oxygen::content::inspection::kAssetKeyRequestSchemaVersion,
+    },
     { "virtual_paths", { "/Content/Materials/A.omat" } },
   };
   ASSERT_EQ(Run(valid), 0);
@@ -118,15 +123,18 @@ NOLINT_TEST_F(InspectorAssetKeyMapTest, InvalidRequestsPreserveExistingReport)
   duplicate["virtual_paths"].push_back("/Content/Materials/A.omat");
   EXPECT_EQ(Run(duplicate), kRefused);
   auto unknown = valid;
-  unknown["schema"] = "oxygen.asset-key-request.v2";
+  unknown["schema_version"]
+    = oxygen::content::inspection::kAssetKeyRequestSchemaVersion + 1;
   EXPECT_EQ(Run(unknown), kRefused);
   EXPECT_EQ(Read(), original);
 }
 
 NOLINT_TEST_F(InspectorAssetKeyMapTest, EmptyBatchIsValid)
 {
-  ASSERT_EQ(Run({ { "schema", "oxygen.asset-key-request.v1" },
-              { "virtual_paths", json::array() } }),
+  ASSERT_EQ(
+    Run({ { "schema_version",
+            oxygen::content::inspection::kAssetKeyRequestSchemaVersion },
+      { "virtual_paths", json::array() } }),
     0);
   EXPECT_TRUE(Read().at("assets").empty());
 }

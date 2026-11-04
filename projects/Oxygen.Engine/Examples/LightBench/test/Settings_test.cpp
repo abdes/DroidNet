@@ -70,7 +70,7 @@ NOLINT_TEST(LightBenchSettings, RejectsMalformedAndCoupledInvalidSettings)
     EXPECT_FALSE(DecodeSettings(candidate.dump()));
   };
   reject("unknown field", [](auto& j) -> auto { j["unknown"] = 1; });
-  reject("obsolete version", [](auto& j) -> auto { j["version"] = 0; });
+  reject("obsolete version", [](auto& j) -> auto { j["schema_version"] = 0; });
   reject("missing exposure", [](auto& j) -> auto { j.erase("exposure"); });
   reject("unknown enum", [](auto& j) -> auto { j["exposure"]["mode"] = 100; });
   reject("unordered EV", [](auto& j) -> auto { j["exposure"]["min_ev"] = 20; });

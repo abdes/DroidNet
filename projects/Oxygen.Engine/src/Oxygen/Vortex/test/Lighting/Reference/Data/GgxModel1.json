@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema_version": 1,
   "model_revision": 1,
   "view_nodes": 513,
   "roughness_nodes": 1025,

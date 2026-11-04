@@ -34,7 +34,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         var jobs = this.CreateDependencyJobs(scope, scope.Inputs);
 
         return new ContentImportManifest(
-            Version: 1,
+            Version: ContentImportManifest.CurrentSchemaVersion,
             Output: output.Path,
             Jobs: jobs)
         { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };
@@ -98,7 +98,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         }
 
         return new ContentImportManifest(
-            Version: 1,
+            Version: ContentImportManifest.CurrentSchemaVersion,
             Output: output.Path,
             Jobs: jobs)
         { SourceKey = output.SourceKey, Mounts = CreateMounts(scope.Project) };

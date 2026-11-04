@@ -3,13 +3,13 @@
   "title": "Oxygen showcase source inventory",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "assets"],
+  "required": ["schema_version", "assets"],
   "properties": {
     "$schema": {
       "type": "string"
     },
-    "version": {
-      "const": 1
+    "schema_version": {
+      "const": 2
     },
     "assets": {
       "type": "array",

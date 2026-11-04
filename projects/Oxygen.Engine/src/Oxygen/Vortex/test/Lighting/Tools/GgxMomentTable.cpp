@@ -213,7 +213,7 @@ auto WriteCandidate(const std::filesystem::path& output, const TableShape shape,
   hash.Update(std::as_bytes(std::span(moments)));
   hash.Update(std::as_bytes(std::span(means)));
   const auto document = nlohmann::json {
-    { "schema", 1U },
+    { "schema_version", 1U },
     { "model_revision", kModelRevision },
     {
       "qualification_status",

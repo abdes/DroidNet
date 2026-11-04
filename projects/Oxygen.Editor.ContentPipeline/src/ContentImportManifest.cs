@@ -14,10 +14,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="Output">The physical cooked output root the ImportTool runs against; it is passed as <c>--cooked-root</c> and is not part of the manifest file.</param>
 /// <param name="Jobs">The manifest jobs.</param>
 public sealed record ContentImportManifest(
-    [property: JsonPropertyName("version")] int Version,
+    [property: JsonPropertyName("schema_version")] int Version,
     [property: JsonIgnore] string Output,
     [property: JsonPropertyName("jobs")] IReadOnlyList<ContentImportJob> Jobs)
 {
+    /// <summary>The manifest version the ImportTool reads.</summary>
+    public const int CurrentSchemaVersion = 2;
+
     /// <summary>Gets the project's source mounts: the folders the job sources resolve in; null when the manifest declares none.</summary>
     [JsonPropertyName("mounts")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

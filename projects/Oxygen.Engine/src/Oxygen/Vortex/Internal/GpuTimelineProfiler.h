@@ -36,6 +36,11 @@ class TimestampQueryProvider;
 
 namespace oxygen::vortex::internal {
 
+//! The version each frame of a timeline export states.
+inline constexpr uint32_t kGpuTimelineFrameSchemaVersion = 2;
+//! The version a multi-frame timeline report states.
+inline constexpr uint32_t kGpuTimelineReportSchemaVersion = 3;
+
 struct GpuTimelineDiagnostic {
   std::string code;
   std::string message;

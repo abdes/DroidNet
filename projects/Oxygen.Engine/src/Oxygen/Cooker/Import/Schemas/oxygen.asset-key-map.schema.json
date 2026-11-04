@@ -3,10 +3,10 @@
   "title": "Oxygen Virtual Asset Key Map",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "assets"],
+  "required": ["schema_version", "assets"],
   "properties": {
-    "schema": {
-      "const": "oxygen.asset-key-map.v1"
+    "schema_version": {
+      "const": 2
     },
     "assets": {
       "type": "array",

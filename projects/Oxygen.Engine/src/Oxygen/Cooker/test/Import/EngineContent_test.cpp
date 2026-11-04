@@ -168,7 +168,9 @@ NOLINT_TEST_F(EngineContentTest, ManifestsLoadOnlyAsTheEngineContentBuild)
     = ImportManifest::Load(manifests.geometry, {}, project_errors);
 
   // Assert
-  EXPECT_EQ(mounts_file, (json { { "version", 1 }, { "root", true } }));
+  EXPECT_EQ(mounts_file,
+    (json { { "schema_version", oxygen::content::import::kMountsSchemaVersion },
+      { "root", true } }));
   EXPECT_TRUE(engine.has_value()) << DiagnosticSummary(engine_errors);
   EXPECT_FALSE(project.has_value());
   EXPECT_THAT(project_errors,

@@ -32,7 +32,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
     // The engine schema owns the descriptor version; a descriptor names the one it requires.
     private static readonly Lazy<int> NativeSceneDescriptorVersion = new(() =>
-        SceneSchemas.Value.GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["version"]!["const"]!
+        SceneSchemas.Value.GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["schema_version"]!["const"]!
             .GetValue<int>());
 
     /// <inheritdoc />

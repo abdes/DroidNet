@@ -16,6 +16,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
@@ -49,9 +50,10 @@ auto Scene(const std::string_view name) -> SceneDescriptor
 // apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"),
-    Scene("Any").Json().at("version"));
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 15);
+  EXPECT_EQ(Schema().at("properties").at("schema_version").at("const"),
+    Scene("Any").Json().at("schema_version"));
+  EXPECT_EQ(Schema().at("properties").at("schema_version").at("const"),
+    oxygen::content::import::internal::kSceneDescriptorSchemaVersion);
 }
 
 //! The environment of the fog scene, without its texture references.
@@ -309,9 +311,9 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "RejectsMissingVersion",
-      Scene("LegacyScene").Remove("/version").Text(),
+      Scene("LegacyScene").Remove("/schema_version").Text(),
       false,
-      "'version'",
+      "'schema_version'",
     }),
   oxygen::cooker::test::SchemaCaseName);
 
@@ -370,9 +372,9 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
       << invalid.flags.dump();
   }
   document.at("nodes").at(0).update({ { "flags", json::object() } });
-  document.update({ { "version", 4 } });
+  document.update({ { "schema_version", 4 } });
   EXPECT_THAT(
-    ValidateJson(Schema(), document), Contains(HasSubstr("/version: ")));
+    ValidateJson(Schema(), document), Contains(HasSubstr("/schema_version: ")));
 }
 
 // An omitted aspect policy takes the scene schema's default.
@@ -457,8 +459,9 @@ NOLINT_TEST(
     Contains(
       HasSubstr("/environment/post_process_volume/manual_exposure_ev: ")));
   auto old = base;
-  old.update({ { "version", 3 } });
-  EXPECT_THAT(ValidateJson(Schema(), old), Contains(HasSubstr("/version: ")));
+  old.update({ { "schema_version", 3 } });
+  EXPECT_THAT(
+    ValidateJson(Schema(), old), Contains(HasSubstr("/schema_version: ")));
 }
 
 NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
@@ -482,9 +485,9 @@ NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
   }
   auto previous = canonical;
   constexpr auto kRetiredVersion = 7;
-  previous.update({ { "version", kRetiredVersion } });
+  previous.update({ { "schema_version", kRetiredVersion } });
   EXPECT_THAT(
-    ValidateJson(Schema(), previous), Contains(HasSubstr("/version: ")));
+    ValidateJson(Schema(), previous), Contains(HasSubstr("/schema_version: ")));
 }
 
 //! Appends the path of every default, numeric bound or integer member list

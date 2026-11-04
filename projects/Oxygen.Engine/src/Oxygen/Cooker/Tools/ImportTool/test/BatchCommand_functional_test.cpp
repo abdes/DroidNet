@@ -241,8 +241,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
       .Remove("/lods")
       .Text());
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -251,7 +250,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       {"type":"geometry-descriptor","source":"Invalid.geometry.json",
        "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
     ]
-  })");
+  })"));
 
   const auto result = RunBatch(manifest_path);
   ASSERT_FALSE(result.has_value()) << Messages();
@@ -273,8 +272,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsARefusedJobAtItsPosition)
       .Text());
   WriteText(root / "Valid.material.json",
     authored::MaterialDescriptor { "/Cooked/Materials/Valid.omat" }.Text());
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -283,7 +281,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsARefusedJobAtItsPosition)
       {"type":"material-descriptor","source":"Valid.material.json",
        "virtual_path":"/Cooked/Materials/Valid.omat"}
     ]
-  })");
+  })"));
 
   ContinueAfterValidationErrors();
   EXPECT_FALSE(RunBatch(manifest_path, std::nullopt, report_path).has_value());
@@ -318,14 +316,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenWhenEveryJobIsRefused)
     authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
       .Remove("/lods")
       .Text());
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
       {"type":"geometry-descriptor","source":"Invalid.geometry.json",
        "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
     ]
-  })");
+  })"));
 
   EXPECT_FALSE(RunBatch(manifest_path, cooked_root, report_path).has_value());
 
@@ -352,10 +349,11 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto report_path = root / "report.json";
   WriteText(root / "texture.json",
     authored::TextureDescriptor { "/Meter.otex", "missing.png" }.Text());
-  WriteText(manifest_path, R"({"version":1,"output":"cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":"cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"texture-descriptor","source":"texture.json",
-      "virtual_path":"/Meter.otex"}]})");
+      "virtual_path":"/Meter.otex"}]})"));
   EXPECT_FALSE(RunBatch(manifest_path, std::nullopt, report_path).has_value());
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
@@ -386,13 +384,13 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
       .Append("/contexts/0/mappings",
         { { "action", "Jump" }, { "slot", "Space" }, { "trigger", "pressed" } })
       .Text());
-  WriteText(manifest_path,
-    R"({"version":1,"output":".cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json",
       "virtual_path":"/Cooked/Wood.omat"},
       {"id":"input","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/Cooked/Input/Player.input"}]})");
+        "virtual_path":"/Cooked/Input/Player.input"}]})"));
 
   ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
     << Messages();
@@ -452,14 +450,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
         .Action("Jump", "bool")
         .Text());
   }
-  WriteText(manifest_path,
-    R"({"version":1,"output":".cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/Cooked/Input/Player.input"},
       {"id":"vehicle","type":"input","source":"Input/Vehicle.input.json",
-        "virtual_path":"/Cooked/Input/Vehicle.input"}]})");
+        "virtual_path":"/Cooked/Input/Vehicle.input"}]})"));
 
   ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
     << Messages();
@@ -504,15 +502,15 @@ NOLINT_TEST_F(
       { "slot", "Space" },
     });
   WriteText(root / "Input" / "Player.input.json", player.Text());
-  WriteText(manifest_path,
-    R"({"version":1,"output":".cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"common","type":"input","source":"Input/Common.input.json",
         "virtual_path":"/Cooked/Input/Common.input"},
       {"id":"player","type":"input","source":"Input/Player.input.json",
         "virtual_path":"/Cooked/Input/Player.input",
-        "depends_on":["common"]}]})");
+        "depends_on":["common"]}]})"));
 
   EXPECT_TRUE(RunBatch(manifest_path).has_value()) << Messages();
   EXPECT_TRUE(
@@ -537,12 +535,12 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
     .Append("/contexts/0/mappings",
       { { "action", "Dash" }, { "slot", "LeftShift" } });
   WriteText(root / "Input" / "Player.input.json", player.Text());
-  WriteText(manifest_path,
-    R"({"version":1,"output":".cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
     "jobs":[
       {"id":"player","type":"input","source":"Input/Player.input.json",
-        "virtual_path":"/Cooked/Input/Player.input"}]})");
+        "virtual_path":"/Cooked/Input/Player.input"}]})"));
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
   EXPECT_THAT(Messages(),
@@ -560,10 +558,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto manifest_path = root / "import-manifest.json";
   WriteText(root / "Wood.material.json",
     authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
-  WriteText(manifest_path,
-    R"({"version":1,"output":".cooked",
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"output":".cooked",
     "mounts":[{"name":"Content","path":"."}],
-    "jobs":[{"type":"material-descriptor","source":"Wood.material.json"}]})");
+    "jobs":[{"type":"material-descriptor","source":"Wood.material.json"}]})"));
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
   EXPECT_THAT(Messages(),
@@ -579,8 +577,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("conflicting_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
-    {"id":"first","type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"first","source_key":")"
+  manifest << oxygen::cooker::test::ManifestText(
+    R"({"mounts":[{"name":"Content","path":"."}],"jobs":[
+    {"id":"first","type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"first","source_key":")")
            << oxygen::Uuid::Generate().ToString() << R"("},
     {"id":"second","type":"texture","source":"second.png","virtual_path":"/Cooked/second.otex","output":"second","depends_on":["first"],"source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("}]})";
@@ -600,8 +599,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("case_alias_output_identities");
   const auto manifest_path = root / "import-manifest.json";
   std::ostringstream manifest;
-  manifest << R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[
-    {"type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"Cooked","source_key":")"
+  manifest << oxygen::cooker::test::ManifestText(
+    R"({"mounts":[{"name":"Content","path":"."}],"jobs":[
+    {"type":"texture","source":"first.png","virtual_path":"/Cooked/first.otex","output":"Cooked","source_key":")")
            << oxygen::Uuid::Generate().ToString() << R"("},
     {"type":"texture","source":"second.png","virtual_path":"/Cooked/second.otex","output":"cooked","source_key":")"
            << oxygen::Uuid::Generate().ToString() << R"("}]})";
@@ -626,7 +626,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   // One admitted job at a time: every submission after the first meets a
   // saturated service and must be deferred, not dropped.
   manifest
-    << R"({"version":1,"output":".cooked",)"
+    << oxygen::cooker::test::ManifestText(R"({"output":".cooked",)")
     << R"("mounts":[{"name":"Content","path":"."}],"max_in_flight_jobs":1,"job_admission_capacity":1,"jobs":[)";
   constexpr size_t kMaterialCount = 8;
   for (size_t index = 0; index < kMaterialCount; ++index) {
@@ -668,8 +668,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, UnproducedReferenceIsLeftToTheCook)
   const auto manifest_path = root / "import-manifest.json";
 
   WriteText(manifest_path,
-    R"({
-      "version": 1,
+    oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -677,7 +676,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, UnproducedReferenceIsLeftToTheCook)
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
-          "bindings": )"
+          "bindings": )")
       + FloorBindingsText({ 0U }, "/Cooked/Physics/Materials/floor.opmat") + R"(
         }
       ]
@@ -711,9 +710,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     FloorShapeText("/Cooked/Physics/Shapes/floor.ocshape", "floor_shape",
       "/Cooked/Physics/Materials/shared.opmat"));
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -736,7 +733,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "virtual_path": "/Cooked/Physics/Shapes/floor.ocshape"
         }
       ]
-    })");
+    })"));
 
   const auto report_path = root / "report.json";
   const auto result = RunBatch(manifest_path, std::nullopt, report_path);
@@ -794,8 +791,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       "/Cooked/Physics/Materials/base.opmat"));
 
   WriteText(manifest_path,
-    R"({
-      "version": 1,
+    oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -833,7 +829,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "id": "physics.sidecar.main",
           "type": "physics-sidecar",
           "target_scene_virtual_path": "/Cooked/Scenes/level.oscene",
-          "bindings": )"
+          "bindings": )")
       + FloorBindingsText({ 0U, 1U }, "/Cooked/Physics/Materials/shared.opmat")
       + R"(
         }
@@ -866,9 +862,7 @@ NOLINT_TEST_F(
     PhysicsMaterialText(
       "/Cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.5, 0.1));
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -887,7 +881,7 @@ NOLINT_TEST_F(
           "virtual_path": "/Cooked/Physics/Materials/mat_b.opmat"
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -916,8 +910,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(sidecar_source, sidecar.Text());
 
   WriteText(manifest_path,
-    R"({
-      "version": 1,
+    oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -938,7 +931,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "type": "physics-sidecar",
           "source": "Scenes/showcase_scene.physics.json",
           "target_scene_virtual_path": "/Cooked/Scenes/showcase_scene.oscene",
-          "bindings": )"
+          "bindings": )")
       + sidecar.Json().at("bindings").dump() + R"(
         }
       ]
@@ -968,9 +961,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       .Set("/rigid_bodies", nlohmann::json::array())
       .Text());
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -981,7 +972,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "target_scene_virtual_path": "/Cooked/Scenes/level.oscene"
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -999,7 +990,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenForARefusedManifest)
   const auto root = MakeScenarioDir("report_refused_manifest");
   const auto report_path = root / "report.json";
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(manifest_path, R"({"version":1,"jobs":[{"type":"unknown"}]})");
+  WriteText(manifest_path,
+    oxygen::cooker::test::ManifestText(R"({"jobs":[{"type":"unknown"}]})"));
 
   EXPECT_FALSE(
     RunBatch(manifest_path, root / ".cooked", report_path).has_value());
@@ -1023,7 +1015,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportOverTheManifestIsRefused)
 {
   const auto root = MakeScenarioDir("report_over_manifest");
   const auto manifest_path = root / "import-manifest.json";
-  constexpr auto kManifest = std::string_view { R"({"version":1,"jobs":[]})" };
+  const auto kManifest = oxygen::cooker::test::ManifestText(R"({"jobs":[]})");
   WriteText(manifest_path, kManifest);
 
   const auto result = RunBatch(manifest_path, root / ".cooked", manifest_path);
@@ -1049,15 +1041,14 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportOverAJobSourceIsRefused)
   const auto descriptor
     = authored::MaterialDescriptor { "/Cooked/Materials/Valid.omat" }.Text();
   WriteText(source, descriptor);
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
       {"type":"material-descriptor","source":"Valid.material.json",
        "virtual_path":"/Cooked/Materials/Valid.omat"}
     ]
-  })");
+  })"));
 
   const auto result = RunBatch(manifest_path, std::nullopt, source);
 
@@ -1078,7 +1069,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportInTheCookedRootIsRefused)
 {
   const auto root = MakeScenarioDir("report_in_cooked_root");
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(manifest_path, R"({"version":1,"jobs":[]})");
+  WriteText(
+    manifest_path, oxygen::cooker::test::ManifestText(R"({"jobs":[]})"));
   const auto report_path = root / ".cooked" / "report.json";
 
   const auto result = RunBatch(manifest_path, root / ".cooked", report_path);
@@ -1097,7 +1089,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, EmptyBatchWritesItsReport)
   const auto root = MakeScenarioDir("report_empty_batch");
   const auto manifest_path = root / "import-manifest.json";
   WriteText(manifest_path,
-    R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[]})");
+    oxygen::cooker::test::ManifestText(
+      R"({"mounts":[{"name":"Content","path":"."}],"jobs":[]})"));
   const auto report_path = root / "report.json";
 
   ASSERT_TRUE(
@@ -1120,7 +1113,8 @@ NOLINT_TEST_F(
   const auto root = MakeScenarioDir("report_write_failure");
   const auto manifest_path = root / "import-manifest.json";
   WriteText(manifest_path,
-    R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[]})");
+    oxygen::cooker::test::ManifestText(
+      R"({"mounts":[{"name":"Content","path":"."}],"jobs":[]})"));
   const auto report_path = root / "folder";
   std::filesystem::create_directories(report_path);
 
@@ -1138,7 +1132,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportSpellsARelativeManifestAbsolute)
 {
   const auto root = MakeScenarioDir("report_relative_manifest");
   const auto manifest_path = root / "import-manifest.json";
-  WriteText(manifest_path, R"({"version":1,"jobs":[{"type":"unknown"}]})");
+  WriteText(manifest_path,
+    oxygen::cooker::test::ManifestText(R"({"jobs":[{"type":"unknown"}]})"));
   const auto working_directory = std::filesystem::current_path();
   std::filesystem::current_path(root);
 
@@ -1164,9 +1159,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)
   const auto root = MakeScenarioDir("input_dep_cycle");
   const auto manifest_path = root / "import-manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -1185,7 +1178,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)
           "virtual_path": "/Cooked/Input/b.input"
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -1202,9 +1195,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   const auto root = MakeScenarioDir("script_sidecar_same_root_fence");
   const auto manifest_path = root / "import-manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -1222,7 +1213,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
           "target_scene_virtual_path": "/Cooked/Scenes/b.oscene"
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -1244,9 +1235,7 @@ NOLINT_TEST_F(
     PhysicsMaterialText(
       "/Cooked/Physics/Materials/mat.opmat", "mat", 0.6, 0.1));
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -1258,7 +1247,7 @@ NOLINT_TEST_F(
           "depends_on": ["missing.id", "missing.id"]
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -1284,9 +1273,7 @@ NOLINT_TEST_F(
     PhysicsMaterialText(
       "/Cooked/Physics/Materials/mat_b.opmat", "mat_b", 0.7, 0.2));
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "output": ".cooked",
       "mounts": [{"name": "Content", "path": "."}],
       "jobs": [
@@ -1303,7 +1290,7 @@ NOLINT_TEST_F(
           "virtual_path": "/Cooked/Physics/Materials/mat_b.opmat"
         }
       ]
-    })");
+    })"));
 
   const auto result = RunBatch(manifest_path);
   EXPECT_FALSE(result.has_value());
@@ -1329,9 +1316,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
   const auto manifest
     = [](const std::string_view id, const std::string_view source,
         const std::string_view virtual_path) {
-        return std::string(R"({"version":1,"output":".cooked",
+        return std::string(
+                 oxygen::cooker::test::ManifestText(R"({"output":".cooked",
       "mounts":[{"name":"Content","path":"."}],
-      "jobs":[{"id":")")
+      "jobs":[{"id":")"))
           + std::string(id) + R"(","type":"material-descriptor","source":")"
           + std::string(source) + R"(","virtual_path":")"
           + std::string(virtual_path) + R"("}]})";
@@ -1368,8 +1356,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
   const auto manifest
     = [](const std::string_view folder, const std::string_view source,
         const std::string_view virtual_path) {
-        return std::string(R"({"version":1,"output":".cooked",
-      "mounts":[{"name":"Content","path":")")
+        return std::string(
+                 oxygen::cooker::test::ManifestText(R"({"output":".cooked",
+      "mounts":[{"name":"Content","path":")"))
           + std::string(folder) + R"("}],
       "jobs":[{"type":"material-descriptor","source":"/Content/)"
           + std::string(source) + R"(","virtual_path":")"
@@ -1407,8 +1396,7 @@ NOLINT_TEST_F(
     WriteText(root / (std::string(name) + ".material.json"),
       authored::MaterialDescriptor { identity }.Text());
   }
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -1424,7 +1412,7 @@ NOLINT_TEST_F(
       {"id":"other","type":"material-descriptor",
        "source":"Other.material.json","virtual_path":"/Cooked/Other.omat"}
     ]
-  })");
+  })"));
 
   const auto result = RunBatch(manifest_path, std::nullopt, report_path);
 
@@ -1463,8 +1451,7 @@ NOLINT_TEST_F(
     authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
       .Remove("/lods")
       .Text());
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -1474,7 +1461,7 @@ NOLINT_TEST_F(
        "source":"Invalid.geometry.json",
        "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
     ]
-  })");
+  })"));
 
   const auto result = RunBatch(manifest_path, std::nullopt, report_path);
 
@@ -1501,8 +1488,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, FailFastStartsNoJobAfterAFailure)
     authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   // A sidecar's target scene is resolved when the job runs. The material cooks
   // to another root, so no fence orders it before the sidecar.
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -1512,7 +1498,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, FailFastStartsNoJobAfterAFailure)
       {"type":"material-descriptor","source":"Wood.material.json",
        "virtual_path":"/Cooked/Wood.omat","output":"other"}
     ]
-  })");
+  })"));
 
   const auto result = RunBatch(manifest_path, std::nullopt, report_path);
 
@@ -1544,8 +1530,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, AStoppedBatchReportsItsJobsCancelled)
     authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
   WriteText(root / "Stone.material.json",
     authored::MaterialDescriptor { "/Cooked/Stone.omat" }.Text());
-  WriteText(manifest_path, R"({
-    "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
     "output": ".cooked",
     "mounts": [{"name": "Content", "path": "."}],
     "jobs": [
@@ -1554,7 +1539,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, AStoppedBatchReportsItsJobsCancelled)
       {"type":"material-descriptor","source":"Stone.material.json",
        "virtual_path":"/Cooked/Stone.omat","depends_on":["wood"]}
     ]
-  })");
+  })"));
   RequestStop();
 
   const auto result = RunBatch(manifest_path, std::nullopt, report_path);

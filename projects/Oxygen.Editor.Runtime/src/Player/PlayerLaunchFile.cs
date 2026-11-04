@@ -8,7 +8,7 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.Runtime.Player;
 
 /// <summary>
-/// The whole input of an <c>Oxygen.Player</c> run, as <c>oxygen.player-launch.schema.json</c> version 3 defines it.
+/// The whole input of an <c>Oxygen.Player</c> run, as <c>oxygen.player-launch.schema.json</c> version 4 defines it.
 /// </summary>
 /// <remarks>
 /// The player reads the file at launch and again at every Play, taking the mounts and the scene it names then; the
@@ -28,7 +28,7 @@ public sealed record PlayerLaunchFile(
     PlayerLaunchWindow Window)
 {
     /// <summary>The launch file format version.</summary>
-    public const int Version = 3;
+    public const int Version = 4;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -70,7 +70,7 @@ public sealed record PlayerLaunchFile(
         => mode == PlayerWindowMode.Borderless ? "borderless" : "windowed";
 
     private sealed record Document(
-        [property: JsonPropertyName("version")] int Version,
+        [property: JsonPropertyName("schema_version")] int Version,
         [property: JsonPropertyName("mounts")] IReadOnlyList<string> Mounts,
         [property: JsonPropertyName("scene")] string Scene,
         [property: JsonPropertyName("source_mounts")] IReadOnlyDictionary<string, string> SourceMounts,

@@ -45,7 +45,7 @@ public sealed partial class NativeLoopCleanupTests
         await File.WriteAllTextAsync(Path.Combine(content, "Meter.otex.json"), descriptor, this.TestContext.CancellationToken).ConfigureAwait(false);
         var cookedRoot = Path.Combine(root, "cooked");
         var manifest = new ContentImportManifest(
-            1,
+            ContentImportManifest.CurrentSchemaVersion,
             cookedRoot,
             [new ContentImportJob("mask", "texture-descriptor", "/Content/Meter.otex.json", [], Output: null, Name: "Meter") { VirtualPath = "/Content/Textures/Meter.otex" }])
         {

@@ -1,6 +1,6 @@
 {
   "$schema": "showcase-assets.schema.json",
-  "version": 1,
+  "schema_version": 2,
   "assets": [
     {
       "name": "Lantern.glb",

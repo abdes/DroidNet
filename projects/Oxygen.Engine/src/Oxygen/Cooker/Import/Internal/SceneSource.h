@@ -33,7 +33,7 @@ namespace oxygen::content::import::internal {
  Independent of the cooked `data::pak::world::kSceneAssetVersion`: a cooked
  layout change recooks content without changing authored descriptors.
 */
-inline constexpr uint32_t kSceneDescriptorVersion = 15;
+inline constexpr uint32_t kSceneDescriptorSchemaVersion = 16;
 
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {

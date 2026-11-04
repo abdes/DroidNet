@@ -32,9 +32,9 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         ArgumentNullException.ThrowIfNull(manifest);
 
         var diagnostics = new List<DiagnosticRecord>();
-        if (manifest.Version != 1)
+        if (manifest.Version != ContentImportManifest.CurrentSchemaVersion)
         {
-            diagnostics.Add(CreateDiagnostic(operationId, "Import manifest version must be 1."));
+            diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest schema_version must be {ContentImportManifest.CurrentSchemaVersion}."));
         }
 
         if (string.IsNullOrWhiteSpace(manifest.Output))

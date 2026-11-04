@@ -454,15 +454,15 @@ namespace {
     const auto stops_walk
       = root != doc->end() && root->is_boolean() && root->get<bool>();
 
-    const auto version = doc->find("version");
-    if (version != doc->end() && version->is_number() && *version != 1) {
+    const auto version = doc->find("schema_version");
+    if (version == doc->end() || *version != kMountsSchemaVersion) {
       reporter.Report(mount_codes::kFileVersion,
         Subject {
           .file = header.file,
-          .json_pointer = "/version",
+          .json_pointer = "/schema_version",
           .mount = {},
         },
-        version->dump());
+        version == doc->end() ? "(none)" : version->dump());
       return { .file = std::nullopt, .stops_walk = stops_walk };
     }
     if (!CheckFileNames(*doc, header.file, owner, reporter)

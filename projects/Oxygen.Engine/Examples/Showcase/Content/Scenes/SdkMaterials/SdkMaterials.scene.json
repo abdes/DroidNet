@@ -1,6 +1,6 @@
 {
   "$schema": "oxygen.scene-descriptor.schema.json",
-  "version": 15,
+  "schema_version": 16,
   "name": "SdkMaterials",
   "starting_camera": {
     "node": 4

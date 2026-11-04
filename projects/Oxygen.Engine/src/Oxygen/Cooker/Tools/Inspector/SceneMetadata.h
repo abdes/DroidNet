@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -17,8 +18,8 @@ class Command;
 
 namespace oxygen::content::inspection {
 
-//! Identifier of the `oxygen.cooked-scenes` report.
-inline constexpr auto kSceneMetadataSchema = "oxygen.cooked-scenes.v2";
+//! The version of the `oxygen.cooked-scenes` report.
+inline constexpr uint32_t kSceneMetadataSchemaVersion = 3;
 
 struct SceneMetadataOptions {
   std::string cooked_root;

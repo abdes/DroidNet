@@ -31,7 +31,7 @@ public sealed class PlayerLaunchFileTests
 
             using var document = JsonDocument.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false));
             var root = document.RootElement;
-            _ = root.GetProperty("version").GetInt32().Should().Be(PlayerLaunchFile.Version);
+            _ = root.GetProperty("schema_version").GetInt32().Should().Be(PlayerLaunchFile.Version);
             _ = root.GetProperty("mounts").EnumerateArray().Select(static mount => mount.GetString()).Should()
                 .Equal(@"C:\Project\.cooked\generations\a", @"C:\Project\.cooked\generations\b");
             _ = root.GetProperty("scene").GetString().Should().Be("/Content/Scenes/Level.oscene");

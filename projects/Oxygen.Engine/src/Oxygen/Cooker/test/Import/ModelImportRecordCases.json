@@ -1,6 +1,6 @@
 {
   "$comment": "Where a model import record lives and how it names its source. A record is the model's authored file: <identity>.import.json in the identity's mount folder. Its source is a file reference from the record, relative within the model's mount, the mount path of a file in another mount. The engine (ModelImportRecordCases_test.cpp) and the editor both run every case over the mount table below, which needs no folder on disk. Folders are relative to one root; codes are diagnostic codes, and vpath the reference grammar's code an import.reference_invalid names.",
-  "version": 1,
+  "schema_version": 2,
   "mounts": [
     { "name": "Content", "folder": "Game/Content" },
     { "name": "RawMedia", "folder": "Media/Raw" }

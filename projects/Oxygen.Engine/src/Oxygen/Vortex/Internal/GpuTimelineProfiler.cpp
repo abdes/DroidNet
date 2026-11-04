@@ -98,7 +98,8 @@ auto WriteJsonFrame(std::ostream& out,
   const oxygen::vortex::internal::GpuTimelineFrame& frame) -> void
 {
   out << "{\n";
-  out << fmt::format("  \"version\": 1,\n");
+  out << fmt::format("  \"schema_version\": {},\n",
+    oxygen::vortex::internal::kGpuTimelineFrameSchemaVersion);
   out << fmt::format("  \"frame_seq\": {},\n", frame.frame_sequence);
   out << fmt::format(
     "  \"timestamp_freq_hz\": {},\n", frame.timestamp_frequency_hz);
@@ -225,10 +226,11 @@ public:
     output_.exceptions(std::ios::badbit | std::ios::failbit);
     output_.open(path, std::ios::binary | std::ios::trunc);
     output_ << fmt::format(
-      "{{\n\"version\": 2,\n\"first_frame_seq\": {},\n"
+      "{{\n\"schema_version\": {},\n\"first_frame_seq\": {},\n"
       "\"requested_frames\": {},\n\"serialization\": \"worker\",\n"
       "\"queue_capacity_frames\": {},\n\"frames\": [\n",
-      first_frame, frame_count, kMaximumQueuedFrames);
+      oxygen::vortex::internal::kGpuTimelineReportSchemaVersion, first_frame,
+      frame_count, kMaximumQueuedFrames);
     worker_ = std::jthread([this] -> void { WriteFrames(); });
   }
 

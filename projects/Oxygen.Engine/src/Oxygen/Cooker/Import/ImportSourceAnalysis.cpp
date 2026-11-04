@@ -1281,7 +1281,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
     serialized_jobs.push_back(std::move(serialized));
   }
   return json {
-    { "version", version },
+    { "schema_version", kSourceAnalysisSchemaVersion },
     { "producer_version", producer_version },
     { "complete", complete },
     { "jobs", std::move(serialized_jobs) },

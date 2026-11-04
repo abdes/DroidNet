@@ -134,7 +134,7 @@ public sealed class ModelImportSettingsTests
         var fileSystem = new MockFileSystem();
         _ = fileSystem.Directory.CreateDirectory(@"D:\Assets");
         _ = fileSystem.Directory.CreateDirectory(ProjectRoot);
-        fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"version":1,"mounts":{"Studio":"D:/Assets"}}""");
+        fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Studio":"D:/Assets"}}""");
         var project = TestProject.Create(fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
 
         var record = this.Create().WithSource("/Studio/Car.glb");

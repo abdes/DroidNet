@@ -11,7 +11,7 @@
       "x-editor-order": 0,
       "x-editor-renderer": "readonly"
     },
-    "version": {
+    "schema_version": {
       "x-editor-label": "Version",
       "x-editor-group": "Document",
       "x-editor-order": 1,

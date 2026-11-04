@@ -16,6 +16,7 @@
 
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/EngineContent.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -155,7 +156,7 @@ auto WriteJson(const std::filesystem::path& path, const json& value) -> void
 auto Manifest(json jobs) -> json
 {
   return {
-    { "version", 1 },
+    { "schema_version", oxygen::content::import::kImportManifestSchemaVersion },
     {
       "mounts",
       json::array({ { { "name", kMount.substr(1) }, { "path", "." } } }),
@@ -176,8 +177,8 @@ auto GetEngineShapes() noexcept -> std::span<const EngineShape>
 auto WriteEngineContentSources(const std::filesystem::path& directory)
   -> EngineContentManifests
 {
-  WriteJson(
-    directory / kMountsFileName, { { "version", 1 }, { "root", true } });
+  WriteJson(directory / kMountsFileName,
+    { { "schema_version", kMountsSchemaVersion }, { "root", true } });
   const auto material_file = std::string(kDefaultMaterialName) + ".omat.json";
   WriteJson(
     directory / kMaterials / material_file, DefaultMaterialDescriptor());

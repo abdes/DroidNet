@@ -57,7 +57,7 @@ def sample_mean(table, roughness):
 
 
 def validate_structure(table):
-    if table["schema"] != 1 or table["model_revision"] != 1:
+    if table["schema_version"] != 1 or table["model_revision"] != 1:
         raise ValueError("Unsupported table schema or BRDF model")
     if table["roughness_minimum"] != 0.045:
         raise ValueError("Incorrect roughness floor")

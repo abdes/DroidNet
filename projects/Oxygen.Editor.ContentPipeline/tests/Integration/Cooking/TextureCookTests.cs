@@ -87,7 +87,7 @@ public sealed class TextureCookTests
             virtual_path = "/Other/Meter.otex",
         }));
         var invalidManifest = new ContentImportManifest(
-            1,
+            ContentImportManifest.CurrentSchemaVersion,
             root,
             [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid") { VirtualPath = "/Other/Meter.otex" }]);
         var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest) { MountsFile = ContentImportMountsFile.Empty }, this.TestContext.CancellationToken).ConfigureAwait(false);

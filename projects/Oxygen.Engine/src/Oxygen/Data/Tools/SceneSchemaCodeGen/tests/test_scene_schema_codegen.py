@@ -32,7 +32,7 @@ def _rules() -> object:
 
 def _minimal() -> dict[str, Any]:
     return {
-        "version": 2,
+        "schema_version": 3,
         "units": [
             {"id": "metre", "abbreviation": "m", "name": "metres"},
             {"id": "degree", "abbreviation": "°", "name": "degrees"},
@@ -429,7 +429,7 @@ def test_cli_writes_once_and_refuses_an_invalid_schema(tmp_path: Path) -> None:
     assert out.stat().st_mtime_ns == written
 
     invalid = _minimal()
-    invalid["version"] = 1
+    invalid["schema_version"] = 1
     bad = tmp_path / "bad.yaml"
     bad.write_text(yaml.safe_dump(invalid), encoding="utf-8")
     assert cli.main(["--schema", str(bad), *arguments]) == 1

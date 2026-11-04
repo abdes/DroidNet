@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
@@ -40,9 +41,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
   const auto manifest_path
     = temp.Path() / "inline_bindings" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -58,7 +57,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -82,15 +81,14 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
 {
   const ScopedTempDir temp;
   const auto job = [](const std::string& binding) {
-    return R"({
-      "version": 1,
+    return oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
           "type": "script-sidecar",
           "output": "oxygen_manifest_sidecar_root",
           "target_scene_virtual_path": "/Scenes/TestScene.oscene",
-          )"
+          )")
       + binding + R"(,
           "instance_bindings": [
             {
@@ -131,9 +129,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "sidecar_context_roots" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "staging",
       "jobs": [
@@ -150,7 +146,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -172,9 +168,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "script_mounts" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [
         { "name": "Authoring", "path": "Authoring" },
         { "name": "Other", "path": "Other" }
@@ -198,7 +192,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           "virtual_path": "/Cooked/Scripts/OtherMain.oscript"
         }
       ]
-    })");
+    })"));
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
@@ -222,9 +216,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const auto manifest_path
     = temp.Path() / "both_source_and_bindings" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -241,7 +233,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -256,9 +248,7 @@ NOLINT_TEST(
   const auto manifest_path
     = temp.Path() / "bindings_non_sidecar" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -275,7 +265,7 @@ NOLINT_TEST(
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -294,9 +284,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const auto manifest_path
     = temp.Path() / "top_level_output_fallback" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "oxygen_manifest_global_output",
       "jobs": [
@@ -317,7 +305,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -350,9 +338,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const auto manifest_path
     = temp.Path() / "defaults_over_top_level_output" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "oxygen_manifest_output_top",
       "defaults": {
@@ -373,7 +359,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -398,9 +384,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   const auto manifest_path
     = temp.Path() / "job_overrides_defaults_output" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "oxygen_manifest_output_top2",
       "defaults": {
@@ -422,7 +406,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
           ]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

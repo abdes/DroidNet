@@ -8,9 +8,9 @@
       "type": "string",
       "description": "Optional self-reference to this schema file."
     },
-    "version": {
+    "schema_version": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "thread_pool_size": {
       "description": "Worker threads of the import's CPU work pool. Default: the processor count.",
@@ -168,7 +168,7 @@
       "$ref": "#/definitions/source_key"
     }
   },
-  "required": ["jobs"],
+  "required": ["schema_version", "jobs"],
   "definitions": {
     "mount_declaration": {
       "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "Tools/examples.schema.json",
-  "version": 1,
+  "schema_version": 2,
   "examples": [
     {
       "name": "BottleOnBox",

@@ -19,6 +19,9 @@
 namespace oxygen::content::import {
 
 //! Parsed source facts for retaining a portable static model import bundle.
+//! The version of the scene source inspection report.
+inline constexpr uint32_t kSceneSourceInspectionSchemaVersion = 2;
+
 struct SceneSourceInspection final {
   bool parsed = false;
   bool supported = false;

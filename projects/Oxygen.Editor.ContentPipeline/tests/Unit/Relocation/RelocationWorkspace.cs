@@ -128,7 +128,7 @@ internal sealed partial class RelocationWorkspace : IDisposable
         _ = this.FileSystem.Directory.CreateDirectory(folder);
         this.FileSystem.File.WriteAllText(
             this.PathOf(ProjectMounts.FileName),
-            new JsonObject { ["version"] = 1, ["mounts"] = new JsonObject { [name] = folder.Replace('\\', '/') } }.ToJsonString());
+            new JsonObject { ["schema_version"] = 2, ["mounts"] = new JsonObject { [name] = folder.Replace('\\', '/') } }.ToJsonString());
         var info = TestProject.InfoOf(this.Project);
         info.Mounts.Add(new ProjectMount(name));
         this.Session.ChangeContext(TestProject.Open(info, this.FileSystem).Context with

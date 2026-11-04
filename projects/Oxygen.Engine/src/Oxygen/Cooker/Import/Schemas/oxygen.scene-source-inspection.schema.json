@@ -3,8 +3,8 @@
   "title": "Oxygen scene source inspection",
   "type": "object",
   "properties": {
-    "version": {
-      "const": 1
+    "schema_version": {
+      "const": 2
     },
     "parsed": {
       "type": "boolean"
@@ -104,7 +104,7 @@
     }
   },
   "required": [
-    "version",
+    "schema_version",
     "parsed",
     "supported",
     "format",

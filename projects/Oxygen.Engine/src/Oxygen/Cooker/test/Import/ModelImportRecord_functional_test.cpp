@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/testing/ModelRecord.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -535,12 +536,12 @@ NOLINT_TEST_F(
   const auto recipe_path = TempDir() / "Models" / "recipe.json";
   {
     std::ofstream recipe(recipe_path);
-    recipe << R"({"version":1,
-      "jobs":[{"type":"gltf","source":"Models/source.gltf",
+    recipe << oxygen::cooker::test::ManifestText(
+      R"({"jobs":[{"type":"gltf","source":"Models/source.gltf",
         "virtual_path":"/Content/Models/source.gltf",
         "normals_policy":"generate",
         "output_format":"bc7_srgb","data_format":"bc7","mip_policy":"full",
-        "mip_filter":"kaiser","bc7_quality":"high"}]})";
+        "mip_filter":"kaiser","bc7_quality":"high"}]})");
   }
   const auto before
     = ModelImportRecord::Prepare(record_, Generations(), mounts_);
@@ -570,9 +571,9 @@ NOLINT_TEST_F(ModelImportRecordTest, WrongRecipeFormatCannotMutateTheRecord)
   const auto recipe_path = TempDir() / "Models" / "recipe.json";
   {
     std::ofstream recipe(recipe_path);
-    recipe
-      << R"({"version":1,"jobs":[{"type":"gltf","source":"Models/source.gltf",
-      "virtual_path":"/Content/Models/source.gltf"}]})";
+    recipe << oxygen::cooker::test::ManifestText(
+      R"({"jobs":[{"type":"gltf","source":"Models/source.gltf",
+      "virtual_path":"/Content/Models/source.gltf"}]})");
   }
   const auto before = FileDigest(record_);
   EXPECT_THROW(ModelImportRecord::SaveRecipeFile(

@@ -3,10 +3,10 @@
   "title": "Oxygen exported source provenance",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "version", "commit", "dirty"],
+  "required": ["schema_version", "version", "commit", "dirty"],
   "properties": {
-    "schema": {
-      "const": 1,
+    "schema_version": {
+      "const": 2,
       "type": "integer"
     },
     "version": {

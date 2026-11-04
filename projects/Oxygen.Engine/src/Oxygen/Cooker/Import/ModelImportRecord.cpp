@@ -333,7 +333,7 @@ namespace {
     const MountTable& mounts) -> void
   {
     const auto manifest = json {
-      { "version", 1 },
+      { "schema_version", kImportManifestSchemaVersion },
       { "jobs", json::array({ MakeJobJson(record, content, identity) }) },
     };
     auto errors = std::vector<ImportDiagnostic> {};
@@ -1200,7 +1200,7 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
   // no worker budgets, which belong to the command's execution options.
   for (const auto& [key, value] : recipe.items()) {
     static_cast<void>(value);
-    if (key != "$schema" && key != "version" && key != "jobs") {
+    if (key != "$schema" && key != "schema_version" && key != "jobs") {
       throw std::invalid_argument("A recipe holds one gltf or fbx job and no '"
         + key + "'; worker budgets are execution options");
     }
@@ -1303,7 +1303,7 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
 
   // The same `model` job a manifest runs, naming the model by its identity.
   const auto manifest = json {
-    { "version", 1 },
+    { "schema_version", kImportManifestSchemaVersion },
     {
       "jobs",
       json::array({

@@ -742,7 +742,7 @@ Top-level fields:
 
 ```json
 {
-  "version": 1,
+  "schema_version": 2,
   "project_root": "..",
   "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
   "output": "../.cooked/Content",
@@ -905,7 +905,7 @@ Batch example with one output shared at manifest level:
 
 ```json
 {
-  "version": 1,
+  "schema_version": 2,
   "project_root": "..",
   "mounts": [{ "name": "Content", "path": "Content" }],
   "output": "../.cooked/Content",

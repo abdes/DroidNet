@@ -111,7 +111,7 @@ auto Diagnostic() -> json
 auto Supported() -> json
 {
   return json {
-    { "version", Owned("/properties/version/const") },
+    { "schema_version", Owned("/properties/schema_version/const") },
     { "parsed", true },
     { "supported", true },
     { "format", "gltf" },
@@ -208,9 +208,9 @@ auto Cases() -> std::vector<SchemaCase>
       With(Supported(), "/diagnostics/0/unknown", "x"), "'unknown'"),
 
     Rejects("RejectsOtherVersion",
-      With(Supported(), "/version",
-        Owned("/properties/version/const").get<std::int64_t>() + 1),
-      "/version: "),
+      With(Supported(), "/schema_version",
+        Owned("/properties/schema_version/const").get<std::int64_t>() + 1),
+      "/schema_version: "),
     Rejects("RejectsNonBooleanParsed", With(Supported(), "/parsed", "yes"),
       "/parsed: "),
     Rejects("RejectsNonBooleanSupported", With(Supported(), "/supported", 1),

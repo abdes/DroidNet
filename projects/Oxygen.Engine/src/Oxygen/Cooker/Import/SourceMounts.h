@@ -37,6 +37,9 @@ template <typename... Args> struct MountCode final {
 };
 
 //! The diagnostic codes of the source mount contract.
+//! The version a `.mounts.json` file states in `schema_version`.
+inline constexpr uint32_t kMountsSchemaVersion = 2;
+
 namespace mount_codes {
   inline constexpr auto kNameInvalid
     = MountCode<std::string_view, std::string_view> {
@@ -148,7 +151,8 @@ namespace mount_codes {
   inline constexpr auto kFileVersion = MountCode<std::string_view> {
     .id = "mount.file_version",
     .severity = ImportSeverity::kError,
-    .message = "unsupported mounts file version {}; the file binds nothing",
+    .message
+    = "unsupported mounts file schema version {}; the file binds nothing",
   };
   inline constexpr auto kFileInvalid = MountCode<std::string_view> {
     .id = "mount.file_invalid",

@@ -61,7 +61,8 @@ namespace {
     auto CookDescriptor(const std::filesystem::path& cooked_root,
       nlohmann::json descriptor) -> ImportReport
     {
-      descriptor.emplace("version", internal::kSceneDescriptorVersion);
+      descriptor.emplace(
+        "schema_version", internal::kSceneDescriptorSchemaVersion);
       auto request = ImportRequest {};
       request.source_path = "inline://scene.oscene.json";
       request.asset_virtual_path

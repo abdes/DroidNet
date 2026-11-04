@@ -102,7 +102,7 @@ namespace {
       exposure["curve"].push_back({ key.metered_ev, key.compensation_ev });
     }
     return {
-      { "version", 1 },
+      { "schema_version", kSettingsSchemaVersion },
       { "preset", GetPresetInfo(s.preset).id },
       { "initial_auto_ev", s.initial_auto_ev },
       { "objects", objects },

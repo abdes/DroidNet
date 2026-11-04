@@ -346,7 +346,7 @@ entry. Nothing committed refers to it by path.
 ```json
 {
   "$schema": "oxygen.mounts.schema.json",
-  "version": 1,
+  "schema_version": 2,
   "root": false,
   "mounts": {
     "Studio": "D:/Studio/SharedContent",
@@ -355,13 +355,13 @@ entry. Nothing committed refers to it by path.
 }
 ```
 
-| Field     | Contract                                                                                                                                                                                                                          |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `version` | `1`. Another value is refused with `mount.file_version`                                                                                                                                                                           |
-| `root`    | Optional, default `false`. `true` stops the search: no `.mounts.json` above this one is read                                                                                                                                      |
-| `mounts`  | Object: mount name to folder (a loose cooked root or a `.pak` file for a `Cooked` mount). An absolute path, the usual form, or a path relative to this file's folder. `/` or `\` separators                                       |
-| Override  | A name the committed declaration has. In the project's own file: replaces its folder, or binds its placeholder. In a parent file: binds its placeholder only; a name with a committed path is ignored with `mount.parent_ignored` |
-| Addition  | A name the committed declaration lacks: a local mount, available to this machine's imports and cooks                                                                                                                              |
+| Field            | Contract                                                                                                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version` | `2`. Any other value, or none, is refused with `mount.file_version`                                                                                                                                                               |
+| `root`           | Optional, default `false`. `true` stops the search: no `.mounts.json` above this one is read                                                                                                                                      |
+| `mounts`         | Object: mount name to folder (a loose cooked root or a `.pak` file for a `Cooked` mount). An absolute path, the usual form, or a path relative to this file's folder. `/` or `\` separators                                       |
+| Override         | A name the committed declaration has. In the project's own file: replaces its folder, or binds its placeholder. In a parent file: binds its placeholder only; a name with a committed path is ignored with `mount.parent_ignored` |
+| Addition         | A name the committed declaration lacks: a local mount, available to this machine's imports and cooks                                                                                                                              |
 
 ### The hierarchy
 
@@ -455,7 +455,7 @@ and recooked, never misread.
 
 ```json
 {
-  "version": 1,
+  "schema_version": 2,
   "project_root": "..",
   "mounts": [{ "name": "Content", "kind": "Source", "path": "Content" }],
   "output": "../.cooked/Content",

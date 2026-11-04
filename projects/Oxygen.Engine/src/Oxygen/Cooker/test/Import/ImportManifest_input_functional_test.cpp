@@ -13,6 +13,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
@@ -34,9 +35,7 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   const auto manifest_path
     = temp.Path() / "accepts_input_job" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -53,7 +52,7 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
           "depends_on": ["core.actions"]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -76,9 +75,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
   const auto manifest_path
     = temp.Path() / "rejects_input_extra_keys" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -89,7 +86,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
           "verbose": true
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -107,9 +104,7 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
 
   const auto job_input = manifest_path.parent_path() / "out" / "job-input";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "out/top-level",
       "defaults": {
@@ -126,7 +121,7 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
           "output": "out/job-input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -149,9 +144,7 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
   const auto default_input
     = manifest_path.parent_path() / "out" / "default-input";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "out/top-level",
       "defaults": {
@@ -167,7 +160,7 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
           "virtual_path": "/Content/Input/Core.input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -189,9 +182,7 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
 
   const auto top_level = manifest_path.parent_path() / "out" / "top-level";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "out/top-level",
       "jobs": [
@@ -202,7 +193,7 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
           "virtual_path": "/Content/Input/Core.input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -226,9 +217,7 @@ NOLINT_TEST(
     = (manifest_path.parent_path() / ".cooked" / "top-level")
         .lexically_normal();
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked/top-level",
       "jobs": [
@@ -239,7 +228,7 @@ NOLINT_TEST(
           "virtual_path": "/Content/Input/Core.input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -261,9 +250,7 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
     = (manifest_path.parent_path() / ".cooked" / "job-level")
         .lexically_normal();
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked/top-level",
       "defaults": {
@@ -280,7 +267,7 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
           "output": ".cooked/job-level"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -300,9 +287,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
   const auto manifest_path
     = temp.Path() / "input_identity" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -312,7 +297,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
           "virtual_path": "/Content/Gameplay/Player.input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -334,9 +319,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
   const auto library
     = (manifest_path.parent_path() / "library").lexically_normal();
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -347,7 +330,7 @@ NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
           "cooked_context_roots": ["library"]
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -367,9 +350,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
   const auto manifest_path
     = temp.Path() / "rejects_input_missing_identity" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -378,7 +359,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
           "source": "Content/Input/Core.input.json"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -394,9 +375,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
   const auto manifest_path
     = temp.Path() / "rejects_input_missing_id" / "import_manifest.json";
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -405,7 +384,7 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
           "virtual_path": "/Content/Input/Core.input"
         }
       ]
-    })");
+    })"));
 
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

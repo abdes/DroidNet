@@ -5,9 +5,9 @@
   "description": "The authored scene node components, their properties with their defaults, ranges and units, and the field and override ids that property edits address.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "units", "enums", "field_sets", "components"],
+  "required": ["schema_version", "units", "enums", "field_sets", "components"],
   "properties": {
-    "version": { "const": 2 },
+    "schema_version": { "const": 3 },
     "units": {
       "type": "array",
       "minItems": 1,

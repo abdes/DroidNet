@@ -41,6 +41,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/OxCo/Run.h>
@@ -755,7 +756,9 @@ namespace {
     std::filesystem::create_directories(root);
     {
       std::ofstream output(file);
-      output << R"({"version":1,"root":true,"mounts":{"Kept":"D:/kept"}})";
+      output << R"({"schema_version":)"
+             << oxygen::content::import::kMountsSchemaVersion
+             << R"(,"root":true,"mounts":{"Kept":"D:/kept"}})";
     }
 
     // Act
@@ -765,7 +768,8 @@ namespace {
     // Assert
     std::ifstream input(file);
     const auto document = nlohmann::json::parse(input);
-    EXPECT_EQ(document.at("version"), 1);
+    EXPECT_EQ(document.at("schema_version"),
+      oxygen::content::import::kMountsSchemaVersion);
     EXPECT_EQ(document.at("root"), true);
     EXPECT_EQ(
       document.at("mounts"), nlohmann::json({ { "Added", "D:/added" } }));

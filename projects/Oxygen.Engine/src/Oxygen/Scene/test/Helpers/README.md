@@ -50,11 +50,10 @@ Transforms are applied in the standard order:
 
 ### Root Object
 
-| Property   | Type   | Required | Description                      |
-| ---------- | ------ | -------- | -------------------------------- |
-| `nodes`    | array  | ✓        | Array of root scene nodes        |
-| `metadata` | object | ✗        | Optional template metadata       |
-| `version`  | string | ✗        | Schema version for compatibility |
+| Property   | Type   | Required | Description                |
+| ---------- | ------ | -------- | -------------------------- |
+| `nodes`    | array  | ✓        | Array of root scene nodes  |
+| `metadata` | object | ✗        | Optional template metadata |
 
 ### SceneNode Object
 

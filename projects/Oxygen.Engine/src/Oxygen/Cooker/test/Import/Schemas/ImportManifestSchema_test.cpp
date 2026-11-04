@@ -17,8 +17,10 @@
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -103,52 +105,58 @@ INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestExecutionSchemaTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsEverySetting",
-      R"({"jobs":[],"thread_pool_size":8,"max_in_flight_jobs":4,
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"thread_pool_size":8,"max_in_flight_jobs":4,
         "job_admission_capacity":16,
-        "concurrency":{"texture":{"workers":4,"queue_capacity":128}}})",
+        "concurrency":{"texture":{"workers":4,"queue_capacity":128}}})"),
       true,
       "",
     },
     SchemaCase {
       "AcceptsOneSettingOfAPipeline",
-      R"({"jobs":[],"concurrency":{"geometry":{"workers":3},
-        "scene":{"queue_capacity":4}}})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"concurrency":{"geometry":{"workers":3},
+        "scene":{"queue_capacity":4}}})"),
       true,
       "",
     },
     SchemaCase {
       "RejectsZeroWorkers",
-      R"({"jobs":[],"concurrency":{"buffer":{"workers":0}}})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"concurrency":{"buffer":{"workers":0}}})"),
       false,
       "below minimum",
     },
     SchemaCase {
       "RejectsUnknownPipeline",
-      R"({"jobs":[],"concurrency":{"audio":{"workers":1}}})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"concurrency":{"audio":{"workers":1}}})"),
       false,
       "audio",
     },
     SchemaCase {
       "RejectsUnknownPipelineSetting",
-      R"({"jobs":[],"concurrency":{"scene":{"threads":1}}})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"concurrency":{"scene":{"threads":1}}})"),
       false,
       "threads",
     },
     SchemaCase {
       "RejectsZeroThreads",
-      R"({"jobs":[],"thread_pool_size":0})",
+      oxygen::cooker::test::ManifestText(R"({"jobs":[],"thread_pool_size":0})"),
       false,
       "below minimum",
     },
     SchemaCase {
       "AcceptsASourceLimitPastFourGigabytes",
-      R"({"jobs":[],"max_source_bytes":5000000000})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"max_source_bytes":5000000000})"),
       true,
       "",
     },
     SchemaCase {
       "RejectsAZeroSourceLimit",
-      R"({"jobs":[],"max_source_bytes":0})",
+      oxygen::cooker::test::ManifestText(R"({"jobs":[],"max_source_bytes":0})"),
       false,
       "below minimum",
     }),
@@ -166,26 +174,30 @@ INSTANTIATE_TEST_SUITE_P(Cases, ImportManifestMountsSchemaTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCookedAndPlaceholderMounts",
-      R"({"jobs":[],"mounts":[{"name":"Content","path":"."},
-        {"name":"Engine","kind":"Cooked"},{"name":"Art"}]})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"mounts":[{"name":"Content","path":"."},
+        {"name":"Engine","kind":"Cooked"},{"name":"Art"}]})"),
       true,
       "",
     },
     SchemaCase {
       "AcceptsMountsWithoutLayout",
-      R"({"jobs":[],"mounts":[{"name":"Content","path":"."}]})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"mounts":[{"name":"Content","path":"."}]})"),
       true,
       "",
     },
     SchemaCase {
       "RejectsMountWithUnknownKey",
-      R"({"jobs":[],"mounts":[{"name":"Content","path":".","colour":"red"}]})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"mounts":[{"name":"Content","path":".","colour":"red"}]})"),
       false,
       "colour",
     },
     SchemaCase {
       "RejectsMountWithoutName",
-      R"({"jobs":[],"mounts":[{"path":"."}]})",
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"mounts":[{"path":"."}]})"),
       false,
       "name",
     }),
@@ -239,7 +251,10 @@ NOLINT_TEST(ImportManifestSchemaTest, ModelJobRefusesDescriptorKeys)
     };
     job[key] = value;
     const auto manifest = json {
-      { "version", 1 },
+      {
+        "schema_version",
+        oxygen::content::import::kImportManifestSchemaVersion,
+      },
       { "jobs", json::array({ job }) },
     };
     auto issues

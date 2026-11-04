@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "schema_version": 16,
   "name": "physics_domains_vsm_benchmark",
   "starting_camera": {
     "node": 21

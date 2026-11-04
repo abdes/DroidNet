@@ -68,7 +68,7 @@ public sealed class SharedMountTests
         _ = reference.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         _ = check.Problems.Should().ContainSingle().Which.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         var written = ReadReferences(workspace);
-        _ = written["version"]!.GetValue<int>().Should().Be(1);
+        _ = written["schema_version"]!.GetValue<int>().Should().Be(2);
         var entry = written["references"]!.AsArray().Should().ContainSingle().Subject!;
         _ = entry["file"]!.GetValue<string>().Should().Be("/Content/Materials/Wall.omat.json");
         _ = entry["property"]!.GetValue<string>().Should().Be("$.textures.base_color.virtual_path");

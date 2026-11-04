@@ -1038,7 +1038,7 @@ transform, no other component, no instance.
   it, the verb composes every scene of the root: a scene without instances
   composes to itself, so the report has one shape.
 - The report schema (`Schemas/oxygen.cooked-scenes.schema.json`) becomes
-  `oxygen.cooked-scenes.v2`. Per node: its node path, node ID, name, parent,
+  `oxygen.cooked-scenes`. Per node: its node path, node ID, name, parent,
   defining scene and components, with every changeable property's value in
   schema units (decoded from the records, Euler angles from the quaternion)
   and the scene that supplies it. Per instance root: its source. Then the

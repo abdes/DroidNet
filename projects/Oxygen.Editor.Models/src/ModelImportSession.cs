@@ -20,7 +20,7 @@ namespace Oxygen.Editor.Models;
 /// </remarks>
 public sealed record ModelImportSession
 {
-    private const int ManifestVersion = 1;
+    private const int ManifestVersion = 2;
 
     private static readonly JsonWriterOptions WriterOptions = new()
     {
@@ -99,7 +99,7 @@ public sealed record ModelImportSession
         using (var writer = new Utf8JsonWriter(stream, WriterOptions))
         {
             writer.WriteStartObject();
-            writer.WriteNumber("version", ManifestVersion);
+            writer.WriteNumber("schema_version", ManifestVersion);
             this.Run.WriteTo(writer);
             writer.WriteStartArray("jobs");
             for (var index = 0; index < this.Jobs.Length; ++index)

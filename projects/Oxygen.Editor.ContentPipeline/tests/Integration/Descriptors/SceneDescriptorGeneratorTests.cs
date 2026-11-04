@@ -890,7 +890,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
     /// </summary>
     private static int ReadEngineSceneDescriptorVersion()
         => EditorSchemaCatalog.LoadFromDirectory(Path.Combine(AppContext.BaseDirectory, "Schemas"))
-            .GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["version"]!["const"]!
+            .GetEngineSchema("oxygen.scene-descriptor.schema.json")["properties"]!["schema_version"]!["const"]!
             .GetValue<int>();
 
     /// <summary>
@@ -901,7 +901,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var version = EngineSceneDescriptorVersion.Value;
         _ = root.GetProperty("$schema").GetString().Should()
             .Be(string.Create(CultureInfo.InvariantCulture, $"oxygen.scene-descriptor.v{version}"));
-        _ = root.GetProperty("version").GetInt32().Should().Be(version);
+        _ = root.GetProperty("schema_version").GetInt32().Should().Be(version);
     }
 
     private static void AssertSupportedSceneDescriptor(JsonElement root, Guid surfaceId)

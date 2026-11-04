@@ -1019,7 +1019,7 @@ namespace {
     std::filesystem::create_directories(cooked_root);
 
     auto legacy = SceneDescriptor { "/Cooked/Scenes/LegacyScene.oscene" };
-    legacy.Set("/version", 2);
+    legacy.Set("/schema_version", 2);
 
     const auto report = Import(MakeRequest(cooked_root, legacy));
 
@@ -1333,7 +1333,7 @@ namespace {
     const auto root = TempDir() / "previous_scene_version";
     std::filesystem::create_directories(root);
     auto old_scene = SceneDescriptor { "/Cooked/Scenes/Old.oscene" };
-    old_scene.Set("/version", 5);
+    old_scene.Set("/schema_version", 5);
     const auto report = Import(MakeRequest(root, old_scene));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);

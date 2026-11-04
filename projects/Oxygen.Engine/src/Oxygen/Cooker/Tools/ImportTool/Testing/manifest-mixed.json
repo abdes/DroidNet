@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "schema_version": 2,
   "thread_pool_size": 60,
   "max_in_flight_jobs": 3,
   "concurrency": {

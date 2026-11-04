@@ -78,7 +78,7 @@ auto ExportSceneSourceInspection(const SceneSourceInspection& report)
     });
   }
   return json {
-    { "version", 1 },
+    { "schema_version", kSceneSourceInspectionSchemaVersion },
     { "parsed", report.parsed },
     { "supported", report.supported },
     { "format", report.format },

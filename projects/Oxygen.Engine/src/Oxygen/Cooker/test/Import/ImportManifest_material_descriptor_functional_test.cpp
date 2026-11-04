@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
@@ -52,8 +53,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       }
     })");
 
-  const auto* const manifest_json = R"({
-      "version": 1,
+  const auto manifest_json = oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked",
       "defaults": {
@@ -69,7 +69,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "name": "wood-job"
         }
       ]
-    })";
+    })");
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::vector<ImportDiagnostic> {};
@@ -106,9 +106,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "domain": "opaque"
     })");
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "material-cooked",
       "jobs": [
@@ -126,7 +124,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "depends_on": ["wood.color"]
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -151,9 +149,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "rejects_disallowed_key" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -162,7 +158,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "intent": "albedo"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -191,9 +187,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       }
     })");
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "material-cooked",
       "jobs": [
@@ -203,7 +197,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
           "virtual_path": "/Cooked/Materials/Bad.omat"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -234,7 +228,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsLayoutField)
     { "virtual_path", "/Content/Materials/Shared.omat" },
   };
   const auto base = json {
-    { "version", 1 },
+    { "schema_version", oxygen::content::import::kImportManifestSchemaVersion },
     {
       "mounts",
       json::array({ { { "name", "Content" }, { "path", "." } } }),
@@ -276,8 +270,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
   const auto root = manifest_path.parent_path();
   WriteText(root / "Materials" / "tiles.material.json",
     R"({"name": "Tiles", "domain": "opaque"})");
-  WriteText(manifest_path, R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "out",
       "jobs": [
@@ -288,7 +281,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
           "cooked_context_roots": ["Libraries/Textures"]
         }
       ]
-    })");
+    })"));
   auto errors = std::vector<ImportDiagnostic> {};
   auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
@@ -313,9 +306,7 @@ NOLINT_TEST(
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "missing_virtual_path" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -323,7 +314,7 @@ NOLINT_TEST(
           "source": "Materials/wood.material.json"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -347,7 +338,10 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
     };
     WriteText(manifest_path,
       json {
-        { "version", 1 },
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
         {
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "." } } }),
@@ -367,7 +361,10 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
     job["virtual_path"] = "/Cooked/Vehicles/Ship.src";
     WriteText(manifest_path,
       json {
-        { "version", 1 },
+        {
+          "schema_version",
+          oxygen::content::import::kImportManifestSchemaVersion,
+        },
         {
           "mounts",
           json::array({ { { "name", "Content" }, { "path", "." } } }),

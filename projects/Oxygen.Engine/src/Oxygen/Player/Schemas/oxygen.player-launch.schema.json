@@ -5,10 +5,10 @@
   "description": "Everything Oxygen.Player needs to run one cooked scene. Relative paths are relative to the folder of the launch file.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "mounts", "scene"],
+  "required": ["schema_version", "mounts", "scene"],
   "properties": {
-    "version": {
-      "const": 3
+    "schema_version": {
+      "const": 4
     },
     "mounts": {
       "description": "Cooked content, highest precedence last: a file ending in .pak is a PAK file, anything else a loose cooked root.",

@@ -45,6 +45,8 @@ struct ImportSourceAnalysis;
  one) and its `json_pointer` locates the value in that file.
 */
 namespace manifest_codes {
+  //! The manifest does not state the `schema_version` this build reads.
+  inline constexpr std::string_view kSchemaVersion = "manifest.schema_version";
   //! The manifest file cannot be read.
   inline constexpr std::string_view kReadFailed = "manifest.read_failed";
   //! The manifest text is not JSON.
@@ -192,8 +194,10 @@ struct ImportManifestLoadOptions final {
   observer_ptr<const MountTable> mount_table;
 };
 
+//! The version a manifest states in `schema_version`.
+inline constexpr uint32_t kImportManifestSchemaVersion = 2;
+
 struct ImportManifest {
-  uint32_t version = 1;
   //! The canonical project root: relative mount folders and the project's
   //! `.mounts.json` belong to it, and relative job sources resolve against it.
   std::filesystem::path project_root;

@@ -16,7 +16,7 @@
 
 #include <Oxygen/Scripting/Analysis/DiagnosticJson.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
-#include <Oxygen/Scripting/Analysis/test/ScriptDiagnostic_schema.h>
+#include <Oxygen/Scripting/Analysis/Test/ScriptDiagnostic_schema.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scripting::testing {
@@ -141,7 +141,7 @@ NOLINT_TEST(DiagnosticJsonTest, WrittenFormNamesCodeAndFamily)
 {
   const auto value = json::parse(ToJson(FullDiagnostic()));
 
-  EXPECT_EQ(value.at("version"), kScriptDiagnosticJsonVersion);
+  EXPECT_EQ(value.at("schema_version"), kScriptDiagnosticSchemaVersion);
   EXPECT_EQ(value.at("code"), "S0701");
   EXPECT_EQ(value.at("family"), "runtime");
   EXPECT_EQ(value.at("severity"), "error");
@@ -169,7 +169,7 @@ NOLINT_TEST(DiagnosticJsonTest, RejectsUncatalogedCode)
 NOLINT_TEST(DiagnosticJsonTest, RejectsOtherVersions)
 {
   auto value = json::parse(ToJson(MinimalDiagnostic()));
-  value.at("version") = 2;
+  value.at("schema_version") = kScriptDiagnosticSchemaVersion + 1;
 
   EXPECT_FALSE(ParseDiagnosticJson(value.dump()).has_value());
 }

@@ -102,5 +102,5 @@
     "range_m": 15.0
   },
   "tone_mapper": 1,
-  "version": 1
+  "schema_version": 2
 }

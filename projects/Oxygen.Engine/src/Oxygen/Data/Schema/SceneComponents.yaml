@@ -40,7 +40,7 @@
 # defining it identifies, such as a surface of a geometry; its properties
 # always have a source and are never applied field by field.
 
-version: 2
+schema_version: 3
 
 units:
   - { id: metre, abbreviation: m, name: metres }

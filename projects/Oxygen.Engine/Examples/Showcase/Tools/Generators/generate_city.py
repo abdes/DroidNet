@@ -776,7 +776,7 @@ def scene_document() -> dict:
         flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
     )
     return {
-        "version": 15,
+        "schema_version": 16,
         "name": SCENE_NAME,
         "starting_camera": {"node": camera},
         "nodes": s.nodes,
@@ -916,7 +916,7 @@ def manifest_document() -> dict:
     )
     return {
         "$schema": "oxygen.import-manifest.schema.json",
-        "version": 1,
+        "schema_version": 2,
         "project_root": "..",
         "mounts": [{"name": "Showcase", "kind": "Source", "path": "Content"}],
         "max_in_flight_jobs": 1,

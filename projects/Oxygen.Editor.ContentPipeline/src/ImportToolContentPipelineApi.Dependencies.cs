@@ -26,7 +26,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
     /// <inheritdoc />
     public async Task<CookedAssetKeyMap> ResolveAssetKeysAsync(string operationRoot, IReadOnlyList<string> virtualPaths, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
     {
-        var request = JsonSerializer.Serialize(new { schema = "oxygen.asset-key-request.v1", virtual_paths = virtualPaths });
+        var request = JsonSerializer.Serialize(new { schema_version = 2, virtual_paths = virtualPaths });
         var report = await this.RunInspectorAsync(operationRoot, ["asset-keys"], request, CookedAssetKeyMap.Parse, artifacts, cancellationToken).ConfigureAwait(false);
         report.ValidatePaths(virtualPaths);
         return report;

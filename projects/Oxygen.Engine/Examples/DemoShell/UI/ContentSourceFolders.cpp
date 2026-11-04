@@ -22,15 +22,12 @@
 namespace oxygen::examples::ui {
 
 namespace {
-  //! The mounts file schema's version.
-  constexpr auto kMountsFileVersion = 1;
-
   //! The mounts file's object; a new one when the file is missing.
   auto ReadMountsFile(const std::filesystem::path& file) -> nlohmann::json
   {
     if (!std::filesystem::exists(file)) {
       return nlohmann::json {
-        { "version", kMountsFileVersion },
+        { "schema_version", content::import::kMountsSchemaVersion },
         { "mounts", nlohmann::json::object() },
       };
     }

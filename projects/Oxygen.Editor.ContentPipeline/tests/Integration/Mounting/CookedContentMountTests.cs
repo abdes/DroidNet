@@ -236,7 +236,7 @@ public sealed partial class CookedContentMountTests
             var selected = JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, token).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;
             var path = CookPublicationPaths.Document(project.ProjectRoot.FullPath, selected.PublicationId);
             var document = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllBytesAsync(path, token).ConfigureAwait(false))!;
-            document["version"] = version;
+            document["schema_version"] = version;
             document["cookInputs"] = new System.Text.Json.Nodes.JsonObject { ["buildFingerprint"] = "older" };
             var bytes = System.Text.Encoding.UTF8.GetBytes(document.ToJsonString());
             await File.WriteAllBytesAsync(path, bytes, token).ConfigureAwait(false);

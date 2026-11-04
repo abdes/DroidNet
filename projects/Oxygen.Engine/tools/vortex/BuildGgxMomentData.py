@@ -67,7 +67,7 @@ def pack(args):
     ):
         raise ValueError("Moment payload changed during packaging")
     manifest = {
-        "schema": 1,
+        "schema_version": 1,
         "model_revision": 1,
         "view_nodes": table["view_nodes"],
         "roughness_nodes": table["roughness_nodes"],
@@ -94,7 +94,7 @@ def embed(args):
     payload = args.payload.read_bytes()
     width, height = manifest["view_nodes"], manifest["roughness_nodes"]
     if (
-        manifest["schema"] != 1
+        manifest["schema_version"] != 1
         or manifest["model_revision"] != 1
         or manifest["format"] != "RG32Float"
     ):

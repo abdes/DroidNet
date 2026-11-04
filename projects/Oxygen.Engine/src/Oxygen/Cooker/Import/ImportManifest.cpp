@@ -1364,13 +1364,22 @@ namespace {
       return std::nullopt;
     }
 
+    if (!document.is_object()
+      || document.value("schema_version", json {})
+        != kImportManifestSchemaVersion) {
+      findings.Error(manifest_codes::kSchemaVersion,
+        fmt::format("the manifest must state schema_version {}",
+          kImportManifestSchemaVersion),
+        "/schema_version");
+      return std::nullopt;
+    }
+
     if (!ValidateAgainstSchema(document, findings)
       || !RequireRelativeFolders(document, findings)) {
       return std::nullopt;
     }
 
     ImportManifest manifest {};
-    manifest.version = document.value("version", 1U);
     if (!ReadSourceKey(document, json::json_pointer {},
           manifest.defaults.source_key, findings)) {
       return std::nullopt;

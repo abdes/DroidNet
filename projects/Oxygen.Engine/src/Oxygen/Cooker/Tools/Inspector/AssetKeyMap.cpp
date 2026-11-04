@@ -94,7 +94,7 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
     });
   }
   const nlohmann::json report = {
-    { "schema", kAssetKeyMapSchema },
+    { "schema_version", kAssetKeyMapSchemaVersion },
     { "assets", std::move(assets) },
   };
   return toolkit::PublishToolReport(output_path, report.dump(2) + '\n');

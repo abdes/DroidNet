@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "schema_version": 16,
   "name": "EngineAssets",
   "starting_camera": {
     "node": 40

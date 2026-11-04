@@ -82,7 +82,7 @@ def generate(args):
         return {"maximum": data[-1], "p99": data[int(0.99 * (len(data) - 1))]}
 
     manifest = {
-        "schema": 1,
+        "schema_version": 1,
         "model_revision": 2,
         "view_nodes": size,
         "roughness_nodes": size,
@@ -113,7 +113,7 @@ def embed(args):
     payload = args.payload.read_bytes()
     width, height = metadata["view_nodes"], metadata["roughness_nodes"]
     if (
-        metadata["schema"] != 1
+        metadata["schema_version"] != 1
         or metadata["model_revision"] != 2
         or metadata["format"] != "RG32Float"
         or width != 32

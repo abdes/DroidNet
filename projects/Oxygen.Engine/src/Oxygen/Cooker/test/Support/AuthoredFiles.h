@@ -18,7 +18,9 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
 //! The one writer of each authored format in the Cooker tests.
@@ -33,6 +35,30 @@
  text with `Set`.
 */
 namespace oxygen::cooker::test {
+
+//! `body` with `schema_version` inserted as its first member.
+inline auto WithSchemaVersion(
+  const std::uint32_t version, const std::string_view body) -> std::string
+{
+  const auto brace = body.find('{');
+  const auto next = body.find_first_not_of(" \t\r\n", brace + 1);
+  const auto empty = next != std::string_view::npos && body[next] == '}';
+  return std::string(body.substr(0, brace + 1))
+    + "\"schema_version\":" + std::to_string(version) + (empty ? "" : ",")
+    + std::string(body.substr(brace + 1));
+}
+
+//! An import manifest text that states the current version.
+inline auto ManifestText(const std::string_view body) -> std::string
+{
+  return WithSchemaVersion(content::import::kImportManifestSchemaVersion, body);
+}
+
+//! A `.mounts.json` text that states the current version.
+inline auto MountsText(const std::string_view body) -> std::string
+{
+  return WithSchemaVersion(content::import::kMountsSchemaVersion, body);
+}
 
 //! The text an authored file whose identity is `anchor` writes to name
 //! `target`: relative within one mount, absolute across mounts
@@ -363,7 +389,10 @@ public:
   explicit SceneDescriptor(const std::string& identity)
     : AuthoredDocument(identity,
         {
-          { "version", content::import::internal::kSceneDescriptorVersion },
+          {
+            "schema_version",
+            content::import::internal::kSceneDescriptorSchemaVersion,
+          },
           { "name", StemOf(identity) },
           {
             "nodes",

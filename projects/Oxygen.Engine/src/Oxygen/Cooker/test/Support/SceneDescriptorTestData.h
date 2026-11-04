@@ -20,7 +20,7 @@ inline auto MakeCurrentSceneDescriptor(const std::string_view text)
   -> nlohmann::json
 {
   auto descriptor = nlohmann::json::parse(text);
-  descriptor["version"] = internal::kSceneDescriptorVersion;
+  descriptor["schema_version"] = internal::kSceneDescriptorSchemaVersion;
   return descriptor;
 }
 

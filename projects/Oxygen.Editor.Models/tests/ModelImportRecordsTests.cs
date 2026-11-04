@@ -102,7 +102,7 @@ public sealed class ModelImportRecordsTests
     {
         _ = this.fileSystem.Directory.CreateDirectory(@"D:\Studio\SharedContent");
         _ = this.fileSystem.Directory.CreateDirectory(ProjectRoot);
-        this.fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"version":1,"mounts":{"Studio":"D:/Studio/SharedContent"}}""");
+        this.fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Studio":"D:/Studio/SharedContent"}}""");
         var project = TestProject.Create(this.fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
         _ = this.Save(project, "/Studio/Vehicles/Car.glb", "/Studio/Vehicles/Car.glb");
 

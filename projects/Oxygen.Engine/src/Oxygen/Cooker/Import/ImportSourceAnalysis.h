@@ -165,9 +165,11 @@ struct ImportSourceJobAnalysis final {
   bool complete = false;
 };
 
+//! The version of the source analysis report.
+inline constexpr uint32_t kSourceAnalysisSchemaVersion = 4;
+
 //! Source discovery for one manifest batch. No cooked files are produced.
 struct ImportSourceAnalysis final {
-  uint32_t version = 3;
   std::string producer_version;
   std::vector<ImportSourceJobAnalysis> jobs;
   //! What the manifest itself reports, before any job: a refused manifest

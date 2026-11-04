@@ -6,12 +6,6 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "version": {
-      "type": "string",
-      "description": "Schema version for compatibility tracking",
-      "pattern": "^\\d+\\.\\d+(\\.\\d+)?$",
-      "examples": ["1.0", "1.0.0"]
-    },
     "metadata": {
       "type": "object",
       "description": "Optional metadata about the scene template",

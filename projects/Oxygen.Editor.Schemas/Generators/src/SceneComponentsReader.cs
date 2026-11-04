@@ -21,9 +21,9 @@ namespace Oxygen.Editor.Schemas.Generators;
 /// </remarks>
 internal sealed partial class SceneComponentsReader
 {
-    private const int SchemaVersion = 2;
+    private const int SchemaVersion = 3;
 
-    private static readonly string[] RootKeys = ["version", "units", "enums", "field_sets", "components"];
+    private static readonly string[] RootKeys = ["schema_version", "units", "enums", "field_sets", "components"];
     private static readonly string[] UnitKeys = ["id", "abbreviation", "name"];
     private static readonly string[] EnumKeys = ["name", "members"];
     private static readonly string[] MemberKeys = ["name", "value"];
@@ -114,9 +114,9 @@ internal sealed partial class SceneComponentsReader
         }
 
         this.CheckKeys(root, "The schema", RootKeys, []);
-        if (this.Integer(root, "version", "The schema") is int version && version != SchemaVersion)
+        if (this.Integer(root, "schema_version", "The schema") is int version && version != SchemaVersion)
         {
-            this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(root.Children[new YamlScalarNode("version")]), $"Schema version {version.ToString(CultureInfo.InvariantCulture)} is not {SchemaVersion.ToString(CultureInfo.InvariantCulture)}");
+            this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(root.Children[new YamlScalarNode("schema_version")]), $"Schema version {version.ToString(CultureInfo.InvariantCulture)} is not {SchemaVersion.ToString(CultureInfo.InvariantCulture)}");
         }
 
         return new SceneComponentsSchema(

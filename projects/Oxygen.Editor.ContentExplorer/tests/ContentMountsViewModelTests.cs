@@ -296,7 +296,7 @@ public sealed class ContentMountsViewModelTests
     {
         var fileSystem = new MockFileSystem();
         _ = fileSystem.Directory.CreateDirectory("C:/Projects/Mounts");
-        fileSystem.File.WriteAllText("C:/Projects/Mounts/.mounts.json", """{"version":1,"mounts":{"StudioLibrary":"D:/Studio/EnvironmentLibrary"}}""");
+        fileSystem.File.WriteAllText("C:/Projects/Mounts/.mounts.json", """{"schema_version":2,"mounts":{"StudioLibrary":"D:/Studio/EnvironmentLibrary"}}""");
         return TestProject.Create(fileSystem, "C:/Projects/Mounts", [new("Content", MountKind.Source, "Content"), new("StudioLibrary", MountKind.Cooked), .. extra]).Context with
         {
             Name = "Mounts",

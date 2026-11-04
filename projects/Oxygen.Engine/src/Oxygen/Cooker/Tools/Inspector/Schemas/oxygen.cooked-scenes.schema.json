@@ -5,9 +5,9 @@
   "description": "Each cooked scene composed: every node, owned and instanced, with its values in the scene schema's units and the occurrence that supplies each value.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "source_key", "complete", "scenes"],
+  "required": ["schema_version", "source_key", "complete", "scenes"],
   "properties": {
-    "schema": { "const": "oxygen.cooked-scenes.v2" },
+    "schema_version": { "const": 3 },
     "source_key": { "$ref": "#/definitions/key" },
     "complete": { "type": "boolean" },
     "scenes": {

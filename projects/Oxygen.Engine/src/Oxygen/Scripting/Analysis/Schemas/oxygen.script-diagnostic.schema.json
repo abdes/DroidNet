@@ -5,7 +5,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version",
+    "schema_version",
     "severity",
     "code",
     "family",
@@ -14,8 +14,8 @@
     "notes"
   ],
   "properties": {
-    "version": {
-      "const": 1
+    "schema_version": {
+      "const": 2
     },
     "severity": {
       "enum": ["error", "warning", "note"]

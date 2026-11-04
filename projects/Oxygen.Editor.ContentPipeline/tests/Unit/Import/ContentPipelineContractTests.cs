@@ -57,7 +57,7 @@ internal sealed class ContentPipelineContractTests
     public void ContentImportManifest_ShouldSerializeWithNativeSchemaPropertyNames()
     {
         var manifest = new ContentImportManifest(
-            Version: 1,
+            Version: ContentImportManifest.CurrentSchemaVersion,
             Output: @"C:\Project\.cooked\Content",
             Jobs:
             [
@@ -75,7 +75,7 @@ internal sealed class ContentPipelineContractTests
 
         var json = JsonSerializer.Serialize(manifest);
 
-        _ = json.Should().Contain("\"version\":1");
+        _ = json.Should().Contain("\"schema_version\":2");
         _ = json.Should().NotContain("\"output\":", "the cooked root is an absolute folder, passed as --cooked-root");
         _ = json.Should().NotContain("\"layout\":", "a cooked root holds one mount, the one its identities name");
         _ = json.Should().NotContain("virtual_mount_root");

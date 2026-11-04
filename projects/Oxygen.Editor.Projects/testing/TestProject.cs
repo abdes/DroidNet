@@ -149,7 +149,7 @@ public sealed class TestProject
         }
 
         var file = projectRoot.Combine(ProjectMounts.FileName);
-        fileSystem.File.WriteAllText(file.FullPath, new JsonObject { ["version"] = 1, ["mounts"] = mounts }.ToJsonString());
+        fileSystem.File.WriteAllText(file.FullPath, new JsonObject { ["schema_version"] = 2, ["mounts"] = mounts }.ToJsonString());
         return file;
     }
 

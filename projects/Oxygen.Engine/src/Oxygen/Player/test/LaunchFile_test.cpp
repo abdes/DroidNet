@@ -22,6 +22,15 @@ using oxygen::player::LaunchWindowMode;
 using oxygen::player::ParseLaunchFile;
 using oxygen::player::ReadLaunchFile;
 
+//! A launch file stating the current version, then the fields of `body`.
+auto Launch(const std::string_view body) -> std::string
+{
+  const auto brace = body.find('{');
+  return std::string(body.substr(0, brace + 1)) + "\"schema_version\": "
+    + std::to_string(oxygen::player::kLaunchFileSchemaVersion) + ", "
+    + std::string(body.substr(brace + 1));
+}
+
 class LaunchFileTest : public oxygen::testing::TempDirTest {
 protected:
   void SetUp() override
@@ -50,15 +59,14 @@ protected:
 
 NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
 {
-  const auto launch = Parse(R"({
-    "version": 3,
+  const auto launch = Parse(Launch(R"({
     "mounts": ["base.pak", "cooked"],
     "scene": "/Cooked/Scenes/Level.oscene",
     "source_mounts": { "Content": "scripts" },
     "window": { "title": "Level", "mode": "borderless", "width": 1600,
                 "height": 900, "vsync": false, "frame_cap": 60 },
     "control": { "port": 4711, "exit_when_owner_leaves": true }
-  })");
+  })"));
 
   ASSERT_EQ(launch.mounts.size(), 2U);
   EXPECT_EQ(launch.mounts[0].kind, LaunchMount::Kind::kPakFile);
@@ -86,9 +94,9 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
 
 NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
 {
-  const auto launch = Parse(R"({
-    "version": 3, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
-  })");
+  const auto launch = Parse(Launch(R"({
+    "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+  })"));
 
   EXPECT_TRUE(launch.source_mounts.empty());
   EXPECT_EQ(launch.window.title, "Oxygen Player");
@@ -102,9 +110,9 @@ NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
 
 NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
 {
-  std::ofstream(TempDir() / "launch.json") << R"({
-    "version": 3, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
-  })";
+  std::ofstream(TempDir() / "launch.json") << Launch(R"({
+    "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+  })");
 
   const auto launch = ReadLaunchFile(TempDir() / "launch.json");
 
@@ -114,35 +122,37 @@ NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
 
 NOLINT_TEST_F(LaunchFileTest, SchemaViolationsNameTheSchemaAndTheValue)
 {
-  const auto missing_scene
-    = ErrorOf(R"({ "version": 3, "mounts": ["cooked"] })");
+  const auto missing_scene = ErrorOf(Launch(R"({ "mounts": ["cooked"] })"));
   EXPECT_NE(
     missing_scene.find("oxygen.player-launch.schema.json"), std::string::npos);
   EXPECT_NE(missing_scene.find("scene"), std::string::npos);
 
-  const auto bad_width = ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "/A.oscene", "window": { "width": "wide" } })");
+  const auto bad_width = ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "/A.oscene", "window": { "width": "wide" } })"));
   EXPECT_NE(bad_width.find("/window/width"), std::string::npos);
 
-  const auto unknown = ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "/A.oscene", "fullscreen": true })");
+  const auto unknown = ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "/A.oscene", "fullscreen": true })"));
   EXPECT_NE(unknown.find("fullscreen"), std::string::npos);
 
-  EXPECT_FALSE(ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
+  EXPECT_FALSE(ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
+      "scene": "/Scenes/A.oscene" })")
+      .empty());
+  EXPECT_FALSE(ErrorOf(R"({ "schema_version": 1, "mounts": ["cooked"],
     "scene": "/A.oscene" })")
       .empty());
   // Source mounts are an object of mount name to folder, never a root list.
-  const auto root_list = ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "/A.oscene", "source_mounts": ["scripts"] })");
+  const auto root_list = ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "/A.oscene", "source_mounts": ["scripts"] })"));
   EXPECT_NE(root_list.find("/source_mounts"), std::string::npos);
-  const auto old_key = ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "/A.oscene", "script_source_roots": ["scripts"] })");
+  const auto old_key = ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "/A.oscene", "script_source_roots": ["scripts"] })"));
   EXPECT_NE(old_key.find("script_source_roots"), std::string::npos);
-  EXPECT_FALSE(ErrorOf(R"({ "version": 3, "mounts": [],
-    "scene": "/A.oscene" })")
+  EXPECT_FALSE(ErrorOf(Launch(R"({ "mounts": [],
+    "scene": "/A.oscene" })"))
       .empty());
-  EXPECT_FALSE(ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "A.oscene" })")
+  EXPECT_FALSE(ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "A.oscene" })"))
       .empty());
 }
 
@@ -153,16 +163,16 @@ NOLINT_TEST_F(LaunchFileTest, InvalidJsonIsReported)
 
 NOLINT_TEST_F(LaunchFileTest, MissingContentIsReported)
 {
-  EXPECT_NE(ErrorOf(R"({ "version": 3, "mounts": ["absent"],
-    "scene": "/A.oscene" })")
+  EXPECT_NE(ErrorOf(Launch(R"({ "mounts": ["absent"],
+    "scene": "/A.oscene" })"))
               .find("absent"),
     std::string::npos);
-  EXPECT_NE(ErrorOf(R"({ "version": 3, "mounts": ["absent.pak"],
-    "scene": "/A.oscene" })")
+  EXPECT_NE(ErrorOf(Launch(R"({ "mounts": ["absent.pak"],
+    "scene": "/A.oscene" })"))
               .find("absent.pak"),
     std::string::npos);
-  const auto missing_mount = ErrorOf(R"({ "version": 3, "mounts": ["cooked"],
-    "scene": "/A.oscene", "source_mounts": { "Content": "nowhere" } })");
+  const auto missing_mount = ErrorOf(Launch(R"({ "mounts": ["cooked"],
+    "scene": "/A.oscene", "source_mounts": { "Content": "nowhere" } })"));
   EXPECT_NE(missing_mount.find("source mount 'Content'"), std::string::npos);
   EXPECT_NE(missing_mount.find("nowhere"), std::string::npos);
 }

@@ -4,7 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version",
+    "schema_version",
     "objects",
     "directional",
     "point",
@@ -15,8 +15,8 @@
     "gamma"
   ],
   "properties": {
-    "version": {
-      "const": 1
+    "schema_version": {
+      "const": 2
     },
     "objects": {
       "type": "array",

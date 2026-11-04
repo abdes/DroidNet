@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
@@ -46,7 +47,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   const auto defaults = oxygen::Uuid::Generate();
   const auto job_key = oxygen::Uuid::Generate();
   const auto manifest_json = nlohmann::json {
-    { "version", 1 },
+    { "schema_version", oxygen::content::import::kImportManifestSchemaVersion },
     {
       "mounts",
       nlohmann::json::array({ { { "name", "Content" }, { "path", "." } } }),
@@ -106,8 +107,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       }
     })");
 
-  const auto* const manifest_json = R"({
-      "version": 1,
+  const auto manifest_json = oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked",
       "defaults": {
@@ -126,7 +126,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
           "color_space": "linear"
         }
       ]
-    })";
+    })");
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::vector<ImportDiagnostic> {};
@@ -159,9 +159,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "rejects_disallowed_key" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -170,7 +168,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
           "unit_policy": "normalize"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -196,9 +194,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       }
     })");
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -207,7 +203,7 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
           "virtual_path": "/Cooked/Textures/Bad.otex"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

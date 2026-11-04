@@ -1,6 +1,6 @@
 {
   "$comment": "How a mount table is resolved from a committed declaration and the .mounts.json hierarchy. The engine (SourceMounts_test.cpp) and the editor (MountTableCasesTests) both run every case, so the two readers cannot drift. Paths are relative to a case folder whose own .mounts.json has \"root\": true; ${temp} in a path is that folder. A cooked source (cooked_sources) is built from its recipe by each harness's own fixture writer: path, kind (loose or pak), roots (the mounts its virtual paths start with; a pak names exactly one, its mount), assets (each a virtual path and an asset type it provides, keyed from the path), requirements (a pak's: each a mount, and the virtual path and type of the asset it requires of it), external_script (a script with an external source under its first root; a loose root only) and format (current, or unsupported: a version this build cannot read). Mounts compare by name; codes compare as sets.",
-  "version": 1,
+  "schema_version": 2,
   "cases": [
     {
       "name": "committed relative path",
@@ -71,7 +71,7 @@
       "folders": ["ws/proj/Showcase", "E/Showcase"],
       "mounts_files": {
         "ws/proj": {
-          "version": 1,
+          "schema_version": 2,
           "mounts": { "Showcase": "${temp}/E/Showcase" }
         }
       },
@@ -97,7 +97,7 @@
       "folders": ["D/Studio", "D/Scratch"],
       "mounts_files": {
         "ws/proj": {
-          "version": 1,
+          "schema_version": 2,
           "mounts": {
             "Studio": "${temp}/D/Studio",
             "Scratch": "${temp}/D/Scratch"
@@ -133,7 +133,10 @@
       "name": "a parent file binds a placeholder",
       "folders": ["D/Studio"],
       "mounts_files": {
-        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Studio" } }
+        "ws": {
+          "schema_version": 2,
+          "mounts": { "Studio": "${temp}/D/Studio" }
+        }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -154,7 +157,10 @@
       "name": "a parent file never retargets a committed path",
       "folders": ["ws/proj/Content", "D/Elsewhere"],
       "mounts_files": {
-        "ws": { "version": 1, "mounts": { "Content": "${temp}/D/Elsewhere" } }
+        "ws": {
+          "schema_version": 2,
+          "mounts": { "Content": "${temp}/D/Elsewhere" }
+        }
       },
       "declarations": [
         { "name": "Content", "kind": "Source", "path": "Content" }
@@ -176,8 +182,11 @@
       "name": "the project's file wins over a parent file",
       "folders": ["D/Near", "D/Far"],
       "mounts_files": {
-        "ws/proj": { "version": 1, "mounts": { "Studio": "${temp}/D/Near" } },
-        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Far" } }
+        "ws/proj": {
+          "schema_version": 2,
+          "mounts": { "Studio": "${temp}/D/Near" }
+        },
+        "ws": { "schema_version": 2, "mounts": { "Studio": "${temp}/D/Far" } }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -199,8 +208,11 @@
       "project": "ws/a/proj",
       "folders": ["D/Near", "D/Far"],
       "mounts_files": {
-        "ws/a": { "version": 1, "mounts": { "Studio": "${temp}/D/Near" } },
-        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Far" } }
+        "ws/a": {
+          "schema_version": 2,
+          "mounts": { "Studio": "${temp}/D/Near" }
+        },
+        "ws": { "schema_version": 2, "mounts": { "Studio": "${temp}/D/Far" } }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -221,8 +233,11 @@
       "name": "root true stops the walk",
       "folders": ["D/Studio"],
       "mounts_files": {
-        "ws/proj": { "version": 1, "root": true },
-        "ws": { "version": 1, "mounts": { "Studio": "${temp}/D/Studio" } }
+        "ws/proj": { "schema_version": 2, "root": true },
+        "ws": {
+          "schema_version": 2,
+          "mounts": { "Studio": "${temp}/D/Studio" }
+        }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -241,7 +256,7 @@
       "name": "a relative path resolves against its file's folder",
       "folders": ["ws/Shared"],
       "mounts_files": {
-        "ws/proj": { "version": 1, "mounts": { "Studio": "../Shared" } }
+        "ws/proj": { "schema_version": 2, "mounts": { "Studio": "../Shared" } }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -328,7 +343,7 @@
       "name": "a local mount overlapping a committed one",
       "folders": ["ws/proj/Content/Sub"],
       "mounts_files": {
-        "ws": { "version": 1, "mounts": { "Sub": "proj/Content/Sub" } }
+        "ws": { "schema_version": 2, "mounts": { "Sub": "proj/Content/Sub" } }
       },
       "declarations": [
         { "name": "Content", "kind": "Source", "path": "Content" }
@@ -433,7 +448,7 @@
       ],
       "mounts_files": {
         "ws/proj": {
-          "version": 1,
+          "schema_version": 2,
           "mounts": { "Props": "${temp}/Vendor/Props" }
         }
       },
@@ -730,10 +745,32 @@
       "codes": []
     },
     {
-      "name": "a file of another version is refused",
+      "name": "a file of another schema version is refused",
       "folders": ["D/Studio"],
       "mounts_files": {
-        "ws/proj": { "version": 2, "mounts": { "Studio": "${temp}/D/Studio" } }
+        "ws/proj": {
+          "schema_version": 1,
+          "mounts": { "Studio": "${temp}/D/Studio" }
+        }
+      },
+      "declarations": [{ "name": "Studio", "kind": "Source" }],
+      "mounts": [
+        {
+          "name": "Studio",
+          "kind": "Source",
+          "scope": "declared",
+          "state": "Unbound",
+          "origin": "none",
+          "role": "Shared"
+        }
+      ],
+      "codes": ["mount.file_version", "mount.unbound"]
+    },
+    {
+      "name": "a file stating the retired version key is refused",
+      "folders": ["D/Studio"],
+      "mounts_files": {
+        "ws/proj": { "version": 1, "mounts": { "Studio": "${temp}/D/Studio" } }
       },
       "declarations": [{ "name": "Studio", "kind": "Source" }],
       "mounts": [
@@ -753,7 +790,7 @@
       "folders": ["D/Studio"],
       "mounts_files": {
         "ws/proj": {
-          "version": 1,
+          "schema_version": 2,
           "cooked_root": "x",
           "mounts": { "Studio": "${temp}/D/Studio" }
         }

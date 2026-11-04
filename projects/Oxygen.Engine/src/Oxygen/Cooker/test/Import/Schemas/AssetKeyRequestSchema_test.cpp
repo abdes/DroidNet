@@ -6,6 +6,7 @@
 
 // Covers: Import/Schemas/oxygen.asset-key-request.schema.json
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -62,17 +63,17 @@ auto Without(json document, const std::string_view pointer) -> json
 }
 
 //! The schema identifier the schema owns.
-auto Identifier() -> std::string
+auto Version() -> std::uint32_t
 {
   return Schema()
-    .at(json::json_pointer { "/properties/schema/const" })
-    .get<std::string>();
+    .at(json::json_pointer { "/properties/schema_version/const" })
+    .get<std::uint32_t>();
 }
 
 auto Valid() -> json
 {
   return json {
-    { "schema", Identifier() },
+    { "schema_version", Version() },
     {
       "virtual_paths",
       json::array(
@@ -97,22 +98,24 @@ NOLINT_TEST_P(AssetKeyRequestSchemaTest, ValidatesDocument)
 constexpr auto kPath = "/virtual_paths/0: ";
 
 INSTANTIATE_TEST_SUITE_P(Cases, AssetKeyRequestSchemaTest,
-  ::testing::Values(
-    Accepts("AcceptsEmptyRequest",
-      json { { "schema", Identifier() }, { "virtual_paths", json::array() } }),
+  ::testing::Values(Accepts("AcceptsEmptyRequest",
+                      json { { "schema_version", Version() },
+                        { "virtual_paths", json::array() } }),
     Accepts("AcceptsTwoPaths", Valid()),
     Accepts("AcceptsTwoSegmentPath", WithPath("/Content/Brick")),
     Accepts("AcceptsPathWithSpaces", WithPath("/Content/Sniper Rifle/Paint")),
 
-    Rejects("RejectsMissingSchema", Without(Valid(), "/schema"), "'schema'"),
+    Rejects("RejectsMissingSchemaVersion", Without(Valid(), "/schema_version"),
+      "'schema_version'"),
     Rejects("RejectsMissingVirtualPaths", Without(Valid(), "/virtual_paths"),
       "'virtual_paths'"),
     Rejects(
       "RejectsUnknownField", With(Valid(), "/unknown", true), "'unknown'"),
 
-    Rejects("RejectsOtherSchemaIdentifier",
-      With(Valid(), "/schema", Identifier() + "x"), "/schema: "),
-    Rejects("RejectsNonStringSchema", With(Valid(), "/schema", 1), "/schema: "),
+    Rejects("RejectsOtherSchemaVersion",
+      With(Valid(), "/schema_version", Version() + 1), "/schema_version: "),
+    Rejects("RejectsNonIntegerSchemaVersion",
+      With(Valid(), "/schema_version", "2"), "/schema_version: "),
     Rejects("RejectsNonArrayVirtualPaths", With(Valid(), "/virtual_paths", "x"),
       "/virtual_paths: "),
     Rejects("RejectsNonStringPath",

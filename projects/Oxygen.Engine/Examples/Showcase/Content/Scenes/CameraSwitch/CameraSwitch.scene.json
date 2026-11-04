@@ -1,5 +1,5 @@
 {
-  "version": 15,
+  "schema_version": 16,
   "name": "camera_switch",
   "starting_camera": {
     "node": 2

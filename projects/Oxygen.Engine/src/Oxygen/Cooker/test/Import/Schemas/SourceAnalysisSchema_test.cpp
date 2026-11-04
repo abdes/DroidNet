@@ -195,7 +195,7 @@ auto Job() -> json
 auto Document(json jobs, json diagnostics) -> json
 {
   return json {
-    { "version", Owned("/properties/version/const") },
+    { "schema_version", Owned("/properties/schema_version/const") },
     { "producer_version", "1.0" },
     { "complete", true },
     { "jobs", std::move(jobs) },
@@ -327,9 +327,9 @@ auto Cases() -> std::vector<SchemaCase>
         Owned(Property("metadata", "last_modified_nanoseconds") + "/maximum"))),
 
     Rejects("RejectsOtherVersion",
-      With(Maximal(), "/version",
-        Owned("/properties/version/const").get<std::int64_t>() + 1),
-      "/version: "),
+      With(Maximal(), "/schema_version",
+        Owned("/properties/schema_version/const").get<std::int64_t>() + 1),
+      "/schema_version: "),
     Rejects("RejectsNonStringProducerVersion",
       With(Maximal(), "/producer_version", 3), "/producer_version: "),
     Rejects("RejectsNonBooleanComplete", With(Maximal(), "/complete", "yes"),

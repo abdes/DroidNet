@@ -54,7 +54,7 @@ public sealed class MountTableCasesTests
     {
         var fileSystem = new MockFileSystem();
         _ = fileSystem.Directory.CreateDirectory(Temp);
-        fileSystem.File.WriteAllText(Path.Combine(Temp, ProjectMounts.FileName), """{"version":1,"root":true}""");
+        fileSystem.File.WriteAllText(Path.Combine(Temp, ProjectMounts.FileName), """{"schema_version":2,"root":true}""");
         foreach (var folder in Strings(testCase["folders"]))
         {
             _ = fileSystem.Directory.CreateDirectory(Path.Combine(Temp, folder));

@@ -21,7 +21,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
     private const string AllOutputs = "WireIds;PropertyIds;WireTable";
 
     private const string Minimal = """
-        version: 2
+        schema_version: 3
         units:
           - { id: metre, abbreviation: m, name: metres }
           - { id: degree, abbreviation: "°", name: degrees }

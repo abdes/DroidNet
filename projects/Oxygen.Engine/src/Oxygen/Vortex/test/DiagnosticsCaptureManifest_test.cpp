@@ -31,7 +31,7 @@ using oxygen::vortex::DiagnosticsPassKind;
 using oxygen::vortex::DiagnosticsPassRecord;
 using oxygen::vortex::DiagnosticsProductRecord;
 using oxygen::vortex::DiagnosticsSeverity;
-using oxygen::vortex::kDiagnosticsCaptureManifestSchema;
+using oxygen::vortex::kDiagnosticsCaptureManifestSchemaVersion;
 using oxygen::vortex::ShaderDebugMode;
 using oxygen::vortex::WriteDiagnosticsCaptureManifest;
 
@@ -94,8 +94,8 @@ NOLINT_TEST(
       },
     }));
 
-  EXPECT_EQ(manifest.at("schema"), kDiagnosticsCaptureManifestSchema);
-  EXPECT_EQ(manifest.at("version"), 1);
+  EXPECT_EQ(
+    manifest.at("schema_version"), kDiagnosticsCaptureManifestSchemaVersion);
   EXPECT_EQ(manifest.at("frame").at("index"), 17);
   EXPECT_EQ(manifest.at("frame").at("active_shader_debug_mode"),
     "DirectionalShadowMask");
@@ -124,7 +124,8 @@ NOLINT_TEST(DiagnosticsCaptureManifestTest, WritesManifestFile)
   auto input = std::ifstream(output_path, std::ios::binary);
   ASSERT_TRUE(input.is_open()) << output_path.string();
   const auto manifest = json::parse(input);
-  EXPECT_EQ(manifest.at("schema"), kDiagnosticsCaptureManifestSchema);
+  EXPECT_EQ(
+    manifest.at("schema_version"), kDiagnosticsCaptureManifestSchemaVersion);
 
   input.close();
   EXPECT_EQ(std::filesystem::remove_all(output_dir), 2U);

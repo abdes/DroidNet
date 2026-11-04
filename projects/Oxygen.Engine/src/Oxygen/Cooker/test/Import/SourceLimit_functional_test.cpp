@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -192,9 +193,12 @@ namespace {
   {
     const auto large = TempDir() / "large.import.json";
     const auto zero = TempDir() / "zero.import.json";
-    WriteText(
-      large, R"({"version":1,"jobs":[],"max_source_bytes":5000000000})");
-    WriteText(zero, R"({"version":1,"jobs":[],"max_source_bytes":0})");
+    WriteText(large,
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"max_source_bytes":5000000000})"));
+    WriteText(zero,
+      oxygen::cooker::test::ManifestText(
+        R"({"jobs":[],"max_source_bytes":0})"));
 
     auto large_errors = std::vector<ImportDiagnostic> {};
     const auto loaded = ImportManifest::Load(large, {}, large_errors);

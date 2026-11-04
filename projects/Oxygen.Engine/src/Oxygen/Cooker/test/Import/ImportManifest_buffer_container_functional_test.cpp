@@ -16,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
@@ -52,8 +53,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       ]
     })");
 
-  const auto* const manifest_json = R"({
-      "version": 1,
+  const auto manifest_json = oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": ".cooked",
       "defaults": {
@@ -68,7 +68,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
           "name": "character-buffers-job"
         }
       ]
-    })";
+    })");
   WriteText(manifest_path, manifest_json);
 
   auto errors = std::vector<ImportDiagnostic> {};
@@ -110,9 +110,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       ]
     })");
 
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "output": "buffer-container-cooked",
       "jobs": [
@@ -129,7 +127,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
           "depends_on": ["prep.textures"]
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
@@ -154,9 +152,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
   const ScopedTempDir temp;
   const auto manifest_path
     = temp.Path() / "rejects_disallowed_key" / "import_manifest.json";
-  WriteText(manifest_path,
-    R"({
-      "version": 1,
+  WriteText(manifest_path, oxygen::cooker::test::ManifestText(R"({
       "mounts": [{ "name": "Content", "path": "." }],
       "jobs": [
         {
@@ -165,7 +161,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
           "intent": "albedo"
         }
       ]
-    })");
+    })"));
 
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);

@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
@@ -85,7 +86,11 @@ class SourceMountsTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    WriteMounts(Root(), json { { "version", 1 }, { "root", true } });
+    WriteMounts(Root(),
+      json {
+        { "schema_version", oxygen::content::import::kMountsSchemaVersion },
+        { "root", true },
+      });
     MakeFolder(Project() / "Content");
   }
 
@@ -117,7 +122,13 @@ protected:
 
   static auto MountsDoc(const json& mounts) -> json
   {
-    return json { { "version", 1 }, { "mounts", mounts } };
+    return json {
+      {
+        "schema_version",
+        oxygen::content::import::kMountsSchemaVersion,
+      },
+      { "mounts", mounts },
+    };
   }
 
   [[nodiscard]] auto Request(std::vector<MountDeclaration> declarations) const
@@ -515,7 +526,8 @@ NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
   auto errors = std::vector<ImportDiagnostic> {};
 
   const auto manifest = ImportManifest::Parse(
-    R"({"jobs":[],"mounts":[{"name":"Props","kind":"Pak","path":"a.pak"}]})",
+    oxygen::cooker::test::ManifestText(
+      R"({"jobs":[],"mounts":[{"name":"Props","kind":"Pak","path":"a.pak"}]})"),
     fs::current_path().root_path() / "OxygenSourceMounts", {}, errors);
 
   EXPECT_FALSE(manifest.has_value());
@@ -570,11 +582,14 @@ NOLINT_TEST_F(SourceMountsTest, UnboundPlaceholderWarns)
 
 // -- The mounts file ---------------------------------------------------------
 
-//! A version other than 1 is `mount.file_version`; the file binds nothing.
+//! Another schema version is `mount.file_version`; the file binds nothing.
 NOLINT_TEST_F(SourceMountsTest, OtherFileVersionIsRefused)
 {
   WriteMounts(Project(),
-    json { { "version", 2 }, { "mounts", { { "Studio", "Content" } } } });
+    json {
+      { "schema_version", oxygen::content::import::kMountsSchemaVersion + 1 },
+      { "mounts", { { "Studio", "Content" } } },
+    });
 
   const auto table = ResolveMountTable(Request({ Placeholder("Studio") }));
 
@@ -587,10 +602,13 @@ NOLINT_TEST_F(SourceMountsTest, OtherFileVersionIsRefused)
 NOLINT_TEST_F(SourceMountsTest, InvalidFileIsRefused)
 {
   const auto cases = std::array {
-    json { { "version", 1 }, { "cooked_root", "x" } }.dump(),
+    json {
+      { "schema_version", oxygen::content::import::kMountsSchemaVersion },
+      { "cooked_root", "x" },
+    }
+      .dump(),
     MountsDoc({ { "Studio", { { "kind", "Cooked" }, { "path", "a.pak" } } } })
       .dump(),
-    json { { "mounts", json::object() } }.dump(),
     std::string { "{ not json" },
   };
   for (const auto& text : cases) {
@@ -603,6 +621,18 @@ NOLINT_TEST_F(SourceMountsTest, InvalidFileIsRefused)
       << text << "\n"
       << DiagnosticSummary(table.diagnostics);
   }
+}
+
+//! A file that states no `schema_version` has no version this build reads.
+NOLINT_TEST_F(SourceMountsTest, FileWithoutSchemaVersionIsRefused)
+{
+  WriteMounts(Project(), json { { "mounts", json::object() } });
+
+  const auto table = ResolveMountTable(Request({}));
+
+  EXPECT_FALSE(table.IsValid());
+  EXPECT_TRUE(HasDiagnosticCode(table.diagnostics, codes::kFileVersion.id))
+    << DiagnosticSummary(table.diagnostics);
 }
 
 //! A `--mounts` file that does not exist is `mount.file_invalid`.
@@ -619,7 +649,11 @@ NOLINT_TEST_F(SourceMountsTest, MissingMountsOptionFileIsRefused)
 //! `mounts` is optional: a file may only stop the walk.
 NOLINT_TEST_F(SourceMountsTest, FileMayOmitMounts)
 {
-  WriteMounts(Project(), json { { "version", 1 }, { "root", true } });
+  WriteMounts(Project(),
+    json {
+      { "schema_version", oxygen::content::import::kMountsSchemaVersion },
+      { "root", true },
+    });
 
   const auto table
     = ResolveMountTable(Request({ Declared("Content", "Content") }));
@@ -671,7 +705,12 @@ NOLINT_TEST_F(SourceMountsTest, RootMountsOptionIsTheOnlyFileRead)
 {
   WriteMounts(Project(), MountsDoc({ { "Studio", "Content" } }));
   const auto option = Workspace() / "run" / "mounts.json";
-  WriteText(option, json { { "version", 1 }, { "root", true } }.dump());
+  WriteText(option,
+    json {
+      { "schema_version", oxygen::content::import::kMountsSchemaVersion },
+      { "root", true },
+    }
+      .dump());
   auto request = Request({ Placeholder("Studio") });
   request.mounts_option = option;
 
@@ -742,7 +781,7 @@ NOLINT_TEST_F(SourceMountsTest, NearestParentWinsAndRootStopsTheWalk)
   MakeFolder(Workspace() / "Far");
   WriteMounts(Workspace() / "group",
     json {
-      { "version", 1 },
+      { "schema_version", oxygen::content::import::kMountsSchemaVersion },
       { "root", true },
       { "mounts", { { "Studio", "../Near" } } },
     });
@@ -1284,7 +1323,8 @@ NOLINT_TEST_F(MountTableCasesTest, TablesFollowTheCaseTable)
     const auto temp = fs::current_path().root_path() / "OxygenMountTableCases"
       / std::to_string(index);
     auto files = MemoryFileSystem {};
-    files.AddFile(temp / kMountsFileName, R"({"version":1,"root":true})");
+    files.AddFile(temp / kMountsFileName,
+      oxygen::cooker::test::MountsText(R"({"root":true})"));
     for (const auto& folder : test_case.value("folders", json::array())) {
       files.AddFolder(temp / folder.get<std::string>());
     }

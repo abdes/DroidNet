@@ -385,7 +385,7 @@ public sealed class CookOrchestrationTests
 
         private static ContentImportManifest CreateInvalid()
             => new(
-                Version: 2,
+                Version: ContentImportManifest.CurrentSchemaVersion + 1,
                 Output: string.Empty,
                 Jobs: []);
     }

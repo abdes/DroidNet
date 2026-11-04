@@ -188,7 +188,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto descriptor_path = dir / "Scenes" / "legacy.scene.json";
   WriteText(descriptor_path,
     R"({
-      "version": 2,
+      "schema_version": 2,
       "name": "LegacyScene",
       "nodes": [ { "name": "Root" } ]
     })");

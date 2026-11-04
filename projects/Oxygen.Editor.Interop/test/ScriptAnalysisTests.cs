@@ -79,7 +79,7 @@ public sealed class ScriptAnalysisTests
     {
         const string json = """
             {
-              "version": 1, "severity": "error", "code": "S0701", "family": "runtime",
+              "schema_version": 2, "severity": "error", "code": "S0701", "family": "runtime",
               "message": "attempt to index nil with 'position'",
               "labels": [ {
                 "span": { "source": "Content/move.lua", "begin": { "line": 10, "column": 9 }, "end": { "line": 10, "column": 13 } },
@@ -110,7 +110,7 @@ public sealed class ScriptAnalysisTests
     public void Render_UnknownSourceOrMalformedJson_RendersWithoutSourceOrReturnsNull()
     {
         const string withoutSource = """
-            { "version": 1, "severity": "warning", "code": "S0701", "family": "runtime", "message": "slow hook",
+            { "schema_version": 2, "severity": "warning", "code": "S0701", "family": "runtime", "message": "slow hook",
               "labels": [ { "span": { "source": "gone.lua", "begin": { "line": 1, "column": 1 }, "end": { "line": 1, "column": 2 } },
                 "message": "here", "primary": true } ], "notes": [] }
             """;

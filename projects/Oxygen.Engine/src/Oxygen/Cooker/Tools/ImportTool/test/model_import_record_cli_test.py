@@ -11,6 +11,14 @@ import uuid
 from pathlib import Path
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
+MANIFEST_VERSION: int = json.loads(
+    (
+        Path(__file__).resolve().parents[3]
+        / "Import"
+        / "Schemas"
+        / "oxygen.import-manifest.schema.json"
+    ).read_text(encoding="utf-8")
+)["properties"]["schema_version"]["const"]
 
 POSITIONS = struct.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
 
@@ -91,7 +99,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         recipe.write_text(
             json.dumps(
                 {
-                    "version": 1,
+                    "schema_version": MANIFEST_VERSION,
                     "jobs": [
                         {
                             "type": "gltf",
@@ -272,7 +280,7 @@ class ModelImportRecordCliTests(unittest.TestCase):
         recipe.write_text(
             json.dumps(
                 {
-                    "version": 1,
+                    "schema_version": MANIFEST_VERSION,
                     "jobs": [
                         {
                             "type": "gltf",

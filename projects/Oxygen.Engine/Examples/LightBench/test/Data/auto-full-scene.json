@@ -99,5 +99,5 @@
     "range_m": 20.0
   },
   "tone_mapper": 0,
-  "version": 1
+  "schema_version": 2
 }

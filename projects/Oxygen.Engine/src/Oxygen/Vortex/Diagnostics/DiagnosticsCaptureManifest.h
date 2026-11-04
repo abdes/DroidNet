@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -15,8 +16,7 @@
 
 namespace oxygen::vortex {
 
-inline constexpr auto kDiagnosticsCaptureManifestSchema
-  = "vortex.diagnostics.capture-manifest.v1";
+inline constexpr uint32_t kDiagnosticsCaptureManifestSchemaVersion = 2;
 
 struct DiagnosticsCaptureManifestOptions {
   std::optional<std::filesystem::path> gpu_timeline_export_path;
