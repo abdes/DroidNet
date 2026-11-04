@@ -18,16 +18,16 @@ namespace oxygen::content::import::tool {
 
 class IMessageWriter;
 
-//! Routes SIGINT and SIGTERM to the stop state read by `StartStopWatcher`.
+//! Routes SIGINT, SIGTERM and SIGBREAK to the stop state read by
+//! `StartStopWatcher`.
 /*!
- The first signal asks the running import to stop; the third ends the process.
+ The stop state starts here and lasts for the process, so a signal that arrives
+ before the service exists still stops the run. The first signal asks the
+ running import to stop; the third ends the process with 128 plus the signal.
 */
 auto InstallStopHandlers() -> void;
 
-//! Forgets any earlier stop request.
-auto ResetStopState() -> void;
-
-//! Watches for a stop request and cancels `service` when one arrives.
+//! Watches for a stop request, past or future, and cancels `service` on one.
 [[nodiscard]] auto StartStopWatcher(AsyncImportService* service,
   oxygen::observer_ptr<IMessageWriter> writer) -> std::jthread;
 

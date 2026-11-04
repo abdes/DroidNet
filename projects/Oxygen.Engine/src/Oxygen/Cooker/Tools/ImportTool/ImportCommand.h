@@ -16,8 +16,8 @@ namespace oxygen::content::import::tool {
 
 //! The process exit status of a failed import command.
 /*!
- An invalid argument, input or configuration is `ExitCode::kUsage`; anything
- else is `ExitCode::kFailed`.
+ An invalid argument, input or configuration is `ExitCode::kUsage`, a cancelled
+ operation is `ExitCode::kCancelled`; anything else is `ExitCode::kFailed`.
 */
 [[nodiscard]] auto ExitStatusFromError(const std::error_code& error) -> int;
 

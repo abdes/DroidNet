@@ -17,6 +17,7 @@
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -27,6 +28,9 @@ namespace {
 
 using nlohmann::json;
 using oxygen::content::inspection::AssetKeyMapOptions;
+
+constexpr int kRefused
+  = static_cast<int>(oxygen::content::toolkit::ExitCode::kUsage);
 
 //! `RunAssetKeyMap` as the tool runs it: the error, if any, goes to stderr, and
 //! the result is the process exit code.
@@ -105,15 +109,15 @@ NOLINT_TEST_F(InspectorAssetKeyMapTest, InvalidRequestsPreserveExistingReport)
     SCOPED_TRACE(path);
     auto invalid = valid;
     invalid["virtual_paths"] = json::array({ path });
-    EXPECT_EQ(Run(invalid), 2);
+    EXPECT_EQ(Run(invalid), kRefused);
     EXPECT_EQ(Read(), original);
   }
   auto duplicate = valid;
   duplicate["virtual_paths"].push_back("/Content/Materials/A.omat");
-  EXPECT_EQ(Run(duplicate), 2);
+  EXPECT_EQ(Run(duplicate), kRefused);
   auto unknown = valid;
   unknown["schema"] = "oxygen.asset-key-request.v2";
-  EXPECT_EQ(Run(unknown), 2);
+  EXPECT_EQ(Run(unknown), kRefused);
   EXPECT_EQ(Read(), original);
 }
 
@@ -129,7 +133,7 @@ NOLINT_TEST_F(InspectorAssetKeyMapTest, MissingInputFailsWithoutCreatingReport)
 {
   EXPECT_EQ(RunAssetKeyMap({ TempPath("missing.json").string(),
               TempPath("report.json").string() }),
-    2);
+    kRefused);
   EXPECT_FALSE(std::filesystem::exists(TempPath("report.json")));
 }
 

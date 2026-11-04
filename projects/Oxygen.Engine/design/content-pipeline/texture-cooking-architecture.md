@@ -525,7 +525,7 @@ Manifest-level defaults may be provided in the `defaults.texture` object.
    - no cycles in the dependency graph.
 3. Jobs are dispatched only when all predecessors have succeeded.
 4. Failed predecessor jobs cause all transitive dependents to be skipped with
-   diagnostic `texture.import.skipped_predecessor_failed`.
+   diagnostic `import.skipped_predecessor_failed`.
 5. The execution node per job remains `TextureImportJob → TexturePipeline`.
 
 #### 7.3.4 Manifest Defaults

@@ -170,7 +170,7 @@ auto RefuseImportJob(const ImportRefusal& refusal,
 
   ordered_json payload = ordered_json::object();
   payload.update({
-    { "report_version", std::string(kReportVersion) },
+    { "schema_version", kReportSchemaVersion },
     { "session", std::move(session) },
     {
       "summary",
@@ -179,6 +179,7 @@ auto RefuseImportJob(const ImportRefusal& refusal,
         { "jobs_succeeded", 0 },
         { "jobs_failed", 1 },
         { "jobs_skipped", 0 },
+        { "jobs_cancelled", 0 },
         { "time_ms_total", 0.0 },
         { "time_ms_io", 0.0 },
         { "time_ms_cpu", 0.0 },
@@ -290,11 +291,15 @@ auto RunImportJob(const ImportRequest& command_request,
       ? service->SubmitModelImport(
           std::move(publication), on_complete, on_progress)
       : service->SubmitImport(request, on_complete, on_progress);
-    if (!job_id) {
+    if (!job_id && !service->IsAcceptingJobs()) {
+      // A stop request came before the job could start.
+      report_copy = MakeCancelledReport(request);
+      report_copy.cooked_root = request.ResolveCookedRoot();
+      have_report = true;
+    } else if (!job_id) {
       submit_error = "ERROR: failed to submit import job";
     } else {
-      // If TUI is enabled and not quiet, run the interactive screen while job
-      // runs
+      // With the screen enabled, it shows the job while it runs.
       if (enable_tui) {
         ImportScreen screen;
         screen.SetDataProvider([&] -> JobViewModel {
@@ -329,6 +334,18 @@ auto RunImportJob(const ImportRequest& command_request,
 
         // The provided writer for TUI runs should already be muted.
         screen.Run();
+
+        // The screen owns the interrupt while it runs, so one that ends before
+        // the job did was asked to stop.
+        auto running = false;
+        {
+          std::scoped_lock lock(mutex);
+          running = !report.has_value();
+        }
+        if (running) {
+          service->CancelAll();
+          service->RequestShutdown();
+        }
       }
 
       std::unique_lock lock(mutex);
@@ -379,7 +396,7 @@ auto RunImportJob(const ImportRequest& command_request,
 
     ordered_json payload = ordered_json::object();
     payload.update({
-      { "report_version", std::string(kReportVersion) },
+      { "schema_version", kReportSchemaVersion },
       {
         "session",
         {
@@ -396,6 +413,7 @@ auto RunImportJob(const ImportRequest& command_request,
     const auto stats_json = BuildStatsJson(report_copy.telemetry);
     const auto time_ms_io = ComputeIoMillis(report_copy.telemetry);
     const auto time_ms_cpu = ComputeCpuMillis(report_copy.telemetry);
+    const auto cancelled = IsCanceledReport(report_copy);
 
     payload.update({
       {
@@ -403,8 +421,9 @@ auto RunImportJob(const ImportRequest& command_request,
         {
           { "jobs_total", 1 },
           { "jobs_succeeded", report_copy.success ? 1 : 0 },
-          { "jobs_failed", report_copy.success ? 0 : 1 },
+          { "jobs_failed", report_copy.success || cancelled ? 0 : 1 },
           { "jobs_skipped", 0 },
+          { "jobs_cancelled", cancelled ? 1 : 0 },
           { "time_ms_total", elapsed_ms },
           { "time_ms_io", time_ms_io },
           { "time_ms_cpu", time_ms_cpu },
@@ -461,6 +480,14 @@ auto RunImportJob(const ImportRequest& command_request,
     }
 
     written_report = toolkit::ResolveReportPath(report_path);
+  }
+
+  if (IsCanceledReport(report_copy)) {
+    writer->Report("Import cancelled");
+    if (written_report.has_value()) {
+      writer->Info(fmt::format("Report written: {}", written_report->string()));
+    }
+    return std::unexpected(std::make_error_code(std::errc::operation_canceled));
   }
 
   if (!report_copy.success) {

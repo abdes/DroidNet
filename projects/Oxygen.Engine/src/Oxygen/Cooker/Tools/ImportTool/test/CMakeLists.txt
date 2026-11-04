@@ -22,7 +22,9 @@ oxygen_cooker_test(
   SOURCES
     "BatchCommand_functional_test.cpp"
     "CapturingWriter.h"
+    "ConsoleMessageWriter_functional_test.cpp"
     "ImportRefusal_functional_test.cpp"
+    "StopSignal_functional_test.cpp"
 )
 
 # -- Python CLI Tests ----------------------------------------------------------

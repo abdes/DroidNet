@@ -114,6 +114,31 @@ namespace {
     };
   }
 
+  auto HasDiagnostic(const ImportReport& report, const std::string_view code)
+    -> bool
+  {
+    return std::ranges::any_of(report.diagnostics,
+      [&](const ImportDiagnostic& diag) -> bool { return diag.code == code; });
+  }
+
+  //! The failed result of a job that did no work.
+  auto MakeNotRunReport(ImportDiagnostic reason) -> ImportReport
+  {
+    constexpr auto kZero = std::chrono::microseconds { 0 };
+    auto report = ImportReport {};
+    report.success = false;
+    report.telemetry.io_duration = kZero;
+    report.telemetry.source_load_duration = kZero;
+    report.telemetry.decode_duration = kZero;
+    report.telemetry.load_duration = kZero;
+    report.telemetry.cook_duration = kZero;
+    report.telemetry.emit_duration = kZero;
+    report.telemetry.finalize_duration = kZero;
+    report.telemetry.total_duration = kZero;
+    report.diagnostics.push_back(std::move(reason));
+    return report;
+  }
+
 } // namespace
 
 auto FormatUtcTimestamp(const std::chrono::system_clock::time_point time)
@@ -366,11 +391,29 @@ auto BuildWorkItemsJson(const JobProgressTrace& trace,
 
 auto IsCanceledReport(const ImportReport& report) -> bool
 {
-  return std::ranges::any_of(
-    report.diagnostics, [](const ImportDiagnostic& diag) -> bool {
-      return diag.code == "import.canceled"
-        || diag.code == "input.import.skipped_predecessor_failed";
-    });
+  return HasDiagnostic(report, import_tool_codes::kCanceled);
+}
+
+auto MakeSkippedReport(const ImportRequest& request,
+  const std::string_view predecessor) -> ImportReport
+{
+  return MakeNotRunReport(ImportDiagnostic {
+    .severity = ImportSeverity::kWarning,
+    .code = std::string { import_tool_codes::kSkippedPredecessorFailed },
+    .message = fmt::format(
+      "Skipped because predecessor '{}' failed or was refused", predecessor),
+    .source_path = request.source_path.string(),
+  });
+}
+
+auto MakeCancelledReport(const ImportRequest& request) -> ImportReport
+{
+  return MakeNotRunReport(ImportDiagnostic {
+    .severity = ImportSeverity::kInfo,
+    .code = std::string { import_tool_codes::kCanceled },
+    .message = "Cancelled before the job ran",
+    .source_path = request.source_path.string(),
+  });
 }
 
 auto JobStatusFromReport(const ImportReport& report) -> std::string_view
@@ -378,8 +421,11 @@ auto JobStatusFromReport(const ImportReport& report) -> std::string_view
   if (report.success) {
     return "succeeded";
   }
-  if (IsCanceledReport(report)) {
+  if (HasDiagnostic(report, import_tool_codes::kSkippedPredecessorFailed)) {
     return "skipped";
+  }
+  if (IsCanceledReport(report)) {
+    return "cancelled";
   }
   return "failed";
 }

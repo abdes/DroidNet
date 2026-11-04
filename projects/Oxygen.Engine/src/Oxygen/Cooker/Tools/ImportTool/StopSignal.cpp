@@ -24,26 +24,25 @@ namespace {
   // The signal handler reaches only objects with static storage duration.
   // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
   std::atomic<bool> g_stop_requested { false };
-  std::atomic<bool> g_stop_handled { false };
   std::atomic<int> g_stop_signal { 0 };
   std::atomic<int> g_stop_count { 0 };
   // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
 
+  constexpr int kForcedExitSignalCount = 3;
+  constexpr int kSignalExitBase = 128;
+
   auto HandleStopSignal(const int signal) -> void
   {
+    // The Windows runtime restores the default action before it calls a
+    // handler, so without this the next signal would end the process uncounted.
+    std::signal(signal, HandleStopSignal);
     const int count = g_stop_count.fetch_add(1, std::memory_order_acq_rel) + 1;
     if (count == 1) {
-      g_stop_requested.store(true, std::memory_order_relaxed);
-      int expected = 0;
-      g_stop_signal.compare_exchange_strong(
-        expected, signal, std::memory_order_acq_rel);
-      std::signal(SIGINT, HandleStopSignal);
-      std::signal(SIGTERM, HandleStopSignal);
-      return;
+      g_stop_signal.store(signal, std::memory_order_release);
+      g_stop_requested.store(true, std::memory_order_release);
     }
-    if (count >= 3) {
-      const int exit_code = (signal == SIGTERM) ? 143 : 130;
-      std::_Exit(exit_code);
+    if (count >= kForcedExitSignalCount) {
+      std::_Exit(kSignalExitBase + signal);
     }
   }
 
@@ -54,6 +53,10 @@ namespace {
       return "Stopping: interrupted (SIGINT)";
     case SIGTERM:
       return "Stopping: terminated (SIGTERM)";
+#ifdef SIGBREAK
+    case SIGBREAK:
+      return "Stopping: interrupted (SIGBREAK)";
+#endif
     default:
       return "Stopping: interrupted";
     }
@@ -67,14 +70,9 @@ auto InstallStopHandlers() -> void
 {
   std::signal(SIGINT, HandleStopSignal);
   std::signal(SIGTERM, HandleStopSignal);
-}
-
-auto ResetStopState() -> void
-{
-  g_stop_requested.store(false, std::memory_order_relaxed);
-  g_stop_handled.store(false, std::memory_order_relaxed);
-  g_stop_signal.store(0, std::memory_order_relaxed);
-  g_stop_count.store(0, std::memory_order_relaxed);
+#ifdef SIGBREAK
+  std::signal(SIGBREAK, HandleStopSignal);
+#endif
 }
 
 auto StartStopWatcher(AsyncImportService* service,
@@ -82,15 +80,11 @@ auto StartStopWatcher(AsyncImportService* service,
 {
   return std::jthread([service, writer](const std::stop_token& st) -> void {
     while (!st.stop_requested()) {
-      if (g_stop_requested.load(std::memory_order_relaxed)) {
-        if (g_stop_handled.exchange(true, std::memory_order_acq_rel)) {
-          break;
-        }
+      if (g_stop_requested.load(std::memory_order_acquire)) {
         if (service != nullptr) {
           if (writer != nullptr) {
-            const auto message = StopReasonMessage(
-              g_stop_signal.load(std::memory_order_relaxed));
-            writer->Report(message);
+            writer->Report(
+              StopReasonMessage(g_stop_signal.load(std::memory_order_acquire)));
           }
           service->CancelAll();
           service->RequestShutdown();

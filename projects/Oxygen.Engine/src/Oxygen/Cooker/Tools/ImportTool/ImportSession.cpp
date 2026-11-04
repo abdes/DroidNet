@@ -97,7 +97,6 @@ auto ImportSession::Begin(const clap::CommandLineContext& parsed,
   }
   service_ = std::move(*created);
   options.import_service = observer_ptr<AsyncImportService> { service_.get() };
-  ResetStopState();
   stop_watcher_.emplace(StartStopWatcher(service_.get(), options.writer));
   return {};
 }

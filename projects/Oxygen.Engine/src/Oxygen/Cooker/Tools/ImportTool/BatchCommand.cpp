@@ -667,12 +667,14 @@ namespace {
   struct BatchSummaryCounts {
     size_t succeeded = 0;
     size_t failed = 0;
+    //! Skipped by a failed predecessor, or never submitted.
     size_t skipped = 0;
+    size_t cancelled = 0;
   };
 
   auto BuildBatchSummary(
-    const std::span<const std::optional<ImportReport>> reports,
-    const size_t total_jobs) -> BatchSummaryCounts
+    const std::span<const std::optional<ImportReport>> reports)
+    -> BatchSummaryCounts
   {
     BatchSummaryCounts counts {};
     for (const auto& report : reports) {
@@ -685,54 +687,13 @@ namespace {
         ++counts.succeeded;
       } else if (status == "skipped") {
         ++counts.skipped;
+      } else if (status == "cancelled") {
+        ++counts.cancelled;
       } else {
         ++counts.failed;
       }
     }
-    if (counts.succeeded + counts.skipped <= total_jobs) {
-      counts.failed = total_jobs - counts.succeeded - counts.skipped;
-    }
     return counts;
-  }
-
-  auto MakeZeroTelemetry() -> ImportTelemetry
-  {
-    constexpr auto kZero = std::chrono::microseconds { 0 };
-    auto telemetry = ImportTelemetry {};
-    telemetry.io_duration = kZero;
-    telemetry.source_load_duration = kZero;
-    telemetry.decode_duration = kZero;
-    telemetry.load_duration = kZero;
-    telemetry.cook_duration = kZero;
-    telemetry.emit_duration = kZero;
-    telemetry.finalize_duration = kZero;
-    telemetry.total_duration = kZero;
-    return telemetry;
-  }
-
-  auto MakeSkippedDependencyReport(const ImportRequest& request,
-    const std::string_view failed_job_id) -> ImportReport
-  {
-    auto report = ImportReport {};
-    report.success = false;
-    report.telemetry = MakeZeroTelemetry();
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kWarning,
-      .code = "input.import.skipped_predecessor_failed",
-      .message = failed_job_id.empty()
-        ? "Skipped because a predecessor job failed"
-        : fmt::format("Skipped because predecessor '{}' failed", failed_job_id),
-      .source_path = request.source_path.string(),
-      .object_path = {},
-    });
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kInfo,
-      .code = "import.canceled",
-      .message = "Job was skipped due to failed dependency",
-      .source_path = request.source_path.string(),
-      .object_path = {},
-    });
-    return report;
   }
 
   //! A job whose request could not be built, and why.
@@ -775,7 +736,7 @@ namespace {
       "Command line is required in report output");
 
     const auto session_ended = std::chrono::system_clock::now();
-    const auto counts = BuildBatchSummary(inputs.reports, inputs.jobs.size());
+    const auto counts = BuildBatchSummary(inputs.reports);
     double total_io_ms = 0.0;
     double total_cpu_ms = 0.0;
     ordered_json jobs_json = ordered_json::array();
@@ -869,7 +830,7 @@ namespace {
 
     ordered_json payload = ordered_json::object();
     payload.update({
-      { "report_version", std::string(kReportVersion) },
+      { "schema_version", kReportSchemaVersion },
       { "session", std::move(session) },
       {
         "summary",
@@ -878,6 +839,7 @@ namespace {
           { "jobs_succeeded", counts.succeeded },
           { "jobs_failed", counts.failed + inputs.refused.size() },
           { "jobs_skipped", counts.skipped },
+          { "jobs_cancelled", counts.cancelled },
           { "validation_errors", inputs.validation_failures },
           { "time_ms_total", inputs.elapsed_ms },
           { "time_ms_io", total_io_ms },
@@ -1323,12 +1285,18 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
   std::vector<std::vector<size_t>> dependents(jobs.size());
   std::vector<size_t> dependency_remaining(jobs.size(), 0U);
+  // The manifest refused an id no job has, so a predecessor without a prepared
+  // job was refused, or --fail-fast stopped before it. Its dependents cannot
+  // run.
+  auto unrunnable = std::deque<std::pair<size_t, std::string>> {};
   for (size_t index = 0; index < jobs.size(); ++index) {
     auto unique_producers = std::unordered_set<size_t> {};
     for (const auto& dep_id : jobs.at(index).depends_on) {
       const auto it = job_id_to_index.find(dep_id);
-      CHECK_F(it != job_id_to_index.end(),
-        "The manifest refuses a dependency on a missing job: {}", dep_id);
+      if (it == job_id_to_index.end()) {
+        unrunnable.emplace_back(index, dep_id);
+        continue;
+      }
       const auto producer_index = it->second;
       if (!unique_producers.insert(producer_index).second) {
         continue;
@@ -1346,7 +1314,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     }
   }
 
-  if (validation_failures == 0 && !jobs.empty()) {
+  if (!jobs.empty()) {
     auto remaining = dependency_remaining;
     std::deque<size_t> ready;
     for (size_t index = 0; index < remaining.size(); ++index) {
@@ -1399,6 +1367,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     std::condition_variable completed_cv;
     BatchViewModel state;
     bool completed = false;
+    //! A stop request ended the run.
+    bool cancelled = false;
     int exit_code = 0;
     std::vector<std::optional<ImportReport>> reports;
   };
@@ -1414,6 +1384,20 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     = BuildWorkerUtilizationViews(worker_totals);
   common_context->reports.resize(jobs.size());
 
+  // Everything downstream of a refused job is skipped before anything runs.
+  while (!unrunnable.empty()) {
+    const auto [index, predecessor] = std::move(unrunnable.front());
+    unrunnable.pop_front();
+    auto& report = common_context->reports.at(index);
+    if (report.has_value()) {
+      continue;
+    }
+    report = MakeSkippedReport(jobs.at(index).request, predecessor);
+    for (const auto child : dependents.at(index)) {
+      unrunnable.emplace_back(child, JobLabel(jobs.at(index), index));
+    }
+  }
+
   std::vector<JobProgressTrace> progress_traces(jobs.size());
   std::vector<std::optional<std::chrono::steady_clock::time_point>>
     submit_times(jobs.size());
@@ -1421,24 +1405,42 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   auto worker_thread = std::jthread([&jobs, common_context, writer,
                                       import_service, &progress_traces,
                                       &submit_times, &dependents,
-                                      &dependency_remaining, worker_totals](
+                                      &dependency_remaining, worker_totals,
+                                      fail_fast](
                                       const std::stop_token& st) -> void {
     DCHECK_NOTNULL_F(import_service, "Import service must be set by main");
 
     size_t completed = 0;
     size_t failures = 0;
     size_t in_flight = 0;
+    // --fail-fast saw a failure: no further job starts. Guarded by the mutex.
+    bool stop_submitting = false;
     std::vector<std::optional<ImportJobId>> job_ids(jobs.size());
     std::vector<ActiveJobView> job_views(jobs.size());
     std::vector<bool> job_active(jobs.size(), false);
     std::vector<bool> job_submitted(jobs.size(), false);
+    std::vector<bool> job_started(jobs.size(), false);
     std::vector<bool> job_finished(jobs.size(), false);
     std::vector<bool> predecessor_failed(jobs.size(), false);
     auto remaining_dependencies = dependency_remaining;
     auto ready_queue = std::deque<size_t> {};
+    {
+      std::scoped_lock lock(common_context->mutex);
+      // A job already skipped never runs.
+      for (size_t index = 0; index < jobs.size(); ++index) {
+        if (common_context->reports.at(index).has_value()) {
+          job_finished.at(index) = true;
+          ++completed;
+          ++failures;
+        }
+      }
+      common_context->state.completed = completed;
+      common_context->state.failures = failures;
+      common_context->state.remaining = jobs.size() - completed;
+    }
     // A completed producer is consumable only after its root's index is sealed.
     for (size_t index = 0; index < remaining_dependencies.size(); ++index) {
-      if (remaining_dependencies.at(index) == 0U) {
+      if (remaining_dependencies.at(index) == 0U && !job_finished.at(index)) {
         ready_queue.push_back(index);
       }
     }
@@ -1512,11 +1514,16 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     while (!st.stop_requested()) {
       {
         std::scoped_lock lock(common_context->mutex);
-        if (completed == jobs.size() && in_flight == 0U) {
+        if ((completed == jobs.size() || stop_submitting) && in_flight == 0U) {
           break;
         }
       }
+      // Only a stop request shuts the service down while jobs remain.
       if (!import_service->IsAcceptingJobs()) {
+        {
+          std::scoped_lock lock(common_context->mutex);
+          common_context->cancelled = true;
+        }
         RequestShutdown();
       }
 
@@ -1532,7 +1539,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
         std::optional<size_t> maybe_job_index;
         {
           std::scoped_lock lock(common_context->mutex);
-          while (!ready_queue.empty()) {
+          while (!stop_submitting && !ready_queue.empty()) {
             const auto candidate = ready_queue.front();
             ready_queue.pop_front();
             if (!job_submitted.at(candidate) && !job_finished.at(candidate)) {
@@ -1561,10 +1568,14 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
           }
 
           job_finished.at(job_index) = true;
+          const auto canceled = IsCanceledReport(report);
 
           job_views.at(job_index).progress = 1.0F;
-          job_views.at(job_index).status
-            = report.success ? "Completed" : "Failed";
+          if (report.success) {
+            job_views.at(job_index).status = "Completed";
+          } else {
+            job_views.at(job_index).status = canceled ? "Cancelled" : "Failed";
+          }
           job_views.at(job_index).item_event = "";
           items_started.at(job_index).clear();
           items_finished.at(job_index).clear();
@@ -1586,7 +1597,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
           }
 
           common_context->reports.at(job_index) = report;
-          if (!report.success) {
+          if (canceled) {
+            common_context->state.recent_logs.push_back(
+              fmt::format("Job {} Cancelled", DisplayJobNumber(job_index)));
+          } else if (!report.success) {
             failures++;
             common_context->state.failures = failures;
             common_context->exit_code = 2; // Fail code
@@ -1595,6 +1609,19 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
               common_context->state.recent_logs.push_back(
                 fmt::format("✖ Job {} Failed: {}: {}",
                   DisplayJobNumber(job_index), diag.code, diag.message));
+            }
+
+            if (fail_fast && !stop_submitting) {
+              // A job that has not started is not running yet, so it stops
+              // with the rest; the ones already running finish.
+              stop_submitting = true;
+              for (size_t index = 0; index < jobs.size(); ++index) {
+                if (job_submitted.at(index) && !job_finished.at(index)
+                  && !job_started.at(index)) {
+                  static_cast<void>(
+                    import_service->CancelJob(*job_ids.at(index)));
+                }
+              }
             }
           } else {
             common_context->state.recent_logs.push_back(
@@ -1639,10 +1666,11 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
             }
           };
 
-          const auto failed_id = jobs.at(job_index).job_id.empty()
-            ? fmt::format("#{}", DisplayJobNumber(job_index))
-            : jobs.at(job_index).job_id;
-          mark_dependency(job_index, report.success, failed_id);
+          // A dependent of a cancelled job did not fail: the run ended first.
+          if (!canceled) {
+            mark_dependency(job_index, report.success,
+              JobLabel(jobs.at(job_index), job_index));
+          }
 
           while (!skip_queue.empty()) {
             auto [skip_index, failed_dep] = std::move(skip_queue.front());
@@ -1652,9 +1680,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
             }
 
             job_finished.at(skip_index) = true;
-            auto skipped = MakeSkippedDependencyReport(
-              jobs.at(skip_index).request, failed_dep);
-            common_context->reports.at(skip_index) = skipped;
+            common_context->reports.at(skip_index)
+              = MakeSkippedReport(jobs.at(skip_index).request, failed_dep);
             failures++;
             completed++;
             common_context->state.failures = failures;
@@ -1669,10 +1696,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
               fmt::format("↷ Job {} Skipped: predecessor failed ({})",
                 DisplayJobNumber(skip_index), failed_dep));
 
-            const auto next_failed = jobs.at(skip_index).job_id.empty()
-              ? failed_dep
-              : jobs.at(skip_index).job_id;
-            mark_dependency(skip_index, false, next_failed);
+            mark_dependency(
+              skip_index, false, JobLabel(jobs.at(skip_index), skip_index));
           }
 
           if (common_context->state.recent_logs.size() > 50) {
@@ -1774,6 +1799,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
             }
           }
           if (progress.header.kind == ProgressEventKind::kJobStarted) {
+            job_started.at(job_index) = true;
             submit_times.at(job_index) = std::chrono::steady_clock::now();
             job_views.at(job_index).status = "Running";
           }
@@ -1900,8 +1926,8 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
       auto stalled = false;
       {
         std::scoped_lock lock(common_context->mutex);
-        if (!shutdown_requested && in_flight == 0U && ready_queue.empty()
-          && completed < jobs.size()) {
+        if (!shutdown_requested && !stop_submitting && in_flight == 0U
+          && ready_queue.empty() && completed < jobs.size()) {
           common_context->state.recent_logs.emplace_back(
             "Dependency scheduler stalled with unfinished jobs");
           common_context->exit_code = 2;
@@ -1927,6 +1953,15 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
     {
       std::scoped_lock lock(common_context->mutex);
+      // A job the stopped run never finished did not run to any result.
+      if (common_context->cancelled || stop_submitting) {
+        for (size_t index = 0; index < jobs.size(); ++index) {
+          auto& report = common_context->reports.at(index);
+          if (!report.has_value()) {
+            report = MakeCancelledReport(jobs.at(index).request);
+          }
+        }
+      }
       common_context->completed = true;
       common_context->state.remaining = 0;
       common_context->state.in_flight = 0;
@@ -1947,7 +1982,20 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
       return common_context->state;
     });
     screen.Run();
-  } else {
+
+    // The screen owns the interrupt while it runs, so one that ends before the
+    // run did was asked to stop.
+    auto running = false;
+    {
+      std::scoped_lock lock(common_context->mutex);
+      running = !common_context->completed;
+    }
+    if (running) {
+      import_service->CancelAll();
+      import_service->RequestShutdown();
+    }
+  }
+  {
     std::unique_lock lock(common_context->mutex);
     common_context->completed_cv.wait(
       lock, [&] -> bool { return common_context->completed; });
@@ -1957,7 +2005,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
   // 6. Report Generation
   std::optional<std::filesystem::path> final_report_path;
-  const auto counts = BuildBatchSummary(common_context->reports, jobs.size());
+  const auto counts = BuildBatchSummary(common_context->reports);
   if (!options_.report_path.empty()) {
     const auto outcome = WriteBatchReport(
       BatchReportInputs {
@@ -2011,9 +2059,9 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
           .count();
     writer->Info(
       fmt::format("Summary: jobs={} succeeded={} failed={} skipped={} "
-                  "validation_errors={} total_time_ms={}",
+                  "cancelled={} validation_errors={} total_time_ms={}",
         jobs.size(), counts.succeeded, counts.failed, counts.skipped,
-        validation_failures, elapsed_ms));
+        counts.cancelled, validation_failures, elapsed_ms));
 
     for (size_t index = 0; index < jobs.size(); ++index) {
       const auto& report = common_context->reports.at(index);
@@ -2050,6 +2098,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
   if (deferred_error.has_value()) {
     return std::unexpected(*deferred_error);
+  }
+
+  if (common_context->cancelled) {
+    return std::unexpected(std::make_error_code(std::errc::operation_canceled));
   }
 
   if (validation_failures > 0) {

@@ -380,7 +380,7 @@ The `source` field must point to a file conforming to
 3. Material jobs are dispatched only when all predecessor texture jobs have
    succeeded (i.e., their `.otex` sidecar files are on disk).
 4. Failed predecessor jobs cause all transitive dependents to be skipped with
-   diagnostic `material.import.skipped_predecessor_failed`.
+   diagnostic `import.skipped_predecessor_failed`.
 5. The execution node per job is
    `MaterialDescriptorImportJob → MaterialPipeline`.
 
@@ -834,7 +834,7 @@ messages written to `error_stream`. Error codes follow the pattern
 | Shader       | `material.shader.duplicate_stage`              | Multiple entries with same `stage` value                               |
 | Shader       | `material.shader.empty_source`                 | `source_path` or `entry_point` is empty                                |
 | Cancellation | `material.cancelled`                           | `stop_token` signalled during job execution                            |
-| Predecessor  | `material.import.skipped_predecessor_failed`   | A `depends_on` texture job failed                                      |
+| Predecessor  | `import.skipped_predecessor_failed`            | A `depends_on` texture job failed                                      |
 
 ---
 

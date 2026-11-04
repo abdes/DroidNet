@@ -32,9 +32,12 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Importer.h>
 #include <Oxygen/Cooker/Tools/Common/ReportFile.h>
+#include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/test/CapturingWriter.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
@@ -206,6 +209,13 @@ protected:
   }
 
   auto ContinueAfterValidationErrors() -> void { options_.fail_fast = false; }
+
+  //! What a stop request does to the service, without the process-wide signal.
+  auto RequestStop() const -> void
+  {
+    service_->CancelAll();
+    service_->RequestShutdown();
+  }
 
 private:
   GlobalOptions options_ {};
@@ -379,7 +389,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
-  EXPECT_EQ(report.at("report_version"), "5");
+  EXPECT_EQ(report.at("schema_version"),
+    oxygen::content::import::tool::kReportSchemaVersion);
   const auto& jobs = report.at("jobs");
   ASSERT_EQ(jobs.size(), 2U);
   // Each job names the importer that cooked it, at its revision.
@@ -1333,6 +1344,189 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
   EXPECT_FALSE(result.has_value());
   EXPECT_THAT(Messages(), ::testing::HasSubstr("mount.name_conflict"));
   EXPECT_FALSE(std::filesystem::exists(root / ".cooked"));
+}
+
+//! Everything downstream of a refused job is skipped, and says which job; the
+//! rest of the batch still runs.
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, DependentsOfARefusedJobAreSkippedWithTheirReason)
+{
+  ContinueAfterValidationErrors();
+  const auto root = MakeScenarioDir("refused_predecessor");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Invalid.geometry.json",
+    authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
+      .Remove("/lods")
+      .Text());
+  for (const auto* name : { "Direct", "Indirect", "Other" }) {
+    const auto identity = std::string("/Cooked/") + name + ".omat";
+    WriteText(root / (std::string(name) + ".material.json"),
+      authored::MaterialDescriptor { identity }.Text());
+  }
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"id":"refused","type":"geometry-descriptor",
+       "source":"Invalid.geometry.json",
+       "virtual_path":"/Cooked/Geometry/Invalid.ogeo"},
+      {"id":"direct","type":"material-descriptor",
+       "source":"Direct.material.json","virtual_path":"/Cooked/Direct.omat",
+       "depends_on":["refused"]},
+      {"id":"indirect","type":"material-descriptor",
+       "source":"Indirect.material.json",
+       "virtual_path":"/Cooked/Indirect.omat","depends_on":["direct"]},
+      {"id":"other","type":"material-descriptor",
+       "source":"Other.material.json","virtual_path":"/Cooked/Other.omat"}
+    ]
+  })");
+
+  const auto result = RunBatch(manifest_path, std::nullopt, report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 4U);
+  EXPECT_EQ(jobs.at(0).at("status"), "failed");
+  EXPECT_EQ(jobs.at(1).at("status"), "skipped");
+  EXPECT_EQ(jobs.at(2).at("status"), "skipped");
+  EXPECT_EQ(jobs.at(3).at("status"), "succeeded");
+  const auto& reason = jobs.at(1).at("diagnostics").at(0);
+  EXPECT_EQ(reason.at("code").get<std::string>(),
+    oxygen::content::import::tool::import_tool_codes::
+      kSkippedPredecessorFailed);
+  EXPECT_THAT(
+    reason.at("message").get<std::string>(), ::testing::HasSubstr("refused"));
+  EXPECT_FALSE(authored::HasCookedFile(root / ".cooked", "Direct.omat"));
+  EXPECT_TRUE(authored::HasCookedFile(root / ".cooked", "Other.omat"));
+}
+
+//! A job that depends on one --fail-fast never reached still gets its report.
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, FailFastRefusalReportsAnEarlierDependent)
+{
+  const auto root = MakeScenarioDir("fail_fast_refused_predecessor");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Early.material.json",
+    authored::MaterialDescriptor { "/Cooked/Early.omat" }.Text());
+  WriteText(root / "Invalid.geometry.json",
+    authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
+      .Remove("/lods")
+      .Text());
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"id":"early","type":"material-descriptor","source":"Early.material.json",
+       "virtual_path":"/Cooked/Early.omat","depends_on":["refused"]},
+      {"id":"refused","type":"geometry-descriptor",
+       "source":"Invalid.geometry.json",
+       "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
+    ]
+  })");
+
+  const auto result = RunBatch(manifest_path, std::nullopt, report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 2U);
+  EXPECT_EQ(jobs.at(0).at("status"), "not_submitted");
+  EXPECT_EQ(jobs.at(1).at("status"), "failed");
+  EXPECT_FALSE(std::filesystem::exists(root / ".cooked"));
+}
+
+//! --fail-fast acts on a job that fails while it runs: no later job runs.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, FailFastStartsNoJobAfterAFailure)
+{
+  const auto root = MakeScenarioDir("fail_fast_execution");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Wood.material.json",
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
+  // A sidecar's target scene is resolved when the job runs. The material cooks
+  // to another root, so no fence orders it before the sidecar.
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"type":"physics-sidecar",
+       "target_scene_virtual_path":"/Cooked/Missing.oscene",
+       "bindings":{"rigid_bodies":[]}},
+      {"type":"material-descriptor","source":"Wood.material.json",
+       "virtual_path":"/Cooked/Wood.omat","output":"other"}
+    ]
+  })");
+
+  const auto result = RunBatch(manifest_path, std::nullopt, report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(
+    result.error(), std::make_error_code(std::errc::state_not_recoverable));
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("summary").at("validation_errors"), 0);
+  EXPECT_EQ(report.at("summary").at("jobs_failed"), 1);
+  EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 1);
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 2U);
+  EXPECT_EQ(jobs.at(0).at("status"), "failed");
+  EXPECT_EQ(jobs.at(1).at("status"), "cancelled");
+  EXPECT_FALSE(authored::HasCookedFile(root / "other", "Wood.omat"));
+}
+
+//! A stop request is neither a success nor a failure: the report says which
+//! jobs it reached, and the exit status is its own.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, AStoppedBatchReportsItsJobsCancelled)
+{
+  const auto root = MakeScenarioDir("stopped_batch");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Wood.material.json",
+    authored::MaterialDescriptor { "/Cooked/Wood.omat" }.Text());
+  WriteText(root / "Stone.material.json",
+    authored::MaterialDescriptor { "/Cooked/Stone.omat" }.Text());
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"id":"wood","type":"material-descriptor","source":"Wood.material.json",
+       "virtual_path":"/Cooked/Wood.omat"},
+      {"type":"material-descriptor","source":"Stone.material.json",
+       "virtual_path":"/Cooked/Stone.omat","depends_on":["wood"]}
+    ]
+  })");
+  RequestStop();
+
+  const auto result = RunBatch(manifest_path, std::nullopt, report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(oxygen::content::import::tool::ExitStatusFromError(result.error()),
+    static_cast<int>(oxygen::content::toolkit::ExitCode::kCancelled));
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 2);
+  EXPECT_EQ(report.at("summary").at("jobs_failed"), 0);
+  for (const auto& job : report.at("jobs")) {
+    EXPECT_EQ(job.at("status"), "cancelled");
+    EXPECT_EQ(job.at("diagnostics").at(0).at("code").get<std::string>(),
+      oxygen::content::import::tool::import_tool_codes::kCanceled);
+  }
+  EXPECT_FALSE(std::filesystem::exists(root / ".cooked" / "Wood.omat"));
 }
 
 } // namespace

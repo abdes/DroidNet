@@ -17,6 +17,9 @@ auto ExitStatusFromError(const std::error_code& error) -> int
   if (error == std::errc::invalid_argument) {
     return static_cast<int>(toolkit::ExitCode::kUsage);
   }
+  if (error == std::errc::operation_canceled) {
+    return static_cast<int>(toolkit::ExitCode::kCancelled);
+  }
   return static_cast<int>(toolkit::ExitCode::kFailed);
 }
 

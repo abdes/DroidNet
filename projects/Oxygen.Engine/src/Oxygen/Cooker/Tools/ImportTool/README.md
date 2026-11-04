@@ -40,18 +40,17 @@ Oxygen.Cooker.ImportTool -o F:/projects/MyGame/.cooked batch \
 
 Global options are available for all commands.
 
-| Option                         | Meaning                                                             |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `-q`, `--quiet`                | Suppress non-error output                                           |
-| `--diagnostics-file <path>`    | Reserved diagnostics output path (currently parsed but not emitted) |
-| `-o`, `--cooked-root <path>`   | Default cooked root fallback                                        |
-| `--fail-fast`                  | Stop batch processing on first failure                              |
-| `--no-color`                   | Disable ANSI color                                                  |
-| `--no-tui`                     | Disable TUI; force text progress                                    |
-| `--theme <plain\|dark\|light>` | Help/output theme                                                   |
-| `--thread-pool-size <n>`       | Override import service worker count                                |
-| `--max-source-bytes <n>`       | Override the most bytes a job reads from one source                 |
-| `--concurrency <spec>`         | Override pipeline concurrency (`t,b,m,h,g,s` as `workers/queue`)    |
+| Option                         | Meaning                                                          |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `-q`, `--quiet`                | Print warnings and errors only                                   |
+| `-o`, `--cooked-root <path>`   | The cooked root of every job, replacing the manifest's           |
+| `--fail-fast`                  | Start no job after the first failure; running jobs finish        |
+| `--no-color`                   | Disable ANSI color                                               |
+| `--no-tui`                     | Disable the screen UI; print plain lines                         |
+| `--theme <plain\|dark\|light>` | Help/output theme                                                |
+| `--thread-pool-size <n>`       | Override import service worker count                             |
+| `--max-source-bytes <n>`       | Override the most bytes a job reads from one source              |
+| `--concurrency <spec>`         | Override pipeline concurrency (`t,b,m,h,g,s` as `workers/queue`) |
 
 Example concurrency override:
 
@@ -73,10 +72,18 @@ Single-job commands (`texture`, `fbx`, `gltf`, `input`, `script`,
 
 Batch (`--manifest`):
 
-1. job `output`
-2. `defaults.<type>.output`
-3. top-level manifest `output`
-4. global `-o`, `--cooked-root`
+1. global `-o`, `--cooked-root`
+2. job `output`
+3. `defaults.<type>.output`
+4. top-level manifest `output`
+
+## Command Line and Manifest
+
+A flag that a manifest key also sets wins over the key: `-o` over every `output`,
+`--root` over `project_root`, `--max-in-flight-jobs`, `--thread-pool-size`,
+`--max-source-bytes` and `--concurrency` over their keys. One flag adds instead
+of replacing: `--cooked-context-root` lies beneath the context roots the manifest
+names, so the manifest's win when both resolve a reference.
 
 ## Source mounts
 
@@ -659,11 +666,17 @@ Validation errors always fail the batch, even when valid jobs continue without
 from the execution results of prepared jobs. A job whose settings or descriptor
 are refused is a `failed` entry of the report's `jobs`, at its manifest position,
 with its typed refusal in `diagnostics`, and an error the batch finds while
-ordering a job is in that job's `diagnostics`. What is about no single job, such
-as a refused manifest or a dependency cycle between jobs, is in the report's
-top-level `diagnostics`. The report is written even when nothing runs, so a
-stopped batch lists only the jobs it reached, and a refused manifest lists none.
-`session.cooked_root` is absent when no job and no `--cooked-root` names one.
+ordering a job is in that job's `diagnostics`. Everything downstream of a refused
+job is `skipped`, with `import.skipped_predecessor_failed` naming the job
+it waited on. What is about no single job, such as a refused manifest or a
+dependency cycle between jobs, is in the report's top-level `diagnostics`. The
+report is written even when nothing runs, so a stopped batch lists only the jobs
+it reached, and a refused manifest lists none. `session.cooked_root` is absent
+when no job and no `--cooked-root` names one.
+
+`--fail-fast` stops the batch at the first refusal, before anything runs, leaving
+the jobs it prepared `not_submitted`. A job that fails while it runs stops it too:
+jobs already running finish, and jobs that have not started are `cancelled`.
 
 Required:
 
@@ -681,6 +694,8 @@ Optional:
 - `--engine-content` (the manifests cook engine content)
 - `--dry-run`
 - `--report <path>`
+- `--captured-inputs <path>`: reads authored inputs through a validated capture
+  map; sources keep their logical identities. `analyze-sources` takes it too.
 - `--cooked-context-root <path>` (repeatable): a loose cooked root or pak file
   that resolves references for every scene, geometry and scripting sidecar job,
   beneath the context roots the manifest names. Pass the engine content pak
@@ -696,6 +711,18 @@ what the cook refuses with the same codes, each located by `json_pointer`; a
 refused job makes the analysis incomplete and the command exit non-zero. A physics or script sidecar references its target
 scene, and its references resolve against the scene's identity; a physics
 sidecar produces the scene's `.opscene`.
+
+### `inspect-source`
+
+Reports a model's static metadata and external dependencies without importing
+it. `inspect-source <source> --output <path>` takes a glTF, GLB or FBX source and
+writes the `oxygen.scene-source-inspection` report.
+
+### `engine-content`
+
+Writes the engine content sources under their `/Engine` paths.
+`engine-content <directory>` receives the descriptors and the materials and
+geometry import manifests, which `batch --engine-content` cooks.
 
 ### `versions`
 
@@ -869,7 +896,7 @@ Job rules:
 - `physics-sidecar` always requires `target_scene_virtual_path`
 - duplicate `id`, missing dependency targets, and dependency cycles are rejected
 - if a dependency job fails, all transitive dependents are skipped with
-  `input.import.skipped_predecessor_failed`
+  `import.skipped_predecessor_failed`
 
 Batch example with one output shared at manifest level:
 
@@ -933,8 +960,19 @@ Notes:
 
 ## Reports and Exit Codes
 
-Per-command `--report` and batch `--report` write JSON report output, version
-`5`. Each job lists:
+Per-command `--report` and batch `--report` write a JSON report whose
+`schema_version` is `6`. Each job has a `status`:
+
+| Status          | Meaning                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------- |
+| `succeeded`     | It ran and published.                                                                                         |
+| `failed`        | It ran and failed, or it was refused; `diagnostics` says why.                                                 |
+| `skipped`       | A predecessor failed or was refused (`import.skipped_predecessor_failed`).                                    |
+| `cancelled`     | A stop request or `--fail-fast` ended it, or kept it from starting (`import.canceled`). It published nothing. |
+| `not_submitted` | A refusal stopped the batch before anything ran.                                                              |
+
+`summary` counts them: `jobs_succeeded`, `jobs_failed`, `jobs_cancelled`, and
+`jobs_skipped` for both `skipped` and `not_submitted`. Each job lists:
 
 - `importer`: the importer that cooks the job and its revision, as
   `{name, revision}`, the same as `versions` reports. A job no importer handles
@@ -966,11 +1004,42 @@ service does not accept the job.
 File paths in reports are absolute and lexically normal, with native separators;
 identities are virtual paths.
 
-Current process exit codes:
+### Exit codes
 
-- `0` success
-- `1` invalid input/argument/configuration
-- `2` runtime/import failure
+| Code | Meaning                                                                                   |
+| ---- | ----------------------------------------------------------------------------------------- |
+| `0`  | Every job succeeded.                                                                      |
+| `1`  | A refusal: the command line, an input or a job's settings. Valid jobs may still have run. |
+| `2`  | A job failed while it ran, or the report could not be written.                            |
+| `3`  | A stop request ended the run. Its report lists what finished.                             |
+| `4`  | An internal error: a defect of the tool.                                                  |
+| 128+ | The third stop signal ended the process: 130 SIGINT, 143 SIGTERM, 149 SIGBREAK.           |
+
+When several apply, a report that could not be written comes first, then a stop
+request, a refusal and a failed job.
+
+### Stopping a run
+
+Ctrl+C, Ctrl+Break and SIGTERM ask a command that cooks to stop, even if they
+arrive before its service exists. Running jobs are cancelled, a published root
+keeps its last commit, the report is written and the exit code is `3`. A third
+signal ends the process at once. Commands that do not cook (`analyze-sources`,
+`inspect-source`, `engine-content`, `reclaim`, `remove-cooked`) run to completion
+unless a third signal ends them.
+
+A hard kill, such as the editor's cancel or closing the console, writes no report
+and leaves each root at its last commit.
+
+### Output streams
+
+| Mode          | Standard output                                  | Standard error   |
+| ------------- | ------------------------------------------------ | ---------------- |
+| `--no-tui`    | Progress and results, one plain line per message | Warnings, errors |
+| `--no-tui -q` | Nothing                                          | Warnings, errors |
+| Screen UI     | The screen                                       | Warnings, errors |
+
+`--no-tui` writes no cursor control and no animation; color appears only on a
+terminal and never with `--no-color`.
 
 ## Tips
 

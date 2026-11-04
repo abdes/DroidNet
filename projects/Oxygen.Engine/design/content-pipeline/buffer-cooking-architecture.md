@@ -696,7 +696,7 @@ messages written to `error_stream`. Error codes follow the pattern
 | Emit         | `buffer.container.dedup_virtual_path_conflict` | Two different virtual paths hash-deduplicated to same `ResourceIndexT` |
 | Internal     | `buffer.container.internal_lookup_failed`      | Submission map lookup failed during collection                         |
 | Cancellation | `buffer.cancelled`                             | `stop_token` signalled during job execution                            |
-| Predecessor  | `buffer.import.skipped_predecessor_failed`     | A `depends_on` job failed                                              |
+| Predecessor  | `import.skipped_predecessor_failed`            | A `depends_on` job failed                                              |
 
 ---
 

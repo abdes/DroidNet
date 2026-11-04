@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!-- Merged by the linker into the manifest of every Oxygen executable on
      Windows (see CompilerPolicy.cmake): with LongPathsEnabled set, paths longer
-     than MAX_PATH open like any other. -->
+     than MAX_PATH open like any other, and narrow strings are UTF-8, so a
+     path's `string()` holds any file name and is valid in JSON. -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings xmlns:ws2="http://schemas.microsoft.com/SMI/2016/WindowsSettings">
       <ws2:longPathAware>true</ws2:longPathAware>
+      <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>
     </windowsSettings>
   </application>
 </assembly>

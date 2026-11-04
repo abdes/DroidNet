@@ -288,7 +288,7 @@ Tasks:
      `manifest.dependency_missing`)
    - detect cycles (diagnostic: `manifest.dependency_cycle`)
    - skip dependents deterministically on predecessor failure (diagnostic:
-     `input.import.skipped_predecessor_failed`)
+     `import.skipped_predecessor_failed`)
    - (wrong-type detection removed: both primary-format and standalone-action
      files produce action assets, so kind-level checks are invalid; unresolved
      refs caught at pipeline parse time)
@@ -487,7 +487,7 @@ Required concrete diagnostics:
 11. `input.import.index_registration_failed`
 12. `input.import.unknown_document_structure` (source JSON matches neither
     format)
-13. `input.import.skipped_predecessor_failed`
+13. `import.skipped_predecessor_failed`
 14. `input.manifest.job_id_missing`
 15. `manifest.job_id_duplicate`
 16. `manifest.dependency_missing`

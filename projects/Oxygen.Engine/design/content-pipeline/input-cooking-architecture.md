@@ -413,7 +413,7 @@ Batch execution is dependency-aware:
 3. Jobs are dispatched only when all predecessors have succeeded.
 4. If a predecessor job fails, all transitive dependents are skipped with
    deterministic diagnostics (failure propagation). Skipped jobs report
-   `input.import.skipped_predecessor_failed`.
+   `import.skipped_predecessor_failed`.
 5. The execution node for each input job remains
    `InputImportJob -> InputImportPipeline`.
 
@@ -1091,7 +1091,7 @@ Required diagnostics:
 10. `input.import.index_load_failed` (a mounted cooked index could not be read
     while resolving an action path)
 11. `input.import.index_registration_failed`
-12. `input.import.skipped_predecessor_failed`
+12. `import.skipped_predecessor_failed`
 13. `input.manifest.job_id_missing`
 14. `manifest.job_id_duplicate`
 15. `manifest.dependency_missing`

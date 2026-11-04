@@ -16,9 +16,9 @@ namespace oxygen::content::import::tool {
 
 //! The writer the run's global options select.
 /*!
- With `--no-tui`, a console writer that animates progress on an interactive
- terminal; otherwise a muted writer that leaves the screen to the TUI and
- prints only errors and warnings. Both write to `streams`.
+ With `--no-tui`, a console writer that prints one plain line per message, in
+ color only on a terminal; otherwise a muted writer that leaves the screen to
+ the TUI and prints only errors and warnings. Both write to `streams`.
 */
 [[nodiscard]] auto CreateMessageWriter(const GlobalOptions& global_options,
   toolkit::ToolStreams streams) -> std::unique_ptr<IMessageWriter>;

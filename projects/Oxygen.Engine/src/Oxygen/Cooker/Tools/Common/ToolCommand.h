@@ -29,14 +29,18 @@ namespace oxygen::content::toolkit {
 //! The process exit codes shared by the content tools.
 /*!
  A tool with a richer contract, such as PakTool, reports its own codes through
- `ToolError::WithCode`; these remain the common 0, 1 and 2.
+ `ToolError::WithCode`; these remain the common codes.
 */
 enum class ExitCode : int {
   kOk = 0,
-  //! The command line or an input it names is invalid.
+  //! The command line or an input it names is refused.
   kUsage = 1,
   //! The command ran and failed.
   kFailed = 2,
+  //! A stop request ended the run before it finished.
+  kCancelled = 3,
+  //! A defect of the tool, not of what it was given.
+  kInternal = 4,
 };
 
 //! Why a command failed, and the process exit code to report for it.
@@ -165,8 +169,10 @@ private:
 //! One sub-command of a content tool.
 /*!
  A command owns its parsed option values as members and registers them in
- `BuildCommand`. `Run` reports failure by returning a `ToolError`; an escaping
- exception is reported as `ExitCode::kFailed`.
+ `BuildCommand`. `Run` reports failure by returning a `ToolError`. An escaping
+ `std::invalid_argument`, such as an input its schema refuses, is
+ `ExitCode::kUsage`; an escaping `std::runtime_error`, such as corrupt cooked
+ content, is `ExitCode::kFailed`; any other is `ExitCode::kInternal`.
 */
 class ToolCommand {
 public:

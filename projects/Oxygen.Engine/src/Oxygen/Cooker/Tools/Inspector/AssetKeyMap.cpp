@@ -68,11 +68,16 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
   const auto bytes = serio::ReadPublishedFile(
     std::filesystem::path(options.input), import::kMaxImportMetadataBytes);
   if (!bytes) {
-    throw std::runtime_error("Could not read asset key request " + options.input
-      + ": " + bytes.error().message());
+    throw std::invalid_argument("Could not read asset key request "
+      + options.input + ": " + bytes.error().message());
   }
   const auto text = bytes->Unsigned();
-  const auto request = nlohmann::json::parse(text.begin(), text.end());
+  const auto request
+    = nlohmann::json::parse(text.begin(), text.end(), nullptr, false);
+  if (request.is_discarded()) {
+    throw std::invalid_argument(
+      "Asset key request " + options.input + " is not JSON");
+  }
   nlohmann::json_schema::json_validator validator;
   validator.set_root_schema(nlohmann::json::parse(kAssetKeyRequestSchema));
   import::internal::ValidateJsonSchema(

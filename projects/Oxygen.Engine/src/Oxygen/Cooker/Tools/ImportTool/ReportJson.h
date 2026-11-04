@@ -27,7 +27,8 @@ namespace oxygen::content::import::tool {
 
 using nlohmann::ordered_json;
 
-inline constexpr std::string_view kReportVersion = "5";
+//! The `schema_version` an import report carries.
+inline constexpr int kReportSchemaVersion = 6;
 
 class IMessageWriter;
 
@@ -39,6 +40,11 @@ namespace import_tool_codes {
   inline constexpr std::string_view kSubmitFailed = "import.submit_failed";
   //! A system call failed before the job could be submitted.
   inline constexpr std::string_view kCommandFailed = "import.command_failed";
+  //! A predecessor of the job failed or was refused, so the job did not run.
+  inline constexpr std::string_view kSkippedPredecessorFailed
+    = "import.skipped_predecessor_failed";
+  //! A stop request, or `--fail-fast`, ended the job or kept it from running.
+  inline constexpr std::string_view kCanceled = "import.canceled";
 } // namespace import_tool_codes
 
 //! Whether a report may be written to `report_path`; prints the typed refusal
@@ -118,6 +124,18 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
 
 [[nodiscard]] auto IsCanceledReport(const ImportReport& report) -> bool;
 
+//! The result of a job that did not run because `predecessor` failed or was
+//! refused.
+[[nodiscard]] auto MakeSkippedReport(
+  const ImportRequest& request, std::string_view predecessor) -> ImportReport;
+
+//! The result of a job that the run ended before it ran.
+[[nodiscard]] auto MakeCancelledReport(const ImportRequest& request)
+  -> ImportReport;
+
+//! The job's status in a report: `succeeded`, `failed`, `skipped` or
+//! `cancelled`. A job the run never reached has no result and is
+//! `not_submitted`.
 [[nodiscard]] auto JobStatusFromReport(const ImportReport& report)
   -> std::string_view;
 

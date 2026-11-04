@@ -111,7 +111,7 @@ public sealed class NativeImportReportReaderTests
         var (execution, report) = CreateReport();
         switch (invalid)
         {
-            case "version": report["report_version"] = "1"; break;
+            case "version": report["schema_version"] = 1; break;
             case "index": report["jobs"]![0]!["index"] = 2; break;
             case "path": report["jobs"]![0]!["outputs"]![0]!["path"] = "../outside.ogeo"; break;
             case "products": _ = report["jobs"]![0]!.AsObject().Remove("products"); break;
@@ -169,7 +169,7 @@ public sealed class NativeImportReportReaderTests
             MountsFile = ContentImportMountsFile.Empty,
         };
         var report = JsonNode.Parse("""
-            {"report_version":"5","session":{"cooked_root":""},"jobs":[
+            {"schema_version":6,"session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
                "products":[
                  {"kind":"asset","virtual_path":"/Content/Models/Model/Geometry/Triangle.ogeo","descriptor_relative_path":"Models/Model/Geometry/Triangle.ogeo","asset_key":"00000000-0000-0000-0000-000000000001","asset_type":2},
@@ -202,7 +202,7 @@ public sealed class NativeImportReportReaderTests
 
         // The engine reports a model job as the gltf or fbx job its record runs.
         var report = JsonNode.Parse("""
-            {"report_version":"5","session":{"cooked_root":""},"jobs":[
+            {"schema_version":6,"session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","status":"succeeded","outputs":[],"products":[],"diagnostics":[]
             """ + update + "}]}")!;
         report["session"]!["cooked_root"] = output;

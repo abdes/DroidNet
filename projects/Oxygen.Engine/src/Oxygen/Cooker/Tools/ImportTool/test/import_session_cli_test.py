@@ -103,6 +103,54 @@ class ImportSessionCliTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--physics-backend", result.stdout + result.stderr)
 
+    def test_a_non_ascii_project_reports_its_paths(self):
+        project = self.root / "Projét 日本語"
+        write_gltf(project, "Hull.gltf")
+        session = project / "ships.import.json"
+        session.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "mounts": [{"name": "Content", "path": "."}],
+                    "jobs": [
+                        {
+                            "type": "gltf",
+                            "source": "Hull.gltf",
+                            "virtual_path": "/Content/Hull.gltf",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        cooked_root = self.root / "Cooked 日本語"
+        report_path = self.root / "report 日本語.json"
+
+        result = subprocess.run(
+            [
+                str(IMPORT_TOOL),
+                "--no-tui",
+                "batch",
+                "--manifest",
+                str(session),
+                "--cooked-root",
+                str(cooked_root),
+                "--report",
+                str(report_path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, f"{result.stdout}\n{result.stderr}")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        self.assertEqual(Path(report["session"]["cooked_root"]), cooked_root.resolve())
+        self.assertEqual(report["jobs"][0]["status"], "succeeded", json.dumps(report))
+
     def test_editor_session_runs_as_a_batch(self):
         session_dir = self.root / "Project"
         write_gltf(session_dir / "Originals" / "Ship", "Hull.gltf")

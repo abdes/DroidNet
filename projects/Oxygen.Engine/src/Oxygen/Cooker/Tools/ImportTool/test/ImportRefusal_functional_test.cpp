@@ -182,6 +182,38 @@ NOLINT_TEST_F(ImportRefusalTest, AJobSpellsARelativeCommandLineAbsolute)
   }
 }
 
+//! A stop request before the job starts is a cancelled job, not a failed one.
+NOLINT_TEST_F(ImportRefusalTest, AStoppedJobReportsItselfCancelled)
+{
+  const auto report_path = TempPath("report.json");
+  const auto report_arg = report_path.string();
+  auto service = oxygen::content::import::AsyncImportService(
+    oxygen::content::import::AsyncImportService::Config {
+      .thread_pool_size = 1U,
+      .max_in_flight_jobs = 1U,
+    });
+  service.RequestShutdown();
+  auto request = oxygen::content::import::ImportRequest {};
+  request.source_path = TempPath("source.png");
+  request.cooked_root = TempPath("cooked");
+
+  const auto result
+    = tool::RunImportJob(request, Writer(), report_arg, "tool texture", false,
+      oxygen::make_observer<oxygen::content::import::AsyncImportService>(
+        &service));
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(
+    result.error(), std::make_error_code(std::errc::operation_canceled));
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("schema_version"), tool::kReportSchemaVersion);
+  EXPECT_EQ(report.at("jobs").at(0).at("status"), "cancelled");
+  EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 1);
+  EXPECT_EQ(report.at("summary").at("jobs_failed"), 0);
+}
+
 //! A refusal never destroys the file it refuses.
 NOLINT_TEST_F(ImportRefusalTest, ARefusalKeepsAnInputItsReportWouldReplace)
 {

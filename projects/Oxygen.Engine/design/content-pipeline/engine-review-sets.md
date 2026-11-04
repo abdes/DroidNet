@@ -768,8 +768,9 @@ installed schemas.
   test, and every schema has a version the producer writes.
 - Exit codes: success, refusal, cancellation and internal error are
   distinct and documented; a refusal always has diagnostics in the report.
-- `StopSignal`: Ctrl+C or a parent's termination leaves no partial
-  publication and still writes the report.
+- `StopSignal`: Ctrl+C leaves no partial publication and still writes the
+  report; a hard kill, as the editor's cancel is, writes no report and leaves the
+  root at its last commit.
 - Batch mode with `--no-tui` writes nothing interactive; stdout and stderr
   carry what the README says.
 - Paths in reports are spelled consistently (absolute file paths, identities

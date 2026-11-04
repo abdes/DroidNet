@@ -35,6 +35,7 @@ namespace {
 
 using oxygen::observer_ptr;
 using oxygen::content::toolkit::ExitCode;
+using oxygen::content::toolkit::ExitCodeOf;
 using oxygen::content::toolkit::RunTool;
 using oxygen::content::toolkit::ToolCommand;
 using oxygen::content::toolkit::ToolContext;
@@ -166,8 +167,8 @@ NOLINT_TEST_F(ToolAppTest, CommandErrorIsReportedWithItsCode)
   EXPECT_EQ(Stderr(), "ERROR: bad input\n");
 }
 
-//! An exception escaping a command is a failure, not a crash.
-NOLINT_TEST_F(ToolAppTest, EscapingExceptionIsAFailure)
+//! A runtime error escaping a command is a failure, not a crash.
+NOLINT_TEST_F(ToolAppTest, EscapingRuntimeErrorIsAFailure)
 {
   ScriptedCommand command("scan", ScriptedCommand::Outcome::kThrow);
 
@@ -175,6 +176,31 @@ NOLINT_TEST_F(ToolAppTest, EscapingExceptionIsAFailure)
 
   EXPECT_EQ(code, static_cast<int>(ExitCode::kFailed));
   EXPECT_EQ(Stderr(), "ERROR: boom\n");
+}
+
+//! An invalid argument names what the tool refused.
+NOLINT_TEST(ExitCodeOfTest, EscapingInvalidArgumentIsARefusal)
+{
+  auto err = std::ostringstream {};
+
+  const auto code = ExitCodeOf(
+    err, [] -> ToolResult { throw std::invalid_argument("refused"); });
+
+  EXPECT_EQ(code, static_cast<int>(ExitCode::kUsage));
+  EXPECT_EQ(err.str(), "ERROR: refused\n");
+}
+
+//! Any other exception is the tool's defect, not a failure of what it was
+//! given.
+NOLINT_TEST(ExitCodeOfTest, OtherEscapingExceptionIsInternal)
+{
+  auto err = std::ostringstream {};
+
+  const auto code
+    = ExitCodeOf(err, [] -> ToolResult { throw std::logic_error("defect"); });
+
+  EXPECT_EQ(code, static_cast<int>(ExitCode::kInternal));
+  EXPECT_EQ(err.str(), "ERROR: defect\n");
 }
 
 //! The built-in `versions` command reports the tool identity without running

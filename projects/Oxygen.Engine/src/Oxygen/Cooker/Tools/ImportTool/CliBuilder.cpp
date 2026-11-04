@@ -35,15 +35,9 @@ namespace {
         .DefaultValue(false)
         .StoreTo(&options.quiet)
         .Build());
-    group->Add(Option::WithKey("diagnostics-file")
-        .About("Write structured diagnostics to file")
-        .Long("diagnostics-file")
-        .WithValue<std::string>()
-        .StoreTo(&options.diagnostics_file)
-        .Build());
 
     group->Add(Option::WithKey("cooked-root")
-        .About("Default output directory for all jobs")
+        .About("Output directory of all jobs, replacing the manifest's")
         .Short("o")
         .Long("cooked-root")
         .WithValue<std::string>()
@@ -51,7 +45,7 @@ namespace {
         .Build());
 
     group->Add(Option::WithKey("fail-fast")
-        .About("Stop on first job failure")
+        .About("Start no job after the first failure; running jobs finish")
         .Long("fail-fast")
         .WithValue<bool>()
         .DefaultValue(false)
@@ -67,7 +61,7 @@ namespace {
         .Build());
 
     group->Add(Option::WithKey("no-tui")
-        .About("Disable curses UI")
+        .About("Disable the screen UI; print plain lines")
         .Long("no-tui")
         .WithValue<bool>()
         .DefaultValue(false)

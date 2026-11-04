@@ -12,6 +12,7 @@
 #include <memory>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -139,12 +140,18 @@ auto ExitCodeOf(std::ostream& err, const std::function<ToolResult()>& body)
       return result.error().code;
     }
     return static_cast<int>(ExitCode::kOk);
+  } catch (const std::invalid_argument& ex) {
+    Report(err, ex.what());
+    return static_cast<int>(ExitCode::kUsage);
+  } catch (const std::runtime_error& ex) {
+    Report(err, ex.what());
+    return static_cast<int>(ExitCode::kFailed);
   } catch (const std::exception& ex) {
     Report(err, ex.what());
   } catch (...) {
     Report(err, "unknown exception");
   }
-  return static_cast<int>(ExitCode::kFailed);
+  return static_cast<int>(ExitCode::kInternal);
 }
 
 namespace {
@@ -199,9 +206,9 @@ auto ToolApp::Run(
     }
     return static_cast<int>(ExitCode::kUsage);
   } catch (const std::exception& ex) {
-    // A command reports its own failures, so this one came from parsing.
+    // A command reports its own failures, and the parser its refusals.
     Report(*streams.err, ex.what());
-    return static_cast<int>(ExitCode::kFailed);
+    return static_cast<int>(ExitCode::kInternal);
   }
 }
 

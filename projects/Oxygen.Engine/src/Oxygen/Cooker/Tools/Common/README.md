@@ -31,7 +31,7 @@ calls `RunToolMain`, which runs it on the process streams inside a
 | Commands       | Adds `help`, `version` and `versions` to the tool's commands, and selects the one the command line names.                         |
 | `versions`     | Prints the cooked format and asset versions; with `ToolInfo::cooks_content`, the importer revisions too. `--json` for one object. |
 | Output         | Everything goes to the streams given to `ToolApp::Run`, including the parser's help and errors.                                   |
-| Failures       | Each is reported once, as `ERROR: <message>`, and yields its exit code. An escaping exception is a failure.                       |
+| Failures       | Each is reported once, as `ERROR: <message>`, and yields its exit code.                                                           |
 | Logging        | `ToolLogging` initializes loguru with the log silenced. A tool raises it from its own options in its lifecycle.                   |
 | Shared setup   | `ToolInfo::lifecycle` brackets the selected command, for services all commands use.                                               |
 | Global options | `ToolInfo::global_options` are accepted before the command name, and stored like command options.                                 |
@@ -39,11 +39,13 @@ calls `RunToolMain`, which runs it on the process streams inside a
 
 ## Exit codes
 
-| Code | Meaning                                                  |
-| ---- | -------------------------------------------------------- |
-| 0    | Success                                                  |
-| 1    | Invalid command line, or an input the command line names |
-| 2    | The command ran and failed, or threw                     |
+| Code | Meaning                                                                 |
+| ---- | ----------------------------------------------------------------------- |
+| 0    | Success                                                                 |
+| 1    | A refused command line or input, or an escaping `std::invalid_argument` |
+| 2    | The command ran and failed, or an escaping `std::runtime_error`         |
+| 3    | A stop request ended the run before it finished                         |
+| 4    | A defect of the tool: any other escaping exception                      |
 
 A tool with a richer contract returns its own codes with
 `ToolError::WithCode`. PakTool does: 3 for a failed build and 4 for a runtime
