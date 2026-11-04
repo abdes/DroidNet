@@ -387,17 +387,15 @@ namespace {
 
   auto BuildUtilization(const BatchViewModel& state) -> Element
   {
-    const std::array<std::string_view, 4> left_order {
+    const std::array<std::string_view, 3> left_order {
       "Material",
       "Geometry",
-      "Audio",
       "Scene",
     };
-    const std::array<std::string_view, 4> right_order {
+    const std::array<std::string_view, 3> right_order {
       "Buffer",
       "Mesh",
       "Texture",
-      "",
     };
 
     std::unordered_map<std::string_view, WorkerUtilizationView> table;
@@ -405,10 +403,9 @@ namespace {
       table[entry.kind] = entry;
     }
 
-    const std::array<std::string_view, 7> label_names {
+    const std::array<std::string_view, 6> label_names {
       "Material",
       "Geometry",
-      "Audio",
       "Scene",
       "Buffer",
       "Mesh",

@@ -137,7 +137,9 @@ protected:
   std::shared_ptr<const SurfaceProvenance> source_provenance_
     = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
 
-  [[nodiscard]] auto RunImport(ImportRequest request) -> ImportRunResult
+  [[nodiscard]] auto RunImport(ImportRequest request,
+    const AsyncImportService::Config& config = MakeMaxConcurrencyConfig())
+    -> ImportRunResult
   {
     if (!request.surface_provenance) {
       request.surface_provenance = source_provenance_;
@@ -146,7 +148,7 @@ protected:
     if (!request.model_import) {
       request.model_import = ModelImportInputs {};
     }
-    AsyncImportService service(MakeMaxConcurrencyConfig());
+    AsyncImportService service(config);
     ImportRunResult result {};
 
     const auto import_start = steady_clock::now();

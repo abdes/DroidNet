@@ -7,10 +7,12 @@
 #include <algorithm>
 #include <chrono>
 #include <exception>
+#include <string>
 #include <thread>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -42,10 +44,11 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
     auto report = ImportReport {};
     report.cooked_root = Request().ResolveCookedRoot();
     report.success = false;
+    report.cancelled = true;
 
     report.diagnostics.push_back({
       .severity = ImportSeverity::kInfo,
-      .code = "import.canceled",
+      .code = std::string(import_codes::kCanceled),
       .message = "Import canceled",
       .source_path = Request().source_path.string(),
       .object_path = {},

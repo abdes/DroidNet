@@ -469,17 +469,17 @@ auto ImportSourceSnapshot::VerifyCapturedFiles() -> co::Co<>
     }
     const auto* input = CaptureFor(path);
     if (input == nullptr || !input->file.has_value()) {
-      throw std::runtime_error(
+      throw ImportSourceChanged(
         "Consumed source has no captured bytes: " + path.string());
     }
     const auto& file = *input->file;
     const auto info = co_await reader_->GetFileInfo(file.path);
     if (!info) {
-      throw std::runtime_error("Cannot verify captured source metadata '"
+      throw ImportSourceChanged("Cannot verify captured source metadata '"
         + file.path.string() + "': " + info.error().message());
     }
     if (info.value().is_directory || info.value().size != file.size) {
-      throw std::runtime_error(
+      throw ImportSourceChanged(
         "Captured source size or type changed: " + path.string());
     }
     auto whole_read = false;
@@ -506,18 +506,18 @@ auto ImportSourceSnapshot::VerifyCapturedFiles() -> co::Co<>
           .max_bytes = count,
         });
       if (!bytes) {
-        throw std::runtime_error("Cannot verify captured source '"
+        throw ImportSourceChanged("Cannot verify captured source '"
           + file.path.string() + "': " + bytes.error().message());
       }
       if (bytes.value().Size().get() != count) {
-        throw std::runtime_error(
+        throw ImportSourceChanged(
           "Captured source returned a short read: " + path.string());
       }
       hash.Update(bytes.value().Bytes());
       offset += count;
     }
     if (hash.Finalize() != file.digest) {
-      throw std::runtime_error(
+      throw ImportSourceChanged(
         "Captured source digest mismatch: " + path.string());
     }
   }
@@ -531,7 +531,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
     sealed_ = true;
     if (verifying_ || active_reads_ != 0U || inconsistent_) {
       inconsistent_ = true;
-      throw std::runtime_error(
+      throw ImportSourceChanged(
         "Cannot publish incomplete or inconsistent source observations");
     }
     verifying_ = true;
@@ -545,21 +545,21 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
     if (observation.metadata) {
       const auto actual = co_await SourceInfo(path);
       if (!actual) {
-        throw std::runtime_error("Cannot verify source metadata '"
+        throw ImportSourceChanged("Cannot verify source metadata '"
           + path.string() + "': " + actual.error().message());
       }
       if (actual.value() != *observation.metadata) {
-        throw std::runtime_error(
+        throw ImportSourceChanged(
           "Source metadata changed before publication: " + path.string());
       }
     } else if (!observation.content_read) {
       const auto actual = co_await SourceExists(path);
       if (!actual) {
-        throw std::runtime_error("Cannot verify source presence '"
+        throw ImportSourceChanged("Cannot verify source presence '"
           + path.string() + "': " + actual.error().message());
       }
       if (actual.value() != observation.exists) {
-        throw std::runtime_error(
+        throw ImportSourceChanged(
           "Source presence changed before publication: " + path.string());
       }
     }
@@ -572,7 +572,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
         .max_bytes = maximum,
       });
     if (!bytes) {
-      throw std::runtime_error("Source became unavailable before publication '"
+      throw ImportSourceChanged("Source became unavailable before publication '"
         + path.string() + "': " + bytes.error().message());
     }
     const auto size = bytes.value().Size().get();
@@ -582,7 +582,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
         return base::ComputeSha256(data.Bytes());
       });
     if (actual != expected) {
-      throw std::runtime_error(
+      throw ImportSourceChanged(
         "Source changed before publication: " + path.string());
     }
     verified_sizes_.insert_or_assign(key, size);
@@ -590,7 +590,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
   co_await VerifyCapturedFiles();
   const std::scoped_lock lock(mutex_);
   if (inconsistent_) {
-    throw std::runtime_error(
+    throw ImportSourceChanged(
       "Source verification was invalidated by an overlapping operation");
   }
   verified_ = true;

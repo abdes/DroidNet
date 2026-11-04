@@ -25,6 +25,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -390,7 +391,7 @@ auto BuildWorkItemsJson(const JobProgressTrace& trace,
 
 auto IsCanceledReport(const ImportReport& report) -> bool
 {
-  return HasDiagnostic(report, import_tool_codes::kCanceled);
+  return report.cancelled;
 }
 
 auto MakeSkippedReport(const ImportRequest& request,
@@ -407,12 +408,14 @@ auto MakeSkippedReport(const ImportRequest& request,
 
 auto MakeCancelledReport(const ImportRequest& request) -> ImportReport
 {
-  return MakeNotRunReport(ImportDiagnostic {
+  auto report = MakeNotRunReport(ImportDiagnostic {
     .severity = ImportSeverity::kInfo,
-    .code = std::string { import_tool_codes::kCanceled },
+    .code = std::string { import_codes::kCanceled },
     .message = "Cancelled before the job ran",
     .source_path = request.source_path.string(),
   });
+  report.cancelled = true;
+  return report;
 }
 
 auto JobStatusFromReport(const ImportReport& report) -> std::string_view

@@ -22,6 +22,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -31,8 +33,19 @@
 #include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
-using namespace oxygen::content::import;
-namespace co = oxygen::co;
+using oxygen::content::import::AsyncImportService;
+using oxygen::content::import::ImportCompletionCallback;
+using oxygen::content::import::ImportConcurrency;
+using oxygen::content::import::ImportJobFactory;
+using oxygen::content::import::ImportJobId;
+using oxygen::content::import::ImportPhase;
+using oxygen::content::import::ImportReport;
+using oxygen::content::import::ImportRequest;
+using oxygen::content::import::kInvalidJobId;
+using oxygen::content::import::ProgressEvent;
+using oxygen::content::import::ProgressEventCallback;
+namespace detail = oxygen::content::import::detail;
+namespace test = oxygen::content::import::test;
 
 namespace {
 
@@ -51,10 +64,10 @@ using oxygen::cooker::test::HasDiagnosticCode;
 [[nodiscard]] auto SubmitTestJob(AsyncImportService& service,
   ImportRequest request, const ImportCompletionCallback& on_complete,
   const ProgressEventCallback& on_progress = nullptr,
-  test::TestImportJob::Config config = {}) -> ImportJobId
+  const test::TestImportJob::Config& config = {}) -> ImportJobId
 {
-  auto result = service.SubmitImport(std::move(request), on_complete,
-    on_progress, MakeTestJobFactory(std::move(config)));
+  auto result = service.SubmitImport(
+    std::move(request), on_complete, on_progress, MakeTestJobFactory(config));
   EXPECT_TRUE(result);
   return result.value_or(kInvalidJobId);
 }
@@ -112,6 +125,79 @@ NOLINT_TEST_F(AsyncImportServiceTest, JobCountsAfterConstructionAreZero)
 }
 
 //=== Job Submission Tests ===------------------------------------------------//
+
+//! A pipeline that can never take work is refused with its code, instead of
+//! hanging the import thread.
+NOLINT_TEST_F(AsyncImportServiceTest, ZeroQueueCapacityIsRefused)
+{
+  AsyncImportService service(config_);
+  std::promise<ImportReport> finished;
+  auto report_future = finished.get_future();
+  auto concurrency = ImportConcurrency {};
+  concurrency.texture.queue_capacity = 0U;
+
+  const auto id = service.SubmitImport(
+    ImportRequest { .source_path = "refused.asset" },
+    [&](ImportJobId, const ImportReport& report) -> void {
+      finished.set_value(report);
+    },
+    nullptr, MakeTestJobFactory({}), concurrency);
+
+  EXPECT_TRUE(id);
+  const auto ready = report_future.wait_for(5s) == std::future_status::ready;
+  EXPECT_TRUE(ready);
+  if (ready) {
+    const auto report = report_future.get();
+    EXPECT_FALSE(report.success);
+    EXPECT_FALSE(report.cancelled);
+    EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+      oxygen::content::import::import_codes::kConcurrencyInvalid));
+  }
+  StopService(service);
+}
+
+//! Submitters racing Stop get a clean refusal or one completion, never a
+//! dangling service object or a lost callback.
+NOLINT_TEST_F(AsyncImportServiceTest, SubmissionsRacingStopAllComplete)
+{
+  constexpr auto kSubmitters = 4U;
+  AsyncImportService service(config_);
+  std::atomic<size_t> accepted { 0 };
+  std::atomic<size_t> completed { 0 };
+  std::atomic<bool> first_accepted { false };
+  {
+    std::vector<std::jthread> submitters;
+    submitters.reserve(kSubmitters);
+    for (auto submitter = 0U; submitter < kSubmitters; ++submitter) {
+      submitters.emplace_back([&] -> void {
+        while (true) {
+          const auto id = service.SubmitImport(
+            ImportRequest { .source_path = "racing.asset" },
+            [&](ImportJobId, const ImportReport&) -> void { ++completed; },
+            nullptr,
+            MakeTestJobFactory({
+              .total_delay = 1ms,
+              .step_delay = 1ms,
+              .report_progress = false,
+            }));
+          if (id) {
+            ++accepted;
+            first_accepted = true;
+          } else if (!service.IsAcceptingJobs()) {
+            return;
+          }
+        }
+      });
+    }
+    while (!first_accepted) {
+      std::this_thread::yield();
+    }
+    StopService(service);
+  }
+
+  EXPECT_GT(accepted.load(), 0U);
+  EXPECT_EQ(completed.load(), accepted.load());
+}
 
 //! Admission includes jobs posted by concurrent callers before the import
 //! thread runs them.
@@ -197,7 +283,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, RejectedFactoriesReleaseAdmission)
       ImportRequest { .source_path = "rejected.asset" },
       [&](ImportJobId, const ImportReport&) -> void { ++rejected_callbacks; },
       nullptr,
-      [](detail::ImportJobParams) -> std::shared_ptr<detail::ImportJob> {
+      [](const detail::ImportJobParams&) -> std::shared_ptr<detail::ImportJob> {
         return nullptr;
       });
     EXPECT_FALSE(id);
@@ -577,8 +663,8 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelAllMultipleJobsCancelsAll)
         DLOG_F(INFO, "CancelAll completion: success={} diagnostics={}",
           report.success, report.diagnostics.size());
         state->jobs_completed.fetch_add(1, std::memory_order_relaxed);
-        const bool canceled
-          = HasDiagnosticCode(report.diagnostics, "import.canceled");
+        const bool canceled = HasDiagnosticCode(
+          report.diagnostics, oxygen::content::import::import_codes::kCanceled);
         if (canceled) {
           state->canceled_reports.fetch_add(1, std::memory_order_relaxed);
         }
@@ -716,7 +802,7 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
   std::vector<std::thread> threads;
   threads.reserve(kThreadCount);
   for (int t = 0; t < kThreadCount; ++t) {
-    threads.emplace_back([&, t] -> void {
+    threads.emplace_back([&] -> void {
       for (int i = 0; i < kJobsPerThread; ++i) {
         [[maybe_unused]] auto job_id = SubmitTestJob(service,
           ImportRequest { .source_path = "custom.asset" },

@@ -19,7 +19,6 @@ namespace oxygen::content::import {
 enum class PlanItemKind : uint8_t {
   kTextureResource,
   kBufferResource,
-  kAudioResource,
   kMaterialAsset,
   kMeshBuild,
   kGeometryAsset,
@@ -35,8 +34,6 @@ enum class PlanItemKind : uint8_t {
     return "Texture";
   case PlanItemKind::kBufferResource:
     return "Buffer";
-  case PlanItemKind::kAudioResource:
-    return "Audio";
   case PlanItemKind::kMaterialAsset:
     return "Material";
   case PlanItemKind::kMeshBuild:
@@ -50,7 +47,7 @@ enum class PlanItemKind : uint8_t {
   return "Unknown";
 }
 
-inline constexpr size_t kPlanKindCount = 7;
+inline constexpr size_t kPlanKindCount = 6;
 
 //! Progress counters for a resource pipeline.
 /*!
@@ -84,7 +81,7 @@ struct PipelineProgress {
 template <typename T>
 concept ImportPipeline = oxygen::IsTyped<T>
   && std::movable<typename T::WorkItem> && std::movable<typename T::WorkResult>
-  && requires(T& pipeline, typename T::WorkItem item, co::Nursery& nursery) {
+  && requires(T& pipeline, T::WorkItem item, co::Nursery& nursery) {
        typename T::WorkItem;
        typename T::WorkResult;
        { T::kItemKind } -> std::convertible_to<PlanItemKind>;

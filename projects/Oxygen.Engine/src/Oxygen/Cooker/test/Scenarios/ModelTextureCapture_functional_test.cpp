@@ -24,13 +24,20 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -94,6 +101,94 @@ namespace {
         placeholder);
     }
   }
+  class ModelConcurrencyTest : public ModelImportTestBase {
+  protected:
+    //! The content hashes of the textures the model's material binds.
+    struct BoundTextures {
+      data::pak::core::ContentHashDigest base_color {};
+      data::pak::core::ContentHashDigest normal {};
+    };
+
+    auto ImportAt(const std::filesystem::path& source,
+      const std::string_view folder, const ImportPipelineConcurrency pipeline,
+      BoundTextures& bound) -> void
+    {
+      auto config = AsyncImportService::Config {
+        .thread_pool_size = 4U,
+        .max_in_flight_jobs = 1U,
+      };
+      config.concurrency = ImportConcurrency {
+        .texture = pipeline,
+        .buffer = pipeline,
+        .material = pipeline,
+        .mesh_build = pipeline,
+        .geometry = pipeline,
+        .scene = pipeline,
+      };
+      auto request = ImportRequest {};
+      request.source_path = source;
+      request.asset_virtual_path
+        = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+      request.source_mount_path
+        = oxygen::cooker::test::SourceMountPath(request.source_path);
+      request.cooked_root = source.parent_path() / folder;
+      const auto cooked = RunImport(std::move(request), config);
+      ASSERT_TRUE(cooked.report.success);
+      const auto content = LoadInspection(cooked.report.cooked_root);
+      const auto material = FindAssetOfType(content, AssetType::kMaterial);
+      ASSERT_HAS_VALUE(material);
+      const auto descriptor = content.Descriptor(material->key);
+      const auto desc
+        = serio::CopyAt<data::pak::render::MaterialAssetDesc>(descriptor);
+      ASSERT_HAS_VALUE(desc);
+      const auto& textures = content.ResourceTable(cooked::TableKind::kTexture);
+      // A descriptor field names a slot of its resource bindings, and the slot
+      // names the table row.
+      const auto bindings = material->references.Resources();
+      const auto hash_of
+        = [&textures, bindings](const data::ResourceReferenceIndex slot)
+        -> data::pak::core::ContentHashDigest {
+        return textures.Row<TextureResourceDesc>(bindings[slot.get()].index)
+          .content_hash;
+      };
+      bound.base_color = hash_of(desc->base_color_texture);
+      bound.normal = hash_of(desc->normal_texture);
+    }
+  };
+
+  //! Row order follows completion order on purpose, so two cooks may number
+  //! their rows differently. What must not differ is the content: at any
+  //! concurrency, down to one item per queue, each material binds the right
+  //! texture, and every queue at capacity one still drains.
+  NOLINT_TEST_F(ModelConcurrencyTest, AnyConcurrencyBindsTheSameContent)
+  {
+    const auto root = MakeTempDir("model_concurrency");
+    for (const auto* const image :
+      { "static_textured_checker.png", "static_tangent_normal.png" }) {
+      std::filesystem::copy_file(TestModelsDirFromFile() / image, root / image);
+    }
+    auto document = nlohmann::json::parse(
+      std::ifstream(TestModelsDirFromFile() / "static_textured_triangle.gltf"));
+    document.at("images").push_back({ { "uri", "static_tangent_normal.png" } });
+    document.at("textures").push_back({ { "source", 1 } });
+    document.at("materials").at(0)["normalTexture"] = { { "index", 1 } };
+    const auto source = root / "two_textures.gltf";
+    std::ofstream(source) << document.dump();
+
+    auto serial = BoundTextures {};
+    ASSERT_NO_FATAL_FAILURE(ImportAt(source, "serial",
+      ImportPipelineConcurrency { .workers = 1U, .queue_capacity = 1U },
+      serial));
+    auto parallel = BoundTextures {};
+    ASSERT_NO_FATAL_FAILURE(ImportAt(source, "parallel",
+      ImportPipelineConcurrency { .workers = 4U, .queue_capacity = 2U },
+      parallel));
+
+    EXPECT_NE(serial.base_color, serial.normal);
+    EXPECT_EQ(serial.base_color, parallel.base_color);
+    EXPECT_EQ(serial.normal, parallel.normal);
+  }
+
   class ModelCapturedInputTest : public ModelImportTestBase {
   protected:
     static auto WriteCapture(const std::filesystem::path& logical,
@@ -215,7 +310,7 @@ namespace {
     EXPECT_GT(cooked.report.materials_written, 0U);
     EXPECT_TRUE(std::ranges::any_of(
       cooked.report.diagnostics, [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "import.texture.load_failed"
+        return diagnostic.code == import_codes::kTextureLoadFailed
           && diagnostic.severity == ImportSeverity::kWarning;
       }));
   }

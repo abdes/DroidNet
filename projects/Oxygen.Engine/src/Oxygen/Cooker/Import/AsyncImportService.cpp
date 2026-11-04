@@ -15,6 +15,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <shared_mutex>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -29,6 +30,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -45,11 +47,10 @@
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/BufferContainerImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
-#include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.h>
-#include <Oxygen/Cooker/Import/Internal/Jobs/GlbImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/InputImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/ModelImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/PhysicsSidecarImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
@@ -293,8 +294,13 @@ struct AsyncImportService::Impl {
   //! Serialize shutdown operations.
   std::mutex shutdown_mutex_;
 
-  //! Flag indicating the import thread is running and ready.
-  std::atomic<bool> thread_running_ { false };
+  //! Held shared while a caller uses the import thread's objects, and
+  //! exclusively to close them and to destroy them.
+  mutable std::shared_mutex lifetime_mutex_;
+
+  //! Whether callers may reach the import thread's objects. Under
+  //! `lifetime_mutex_`.
+  bool infrastructure_open_ = false;
 
   //! Latch to signal thread startup complete.
   std::latch startup_latch_ { 1 };
@@ -342,10 +348,12 @@ struct AsyncImportService::Impl {
       = std::make_unique<detail::AsyncImporter>(detail::AsyncImporter::Config {
         .channel_capacity = config_.job_admission_capacity,
         .max_in_flight_jobs = config_.max_in_flight_jobs,
-        .table_registry = table_registry_.get(),
       });
 
-    thread_running_.store(true, std::memory_order_release);
+    {
+      const std::unique_lock lifetime(lifetime_mutex_);
+      infrastructure_open_ = true;
+    }
 
     // Signal that initialization is complete
     startup_latch_.count_down();
@@ -369,6 +377,14 @@ struct AsyncImportService::Impl {
       };
     });
 
+    // No caller reaches the importer from here on. What callers posted before
+    // this runs now, so a job that got in still completes.
+    {
+      const std::unique_lock lifetime(lifetime_mutex_);
+      infrastructure_open_ = false;
+    }
+    event_loop_->RunPending();
+
     // We run coroutines again, after the main nursery is closed, to finalize
     // all resource tables. This guarantees that all import jobs have completed
     // and no further writes will be made to the tables.
@@ -381,6 +397,7 @@ struct AsyncImportService::Impl {
     });
 
     // Cleanup on import thread (in reverse order of creation)
+    const std::unique_lock lifetime(lifetime_mutex_);
     if (thread_pool_) {
       thread_pool_.reset();
     }
@@ -400,8 +417,6 @@ struct AsyncImportService::Impl {
       event_loop_.reset();
     }
 
-    thread_running_.store(false, std::memory_order_release);
-
     DLOG_F(INFO, "Import thread exited");
   }
 
@@ -417,6 +432,11 @@ struct AsyncImportService::Impl {
     stop_source_.request_stop();
     DLOG_F(INFO, "Shutdown requested");
 
+    const std::shared_lock lifetime(lifetime_mutex_);
+    if (!infrastructure_open_) {
+      return;
+    }
+
     // Trigger all cancel events to cancel pending jobs on the import thread.
     std::vector<std::shared_ptr<co::Event>> events_to_trigger;
     {
@@ -430,28 +450,20 @@ struct AsyncImportService::Impl {
     }
 
     if (!events_to_trigger.empty()) {
-      if (event_loop_) {
-        // IMPORTANT: Trigger cancellations on the import thread to keep
-        // coroutine resumption on the correct executor.
-        event_loop_->Post(
-          [events = std::move(events_to_trigger)] mutable -> void {
-            for (auto& event : events) {
-              event->Trigger();
-            }
-          });
-      } else {
-        for (auto& event : events_to_trigger) {
-          event->Trigger();
-        }
-      }
+      // IMPORTANT: Trigger cancellations on the import thread to keep
+      // coroutine resumption on the correct executor.
+      event_loop_->Post(
+        [events = std::move(events_to_trigger)] mutable -> void {
+          for (auto& event : events) {
+            event->Trigger();
+          }
+        });
     }
 
     // Post the stop request to the event loop to ensure it runs on the
     // correct thread. The nursery will be canceled and co::Run() will
     // exit naturally, causing the event loop to stop.
-    if (event_loop_ && async_importer_) {
-      event_loop_->Post([this] -> void { async_importer_->Stop(); });
-    }
+    event_loop_->Post([this] -> void { async_importer_->Stop(); });
   }
 
   //! Shutdown the import thread and wait for completion.
@@ -536,36 +548,23 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
   const std::optional<ImportConcurrency>& concurrency_override) const
   -> std::optional<ImportJobId>
 {
+  // The import thread's objects stay alive for as long as this is held.
+  const std::shared_lock lifetime(impl_->lifetime_mutex_);
+
   // Check if we're accepting jobs
   if (impl_->shutdown_requested_.load(std::memory_order_acquire)) {
     LOG_F(WARNING, "Submit rejected: service is shutting down");
     return std::nullopt;
   }
 
-  if (!impl_->thread_running_.load(std::memory_order_acquire)) {
+  if (!impl_->infrastructure_open_) {
     LOG_F(WARNING, "Submit rejected: import thread not running");
-    return std::nullopt;
-  }
-
-  // Check if the async importer is ready
-  if (!impl_->async_importer_ || !impl_->async_importer_->IsAcceptingJobs()) {
-    LOG_F(WARNING, "Submit rejected: async importer not ready");
     return std::nullopt;
   }
 
   // Generate job ID
   const ImportJobId job_id { impl_->next_job_id_.fetch_add(
     1, std::memory_order_relaxed) };
-
-  if (!impl_->file_reader_) {
-    LOG_F(WARNING, "Submit rejected: async file reader not ready");
-    return std::nullopt;
-  }
-
-  if (!impl_->thread_pool_) {
-    LOG_F(WARNING, "Submit rejected: thread pool not ready");
-    return std::nullopt;
-  }
 
   const bool use_custom_factory = static_cast<bool>(job_factory);
   const auto importer = ImporterOf(request);
@@ -673,25 +672,29 @@ auto AsyncImportService::SubmitImport(ImportRequest request,
 
   // Submit directly to AsyncImporter via event loop post
   // The event loop ensures this runs on the import thread
-  impl_->event_loop_->Post([importer = impl_->async_importer_.get(),
-                             entry = std::move(entry), wrapped_complete, job_id,
-                             source_path = source_path_string] mutable -> void {
-    // Now on import thread - submit to AsyncImporter
-    // Use TrySubmitJob since we're not in a coroutine context
-    if (!importer->TrySubmitJob(std::move(entry))) {
-      LOG_F(WARNING, "Failed to submit job (channel full or closed)");
-      auto report = ImportReport {};
-      report.diagnostics.push_back({
-        .severity = ImportSeverity::kError,
-        .code = "import.queue_full",
-        .message = "Import queue is full",
-        .source_path = source_path,
-        .object_path = {},
-      });
-      report.success = false;
-      wrapped_complete(job_id, report);
-    }
-  });
+  impl_->event_loop_->Post(
+    [importer = impl_->async_importer_.get(), entry = std::move(entry),
+      usable = AllQueuesHaveCapacity(concurrency)] mutable -> void {
+      // On the import thread nothing else moves the channel between the checks
+      // and the send, and a job refused here still completes like any other.
+      if (!usable) {
+        entry.job->RefuseUnstarted(import_codes::kConcurrencyInvalid,
+          "Every pipeline needs a queue capacity of at least one");
+        return;
+      }
+      if (!importer->IsAcceptingJobs()) {
+        entry.job->CancelUnstarted();
+        return;
+      }
+      if (importer->IsQueueFull()) {
+        LOG_F(WARNING, "Failed to submit job: the queue is full");
+        entry.job->RefuseUnstarted(
+          import_codes::kQueueFull, "Import queue is full");
+        return;
+      }
+      const auto queued = importer->TrySubmitJob(std::move(entry));
+      CHECK_F(queued, "A job the open channel has room for was not queued");
+    });
   posted = true;
 
   return job_id;
@@ -735,12 +738,12 @@ auto AsyncImportService::CancelJob(const ImportJobId job_id) const -> bool
   // Trigger cancellation
   // The job's nursery will observe this and cancel accordingly
   if (cancel_event) {
-    if (impl_->event_loop_) {
-      impl_->event_loop_->Post(
-        [event = cancel_event] -> void { event->Trigger(); });
-    } else {
-      cancel_event->Trigger();
+    const std::shared_lock lifetime(impl_->lifetime_mutex_);
+    if (!impl_->infrastructure_open_) {
+      return false;
     }
+    impl_->event_loop_->Post(
+      [event = cancel_event] -> void { event->Trigger(); });
     DLOG_F(INFO, "Triggered cancellation for job {}", job_id);
     return true;
   }
@@ -766,18 +769,16 @@ auto AsyncImportService::CancelAll() const -> void
   }
 
   // Trigger all cancel events (outside the lock)
-  if (impl_->event_loop_) {
-    impl_->event_loop_->Post(
-      [events = std::move(events_to_trigger)] mutable -> void {
-        for (auto& event : events) {
-          event->Trigger();
-        }
-      });
-  } else {
-    for (auto& event : events_to_trigger) {
-      event->Trigger();
-    }
+  const std::shared_lock lifetime(impl_->lifetime_mutex_);
+  if (!impl_->infrastructure_open_) {
+    return;
   }
+  impl_->event_loop_->Post(
+    [events = std::move(events_to_trigger)] mutable -> void {
+      for (auto& event : events) {
+        event->Trigger();
+      }
+    });
 
   LOG_F(INFO, "Triggered cancellation for {} jobs", cancel_count);
 }
@@ -818,7 +819,8 @@ auto AsyncImportService::IsAcceptingJobs() const -> bool
 
 auto AsyncImportService::ActiveJobCount() const -> size_t
 {
-  if (impl_->async_importer_) {
+  const std::shared_lock lifetime(impl_->lifetime_mutex_);
+  if (impl_->infrastructure_open_) {
     return impl_->async_importer_->ActiveJobCount();
   }
   return 0;
@@ -826,7 +828,8 @@ auto AsyncImportService::ActiveJobCount() const -> size_t
 
 auto AsyncImportService::RunningJobCount() const -> size_t
 {
-  if (impl_->async_importer_) {
+  const std::shared_lock lifetime(impl_->lifetime_mutex_);
+  if (impl_->infrastructure_open_) {
     return impl_->async_importer_->RunningJobCount();
   }
   return 0;
@@ -834,7 +837,8 @@ auto AsyncImportService::RunningJobCount() const -> size_t
 
 auto AsyncImportService::PendingJobCount() const -> size_t
 {
-  if (impl_->async_importer_) {
+  const std::shared_lock lifetime(impl_->lifetime_mutex_);
+  if (impl_->infrastructure_open_) {
     return impl_->async_importer_->PendingJobCount();
   }
   return 0;

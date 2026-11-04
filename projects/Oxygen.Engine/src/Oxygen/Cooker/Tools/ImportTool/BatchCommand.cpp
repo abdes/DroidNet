@@ -44,6 +44,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
@@ -358,7 +359,7 @@ namespace {
       if (!CollectProducedVirtualPathByJob(
             jobs.at(job_index), produced_virtual_path, error)) {
         AddJobValidationError(jobs.at(job_index),
-          "physics.manifest.dependency_inference_failed",
+          import_codes::kPhysicsManifestDependencyInferenceFailed,
           fmt::format("job '{}' output inference failed: {}",
             JobLabel(jobs.at(job_index), job_index), error),
           writer, validation_failures);
@@ -396,7 +397,7 @@ namespace {
       auto error = std::string {};
       if (!CollectPhysicsDependencyRefs(jobs.at(job_index), refs, error)) {
         AddJobValidationError(jobs.at(job_index),
-          "physics.manifest.dependency_inference_failed",
+          import_codes::kPhysicsManifestDependencyInferenceFailed,
           fmt::format("job '{}' reference collection failed: {}",
             JobLabel(jobs.at(job_index), job_index), error),
           writer, validation_failures);
@@ -433,7 +434,7 @@ namespace {
             producer_list_text.append(producer_list.at(i));
           }
           AddJobValidationError(jobs.at(job_index),
-            "physics.manifest.dependency_ambiguous",
+            import_codes::kPhysicsManifestDependencyAmbiguous,
             fmt::format("job '{}' reference '{}' at '{}' matches multiple "
                         "producer jobs: {}",
               JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
@@ -529,7 +530,7 @@ namespace {
 
   // --- Logic Helpers (Restored) ---
 
-  using WorkerTotals = std::array<uint32_t, 7>;
+  using WorkerTotals = std::array<uint32_t, 6>;
 
   auto BuildWorkerTotals(const ImportManifest& manifest) -> WorkerTotals
   {
@@ -542,21 +543,19 @@ namespace {
       concurrency.mesh_build.workers,
       concurrency.geometry.workers,
       concurrency.scene.workers,
-      0U,
     };
   }
 
   auto BuildWorkerUtilizationViews(const WorkerTotals& totals)
     -> std::vector<WorkerUtilizationView>
   {
-    const std::array<std::string_view, 7> kinds {
+    const std::array<std::string_view, 6> kinds {
       "Texture",
       "Buffer",
       "Material",
       "MeshBuild",
       "Geometry",
       "Scene",
-      "Audio",
     };
 
     std::vector<WorkerUtilizationView> result;
@@ -591,9 +590,6 @@ namespace {
     }
     if (kind == "Scene") {
       return 5U;
-    }
-    if (kind == "Audio") {
-      return 6U;
     }
     return std::nullopt;
   }
@@ -1228,7 +1224,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
       if (!inserted && found->second != request->source_key.value()) {
         auto conflict = ImportDiagnostic {
           .severity = ImportSeverity::kError,
-          .code = "import.source_key_conflict",
+          .code = std::string(import_codes::kSourceKeyConflict),
           .message
           = fmt::format("jobs writing '{}' must use the same source_key", root),
           .source_path = job.origin.source_path,

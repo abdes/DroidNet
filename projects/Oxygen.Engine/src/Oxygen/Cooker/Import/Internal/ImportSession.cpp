@@ -29,6 +29,7 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -39,6 +40,7 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/ResourceDescriptorEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
@@ -100,7 +102,7 @@ namespace {
     if (!size.has_value()) {
       diagnostics.push_back({
         .severity = ImportSeverity::kError,
-        .code = "import.output_missing",
+        .code = std::string(import_codes::kOutputMissing),
         .message = "Expected output missing: " + std::string(relpath),
         .source_path = std::string(source_path),
         .object_path = {},
@@ -197,7 +199,7 @@ namespace {
     auto key = std::string {};
     key.reserve(diagnostic.code.size() + diagnostic.message.size()
       + diagnostic.source_path.size() + diagnostic.object_path.size()
-      + diagnostic.json_pointer.size() + 16U);
+      + diagnostic.object_name.size() + diagnostic.json_pointer.size() + 16U);
     key.append(std::to_string(static_cast<uint32_t>(diagnostic.severity)));
     key.push_back('\x1F');
     key.append(diagnostic.code);
@@ -207,6 +209,8 @@ namespace {
     key.append(diagnostic.source_path);
     key.push_back('\x1F');
     key.append(diagnostic.object_path);
+    key.push_back('\x1F');
+    key.append(diagnostic.object_name);
     key.push_back('\x1F');
     key.append(diagnostic.json_pointer);
     return key;
@@ -603,6 +607,12 @@ auto ImportSession::Producer() const -> LooseCookedProducer
   return { .source = {}, .completes = target };
 }
 
+auto ImportSession::VerifySourcesBeforeCommit(
+  std::shared_ptr<detail::ImportSourceSnapshot> snapshot) noexcept -> void
+{
+  source_snapshot_ = std::move(snapshot);
+}
+
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   const auto started = std::chrono::steady_clock::now();
@@ -618,12 +628,17 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   auto& index_participation = *index_participation_;
   DLOG_F(INFO, "Finalize starting");
 
+  // A row whose bytes failed to write must reach no table: another participant
+  // may already have reused it.
+  auto resource_writes_failed = false;
+
   if (texture_emitter_.has_value()) {
     const auto ok = co_await (*texture_emitter_)->Finalize();
     if (!ok) {
+      resource_writes_failed = true;
       AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "import.texture_emitter_finalize_failed",
+        .code = std::string(import_codes::kTextureEmitterFinalizeFailed),
         .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
@@ -634,9 +649,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   if (buffer_emitter_.has_value()) {
     const auto ok = co_await (*buffer_emitter_)->Finalize();
     if (!ok) {
+      resource_writes_failed = true;
       AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "import.buffer_emitter_finalize_failed",
+        .code = std::string(import_codes::kBufferEmitterFinalizeFailed),
         .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
@@ -647,9 +663,11 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
   if (physics_resource_emitter_.has_value()) {
     const auto ok = co_await (*physics_resource_emitter_)->Finalize();
     if (!ok) {
+      resource_writes_failed = true;
       AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "import.physics_resource_emitter_finalize_failed",
+        .code
+        = std::string(import_codes::kPhysicsResourceEmitterFinalizeFailed),
         .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
@@ -662,7 +680,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "import.asset_emitter_finalize_failed",
+        .code = std::string(import_codes::kAssetEmitterFinalizeFailed),
         .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
@@ -672,14 +690,13 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
 
   // The digests the emitter recorded describe the files only once they are
   // written.
-  auto resource_descriptors_written = true;
   if (resource_descriptor_emitter_.has_value()) {
     const auto ok = co_await (*resource_descriptor_emitter_)->Finalize();
-    resource_descriptors_written = ok.has_value();
     if (!ok) {
       AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "import.resource_descriptor_emitter_finalize_failed",
+        .code
+        = std::string(import_codes::kResourceDescriptorEmitterFinalizeFailed),
         .message = ok.error().Message(),
         .source_path = request_.source_path.string(),
         .object_path = {},
@@ -698,208 +715,245 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     = asset_emitter_.has_value() ? (*asset_emitter_)->Records().size() : 0U;
 #endif // NDEBUG
 
-  const auto tables = co_await co::NonCancellable(
-    table_registry_->EndSession(table_participation));
-  if (!tables.ok) {
-    AddDiagnostic({
-      .severity = ImportSeverity::kError,
-      .code = "import.resource_table_finalize_failed",
-      .message = "Resource table finalization failed",
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
+  // The last moment anything can still stop publication: a source that changed
+  // fails the job, and a cancellation here unwinds with nothing published.
+  // Past this point completion wins over a cancellation.
+  if (source_snapshot_ && !HasErrors()) {
+    try {
+      co_await source_snapshot_->Verify();
+    } catch (const detail::ImportSourceChanged& error) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = std::string(import_codes::kSourceChanged),
+        .message = error.what(),
+        .source_path = request_.source_path.string(),
+        .object_path = {},
+      });
+    }
   }
 
-  // Build the report
-  bool had_errors = HasErrors();
+  auto tables = ResourceTableRegistry::SessionEnd {
+    .ok = false,
+    .aborted = false,
+    .written = {},
+  };
+  if (resource_writes_failed) {
+    table_registry_->AbortSession(table_participation);
+  } else {
+    tables = co_await co::NonCancellable(
+      table_registry_->EndSession(table_participation));
+  }
+
+  // Rows a participant bound are in no table, so no participant may publish.
+  if (!tables.ok) {
+    if (index_participation.IsActive()) {
+      index_registry_->AbortSession(index_participation);
+    }
+    if (tables.aborted) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = std::string(import_codes::kRootInterrupted),
+        .message = "Another import of this cooked root was interrupted",
+        .source_path = request_.source_path.string(),
+        .object_path = {},
+      });
+    } else if (!resource_writes_failed) {
+      AddDiagnostic({
+        .severity = ImportSeverity::kError,
+        .code = std::string(import_codes::kResourceTableFinalizeFailed),
+        .message = "Resource table finalization failed",
+        .source_path = request_.source_path.string(),
+        .object_path = {},
+      });
+    }
+    auto interrupted = ImportReport {};
+    interrupted.cooked_root = cooked_root_;
+    interrupted.diagnostics = Diagnostics();
+    interrupted.packaging = BuildPackagingSummary(interrupted, std::nullopt);
+    co_return interrupted;
+  }
+
+  const auto source_path = request_.source_path.string();
+  const auto add_failure
+    = [&](const std::string_view code, const std::string& message) -> void {
+    AddDiagnostic({
+      .severity = ImportSeverity::kError,
+      .code = std::string(code),
+      .message = message,
+      .source_path = source_path,
+      .object_path = {},
+    });
+    LOG_F(ERROR, "Publication of '{}' refused: {}", source_path, message);
+  };
+  const auto describe_failure = [&](const std::exception_ptr& failure) -> void {
+    try {
+      std::rethrow_exception(failure);
+    } catch (const LooseCookedPublicationAborted& ex) {
+      add_failure(import_codes::kRootInterrupted, ex.what());
+    } catch (const LooseCookedSourceOutsideMount& ex) {
+      add_failure(mount_codes::kSourceOutsideMount.id, ex.what());
+    } catch (const LooseCookedOutputMountMixed& ex) {
+      add_failure(import_codes::kOutputMountMixed, ex.what());
+    } catch (const LooseCookedIdentityCollision& ex) {
+      add_failure(import_codes::kIdentityCollision, ex.what());
+    } catch (const std::exception& ex) {
+      add_failure(import_codes::kIndexWriteFailed, ex.what());
+    }
+  };
+  const auto failed_report = [&] -> ImportReport {
+    auto failed = ImportReport {};
+    failed.cooked_root = cooked_root_;
+    failed.diagnostics = Diagnostics();
+    failed.packaging = BuildPackagingSummary(failed, std::nullopt);
+    return failed;
+  };
+
+  using data::loose_cooked::FileKind;
+  DLOG_F(INFO,
+    "Registering index entries: textures={} buffers={} assets={} "
+    "cooked_root='{}'",
+    texture_count, buffer_count, asset_count, cooked_root_.string());
+
+  const auto textures = ResourceFiles {
+    .table = FileKind::kTexturesTable,
+    .data = FileKind::kTexturesData,
+    .data_relpath = loose_layout::kTexturesData,
+  };
+  const auto buffers = ResourceFiles {
+    .table = FileKind::kBuffersTable,
+    .data = FileKind::kBuffersData,
+    .data_relpath = loose_layout::kBuffersData,
+  };
+  const auto physics = ResourceFiles {
+    .table = FileKind::kPhysicsTable,
+    .data = FileKind::kPhysicsData,
+    .data_relpath = loose_layout::kPhysicsData,
+  };
+  const auto data_file_exists = [&](const ResourceFiles& files) -> bool {
+    return storage_->KindOf(cooked_root_ / files.data_relpath)
+      == cooked::PathKind::kFile;
+  };
+
+  // The last session to end the tables registers them, whatever it emitted
+  // itself: they carry the other participants' rows too.
+  auto resources = std::vector<ResourceFiles> {};
+  if (texture_count > 0 || WrittenTableOf(tables, textures.table) != nullptr) {
+    resources.push_back(textures);
+  }
+  if (buffer_count > 0 || WrittenTableOf(tables, buffers.table) != nullptr) {
+    resources.push_back(buffers);
+  }
+  resources.push_back(physics);
+
+  // Everything that can still fail the job runs here, before its first
+  // registration, so a job that fails contributes nothing and stops no one.
   auto report = ImportReport {};
   report.cooked_root = cooked_root_;
-  report.diagnostics = Diagnostics();
-
-  // Always attempt to write the index to keep file sizes in sync, even if
-  // diagnostics reported errors. This prevents stale index metadata from
-  // invalidating previously cooked content.
-  try {
-    using data::loose_cooked::FileKind;
-    DLOG_F(INFO,
-      "Registering index entries: textures={} buffers={} assets={} "
-      "cooked_root='{}'",
-      texture_count, buffer_count, asset_count, cooked_root_.string());
-
-    bool output_missing = false;
-
-    // A data file and the table of its rows register together; the table
-    // has its content name, which the session's table finalization gave it.
-    const auto register_resource = [&](const ResourceFiles& files) -> void {
-      if (storage_->KindOf(cooked_root_ / files.data_relpath)
-        == cooked::PathKind::kFile) {
-        index_registry_->RegisterExternalDataFile(
-          cooked_root_, files.data, files.data_relpath);
-        output_missing
-          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
-            cooked_root_, files.data_relpath, request_.source_path.string());
-      }
-      if (const auto* const table = WrittenTableOf(tables, files.table)) {
-        index_registry_->RegisterExternalFile(
-          cooked_root_, files.table, table->relpath, table->digest);
-        output_missing
-          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
-            cooked_root_, table->relpath, request_.source_path.string());
-      }
-    };
-    if (texture_count > 0) {
-      register_resource({
-        .table = FileKind::kTexturesTable,
-        .data = FileKind::kTexturesData,
-        .data_relpath = loose_layout::kTexturesData,
-      });
-    }
-    if (buffer_count > 0) {
-      register_resource({
-        .table = FileKind::kBuffersTable,
-        .data = FileKind::kBuffersData,
-        .data_relpath = loose_layout::kBuffersData,
-      });
-    }
-    register_resource({
-      .table = FileKind::kPhysicsTable,
-      .data = FileKind::kPhysicsData,
-      .data_relpath = loose_layout::kPhysicsData,
-    });
-
-    // Only the entries the index records a producer for need one.
-    const auto producer = Producer();
-    const auto recorded_producer = [&producer] -> const LooseCookedProducer& {
-      if (producer.source.empty() && producer.completes.empty()) {
+  auto producer = LooseCookedProducer {};
+  auto asset_requirements
+    = std::vector<std::vector<data::loose_cooked::IndexedRequirement>> {};
+  if (!HasErrors()) {
+    try {
+      const auto record_output = [&](const std::string_view relpath) -> void {
+        auto missing = std::vector<ImportDiagnostic> {};
+        static_cast<void>(AppendOutputRecord(*storage_, report.outputs, missing,
+          cooked_root_, relpath, source_path));
+        for (auto& diagnostic : missing) {
+          AddDiagnostic(std::move(diagnostic));
+        }
+      };
+      producer = Producer();
+      const auto needs_producer = [&] -> bool {
+        const auto has_assets
+          = asset_emitter_.has_value() && !(*asset_emitter_)->Records().empty();
+        const auto has_descriptors = resource_descriptor_emitter_.has_value()
+          && !(*resource_descriptor_emitter_)->Records().empty();
+        return has_assets || has_descriptors;
+      }();
+      if (needs_producer && producer.source.empty()
+        && producer.completes.empty()) {
         throw LooseCookedSourceOutsideMount(
           "no recorded source: the job's source lies in no source mount");
       }
-      return producer;
-    };
-    if (asset_emitter_.has_value()) {
-      const auto& records = (*asset_emitter_)->Records();
-      report.outputs.reserve(report.outputs.size() + records.size());
-      // What each asset requires of other mounts, from the cooked roots its
-      // job reads; read once, for the assets that reference other keys.
-      auto mounts
-        = std::optional<std::vector<internal::MountedCookedSource>> {};
-      for (const auto& rec : records) {
-        auto requirements
-          = std::vector<data::loose_cooked::IndexedRequirement> {};
-        if (!rec.references.Keys().empty()) {
-          if (!mounts.has_value()) {
-            mounts = internal::LoadMountedCookedSources(
-              *this, request_, "import.requirements.");
-          }
-          const auto own_mount = content::MountRootOf(rec.virtual_path);
-          requirements = internal::RequirementsOf(*mounts,
-            own_mount.empty() ? own_mount : own_mount.substr(1),
-            rec.references);
-        }
-        index_registry_->RegisterProducedAssetDescriptor(cooked_root_, rec.key,
-          rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-          LooseCookedFileDigest {
-            .size = rec.descriptor_size,
-            .sha256 = rec.descriptor_sha256,
-          },
-          rec.references, recorded_producer(), requirements);
-        report.outputs.push_back({
-          .path = rec.descriptor_relpath,
-          .size_bytes = rec.descriptor_size,
-        });
-        report.products.push_back({
-          .virtual_path = rec.virtual_path,
-          .descriptor_relpath = rec.descriptor_relpath,
-          .key = rec.key,
-          .asset_type = rec.asset_type,
-        });
-      }
-    }
 
-    // Descriptors the emitter failed to write are not indexed; the failure
-    // is already diagnosed.
-    if (resource_descriptor_emitter_.has_value()
-      && resource_descriptors_written) {
-      const auto records = (*resource_descriptor_emitter_)->Records();
-      report.outputs.reserve(report.outputs.size() + records.size());
-      for (const auto& rec : records) {
-        const auto produced = LooseCookedFileDigest {
-          .size = rec.size_bytes,
-          .sha256 = rec.sha256,
-        };
-        if (rec.kind == data::loose_cooked::FileKind::kAuxiliary) {
-          index_registry_->RegisterExternalAuxiliaryFile(cooked_root_,
-            rec.relpath, rec.virtual_path, recorded_producer(), produced);
-        } else {
-          index_registry_->RegisterExternalTextureDescriptor(cooked_root_,
-            rec.relpath, rec.virtual_path, recorded_producer(), produced);
+      for (const auto& files : resources) {
+        if (data_file_exists(files)) {
+          record_output(files.data_relpath);
+        }
+        if (const auto* const table = WrittenTableOf(tables, files.table)) {
+          record_output(table->relpath);
+        }
+      }
+
+      if (asset_emitter_.has_value()) {
+        const auto& records = (*asset_emitter_)->Records();
+        report.outputs.reserve(report.outputs.size() + records.size());
+        asset_requirements.reserve(records.size());
+        // What each asset requires of other mounts, from the cooked roots its
+        // job reads; read once, for the assets that reference other keys.
+        auto mounts
+          = std::optional<std::vector<internal::MountedCookedSource>> {};
+        for (const auto& rec : records) {
+          auto requirements
+            = std::vector<data::loose_cooked::IndexedRequirement> {};
+          if (!rec.references.Keys().empty()) {
+            if (!mounts.has_value()) {
+              mounts = internal::LoadMountedCookedSources(*this, request_,
+                import_codes::kImportRequirementsIndexLoadFailed);
+            }
+            const auto own_mount = content::MountRootOf(rec.virtual_path);
+            requirements = internal::RequirementsOf(*mounts,
+              own_mount.empty() ? own_mount : own_mount.substr(1),
+              rec.references);
+          }
+          asset_requirements.push_back(std::move(requirements));
+          report.outputs.push_back({
+            .path = rec.descriptor_relpath,
+            .size_bytes = rec.descriptor_size,
+          });
           report.products.push_back({
             .virtual_path = rec.virtual_path,
-            .descriptor_relpath = rec.relpath,
+            .descriptor_relpath = rec.descriptor_relpath,
+            .key = rec.key,
+            .asset_type = rec.asset_type,
           });
-        }
-        output_missing
-          |= !AppendOutputRecord(*storage_, report.outputs, report.diagnostics,
-            cooked_root_, rec.relpath, request_.source_path.string());
-      }
-    }
-
-    // A job that completed without errors re-cooked its source in full under
-    // its identity, so what it no longer produces there retires. A sidecar
-    // completes one asset of its scene's source and re-cooks nothing of it.
-    if (auto identity_relpath = std::string {}; producer.completes.empty()
-      && !producer.source.empty() && !HasErrors()
-      && internal::TryVirtualPathToRelPath(
-        request_.asset_virtual_path, identity_relpath)) {
-      index_registry_->RetireUnwrittenOutputs(cooked_root_,
-        LooseCookedRecook {
-          .source = producer.source,
-          .identity = request_.asset_virtual_path,
-          .identity_relpath = std::move(identity_relpath),
-        });
-    }
-
-    const auto publication
-      = co_await index_registry_->EndSession(index_participation);
-    const auto& write_result = publication.write_result;
-    report.source_key = publication.source_key;
-    if (write_result.has_value()) {
-      LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
-        write_result->assets.size(), write_result->files.size(),
-        cooked_root_.string());
-      output_missing |= !AppendOutputRecord(*storage_, report.outputs,
-        report.diagnostics, cooked_root_, loose_layout::kIndexFileName,
-        request_.source_path.string());
-    } else {
-      DLOG_F(INFO, "Index published by another session for cooked_root='{}'",
-        cooked_root_.string());
-    }
-
-    if (asset_emitter_.has_value()) {
-      for (const auto& rec : (*asset_emitter_)->Records()) {
-        switch (rec.asset_type) {
-        case data::AssetType::kMaterial:
-          ++report.materials_written;
-          break;
-        case data::AssetType::kGeometry:
-          ++report.geometry_written;
-          break;
-        case data::AssetType::kScene:
-          ++report.scenes_written;
-          break;
-        case data::AssetType::kScript:
-          ++report.scripts_written;
-          break;
-        default:
-          break;
+          switch (rec.asset_type) {
+          case data::AssetType::kMaterial:
+            ++report.materials_written;
+            break;
+          case data::AssetType::kGeometry:
+            ++report.geometry_written;
+            break;
+          case data::AssetType::kScene:
+            ++report.scenes_written;
+            break;
+          case data::AssetType::kScript:
+            ++report.scripts_written;
+            break;
+          default:
+            break;
+          }
         }
       }
-    }
 
-    if (request_.options.scripting.import_kind
-      == ScriptingImportKind::kScriptingSidecar) {
-      auto component_count = uint64_t { 0 };
-      if (asset_emitter_.has_value()) {
+      if (resource_descriptor_emitter_.has_value()) {
+        const auto records = (*resource_descriptor_emitter_)->Records();
+        report.outputs.reserve(report.outputs.size() + records.size());
+        for (const auto& rec : records) {
+          if (rec.kind != data::loose_cooked::FileKind::kAuxiliary) {
+            report.products.push_back({
+              .virtual_path = rec.virtual_path,
+              .descriptor_relpath = rec.relpath,
+            });
+          }
+          record_output(rec.relpath);
+        }
+      }
+
+      if (request_.options.scripting.import_kind
+          == ScriptingImportKind::kScriptingSidecar
+        && asset_emitter_.has_value()) {
+        auto component_count = uint64_t { 0 };
         for (const auto& rec : (*asset_emitter_)->Records()) {
           if (rec.asset_type != data::AssetType::kScene) {
             continue;
@@ -911,113 +965,170 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           report.script_slots_written += counts.slots;
           report.script_params_written += counts.parameters;
         }
-      }
-      if (component_count > std::numeric_limits<uint32_t>::max()) {
         report.scripting_components_written
-          = std::numeric_limits<uint32_t>::max();
-      } else {
-        report.scripting_components_written
-          = static_cast<uint32_t>(component_count);
+          = component_count > std::numeric_limits<uint32_t>::max()
+          ? std::numeric_limits<uint32_t>::max()
+          : static_cast<uint32_t>(component_count);
       }
-    }
 
-    if (report.outputs.empty()) {
-      report.diagnostics.push_back({
-        .severity = ImportSeverity::kError,
-        .code = "import.outputs_missing",
-        .message = "Import produced no outputs",
-        .source_path = request_.source_path.string(),
-        .object_path = {},
-      });
-      output_missing = true;
-    }
-
-    had_errors = had_errors || output_missing;
-
-    if (had_errors) {
-      report.diagnostics.push_back({
-        .severity = ImportSeverity::kWarning,
-        .code = "import.index_written_with_errors",
-        .message = "Index written despite import errors",
-        .source_path = request_.source_path.string(),
-        .object_path = {},
-      });
-    }
-
-    report.success = !had_errors;
-    if (report.success && request_.surface_provenance) {
-      if (surface_source_processed_) {
-        const SurfaceProvenance provenance(
-          request_.surface_provenance->SourceIdentity(),
-          std::move(surface_provenance_));
-        report.surface_provenance_json = provenance.Serialize();
-      } else {
-        report.surface_provenance_json
-          = request_.surface_provenance->Serialize();
+      if (request_.surface_provenance) {
+        if (surface_source_processed_) {
+          const SurfaceProvenance provenance(
+            request_.surface_provenance->SourceIdentity(),
+            std::move(surface_provenance_));
+          report.surface_provenance_json = provenance.Serialize();
+        } else {
+          report.surface_provenance_json
+            = request_.surface_provenance->Serialize();
+        }
+        if (request_.model_import) {
+          const std::scoped_lock lock(surface_provenance_mutex_);
+          report.published_nodes = std::move(published_nodes_.published);
+          report.new_nodes = std::move(published_nodes_.added);
+          report.vanished_nodes = std::move(published_nodes_.vanished);
+        }
       }
-      if (request_.model_import) {
-        const std::scoped_lock lock(surface_provenance_mutex_);
-        report.published_nodes = std::move(published_nodes_.published);
-        report.new_nodes = std::move(published_nodes_.added);
-        report.vanished_nodes = std::move(published_nodes_.vanished);
-      }
+    } catch (...) {
+      describe_failure(std::current_exception());
     }
-    report.packaging = BuildPackagingSummary(report, write_result);
-
-    LOG_F(INFO,
-      "Packaging summary: success={} outputs={} index_written={} "
-      "diagnostics(info/warn/error)={}/{}/{}",
-      report.success, report.packaging.outputs_written,
-      report.packaging.index_written, report.packaging.diagnostics_info,
-      report.packaging.diagnostics_warning, report.packaging.diagnostics_error);
-
-    DLOG_F(INFO,
-      "Finalize complete: {} materials, {} geometry, {} scenes, {} scripts, "
-      "{} scripting components, {} slots, {} params",
-      report.materials_written, report.geometry_written, report.scenes_written,
-      report.scripts_written, report.scripting_components_written,
-      report.script_slots_written, report.script_params_written);
-  } catch (const LooseCookedSourceOutsideMount& ex) {
-    report.success = false;
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kError,
-      .code = std::string { mount_codes::kSourceOutsideMount.id },
-      .message = ex.what(),
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-    LOG_F(ERROR, "Refused index entries: {}", ex.what());
-  } catch (const LooseCookedOutputMountMixed& ex) {
-    report.success = false;
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kError,
-      .code = "import.output_mount_mixed",
-      .message = ex.what(),
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-    LOG_F(ERROR, "Refused index entry: {}", ex.what());
-  } catch (const LooseCookedIdentityCollision& ex) {
-    report.success = false;
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kError,
-      .code = "import.identity_collision",
-      .message = ex.what(),
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-    LOG_F(ERROR, "Refused index entry: {}", ex.what());
-  } catch (const std::exception& ex) {
-    report.success = false;
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kError,
-      .code = "import.index_write_failed",
-      .message = ex.what(),
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-    LOG_F(ERROR, "Failed to write index: {}", ex.what());
   }
+
+  // A failed job contributes nothing of its own. Its session may still have
+  // ended the table session last, so the tables it holds carry the other
+  // participants' rows; they publish only if one of those commits.
+  if (HasErrors()) {
+    try {
+      for (const auto& files : { textures, buffers, physics }) {
+        if (const auto* const table = WrittenTableOf(tables, files.table)) {
+          if (data_file_exists(files)) {
+            index_registry_->RegisterExternalDataFile(
+              cooked_root_, files.data, files.data_relpath);
+          }
+          index_registry_->RegisterExternalFile(
+            cooked_root_, files.table, table->relpath, table->digest);
+        }
+      }
+      index_registry_->LeaveSession(index_participation);
+    } catch (...) {
+      describe_failure(std::current_exception());
+      if (index_participation.IsActive()) {
+        index_registry_->AbortSession(index_participation);
+      }
+    }
+    co_return failed_report();
+  }
+
+  // What the writer refuses here may follow what it already took, and it takes
+  // nothing back, so a refusal stops the cohort.
+  try {
+    for (const auto& files : resources) {
+      if (data_file_exists(files)) {
+        index_registry_->RegisterExternalDataFile(
+          cooked_root_, files.data, files.data_relpath);
+      }
+      if (const auto* const table = WrittenTableOf(tables, files.table)) {
+        index_registry_->RegisterExternalFile(
+          cooked_root_, files.table, table->relpath, table->digest);
+      }
+    }
+    if (asset_emitter_.has_value()) {
+      const auto& records = (*asset_emitter_)->Records();
+      for (size_t index = 0; index < records.size(); ++index) {
+        const auto& rec = records.at(index);
+        index_registry_->RegisterProducedAssetDescriptor(cooked_root_, rec.key,
+          rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
+          LooseCookedFileDigest {
+            .size = rec.descriptor_size,
+            .sha256 = rec.descriptor_sha256,
+          },
+          rec.references, producer, asset_requirements.at(index));
+      }
+    }
+    if (resource_descriptor_emitter_.has_value()) {
+      for (const auto& rec : (*resource_descriptor_emitter_)->Records()) {
+        const auto produced = LooseCookedFileDigest {
+          .size = rec.size_bytes,
+          .sha256 = rec.sha256,
+        };
+        if (rec.kind == data::loose_cooked::FileKind::kAuxiliary) {
+          index_registry_->RegisterExternalAuxiliaryFile(
+            cooked_root_, rec.relpath, rec.virtual_path, producer, produced);
+        } else {
+          index_registry_->RegisterExternalTextureDescriptor(
+            cooked_root_, rec.relpath, rec.virtual_path, producer, produced);
+        }
+      }
+    }
+
+    // A job that completed without errors re-cooked its source in full under
+    // its identity, so what it no longer produces there retires. A sidecar
+    // completes one asset of its scene's source and re-cooks nothing of it.
+    if (auto identity_relpath = std::string {}; producer.completes.empty()
+      && !producer.source.empty()
+      && internal::TryVirtualPathToRelPath(
+        request_.asset_virtual_path, identity_relpath)) {
+      index_registry_->RetireUnwrittenOutputs(cooked_root_,
+        LooseCookedRecook {
+          .source = producer.source,
+          .identity = request_.asset_virtual_path,
+          .identity_relpath = std::move(identity_relpath),
+        });
+    }
+  } catch (...) {
+    describe_failure(std::current_exception());
+    if (index_participation.IsActive()) {
+      index_registry_->AbortSession(index_participation);
+    }
+    co_return failed_report();
+  }
+
+  auto publication = LooseCookedIndexRegistry::Publication {};
+  try {
+    publication = co_await co::NonCancellable(
+      index_registry_->EndSession(index_participation));
+  } catch (...) {
+    // The commit did not happen: an aborted cohort, or an index it could not
+    // write.
+    describe_failure(std::current_exception());
+    co_return failed_report();
+  }
+
+  // Published. Nothing below can make this job a failure.
+  report.success = true;
+  report.source_key = publication.source_key;
+  report.diagnostics = Diagnostics();
+  const auto& write_result = publication.write_result;
+  if (write_result.has_value()) {
+    LOG_F(INFO, "Index write completed: assets={} files={} cooked_root='{}'",
+      write_result->assets.size(), write_result->files.size(),
+      cooked_root_.string());
+    if (const auto size
+      = storage_->SizeOf(cooked_root_ / loose_layout::kIndexFileName);
+      size.has_value()) {
+      report.outputs.push_back({
+        .path = std::string(loose_layout::kIndexFileName),
+        .size_bytes = size->get(),
+      });
+    }
+  } else {
+    DLOG_F(INFO, "Index published by another session for cooked_root='{}'",
+      cooked_root_.string());
+  }
+  report.packaging = BuildPackagingSummary(report, write_result);
+
+  LOG_F(INFO,
+    "Packaging summary: success={} outputs={} index_written={} "
+    "diagnostics(info/warn/error)={}/{}/{}",
+    report.success, report.packaging.outputs_written,
+    report.packaging.index_written, report.packaging.diagnostics_info,
+    report.packaging.diagnostics_warning, report.packaging.diagnostics_error);
+
+  DLOG_F(INFO,
+    "Finalize complete: {} materials, {} geometry, {} scenes, {} scripts, "
+    "{} scripting components, {} slots, {} params",
+    report.materials_written, report.geometry_written, report.scenes_written,
+    report.scripts_written, report.scripting_components_written,
+    report.script_slots_written, report.script_params_written);
 
   co_return report;
 }

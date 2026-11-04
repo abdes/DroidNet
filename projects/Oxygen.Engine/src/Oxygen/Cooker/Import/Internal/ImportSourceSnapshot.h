@@ -15,6 +15,7 @@
 #include <optional>
 #include <set>
 #include <span>
+#include <stdexcept>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -24,12 +25,20 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/Types.h>
 
 namespace oxygen::content::import::detail {
+
+//! A source no longer holds what the import read from it, or can no longer be
+//! checked (`import_codes::kSourceChanged`).
+class ImportSourceChanged final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
 
 //! Records consumed bytes and input probes, then verifies those same facts
 //! before publication. Inputs are neither copied to disk nor rewritten.

@@ -6,7 +6,9 @@
 
 // Covers: Import/Internal/AsyncImporter.cpp, Import/Internal/ImportJob.cpp
 
+#include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -19,6 +21,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -30,6 +33,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -107,7 +111,6 @@ protected:
     table_registry_ = std::make_unique<ResourceTableRegistry>(loop_.Driver(),
       oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
-    config_.table_registry = table_registry_.get();
   }
 
   [[nodiscard]] auto MakeJob(ImportJobId job_id, ImportRequest request,
@@ -131,6 +134,141 @@ protected:
     });
   }
 };
+
+//! Waits to be cancelled.
+class WaitingImportJob final : public ImportJob {
+public:
+  OXYGEN_TYPED(WaitingImportJob)
+
+public:
+  using ImportJob::ImportJob;
+
+  Event waiting;
+
+private:
+  [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
+  {
+    waiting.Trigger();
+    co_await oxygen::co::kSuspendForever;
+    co_return ImportReport {};
+  }
+};
+
+//! The counts drop when a job ends, not when another job is submitted.
+NOLINT_TEST_F(AsyncImporterJobTest, CountsDropWhenTheJobEndsBelowTheLimit)
+{
+  config_.max_in_flight_jobs = 2;
+  AsyncImporter importer(config_);
+  Event completed;
+  auto running_after_settling = size_t { 1 };
+  auto active_after_settling = size_t { 1 };
+
+  oxygen::co::Run(loop_, [&] -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
+      importer.Run();
+
+      ImportRequest request;
+      request.source_path = "test.txt";
+      request.cooked_root = MakeTestCookedRoot();
+      JobEntry entry;
+      entry.job_id = ImportJobId { 1U };
+      entry.job = MakeJob(
+        entry.job_id, std::move(request),
+        [&](ImportJobId, const ImportReport&) -> void { completed.Trigger(); },
+        nullptr, nullptr);
+      co_await importer.SubmitJob(std::move(entry));
+      co_await completed;
+
+      // The job unwinds after its callback; no further job ever arrives.
+      constexpr auto kTurnsToSettle = 1000;
+      for (auto turn = 0;
+        turn < kTurnsToSettle && importer.ActiveJobCount() != 0U; ++turn) {
+        co_await oxygen::co::kYield;
+      }
+      running_after_settling = importer.RunningJobCount();
+      active_after_settling = importer.ActiveJobCount();
+
+      importer.Stop();
+      co_return kJoin;
+    };
+  });
+
+  EXPECT_EQ(running_after_settling, 0U);
+  EXPECT_EQ(active_after_settling, 0U);
+}
+
+//! Stop completes every job exactly once: queued jobs, which never ran, and the
+//! job in flight.
+NOLINT_TEST_F(AsyncImporterJobTest, StopCompletesQueuedAndRunningJobsOnce)
+{
+  config_.max_in_flight_jobs = 1;
+  AsyncImporter importer(config_);
+  constexpr auto kJobs = 4U;
+  auto completions = std::array<int, kJobs> {};
+  auto cancelled = 0;
+  auto final_events = 0;
+
+  oxygen::co::Run(loop_, [&] -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(&AsyncImporter::ActivateAsync, &importer);
+      importer.Run();
+
+      auto running = std::shared_ptr<WaitingImportJob> {};
+      for (auto index = 0U; index < kJobs; ++index) {
+        ImportRequest request;
+        request.source_path = "test.txt";
+        request.cooked_root = MakeTestCookedRoot();
+        auto job = std::make_shared<WaitingImportJob>(ImportJobParams {
+          .id = ImportJobId { index },
+          .request = std::move(request),
+          .on_complete
+          = [&, index](ImportJobId, const ImportReport& report) -> void {
+            ++completions.at(index);
+            cancelled += report.cancelled ? 1 : 0;
+          },
+          .on_progress = [&](const ProgressEvent& event) -> void {
+            final_events += event.header.kind
+                == oxygen::content::import::ProgressEventKind::kJobFinished
+              ? 1
+              : 0;
+          },
+          .cancel_event = nullptr,
+          .reader = oxygen::observer_ptr<IAsyncFileReader>(file_reader_.get()),
+          .driver
+          = oxygen::observer_ptr<oxygen::serio::IoDriver>(&loop_.Driver()),
+          .thread_pool
+          = oxygen::observer_ptr<oxygen::co::ThreadPool>(thread_pool_.get()),
+          .registry
+          = oxygen::observer_ptr<ResourceTableRegistry>(table_registry_.get()),
+          .concurrency = ImportConcurrency {},
+          .stop_token = {},
+        });
+        if (index == 0U) {
+          running = job;
+        }
+        JobEntry entry;
+        entry.job_id = ImportJobId { index };
+        entry.job = std::move(job);
+        co_await importer.SubmitJob(std::move(entry));
+      }
+      co_await running->waiting;
+
+      importer.Stop();
+      co_return kJoin;
+    };
+  });
+
+  for (const auto count : completions) {
+    EXPECT_EQ(count, 1);
+  }
+  EXPECT_EQ(cancelled, static_cast<int>(kJobs));
+  EXPECT_EQ(final_events, static_cast<int>(kJobs));
+  EXPECT_EQ(importer.RunningJobCount(), 0U);
+  EXPECT_EQ(importer.ActiveJobCount(), 0U);
+}
 
 NOLINT_TEST_F(AsyncImporterJobTest, SubmitJobCallsCompletionCallback)
 {
@@ -304,7 +442,6 @@ protected:
     table_registry_ = std::make_unique<ResourceTableRegistry>(loop_.Driver(),
       oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()));
     thread_pool_ = std::make_unique<oxygen::co::ThreadPool>(loop_, 1);
-    config_.table_registry = table_registry_.get();
   }
 };
 
@@ -379,7 +516,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(complete_called);
   EXPECT_EQ(completed_id, ImportJobId { 123U });
   EXPECT_FALSE(received_success);
-  EXPECT_EQ(canceled_code, "import.canceled");
+  EXPECT_EQ(canceled_code, oxygen::content::import::import_codes::kCanceled);
 }
 
 NOLINT_TEST_F(AsyncImporterCancellationTest, CloseJobChannelPreventsSubmissions)

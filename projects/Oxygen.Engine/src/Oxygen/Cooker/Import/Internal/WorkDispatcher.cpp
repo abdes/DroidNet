@@ -32,6 +32,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -120,6 +121,10 @@ namespace {
 
     [[nodiscard]] virtual auto HasReady() const -> bool = 0;
 
+    //! Whether a ready item is of a kind with capacity.
+    [[nodiscard]] virtual auto HasSubmittable(
+      const KindAvailability& availability) const -> bool = 0;
+
     [[nodiscard]] virtual auto NextReady(const KindAvailability& availability)
       -> std::optional<PlanItemId> = 0;
   };
@@ -136,6 +141,17 @@ namespace {
     {
       return std::ranges::any_of(
         buckets_, [](const auto& bucket) -> bool { return !bucket.empty(); });
+    }
+
+    [[nodiscard]] auto HasSubmittable(
+      const KindAvailability& availability) const -> bool override
+    {
+      for (size_t kind = 0U; kind < buckets_.size(); ++kind) {
+        if (!buckets_.at(kind).empty() && availability.at(kind)) {
+          return true;
+        }
+      }
+      return false;
     }
 
     [[nodiscard]] auto NextReady(const KindAvailability& availability)
@@ -270,9 +286,10 @@ auto WorkDispatcher::EmitGeometryPayload(
     session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
     return true;
   } catch (const std::exception& ex) {
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.geometry_emit_failed",
-      "Failed to emit geometry descriptor: " + std::string(ex.what()),
-      cooked.virtual_path, cooked.descriptor_relpath));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kGeometryEmitFailed),
+        "Failed to emit geometry descriptor: " + std::string(ex.what()),
+        cooked.virtual_path, cooked.descriptor_relpath));
     return false;
   }
 }
@@ -290,7 +307,8 @@ auto WorkDispatcher::EmitTexturePayload(TexturePipeline::WorkResult& result)
       }
     }
     AddDiagnostics(session_, std::move(result.diagnostics));
-    session_.AddDiagnostic(MakeWarningDiagnostic("texture.placeholder_used",
+    session_.AddDiagnostic(MakeWarningDiagnostic(
+      std::string(import_codes::kTexturePlaceholderUsed),
       "Texture cooking failed; using fallback texture", result.source_id, ""));
 
     // Ensure the texture emitter is initialized so the fallback index is valid.
@@ -371,7 +389,7 @@ auto WorkDispatcher::EmitTextureSidecarDescriptor(
     = texture_emitter.TryGetDescriptor(static_cast<uint32_t>(resource_index));
   if (!descriptor.has_value()) {
     session_.AddDiagnostic(
-      MakeErrorDiagnostic("import.texture_descriptor_missing",
+      MakeErrorDiagnostic(std::string(import_codes::kTextureDescriptorMissing),
         "Missing texture descriptor for emitted resource index", source_id,
         std::to_string(static_cast<uint32_t>(resource_index))));
     return false;
@@ -385,10 +403,10 @@ auto WorkDispatcher::EmitTextureSidecarDescriptor(
         placement.virtual_path, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
-    session_.AddDiagnostic(
-      MakeErrorDiagnostic("import.texture_descriptor_emit_failed",
-        "Failed to emit texture sidecar descriptor: " + std::string(ex.what()),
-        source_id, std::to_string(static_cast<uint32_t>(resource_index))));
+    session_.AddDiagnostic(MakeErrorDiagnostic(
+      std::string(import_codes::kTextureDescriptorEmitFailed),
+      "Failed to emit texture sidecar descriptor: " + std::string(ex.what()),
+      source_id, std::to_string(static_cast<uint32_t>(resource_index))));
     return false;
   }
 }
@@ -403,7 +421,7 @@ auto WorkDispatcher::EmitBufferSidecarDescriptor(
     = buffer_emitter.TryGetDescriptor(static_cast<uint32_t>(resource_index));
   if (!descriptor.has_value()) {
     session_.AddDiagnostic(
-      MakeErrorDiagnostic("import.buffer_descriptor_missing",
+      MakeErrorDiagnostic(std::string(import_codes::kBufferDescriptorMissing),
         "Missing buffer descriptor for emitted resource index", source_id,
         std::to_string(static_cast<uint32_t>(resource_index))));
     return false;
@@ -415,10 +433,10 @@ auto WorkDispatcher::EmitBufferSidecarDescriptor(
         sidecar.virtual_path, resource_index, *descriptor);
     return true;
   } catch (const std::exception& ex) {
-    session_.AddDiagnostic(
-      MakeErrorDiagnostic("import.buffer_descriptor_emit_failed",
-        "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
-        source_id, std::to_string(static_cast<uint32_t>(resource_index))));
+    session_.AddDiagnostic(MakeErrorDiagnostic(
+      std::string(import_codes::kBufferDescriptorEmitFailed),
+      "Failed to emit buffer sidecar descriptor: " + std::string(ex.what()),
+      source_id, std::to_string(static_cast<uint32_t>(resource_index))));
     return false;
   }
 }
@@ -444,9 +462,10 @@ auto WorkDispatcher::EmitMaterialPayload(MaterialPipeline::WorkResult result)
     session_.AddEmitDuration(MakeDuration(emit_start, emit_end));
     return true;
   } catch (const std::exception& ex) {
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.material_emit_failed",
-      "Failed to emit material descriptor: " + std::string(ex.what()),
-      cooked.virtual_path, cooked.descriptor_relpath));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kMaterialEmitFailed),
+        "Failed to emit material descriptor: " + std::string(ex.what()),
+        cooked.virtual_path, cooked.descriptor_relpath));
     return false;
   }
 }
@@ -472,9 +491,10 @@ auto WorkDispatcher::EmitScenePayload(ScenePipeline::WorkResult result) -> bool
     session_.SetPublishedNodes(std::move(cooked.model_nodes));
     return true;
   } catch (const std::exception& ex) {
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.scene_emit_failed",
-      "Failed to emit scene descriptor: " + std::string(ex.what()),
-      cooked.virtual_path, cooked.descriptor_relpath));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kSceneEmitFailed),
+        "Failed to emit scene descriptor: " + std::string(ex.what()),
+        cooked.virtual_path, cooked.descriptor_relpath));
     return false;
   }
 }
@@ -492,7 +512,8 @@ auto WorkDispatcher::UpdateMaterialBindings(
 
     const auto it = texture_indices.find(binding.source_id);
     if (it == texture_indices.end()) {
-      diagnostics.push_back(MakeWarningDiagnostic("material.texture_missing",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMaterialTextureMissing),
         "Material texture dependency is missing", item.source_id,
         binding.source_id));
       DLOG_F(WARNING, "Material '{}' missing texture '{}' ({})", item.source_id,
@@ -715,9 +736,10 @@ auto WorkDispatcher::EmitMeshBuffers(
   for (size_t lod_index = 0; lod_index < cooked.lods.size(); ++lod_index) {
     auto& lod = cooked.lods.at(lod_index);
     if (!lod.auxiliary_buffers.empty() && lod.auxiliary_buffers.size() != 4U) {
-      session_.AddDiagnostic(MakeErrorDiagnostic("mesh.aux_buffer_count",
-        "Unexpected auxiliary buffer count for mesh LOD", result.source_id,
-        ""));
+      session_.AddDiagnostic(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshAuxBufferCount),
+          "Unexpected auxiliary buffer count for mesh LOD", result.source_id,
+          ""));
       return std::nullopt;
     }
     if (!EmitGeometryBuffer(std::move(lod.vertex_buffer),
@@ -1187,9 +1209,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       result.source_id, result.texture_id, result.source_key, result.success,
       result.used_placeholder);
 
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.texture_unmapped",
-      "Texture result could not be mapped to a plan item", result.source_id,
-      ""));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kPlanTextureUnmapped),
+        "Texture result could not be mapped to a plan item", result.source_id,
+        ""));
     co_return false;
   };
 
@@ -1221,9 +1244,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       co_return true;
     }
 
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.buffer_unmapped",
-      "Buffer result could not be mapped to a plan item", result.source_id,
-      ""));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kPlanBufferUnmapped),
+        "Buffer result could not be mapped to a plan item", result.source_id,
+        ""));
     co_return false;
   };
 
@@ -1254,9 +1278,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       co_return true;
     }
 
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.material_unmapped",
-      "Material result could not be mapped to a plan item", result.source_id,
-      ""));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kPlanMaterialUnmapped),
+        "Material result could not be mapped to a plan item", result.source_id,
+        ""));
     co_return false;
   };
 
@@ -1267,7 +1292,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     const auto item_id = resolve_mesh_build_item(result);
     if (!item_id.has_value()) {
       session_.AddDiagnostic(
-        MakeErrorDiagnostic("import.plan.mesh_build_unmapped",
+        MakeErrorDiagnostic(std::string(import_codes::kPlanMeshBuildUnmapped),
           "Mesh build result could not be mapped to a plan item",
           result.source_id, ""));
       co_return false;
@@ -1309,7 +1334,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     const auto item_id = resolve_geometry_item(result);
     if (!item_id.has_value()) {
       session_.AddDiagnostic(
-        MakeErrorDiagnostic("import.plan.geometry_unmapped",
+        MakeErrorDiagnostic(std::string(import_codes::kPlanGeometryUnmapped),
           "Geometry result could not be mapped to a plan item",
           result.source_id, ""));
       co_return false;
@@ -1361,8 +1386,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       co_return true;
     }
 
-    session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.scene_unmapped",
-      "Scene result could not be mapped to a plan item", "", ""));
+    session_.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(import_codes::kPlanSceneUnmapped),
+        "Scene result could not be mapped to a plan item", "", ""));
     co_return false;
   };
 
@@ -1553,8 +1579,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
             };
           }
           break;
-        case PlanItemKind::kAudioResource:
-          continue;
         }
 
         if (envelope.has_value()) {
@@ -1706,9 +1730,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     const auto result_it
       = mesh_build_results.find(payload.item.mesh_build_item);
     if (result_it == mesh_build_results.end()) {
-      session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.mesh_missing",
-        "Missing mesh build result for geometry finalize", item.debug_name,
-        ""));
+      session_.AddDiagnostic(
+        MakeErrorDiagnostic(std::string(import_codes::kPlanMeshMissing),
+          "Missing mesh build result for geometry finalize", item.debug_name,
+          ""));
       co_return false;
     }
 
@@ -1741,7 +1766,7 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       }
       if (surface >= context.surfaces.size()) {
         session_.AddDiagnostic(
-          MakeErrorDiagnostic("import.plan.surface_invalid",
+          MakeErrorDiagnostic(std::string(import_codes::kPlanSurfaceInvalid),
             "Surface is outside the plan material list", item.debug_name,
             std::to_string(surface)));
         missing_material = true;
@@ -1751,10 +1776,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       const auto key = surface_material_key(
         oxygen::base::CheckedAt(context.surfaces, surface));
       if (!key.has_value()) {
-        session_.AddDiagnostic(
-          MakeErrorDiagnostic("import.plan.material_key_missing",
-            "Missing material key for geometry patch", item.debug_name,
-            std::to_string(surface)));
+        session_.AddDiagnostic(MakeErrorDiagnostic(
+          std::string(import_codes::kPlanMaterialKeyMissing),
+          "Missing material key for geometry patch", item.debug_name,
+          std::to_string(surface)));
         missing_material = true;
         continue;
       }
@@ -1800,7 +1825,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       if (it != geometry_keys.end()) {
         payload.item.geometry_keys.push_back(it->second);
       } else {
-        session_.AddDiagnostic(MakeErrorDiagnostic("scene.geometry_key_missing",
+        session_.AddDiagnostic(MakeErrorDiagnostic(
+          std::string(import_codes::kSceneGeometryKeyMissing),
           "Missing geometry key for scene dependency", item.debug_name, ""));
       }
     }
@@ -1845,10 +1871,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
       co_return co_await submit_geometry_asset(item_id, std::move(on_started));
     case PlanItemKind::kSceneAsset:
       co_return co_await submit_scene(item_id, std::move(on_started));
-    case PlanItemKind::kAudioResource:
-      session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.unhandled_kind",
-        "Unhandled plan item kind in import", item.debug_name, ""));
-      co_return false;
     }
 
     co_return false;
@@ -1874,8 +1896,6 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     case PlanItemKind::kSceneAsset:
       return pending_scenes.load(std::memory_order_acquire)
         < concurrency_.scene.queue_capacity;
-    case PlanItemKind::kAudioResource:
-      return false;
     }
     return false;
   };
@@ -1924,28 +1944,22 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
         = pending_envelopes.load(std::memory_order_acquire);
       if (pending_total == 0U && pending_envelopes_count == 0U) {
         if (scheduler->HasReady()) {
-          const auto any_capacity = [&] -> bool {
-            for (size_t index = 0U; index < kPlanKindCount; ++index) {
-              if (KindHasCapacity(static_cast<PlanItemKind>(index))) {
-                return true;
-              }
-            }
-            return false;
-          }();
-
-          if (!any_capacity) {
-            session_.AddDiagnostic(
-              MakeErrorDiagnostic("import.plan.capacity_blocked",
-                "Import plan has ready work but no pipeline capacity available",
-                "", ""));
+          // Results processed above may have readied work. Ready work no
+          // pipeline can take would otherwise spin this loop forever.
+          if (!scheduler->HasSubmittable(BuildAvailability())) {
+            session_.AddDiagnostic(MakeErrorDiagnostic(
+              std::string(import_codes::kPlanCapacityBlocked),
+              "Import plan has ready work but no pipeline capacity available",
+              "", ""));
             co_return co_await Finish(false);
           }
 
           continue;
         }
 
-        session_.AddDiagnostic(MakeErrorDiagnostic("import.plan.deadlock",
-          "Import plan has no pending work but is not complete", "", ""));
+        session_.AddDiagnostic(
+          MakeErrorDiagnostic(std::string(import_codes::kPlanDeadlock),
+            "Import plan has no pending work but is not complete", "", ""));
         co_return co_await Finish(false);
       }
 

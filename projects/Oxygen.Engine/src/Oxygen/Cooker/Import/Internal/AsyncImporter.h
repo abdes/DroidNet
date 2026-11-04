@@ -16,12 +16,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
-
-namespace oxygen::content::import {
-
-class ResourceTableRegistry;
-
-} // namespace oxygen::content::import
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import::detail {
 
@@ -59,9 +54,6 @@ public:
 
     //! Maximum number of jobs processed concurrently.
     size_t max_in_flight_jobs = 1;
-
-    //! Resource table registry for global aggregation.
-    ResourceTableRegistry* table_registry = nullptr;
   };
 
   //! Construct an importer with the given configuration.
@@ -92,9 +84,8 @@ public:
 
   //! Request cancellation and close the job channel.
   /*!
-     Triggers cancellation of the nursery and closes the job channel. The
-     processing loop exits after draining and all in-flight jobs report
-     completion.
+     Closes the job channel, completes every queued job as cancelled, and
+     cancels the nursery; each in-flight job reports its own completion.
 
      @note Call `Stop()` on the import thread (via the event loop) to keep
        coroutine resumption on the correct executor.
@@ -123,14 +114,14 @@ public:
   */
   OXGN_COOK_NDAPI auto TrySubmitJob(JobEntry entry) -> bool;
 
-  //! Check if the importer has capacity for another job.
-  OXGN_COOK_NDAPI auto CanAcceptJob() const noexcept -> bool;
-
   //! Close the job channel (no more jobs accepted).
   OXGN_COOK_API void CloseJobChannel();
 
   //! Check if the job channel is accepting jobs.
   OXGN_COOK_NDAPI auto IsAcceptingJobs() const -> bool;
+
+  //! Check if the job channel has no room for another job.
+  OXGN_COOK_NDAPI auto IsQueueFull() const -> bool;
 
   //! Get the number of active jobs (queued + running).
   OXGN_COOK_NDAPI auto ActiveJobCount() const noexcept -> size_t;
@@ -145,6 +136,10 @@ private:
   //! The job processing loop coroutine.
   [[nodiscard]] auto ProcessJobsLoop() -> co::Co<>;
 
+  //! Run one job in its slot; the counts drop as soon as it ends.
+  [[nodiscard]] auto RunJob(JobEntry entry, co::Semaphore::LockGuard slot)
+    -> co::Co<>;
+
   //! Process a single job.
   [[nodiscard]] auto ProcessJob(JobEntry entry) -> co::Co<>;
 
@@ -154,14 +149,8 @@ private:
   //! Channel for receiving job entries.
   co::Channel<JobEntry> job_channel_;
 
-  //! Channel for completed job notifications.
-  co::Channel<int> completion_channel_;
-
-  //! Configuration.
-  Config config_;
-
-  //! Channel capacity for backpressure checks.
-  size_t channel_capacity_ = 0;
+  //! One slot per job that may run at once.
+  co::Semaphore job_slots_;
 
   //! Active job count (queued + running).
   std::atomic<size_t> active_jobs_ { 0 };

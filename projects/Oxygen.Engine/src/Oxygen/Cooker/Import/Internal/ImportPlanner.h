@@ -94,6 +94,12 @@ struct PlanStep {
 
  @warning ImportPlanner is job-scoped and not thread-safe.
 */
+//! One edge of the plan: `consumer` waits for `producer`.
+struct PlanDependency final {
+  PlanItemId consumer;
+  PlanItemId producer;
+};
+
 class ImportPlanner final {
 public:
   ImportPlanner() = default;
@@ -110,10 +116,6 @@ public:
 
   //! Register a buffer resource plan item.
   OXGN_COOK_API auto AddBufferResource(
-    std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId;
-
-  //! Register an audio resource plan item.
-  OXGN_COOK_API auto AddAudioResource(
     std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId;
 
   //! Register a material asset plan item.
@@ -133,8 +135,7 @@ public:
     std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId;
 
   //! Add a dependency edge from consumer to producer.
-  OXGN_COOK_API auto AddDependency(PlanItemId consumer, PlanItemId producer)
-    -> void;
+  OXGN_COOK_API auto AddDependency(const PlanDependency& dependency) -> void;
 
   //=== Pipeline registration ===--------------------------------------------//
 

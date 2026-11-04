@@ -43,8 +43,6 @@ namespace import_tool_codes {
   //! A predecessor of the job failed or was refused, so the job did not run.
   inline constexpr std::string_view kSkippedPredecessorFailed
     = "import.skipped_predecessor_failed";
-  //! A stop request, or `--fail-fast`, ended the job or kept it from running.
-  inline constexpr std::string_view kCanceled = "import.canceled";
 } // namespace import_tool_codes
 
 //! Whether a report may be written to `report_path`; prints the typed refusal

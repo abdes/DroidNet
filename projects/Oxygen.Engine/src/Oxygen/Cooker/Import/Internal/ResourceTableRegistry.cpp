@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -156,6 +157,10 @@ auto ResourceTableRegistry::AcquireSharedTableLock(std::string key)
   auto state = std::shared_ptr<SharedTableLockState> {};
   {
     std::scoped_lock lock(mutex_);
+    // A lock only this map still holds has no holder and no waiter.
+    std::erase_if(shared_table_locks_, [&key](const auto& lock_entry) -> bool {
+      return lock_entry.first != key && lock_entry.second.use_count() == 1;
+    });
     auto& entry = shared_table_locks_[key];
     if (!entry) {
       entry = std::make_shared<SharedTableLockState>();
@@ -183,6 +188,15 @@ auto ResourceTableRegistry::WaitForFinalization(
     }
     co_await *completion;
   }
+}
+
+auto ResourceTableRegistry::ActiveSessionCount(
+  const std::filesystem::path& cooked_root) const -> uint32_t
+{
+  const auto key = NormalizeKey(cooked_root);
+  std::scoped_lock lock(mutex_);
+  const auto found = active_sessions_.find(key);
+  return found == active_sessions_.end() ? 0U : found->second.active;
 }
 
 auto ResourceTableRegistry::AbortSession(ImportSessionToken& participation)
@@ -226,7 +240,11 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
     if (found->second.active > 1) {
       --found->second.active;
       participation.active_ = false;
-      co_return SessionEnd { .ok = !found->second.aborted, .written = {} };
+      co_return SessionEnd {
+        .ok = !found->second.aborted,
+        .aborted = found->second.aborted,
+        .written = {},
+      };
     }
     // Allocate the admission gate before consuming the final participation.
     completion = std::make_shared<co::Event>();
@@ -252,7 +270,7 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
     completion->Trigger();
   });
   if (aborted) {
-    co_return SessionEnd { .ok = false, .written = {} };
+    co_return SessionEnd { .ok = false, .aborted = true, .written = {} };
   }
   using data::loose_cooked::FileKind;
   auto end = SessionEnd {};

@@ -29,4 +29,16 @@ struct ImportConcurrency {
   ImportPipelineConcurrency scene { .workers = 1, .queue_capacity = 8 };
 };
 
+//! Whether every pipeline can hold work: a zero capacity never takes any.
+[[nodiscard]] constexpr auto AllQueuesHaveCapacity(
+  const ImportConcurrency& concurrency) noexcept -> bool
+{
+  return concurrency.texture.queue_capacity > 0U
+    && concurrency.buffer.queue_capacity > 0U
+    && concurrency.material.queue_capacity > 0U
+    && concurrency.mesh_build.queue_capacity > 0U
+    && concurrency.geometry.queue_capacity > 0U
+    && concurrency.scene.queue_capacity > 0U;
+}
+
 } // namespace oxygen::content::import

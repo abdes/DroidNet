@@ -8,9 +8,13 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
+#include <ios>
+#include <iterator>
 #include <latch>
 #include <memory>
 #include <optional>
@@ -18,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -26,6 +31,7 @@
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -502,7 +508,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeSuccessWritesIndex)
   });
 }
 
-NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
+//! A failed job with nothing else on the root publishes nothing at all.
+NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsPublishesNothing)
 {
   RunInNursery([&] -> co::Co<> {
     const auto request = MakeRequest();
@@ -525,15 +532,193 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
     const ImportReport report = co_await session.Finalize();
 
     EXPECT_FALSE(report.success);
-    const auto has_index_warning = std::ranges::any_of(
-      report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "import.index_written_with_errors";
-      });
-    EXPECT_TRUE(has_index_warning);
+    EXPECT_FALSE(report.packaging.index_written);
+    EXPECT_TRUE(report.products.empty());
     const auto index_path = request.cooked_root.value() / "container.index.bin";
-    EXPECT_TRUE(std::filesystem::exists(index_path));
+    EXPECT_FALSE(std::filesystem::exists(index_path));
     co_return;
   });
+}
+
+//! A failed job over a published root leaves that publication exactly as it
+//! was: nothing of the failed job reaches a later reader.
+NOLINT_TEST_F(ImportSessionTest, FailedJobLeavesThePublishedIndexAsItWas)
+{
+  const auto request = MakeRequest();
+  ASSERT_HAS_VALUE(request.cooked_root) << "The fixture requires a cooked root";
+  const auto root = *request.cooked_root;
+  std::filesystem::create_directories(root);
+  const auto index_path = root / "container.index.bin";
+  const auto read_index = [&index_path] -> std::string {
+    return { std::istreambuf_iterator<char>(
+               std::ifstream(index_path, std::ios::binary).rdbuf()),
+      {} };
+  };
+  const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
+  const auto session_emitting
+    = [&](const std::string_view name) -> std::unique_ptr<ImportSession> {
+    auto session = std::make_unique<ImportSession>(request,
+      observer_ptr(reader_.get()), observer_ptr(&loop_->Driver()),
+      observer_ptr(writes_), observer_ptr(thread_pool_.get()),
+      observer_ptr(table_registry_.get()), observer_ptr(index_registry_.get()));
+    const auto relative = std::string(name) + ".omat";
+    const auto virtual_path = "/Content/" + relative;
+    session->AssetEmitter().Emit(
+      oxygen::data::AssetKey::FromVirtualPath(virtual_path),
+      oxygen::data::AssetType::kMaterial, virtual_path, relative,
+      descriptor.Bytes(), descriptor.References());
+    return session;
+  };
+
+  auto published = std::string {};
+  RunInNursery([&] -> co::Co<> {
+    const auto kept = session_emitting("kept");
+    EXPECT_TRUE((co_await kept->Finalize()).success);
+    published = read_index();
+
+    const auto failed = session_emitting("failed");
+    failed->AddDiagnostic({
+      .severity = ImportSeverity::kError,
+      .code = "test.error",
+      .message = "A late failure",
+      .source_path = {},
+      .object_path = {},
+    });
+    const auto report = co_await failed->Finalize();
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(report.products.empty());
+  });
+
+  EXPECT_EQ(read_index(), published);
+  const auto content = oxygen::content::cooked::CookedContent::Open(
+    oxygen::content::cooked::RealCookerStorage(), root);
+  EXPECT_NE(content.FindAsset("/Content/kept.omat"), nullptr);
+  EXPECT_EQ(content.FindAsset("/Content/failed.omat"), nullptr);
+}
+
+//! Two diagnostics that differ only by the object they name are two findings.
+NOLINT_TEST_F(ImportSessionTest, DiagnosticsNamingDifferentObjectsBothSurvive)
+{
+  const auto request = MakeRequest();
+  ASSERT_HAS_VALUE(request.cooked_root) << "The fixture requires a cooked root";
+  std::filesystem::create_directories(*request.cooked_root);
+  RunInNursery([&] -> co::Co<> {
+    ImportSession session(request, observer_ptr(reader_.get()),
+      observer_ptr(&loop_->Driver()), observer_ptr(writes_),
+      observer_ptr(thread_pool_.get()), observer_ptr(table_registry_.get()),
+      observer_ptr(index_registry_.get()));
+    for (const auto* const name : { "first", "second", "second" }) {
+      auto diagnostic = ImportDiagnostic {
+        .severity = ImportSeverity::kWarning,
+        .code = "test.warning",
+        .message = "The same finding",
+      };
+      diagnostic.object_name = name;
+      session.AddDiagnostic(std::move(diagnostic));
+    }
+    EXPECT_EQ(session.Diagnostics().size(), 2U);
+    co_await session.DrainAndRetire();
+  });
+}
+
+//! The last session to end the tables registers them even when it emitted no
+//! texture itself: the index then lists the row another session bound.
+NOLINT_TEST_F(ImportSessionTest, LastSessionRegistersTablesOfOtherParticipants)
+{
+  const auto request = MakeRequest();
+  ASSERT_HAS_VALUE(request.cooked_root) << "The fixture requires a cooked root";
+  const auto root = *request.cooked_root;
+  std::filesystem::create_directories(root);
+  RunInNursery([&] -> co::Co<> {
+    const auto make_session = [&] -> std::unique_ptr<ImportSession> {
+      return std::make_unique<ImportSession>(request,
+        observer_ptr(reader_.get()), observer_ptr(&loop_->Driver()),
+        observer_ptr(writes_), observer_ptr(thread_pool_.get()),
+        observer_ptr(table_registry_.get()),
+        observer_ptr(index_registry_.get()));
+    };
+    const auto with_texture = make_session();
+    const auto last = make_session();
+    static_cast<void>(
+      with_texture->TextureEmitter().Emit(MakeTestTexturePayload()));
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
+    last->AssetEmitter().Emit(
+      oxygen::data::AssetKey::FromVirtualPath("/Content/last.omat"),
+      oxygen::data::AssetType::kMaterial, "/Content/last.omat", "last.omat",
+      descriptor.Bytes(), descriptor.References());
+    OXCO_WITH_NURSERY(tasks)
+    {
+      tasks.Start([&] -> co::Co<> {
+        EXPECT_TRUE((co_await with_texture->Finalize()).success);
+      });
+      tasks.Start([&] -> co::Co<> {
+        // The case under test: the other session has ended the tables, so
+        // this one, which emitted no texture, ends them last.
+        // Each wait goes through the loop, so the other session's writes can
+        // complete; a coroutine yield alone would never let them.
+        constexpr auto kMostWaits = 5000;
+        auto waits = 0;
+        while (table_registry_->ActiveSessionCount(root) != 1U
+          && waits < kMostWaits) {
+          co_await thread_pool_->Run([](co::ThreadPool::CancelToken) -> void {
+            std::this_thread::sleep_for(std::chrono::milliseconds { 1 });
+          });
+          ++waits;
+        }
+        EXPECT_EQ(table_registry_->ActiveSessionCount(root), 1U);
+        EXPECT_TRUE((co_await last->Finalize()).success);
+      });
+      co_return co::kJoin;
+    };
+  });
+
+  const auto content = oxygen::content::cooked::CookedContent::Open(
+    oxygen::content::cooked::RealCookerStorage(), root);
+  // The fallback at row zero, and the emitted texture.
+  EXPECT_EQ(content.ResourceTable(oxygen::content::cooked::TableKind::kTexture)
+              .RowCount(),
+    2U);
+}
+
+//! An interrupted participant may leave rows with no bytes, so nothing of its
+//! cohort publishes, and the others are told they can run again.
+NOLINT_TEST_F(ImportSessionTest, InterruptedParticipantStopsTheCohort)
+{
+  const auto request = MakeRequest();
+  ASSERT_HAS_VALUE(request.cooked_root) << "The fixture requires a cooked root";
+  const auto root = *request.cooked_root;
+  std::filesystem::create_directories(root);
+  auto report = ImportReport {};
+  RunInNursery([&] -> co::Co<> {
+    const auto make_session = [&] -> std::unique_ptr<ImportSession> {
+      return std::make_unique<ImportSession>(request,
+        observer_ptr(reader_.get()), observer_ptr(&loop_->Driver()),
+        observer_ptr(writes_), observer_ptr(thread_pool_.get()),
+        observer_ptr(table_registry_.get()),
+        observer_ptr(index_registry_.get()));
+    };
+    const auto finishing = make_session();
+    const auto interrupted = make_session();
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
+    finishing->AssetEmitter().Emit(
+      oxygen::data::AssetKey::FromVirtualPath("/Content/finishing.omat"),
+      oxygen::data::AssetType::kMaterial, "/Content/finishing.omat",
+      "finishing.omat", descriptor.Bytes(), descriptor.References());
+    OXCO_WITH_NURSERY(tasks)
+    {
+      tasks.Start([&] -> co::Co<> { report = co_await finishing->Finalize(); });
+      tasks.Start([&] -> co::Co<> { co_await interrupted->DrainAndRetire(); });
+      co_return co::kJoin;
+    };
+  });
+
+  EXPECT_FALSE(report.success);
+  EXPECT_TRUE(std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kRootInterrupted;
+    }));
+  EXPECT_FALSE(std::filesystem::exists(root / "container.index.bin"));
 }
 
 //! Participant diagnostics stay local while successful publication is shared.
@@ -579,8 +764,12 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
       for (size_t index = 0; index < sessions.size(); ++index) {
         tasks.Start([&, index] -> co::Co<> {
           reports.at(index) = co_await sessions.at(index)->Finalize();
-          EXPECT_TRUE(std::filesystem::exists(
-            request.cooked_root.value() / "container.index.bin"));
+          // A participant that commits returns once the commit is published. A
+          // failed one does not wait for it.
+          if (reports.at(index).success) {
+            EXPECT_TRUE(std::filesystem::exists(
+              request.cooked_root.value() / "container.index.bin"));
+          }
         });
       }
       co_return co::kJoin;
@@ -589,8 +778,13 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
   EXPECT_TRUE(reports.at(0).success);
   EXPECT_FALSE(reports.at(1).success);
   EXPECT_TRUE(reports.at(2).success);
-  EXPECT_EQ(reports.at(0).source_key, reports.at(1).source_key);
   EXPECT_EQ(reports.at(0).source_key, reports.at(2).source_key);
+  EXPECT_TRUE(reports.at(1).products.empty());
+  const auto content = oxygen::content::cooked::CookedContent::Open(
+    oxygen::content::cooked::RealCookerStorage(), request.cooked_root.value());
+  EXPECT_NE(content.FindAsset("/Content/first.omat"), nullptr);
+  EXPECT_EQ(content.FindAsset("/Content/failed.omat"), nullptr);
+  EXPECT_NE(content.FindAsset("/Content/last.omat"), nullptr);
   EXPECT_EQ(std::ranges::count_if(reports,
               [](const auto& report) -> auto {
                 return report.packaging.index_written;
@@ -812,7 +1006,8 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeRefusesAnIdentityOfAnotherMount)
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(std::ranges::any_of(report.diagnostics,
       [](const import::ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "import.output_mount_mixed";
+        return diagnostic.code
+          == oxygen::content::import::import_codes::kOutputMountMixed;
       }));
     co_return;
   });

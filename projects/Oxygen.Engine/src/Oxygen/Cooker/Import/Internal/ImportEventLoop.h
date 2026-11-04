@@ -86,6 +86,9 @@ public:
   //! Check if the event loop is currently running.
   OXGN_COOK_NDAPI auto IsRunning() const noexcept -> bool;
 
+  //! Run what has been posted so far, on this thread, when no run is active.
+  OXGN_COOK_API auto RunPending() -> void;
+
   //! Post a callback to run on this event loop. Thread-safe.
   /*!
    The callback will be executed on the import thread during the next

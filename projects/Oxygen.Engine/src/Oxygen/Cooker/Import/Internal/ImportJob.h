@@ -53,8 +53,10 @@ class ImportSourceSnapshot;
 /*!
  Owns job-scoped state and defines the job lifetime boundary.
 
- The job is cancellable. Cancellation is reported via the completion callback
- only: `ImportReport.success=false` with a canceled diagnostic.
+ The job is cancellable. Cancellation is reported through the final progress
+ event (`ImportPhase::kCancelled`) and the completion callback
+ (`ImportReport::cancelled`, with the diagnostics the job gathered). Every job
+ ends with exactly one final event and one completion, whether it ran or not.
 
  The job is a `co::LiveObject`. It owns a per-job nursery which is opened by
  `ActivateAsync()` and canceled by `Stop()`. All job-scoped tasks (pipeline
@@ -87,6 +89,19 @@ public:
 
   //! Wait until the job reports completion.
   OXGN_COOK_NDAPI auto Wait() -> co::Co<>;
+
+  //! Complete a job that will never run, as cancelled.
+  /*!
+   For a job dropped from the queue at shutdown. Reports the final progress
+   event and the completion callback, like a job that ran. Call on the import
+   thread, instead of `Run()`.
+  */
+  OXGN_COOK_API auto CancelUnstarted() -> void;
+
+  //! Complete a job that will never run, as failed with `code`.
+  /*! @see CancelUnstarted */
+  OXGN_COOK_API auto RefuseUnstarted(
+    std::string_view code, std::string_view message) -> void;
 
   //! Get the job identifier.
   OXGN_COOK_NDAPI auto GetJobId() const noexcept -> ImportJobId;
@@ -231,6 +246,15 @@ private:
   //! Adds what a model import from its record read, once verified.
   auto AttachFingerprint(ImportReport& report) const -> void;
   [[nodiscard]] auto MainAsync() -> co::Co<>;
+
+  [[nodiscard]] auto CancelRequested() const noexcept -> bool;
+
+  //! A callback that throws is logged: it cannot change the job's outcome.
+  auto EmitProgress(const ProgressEvent& progress) const noexcept -> void;
+
+  //! The final progress event and the completion callback; every job's last
+  //! act.
+  auto ReportCompletion(ImportReport& report) -> void;
 
   [[nodiscard]] auto MakeCancelledReport(const ImportRequest& request) const
     -> ImportReport;

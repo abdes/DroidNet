@@ -59,14 +59,12 @@ template <oxygen::TypeId kTypeId> struct MockPipeline {
 
 constexpr oxygen::TypeId kMockTexturePipelineTypeId = 0x1101U;
 constexpr oxygen::TypeId kMockBufferPipelineTypeId = 0x1102U;
-constexpr oxygen::TypeId kMockAudioPipelineTypeId = 0x1103U;
 constexpr oxygen::TypeId kMockMaterialPipelineTypeId = 0x1104U;
 constexpr oxygen::TypeId kMockGeometryPipelineTypeId = 0x1105U;
 constexpr oxygen::TypeId kMockScenePipelineTypeId = 0x1106U;
 
 using MockTexturePipeline = MockPipeline<kMockTexturePipelineTypeId>;
 using MockBufferPipeline = MockPipeline<kMockBufferPipelineTypeId>;
-using MockAudioPipeline = MockPipeline<kMockAudioPipelineTypeId>;
 using MockMaterialPipeline = MockPipeline<kMockMaterialPipelineTypeId>;
 using MockGeometryPipeline = MockPipeline<kMockGeometryPipelineTypeId>;
 using MockScenePipeline = MockPipeline<kMockScenePipelineTypeId>;
@@ -85,7 +83,6 @@ protected:
       PlanItemKind::kTextureResource);
     Planner().RegisterPipeline<MockBufferPipeline>(
       PlanItemKind::kBufferResource);
-    Planner().RegisterPipeline<MockAudioPipeline>(PlanItemKind::kAudioResource);
     Planner().RegisterPipeline<MockMaterialPipeline>(
       PlanItemKind::kMaterialAsset);
     Planner().RegisterPipeline<MockGeometryPipeline>(
@@ -123,10 +120,10 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanStableOrder)
   const auto geometry = Planner().AddGeometryAsset("geometry", {});
   const auto scene = Planner().AddSceneAsset("scene", {});
 
-  Planner().AddDependency(material, texture);
-  Planner().AddDependency(geometry, material);
-  Planner().AddDependency(geometry, buffer);
-  Planner().AddDependency(scene, geometry);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
+  Planner().AddDependency({ .consumer = geometry, .producer = material });
+  Planner().AddDependency({ .consumer = geometry, .producer = buffer });
+  Planner().AddDependency({ .consumer = scene, .producer = geometry });
 
   const auto plan = Planner().MakePlan();
 
@@ -147,7 +144,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanTieBreaksByOrder)
 
   const auto texture = Planner().AddTextureResource("texture", {});
   const auto buffer = Planner().AddBufferResource("buffer", {});
-  const auto audio = Planner().AddAudioResource("audio", {});
+  const auto material = Planner().AddMaterialAsset("material", {});
 
   const auto plan = Planner().MakePlan();
 
@@ -157,7 +154,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanTieBreaksByOrder)
     order.push_back(step.item_id);
   }
 
-  const std::vector<PlanItemId> expected = { texture, buffer, audio };
+  const std::vector<PlanItemId> expected = { texture, buffer, material };
   EXPECT_EQ(order, expected);
 }
 
@@ -169,8 +166,8 @@ NOLINT_TEST_F(ImportPlannerPlanTest, AddDependencyDeduplicates)
   const auto texture = Planner().AddTextureResource("texture", {});
   const auto material = Planner().AddMaterialAsset("material", {});
 
-  Planner().AddDependency(material, texture);
-  Planner().AddDependency(material, texture);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
+  Planner().AddDependency({ .consumer = material, .producer = texture });
 
   const auto plan = Planner().MakePlan();
 
@@ -205,8 +202,8 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ReadinessTrackerTransitions)
   const auto buffer = Planner().AddBufferResource("buffer", {});
   const auto material = Planner().AddMaterialAsset("material", {});
 
-  Planner().AddDependency(material, texture);
-  Planner().AddDependency(material, buffer);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
+  Planner().AddDependency({ .consumer = material, .producer = buffer });
 
   const auto plan = Planner().MakePlan();
   (void)plan;
@@ -258,7 +255,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, ReadinessTrackerUnknownToken)
   const auto texture = Planner().AddTextureResource("texture", {});
   const auto material = Planner().AddMaterialAsset("material", {});
 
-  Planner().AddDependency(material, texture);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
 
   const auto plan = Planner().MakePlan();
   (void)plan;
@@ -279,7 +276,7 @@ NOLINT_TEST_F(ImportPlannerDeathTest, MakePlanSelfCycleDies)
   RegisterAllPipelines();
 
   const auto texture = Planner().AddTextureResource("texture", {});
-  Planner().AddDependency(texture, texture);
+  Planner().AddDependency({ .consumer = texture, .producer = texture });
 
   NOLINT_EXPECT_DEATH(Planner().MakePlan(), "cycle detected");
 }
@@ -294,8 +291,8 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanDisjointOrder)
   const auto buffer = Planner().AddBufferResource("buffer", {});
   const auto geometry = Planner().AddGeometryAsset("geometry", {});
 
-  Planner().AddDependency(material, texture);
-  Planner().AddDependency(geometry, buffer);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
+  Planner().AddDependency({ .consumer = geometry, .producer = buffer });
 
   const auto plan = Planner().MakePlan();
 
@@ -319,7 +316,7 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanOrderDiffersFromId)
   const auto middle = Planner().AddBufferResource("middle", {});
   const auto late = Planner().AddMaterialAsset("late", {});
 
-  Planner().AddDependency(early, late);
+  Planner().AddDependency({ .consumer = early, .producer = late });
 
   const auto plan = Planner().MakePlan();
 
@@ -342,39 +339,39 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanComplexScene)
   const auto scene = Planner().AddSceneAsset("scene", {});
 
   const auto lod0 = Planner().AddGeometryAsset("geom_lod0", {});
-  Planner().AddDependency(scene, lod0);
+  Planner().AddDependency({ .consumer = scene, .producer = lod0 });
 
   const auto lod1 = Planner().AddGeometryAsset("geom_lod1", {});
-  Planner().AddDependency(scene, lod1);
+  Planner().AddDependency({ .consumer = scene, .producer = lod1 });
 
   const auto material_a = Planner().AddMaterialAsset("material_a", {});
-  Planner().AddDependency(lod0, material_a);
-  Planner().AddDependency(lod1, material_a);
+  Planner().AddDependency({ .consumer = lod0, .producer = material_a });
+  Planner().AddDependency({ .consumer = lod1, .producer = material_a });
 
   const auto material_b = Planner().AddMaterialAsset("material_b", {});
-  Planner().AddDependency(lod0, material_b);
-  Planner().AddDependency(lod1, material_b);
+  Planner().AddDependency({ .consumer = lod0, .producer = material_b });
+  Planner().AddDependency({ .consumer = lod1, .producer = material_b });
 
   const auto albedo = Planner().AddTextureResource("albedo", {});
-  Planner().AddDependency(material_a, albedo);
-  Planner().AddDependency(material_b, albedo);
+  Planner().AddDependency({ .consumer = material_a, .producer = albedo });
+  Planner().AddDependency({ .consumer = material_b, .producer = albedo });
 
   const auto normal = Planner().AddTextureResource("normal", {});
-  Planner().AddDependency(material_a, normal);
+  Planner().AddDependency({ .consumer = material_a, .producer = normal });
 
   const auto roughness = Planner().AddTextureResource("roughness", {});
-  Planner().AddDependency(material_a, roughness);
+  Planner().AddDependency({ .consumer = material_a, .producer = roughness });
 
   const auto metalness = Planner().AddTextureResource("metalness", {});
-  Planner().AddDependency(material_b, metalness);
+  Planner().AddDependency({ .consumer = material_b, .producer = metalness });
 
   const auto vertex_buffer = Planner().AddBufferResource("vb", {});
-  Planner().AddDependency(lod0, vertex_buffer);
-  Planner().AddDependency(lod1, vertex_buffer);
+  Planner().AddDependency({ .consumer = lod0, .producer = vertex_buffer });
+  Planner().AddDependency({ .consumer = lod1, .producer = vertex_buffer });
 
   const auto index_buffer = Planner().AddBufferResource("ib", {});
-  Planner().AddDependency(lod0, index_buffer);
-  Planner().AddDependency(lod1, index_buffer);
+  Planner().AddDependency({ .consumer = lod0, .producer = index_buffer });
+  Planner().AddDependency({ .consumer = lod1, .producer = index_buffer });
 
   const auto data_buffer = Planner().AddBufferResource("custom_data", {});
 
@@ -431,8 +428,8 @@ NOLINT_TEST_F(ImportPlannerDeathTest, MakePlanCycleDies)
   const auto texture = Planner().AddTextureResource("texture", {});
   const auto material = Planner().AddMaterialAsset("material", {});
 
-  Planner().AddDependency(material, texture);
-  Planner().AddDependency(texture, material);
+  Planner().AddDependency({ .consumer = material, .producer = texture });
+  Planner().AddDependency({ .consumer = texture, .producer = material });
 
   NOLINT_EXPECT_DEATH(Planner().MakePlan(), "cycle detected");
 }
@@ -446,9 +443,9 @@ NOLINT_TEST_F(ImportPlannerDeathTest, MakePlanCrossAssetCycleDies)
   const auto geometry = Planner().AddGeometryAsset("geometry", {});
   const auto material = Planner().AddMaterialAsset("material", {});
 
-  Planner().AddDependency(scene, geometry);
-  Planner().AddDependency(geometry, material);
-  Planner().AddDependency(material, scene);
+  Planner().AddDependency({ .consumer = scene, .producer = geometry });
+  Planner().AddDependency({ .consumer = geometry, .producer = material });
+  Planner().AddDependency({ .consumer = material, .producer = scene });
 
   NOLINT_EXPECT_DEATH(Planner().MakePlan(), "cycle detected");
 }
@@ -493,7 +490,8 @@ NOLINT_TEST_F(ImportPlannerDeathTest, AddDependencyInvalidDies)
 
   const auto texture = Planner().AddTextureResource("texture", {});
 
-  NOLINT_EXPECT_DEATH(Planner().AddDependency(texture, PlanItemId { 99U }),
+  NOLINT_EXPECT_DEATH(Planner().AddDependency({ .consumer = texture,
+                        .producer = PlanItemId { 99U } }),
     "PlanItemId out of range");
 }
 

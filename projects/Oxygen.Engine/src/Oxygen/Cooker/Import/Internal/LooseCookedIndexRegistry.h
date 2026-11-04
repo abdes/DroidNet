@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -37,6 +38,13 @@ namespace oxygen::content::import {
 
  @see LooseCookedWriter
 */
+//! A participant of the cohort was interrupted, so the cohort published
+//! nothing.
+class LooseCookedPublicationAborted final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
 class LooseCookedIndexRegistry final {
 public:
   class DescriptorEditGuard;
@@ -114,9 +122,20 @@ public:
   /*! All participants receive the published identity. Only the writing session
       receives the full write result. Publication failure reaches every waiter.
    */
+  /*! @throw LooseCookedPublicationAborted When a participant aborted. */
   OXGN_COOK_API auto EndSession(ImportSessionToken& participation)
     -> co::Co<Publication>;
 
+  //! Retire participation of a session that contributes nothing.
+  /*!
+   Commits nothing of its own, leaves the other participants' commit as it is,
+   and does not wait for it. A cohort no session ends leaves the published index
+   untouched.
+  */
+  OXGN_COOK_API auto LeaveSession(ImportSessionToken& participation) -> void;
+
+  //! Abandon the cohort: a session whose work was interrupted may leave rows
+  //! with no bytes behind, so no participant publishes.
   OXGN_COOK_API auto AbortSession(ImportSessionToken& participation) -> void;
 
 private:
@@ -132,11 +151,17 @@ private:
     std::unique_ptr<LooseCookedWriter> writer;
     uint32_t active_sessions = 0;
     bool aborted = false;
+    //! Whether a participant of the cohort asked for its commit.
+    bool commit_requested = false;
     std::optional<data::SourceKey> source_key;
     std::shared_ptr<Completion> completion;
     std::unordered_map<std::string, std::shared_ptr<co::Semaphore>>
       descriptor_locks;
   };
+
+  //! Close a cohort its last participant has retired, under its entry's lock.
+  [[nodiscard]] static auto CloseCohort(Entry& state)
+    -> std::optional<LooseCookedWriteResult>;
 
   [[nodiscard]] auto NormalizeKey(
     const std::filesystem::path& cooked_root) const -> std::string;

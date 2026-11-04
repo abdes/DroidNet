@@ -57,15 +57,15 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
 
  ### Architecture
 
- Jobs are submitted via a thread-safe channel directly to AsyncImporter,
- which processes them sequentially on the import thread. The service
- tracks active jobs only for cancellation support.
+ Submissions are posted to the import thread, where AsyncImporter queues them
+ and runs up to `max_in_flight_jobs` at once. The service tracks active jobs
+ only for cancellation support.
 
  ### Lifecycle
 
  1. Construct the service (spawns import thread).
  2. Call `SubmitImport()` from any thread to queue jobs.
- 3. Receive callbacks on your thread (via ThreadNotification if available).
+ 3. Receive callbacks on the import thread.
  4. Call `Stop()` and wait for `IsStopped()` before destruction.
 
  ### Shutdown Contract
@@ -81,30 +81,23 @@ using ImportJobFactory = std::function<std::shared_ptr<detail::ImportJob>(
  ### Cancellation
 
  Per-job cancellation is supported via `CancelJob(job_id)`, which triggers
- an event observed by the job's nursery. Cancelled jobs complete with a
- diagnostic code "import.canceled".
-
- ### Simplified Design (2026-01-15 Refactoring)
-
- Previous implementation tracked jobs in multiple queues with manual
- synchronization. This was redundant with co::Channel. Current design:
-
- - Jobs submitted directly to AsyncImporter via channel
- - No pending/active/completed tracking (channel handles state)
- - Only cancel events tracked for cancellation support
- - Nursery-based cancellation (no manual state machines)
+ an event observed by the job's nursery. A cancelled job completes with
+ `ImportReport::cancelled`, the diagnostics it gathered and the diagnostic
+ code "import.canceled", publishes nothing, and ends with the final progress
+ phase `ImportPhase::kCancelled`. A job cancelled while it publishes may
+ complete instead: completion wins once its commit has started. Another job
+ on the same cooked root that is still in flight then fails with
+ "import.cooked_root_interrupted" and can run again.
 
  ### Thread Safety
 
- All public methods are thread-safe. The service internally marshals
- requests to the import thread and results back to the caller's thread.
+ All public methods are thread-safe. Requests are marshalled to the import
+ thread.
 
  ### Callback Threading
 
- Callbacks are invoked on the caller's thread if that thread has an
- event loop with `ThreadNotification` support. For threads without an
- event loop (e.g., main thread before starting), callbacks are invoked
- directly on the import thread.
+ Callbacks are invoked directly on the import thread, so a callback that
+ blocks holds up every job.
 
  ### Example
 
@@ -217,7 +210,7 @@ public:
           finishes (success, failure, or cancellation). Receives the job ID and
           `ImportReport` with success status, diagnostics, and asset metadata.
           Cancelled jobs (via `CancelJob()` or `CancelAll()`) complete with
-          `report.success = false` and diagnostic code `"import.canceled"`.
+          `report.cancelled` and diagnostic code `"import.canceled"`.
 
           @note Callbacks are invoked on the import thread. If the calling
                 thread is monitoring for results and progress, it should
@@ -317,7 +310,7 @@ public:
      @note Cancellation is posted to the import thread to keep coroutine
        resumption on the correct executor.
 
-   After calling this, `SubmitImport` will return `kInvalidJobId`.
+   After calling this, `SubmitImport` returns `std::nullopt`.
   */
   OXGN_COOK_API auto RequestShutdown() const -> void;
 

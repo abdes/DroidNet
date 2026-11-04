@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <memory>
@@ -77,6 +78,12 @@ auto LooseCookedIndexRegistry::GetEntry(
   if (const auto found = entries_.find(key); found != entries_.end()) {
     return found->second;
   }
+  // Only this map still holds an idle root's entry, and nothing can reach it
+  // again: forget those, so a long-lived service does not grow per root.
+  std::erase_if(entries_, [](const auto& entry) -> bool {
+    return entry.second.use_count() == 1 && !entry.second->writer
+      && entry.second->active_sessions == 0;
+  });
   auto state = std::make_shared<Entry>();
   entries_.emplace(key, state);
   return state;
@@ -240,40 +247,29 @@ auto LooseCookedIndexRegistry::EndSession(ImportSessionToken& participation)
   }
   std::shared_ptr<Completion> completion;
   std::optional<LooseCookedWriteResult> result;
-  bool publishes = false;
+  bool closes = false;
   {
     std::scoped_lock lock(state->mutex);
     if (state->active_sessions == 0 || !state->writer) {
       throw std::logic_error("End index session without matching BeginSession");
     }
     completion = state->completion;
+    state->commit_requested = true;
     --state->active_sessions;
     participation.active_ = false;
-    publishes = state->active_sessions == 0;
-    if (publishes) {
-      auto writer = std::move(state->writer);
-      state->source_key.reset();
-      state->completion.reset();
-      completion->aborted = state->aborted;
-      if (!completion->aborted) {
-        try {
-          auto written = writer->Finish();
-          completion->source_key = written.source_key;
-          result = std::move(written);
-        } catch (...) {
-          completion->failure = std::current_exception();
-        }
-      }
+    closes = state->active_sessions == 0;
+    if (closes) {
+      result = CloseCohort(*state);
     }
   }
 
   // Trigger resumes waiters synchronously; their callbacks may admit new work.
-  if (publishes) {
+  if (closes) {
     completion->ready.Trigger();
   }
   co_await completion->ready;
   if (completion->aborted) {
-    throw std::runtime_error(
+    throw LooseCookedPublicationAborted(
       "Index publication aborted by an interrupted import session");
   }
   if (completion->failure) {
@@ -283,6 +279,55 @@ auto LooseCookedIndexRegistry::EndSession(ImportSessionToken& participation)
     .source_key = completion->source_key,
     .write_result = std::move(result),
   };
+}
+
+auto LooseCookedIndexRegistry::CloseCohort(Entry& state)
+  -> std::optional<LooseCookedWriteResult>
+{
+  auto writer = std::move(state.writer);
+  auto completion = std::move(state.completion);
+  const auto commits = state.commit_requested && !state.aborted;
+  state.source_key.reset();
+  state.commit_requested = false;
+  completion->aborted = state.aborted;
+  if (!commits) {
+    return std::nullopt;
+  }
+  try {
+    auto written = writer->Finish();
+    completion->source_key = written.source_key;
+    return written;
+  } catch (...) {
+    completion->failure = std::current_exception();
+    return std::nullopt;
+  }
+}
+
+auto LooseCookedIndexRegistry::LeaveSession(ImportSessionToken& participation)
+  -> void
+{
+  participation.Validate(this);
+  std::shared_ptr<Entry> state;
+  {
+    std::scoped_lock lock(mutex_);
+    state = entries_.at(participation.key_);
+  }
+  std::shared_ptr<Completion> completion;
+  {
+    std::scoped_lock lock(state->mutex);
+    if (state->active_sessions == 0 || !state->writer) {
+      throw std::logic_error(
+        "Leave index session without matching BeginSession");
+    }
+    participation.active_ = false;
+    if (--state->active_sessions == 0) {
+      completion = state->completion;
+      static_cast<void>(CloseCohort(*state));
+    }
+  }
+  if (completion) {
+    completion->ready.Trigger();
+  }
 }
 
 auto LooseCookedIndexRegistry::AbortSession(ImportSessionToken& participation)
@@ -305,6 +350,7 @@ auto LooseCookedIndexRegistry::AbortSession(ImportSessionToken& participation)
     participation.active_ = false;
     if (--state->active_sessions == 0) {
       state->writer.reset();
+      state->commit_requested = false;
       state->source_key.reset();
       completion = std::move(state->completion);
       completion->aborted = true;

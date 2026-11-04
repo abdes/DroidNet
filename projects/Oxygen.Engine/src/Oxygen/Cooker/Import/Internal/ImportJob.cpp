@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -21,6 +22,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -120,6 +122,73 @@ namespace {
     return fingerprint;
   }
 
+  auto AddFailure(ImportReport& report, const ImportRequest& request,
+    const std::string_view code, const std::string_view message) -> void
+  {
+    report.success = false;
+    report.cancelled = false;
+    report.cooked_root = request.ResolveCookedRoot();
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = std::string(code),
+      .message = std::string(message),
+      .source_path = request.source_path.string(),
+      .object_path = {},
+    });
+  }
+
+  //! Diagnostics may allocate; teardown must finish even when the failure was
+  //! allocation failure, so a minimal failed report still carries completion.
+  auto DescribeFailure(ImportReport& report, const ImportRequest& request,
+    const std::exception_ptr& failure) noexcept -> void
+  {
+    report.success = false;
+    report.cancelled = false;
+    try {
+      try {
+        std::rethrow_exception(failure);
+      } catch (const LooseCookedRootBusy& error) {
+        // Nothing was written: the cook can run again once the root is free.
+        AddFailure(
+          report, request, import_codes::kCookedRootBusy, error.what());
+      } catch (const ModelImportRecordError& error) {
+        // The record refused its publication: its code, not the exception's.
+        AddFailure(
+          report, request, error.Diagnostic().code, error.Diagnostic().message);
+      } catch (const ImportSourceChanged& error) {
+        AddFailure(report, request, import_codes::kSourceChanged, error.what());
+      } catch (const std::exception& error) {
+        AddFailure(report, request, import_codes::kException, error.what());
+      } catch (...) {
+        AddFailure(report, request, import_codes::kException,
+          "Unknown import exception");
+      }
+    } catch (...) {
+      report.success = false;
+    }
+  }
+
+  [[nodiscard]] auto FinalPhase(const ImportReport& report) noexcept
+    -> ImportPhase
+  {
+    if (report.success) {
+      return ImportPhase::kComplete;
+    }
+    return report.cancelled ? ImportPhase::kCancelled : ImportPhase::kFailed;
+  }
+
+  [[nodiscard]] auto FinalMessage(const ImportPhase phase) -> std::string_view
+  {
+    switch (phase) {
+    case ImportPhase::kComplete:
+      return "Job finished";
+    case ImportPhase::kCancelled:
+      return "Job cancelled";
+    default:
+      return "Job failed";
+    }
+  }
+
 } // namespace
 
 ImportJob::ImportJob(ImportJobParams params)
@@ -140,9 +209,9 @@ ImportJob::ImportJob(ImportJobParams params)
   , model_import_record_(std::move(params.model_import_record))
 {
   CHECK_NOTNULL_F(thread_pool_, "ImportJob requires a non-null thread pool");
-  if (model_import_record_ || request_.captured_inputs
-    || !request_.preparation_inputs.empty() || request_.model_import) {
-    CHECK_NOTNULL_F(file_reader_, "Observed imports require a source reader");
+  // Every job's reads are observed, so a source that changes under it is found
+  // before anything publishes.
+  if (file_reader_) {
     source_snapshot_ = std::make_shared<ImportSourceSnapshot>(
       *file_reader_, *thread_pool_, request_.captured_inputs);
     const auto preparation = std::exchange(request_.preparation_inputs, {});
@@ -313,6 +382,10 @@ auto ImportJob::Session() -> ImportSession&
       for (const auto& note : model_import_record_->Notes()) {
         session_->AddDiagnostic(note);
       }
+    } else {
+      // A record's generation becomes visible only when the record publishes,
+      // and the job verifies right before that instead.
+      session_->VerifySourcesBeforeCommit(source_snapshot_);
     }
   }
   return *session_;
@@ -351,9 +424,15 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
     co_return report;
   }
   if (!model_import_record_) {
-    if (source_snapshot_) {
-      co_await source_snapshot_->Verify();
-      AttachFingerprint(report);
+    // The session verified the sources before it committed, so a successful
+    // report is already published: nothing here can turn it into a failure.
+    if (source_snapshot_ && report.success) {
+      try {
+        AttachFingerprint(report);
+      } catch (const std::exception& error) {
+        LOG_F(
+          ERROR, "Could not fingerprint a published import: {}", error.what());
+      }
     }
     co_return report;
   }
@@ -371,7 +450,7 @@ auto ImportJob::ExecuteAndPublishAsync() -> co::Co<ImportReport>
     co_return MakeCancelledReport(request_);
   }
   co_await source_snapshot_->Verify();
-  if (IsStopped() || (cancel_event_ && cancel_event_->Triggered())) {
+  if (CancelRequested()) {
     co_return MakeCancelledReport(request_);
   }
   AttachFingerprint(*candidate);
@@ -414,25 +493,14 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   bool execution_completed = false;
   std::exception_ptr execution_failure;
   std::exception_ptr drain_failure;
-  const auto fail
-    = [&](const std::string_view code, const std::string_view message) -> void {
-    report.success = false;
-    report.cooked_root = request_.ResolveCookedRoot();
-    report.diagnostics.push_back({
-      .severity = ImportSeverity::kError,
-      .code = std::string(code),
-      .message = std::string(message),
-      .source_path = request_.source_path.string(),
-      .object_path = {},
-    });
-  };
+  auto gathered_diagnostics = std::vector<ImportDiagnostic> {};
   try {
     ReportJobEvent(ProgressEventKind::kJobStarted, ImportPhase::kPending, 0.0F,
       "Job started");
     OXCO_WITH_NURSERY(producers)
     {
       producer_nursery_ = &producers;
-      if (IsStopped() || (cancel_event_ && cancel_event_->Triggered())) {
+      if (CancelRequested()) {
         co_return co::kCancel;
       }
       if (cancel_event_) {
@@ -462,66 +530,74 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
       fallback_telemetry.finalize_duration = session_->FinalizeDuration();
     }
   };
+  // What the job found before it was cut short stays in its report.
+  const auto gather_session_diagnostics = [&] noexcept -> void {
+    if (!execution_completed && session_) {
+      try {
+        gathered_diagnostics = session_->Diagnostics();
+      } catch (...) {
+        gathered_diagnostics.clear();
+      }
+    }
+  };
   try {
     if (session_) {
       co_await session_->DrainAndRetire();
       capture_session_timing();
+      gather_session_diagnostics();
       session_.reset();
     }
   } catch (...) {
     capture_session_timing();
+    gather_session_diagnostics();
     drain_failure = std::current_exception();
   }
 
-  // Diagnostics may allocate. Teardown must finish even when the original
-  // failure was allocation failure in table/index finalization.
-  const auto describe_failure
-    = [&](const std::exception_ptr& failure) noexcept -> void {
-    report.success = false;
-    try {
-      try {
-        std::rethrow_exception(failure);
-      } catch (const LooseCookedRootBusy& error) {
-        // Nothing was written: the cook can run again once the root is free.
-        fail("import.cooked_root_busy", error.what());
-      } catch (const ModelImportRecordError& error) {
-        // The record refused its publication: its code, not the exception's.
-        fail(error.Diagnostic().code, error.Diagnostic().message);
-      } catch (const std::exception& error) {
-        fail("import.exception", error.what());
-      } catch (...) {
-        fail("import.exception", "Unknown import exception");
-      }
-    } catch (...) {
-      // A minimal failed report still carries completion during memory
-      // exhaustion.
-      report.success = false;
-    }
-  };
   if (execution_failure && !IsStopped()) {
-    describe_failure(execution_failure);
+    DescribeFailure(report, request_, execution_failure);
   } else if (!execution_completed) {
     try {
       report = MakeCancelledReport(request_);
     } catch (...) {
       report.success = false;
+      report.cancelled = true;
     }
+  } else if (!report.success && CancelRequested()) {
+    // The job noticed the stop itself and returned instead of unwinding.
+    report.cancelled = true;
   }
   if (drain_failure) {
-    describe_failure(drain_failure);
+    DescribeFailure(report, request_, drain_failure);
   }
   if (!execution_completed) {
     fallback_telemetry.total_duration
       = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - started);
     report.telemetry = fallback_telemetry;
+    try {
+      report.diagnostics.insert(report.diagnostics.begin(),
+        gathered_diagnostics.begin(), gathered_diagnostics.end());
+    } catch (...) {
+      LOG_F(ERROR, "Dropped the diagnostics of an interrupted import");
+    }
   }
+  ReportCompletion(report);
+}
+
+auto ImportJob::CancelRequested() const noexcept -> bool
+{
+  return IsStopped() || (cancel_event_ && cancel_event_->Triggered());
+}
+
+auto ImportJob::ReportCompletion(ImportReport& report) -> void
+{
   try {
-    ReportJobEvent(ProgressEventKind::kJobFinished,
-      report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
-      report.success ? "Job finished" : "Job failed");
+    const auto phase = FinalPhase(report);
+    ReportJobEvent(ProgressEventKind::kJobFinished, phase, 1.0F,
+      std::string(FinalMessage(phase)));
   } catch (...) {
-    describe_failure(std::current_exception());
+    // The outcome is decided: the job may already be published.
+    LOG_F(ERROR, "Could not build the final progress event of job {}", job_id_);
   }
   if (on_complete_) {
     try {
@@ -534,23 +610,51 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   }
 }
 
+auto ImportJob::CancelUnstarted() -> void
+{
+  auto report = MakeCancelledReport(request_);
+  ReportCompletion(report);
+}
+
+auto ImportJob::RefuseUnstarted(
+  const std::string_view code, const std::string_view message) -> void
+{
+  auto report = ImportReport {};
+  report.telemetry = MakeZeroTelemetry();
+  AddFailure(report, request_, code, message);
+  ReportCompletion(report);
+}
+
 auto ImportJob::MakeCancelledReport(const ImportRequest& request) const
   -> ImportReport
 {
   auto report = ImportReport {};
   report.cooked_root = request.ResolveCookedRoot();
   report.success = false;
+  report.cancelled = true;
 
   report.telemetry = MakeZeroTelemetry();
 
   report.diagnostics.push_back({
     .severity = ImportSeverity::kInfo,
-    .code = "import.canceled",
+    .code = std::string(import_codes::kCanceled),
     .message = "Import canceled",
     .source_path = request.source_path.string(),
   });
 
   return report;
+}
+
+auto ImportJob::EmitProgress(const ProgressEvent& progress) const noexcept
+  -> void
+{
+  try {
+    on_progress_(progress);
+  } catch (const std::exception& error) {
+    LOG_F(ERROR, "Import progress callback failed: {}", error.what());
+  } catch (...) {
+    LOG_F(ERROR, "Import progress callback threw an unknown exception");
+  }
 }
 
 auto ImportJob::ReportJobEvent(ProgressEventKind kind, ImportPhase phase,
@@ -566,7 +670,7 @@ auto ImportJob::ReportJobEvent(ProgressEventKind kind, ImportPhase phase,
   ProgressEvent progress = kind == ProgressEventKind::kJobStarted
     ? MakeJobStarted(job_id_, phase, overall_progress, std::move(message))
     : MakeJobFinished(job_id_, phase, overall_progress, std::move(message));
-  on_progress_(progress);
+  EmitProgress(progress);
 }
 
 auto ImportJob::ReportPhaseProgress(
@@ -578,7 +682,7 @@ auto ImportJob::ReportPhaseProgress(
 
   auto progress
     = MakePhaseProgress(job_id_, phase, overall_progress, std::move(message));
-  on_progress_(progress);
+  EmitProgress(progress);
 }
 
 auto ImportJob::ReportItemProgress(ProgressEventKind kind, ImportPhase phase,
@@ -597,7 +701,7 @@ auto ImportJob::ReportItemProgress(ProgressEventKind kind, ImportPhase phase,
         std::move(item_name), std::move(message))
     : MakeItemFinished(job_id_, phase, overall_progress, std::move(item_kind),
         std::move(item_name), std::move(message));
-  on_progress_(progress);
+  EmitProgress(progress);
 }
 
 } // namespace oxygen::content::import::detail

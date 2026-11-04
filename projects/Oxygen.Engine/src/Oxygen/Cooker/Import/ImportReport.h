@@ -172,8 +172,12 @@ struct ImportReport final {
   //! Machine-readable packaging and diagnostics summary.
   ImportPackagingSummary packaging {};
 
-  //! True if the cook completed and emitted an index.
+  //! True if the job finished and its output is published.
   bool success = false;
+
+  //! True if a stop request ended the job. `success` is then false and nothing
+  //! of the job is published.
+  bool cancelled = false;
 };
 
 //! Completion callback invoked when import finishes.

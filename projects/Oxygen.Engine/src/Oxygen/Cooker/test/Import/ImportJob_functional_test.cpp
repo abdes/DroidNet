@@ -18,6 +18,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -273,7 +274,7 @@ NOLINT_TEST_F(ImportJobTest, StopCompletesWithCancelledDiagnostic)
 
   EXPECT_EQ(complete_calls.load(), 1);
   EXPECT_FALSE(reported_success);
-  EXPECT_EQ(canceled_code, "import.canceled");
+  EXPECT_EQ(canceled_code, oxygen::content::import::import_codes::kCanceled);
   EXPECT_TRUE(job.StopTokenForTest().stop_requested());
 }
 
@@ -328,7 +329,7 @@ NOLINT_TEST_F(ImportJobTest, CancelEventPreTriggeredAvoidsExecution)
 
   EXPECT_EQ(complete_calls.load(), 1);
   EXPECT_FALSE(reported_success);
-  EXPECT_EQ(canceled_code, "import.canceled");
+  EXPECT_EQ(canceled_code, oxygen::content::import::import_codes::kCanceled);
   EXPECT_FALSE(job.executed);
   EXPECT_TRUE(job.StopTokenForTest().stop_requested());
 }

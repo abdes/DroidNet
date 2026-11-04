@@ -71,9 +71,15 @@ public:
   struct SessionEnd final {
     //! False when the cohort was aborted or a table could not be written.
     bool ok = true;
+    //! True when another participant aborted the cohort.
+    bool aborted = false;
     //! The tables this session wrote, as the last one of its cohort.
     std::vector<WrittenTable> written;
   };
+
+  //! How many sessions of `cooked_root` have not ended yet.
+  OXGN_COOK_NDAPI auto ActiveSessionCount(
+    const std::filesystem::path& cooked_root) const -> uint32_t;
 
   //! Complete a session and finalize tables if it was the last one.
   OXGN_COOK_API auto EndSession(ImportSessionToken& participation)
@@ -99,7 +105,7 @@ private:
 
   observer_ptr<serio::IoDriver> driver_;
   observer_ptr<cooked::ImportStorage> storage_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::unordered_map<std::string, std::unique_ptr<TextureTableAggregator>>
     texture_tables_;
   std::unordered_map<std::string, std::unique_ptr<BufferTableAggregator>>

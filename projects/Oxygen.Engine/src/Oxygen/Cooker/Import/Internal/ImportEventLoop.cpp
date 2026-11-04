@@ -100,6 +100,8 @@ auto ImportEventLoop::Stop() -> void
   io_context_.stop();
 }
 
+auto ImportEventLoop::RunPending() -> void { io_context_.poll(); }
+
 auto ImportEventLoop::IsRunning() const noexcept -> bool
 {
   return running_.load(std::memory_order_acquire)

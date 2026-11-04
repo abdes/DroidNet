@@ -6,12 +6,18 @@
 
 // Covers: Import/Internal/ImportJob.cpp
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <functional>
+#include <ios>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Base/Macros.h>
@@ -21,6 +27,9 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
@@ -30,12 +39,14 @@
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/HoldingStorage.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -284,6 +295,316 @@ NOLINT_TEST(ImportJobLifetimeTest,
   const auto index = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root);
   EXPECT_NO_THROW(
     index.ValidateContent(root, oxygen::content::lc::IntegrityCheck::kFull));
+}
+
+constexpr auto kGatheredCode = std::string_view { "test.gathered" };
+
+[[nodiscard]] auto MakeGatheredWarning() -> imp::ImportDiagnostic
+{
+  return imp::ImportDiagnostic {
+    .severity = imp::ImportSeverity::kWarning,
+    .code = std::string(kGatheredCode),
+    .message = "Found before the job was cut short",
+    .source_path = {},
+    .object_path = {},
+  };
+}
+
+//! Gathers a diagnostic, then waits to be stopped.
+class GatherThenWaitJob final : public imp::detail::ImportJob {
+  OXYGEN_TYPED(GatherThenWaitJob)
+public:
+  using ImportJob::ImportJob;
+  ~GatherThenWaitJob() override = default;
+  OXYGEN_MAKE_NON_COPYABLE(GatherThenWaitJob)
+  OXYGEN_MAKE_NON_MOVABLE(GatherThenWaitJob)
+  co::Event waiting;
+
+private:
+  auto ExecuteAsync() -> co::Co<imp::ImportReport> override
+  {
+    EnsureCookedRoot();
+    Session().AddDiagnostic(MakeGatheredWarning());
+    waiting.Trigger();
+    co_await co::kSuspendForever;
+    co_return imp::ImportReport {};
+  }
+};
+
+//! Gathers a diagnostic, then fails with an exception.
+class GatherThenThrowJob final : public imp::detail::ImportJob {
+  OXYGEN_TYPED(GatherThenThrowJob)
+public:
+  using ImportJob::ImportJob;
+  ~GatherThenThrowJob() override = default;
+  OXYGEN_MAKE_NON_COPYABLE(GatherThenThrowJob)
+  OXYGEN_MAKE_NON_MOVABLE(GatherThenThrowJob)
+
+private:
+  auto ExecuteAsync() -> co::Co<imp::ImportReport> override
+  {
+    EnsureCookedRoot();
+    Session().AddDiagnostic(MakeGatheredWarning());
+    if (Session().HasErrors()) {
+      co_return imp::ImportReport {};
+    }
+    throw std::runtime_error("Failure after a gathered diagnostic");
+  }
+};
+
+//! A plain job: reads its source, runs `after_read`, and emits a material.
+class ReadThenEmitJob final : public imp::detail::ImportJob {
+  OXYGEN_TYPED(ReadThenEmitJob)
+public:
+  ReadThenEmitJob(
+    imp::detail::ImportJobParams params, std::function<void()> after_read)
+    : ImportJob(std::move(params))
+    , after_read_(std::move(after_read))
+  {
+  }
+  ~ReadThenEmitJob() override = default;
+  OXYGEN_MAKE_NON_COPYABLE(ReadThenEmitJob)
+  OXYGEN_MAKE_NON_MOVABLE(ReadThenEmitJob)
+
+private:
+  auto ExecuteAsync() -> co::Co<imp::ImportReport> override
+  {
+    EnsureCookedRoot();
+    auto& session = Session();
+    const auto bytes = co_await FileReader()->ReadFile(Request().source_path);
+    if (!bytes) {
+      throw std::runtime_error("The fixture source is unreadable");
+    }
+    after_read_();
+    const auto descriptor = oxygen::cooker::testing::MaterialBuilder {};
+    session.AssetEmitter().Emit(
+      oxygen::data::AssetKey::FromVirtualPath("/Cooked/source.omat"),
+      oxygen::data::AssetType::kMaterial, "/Cooked/source.omat", "source.omat",
+      descriptor.Bytes(), descriptor.References());
+    co_return co_await session.Finalize();
+  }
+  std::function<void()> after_read_;
+};
+
+//! What a job told its callers, in full.
+struct JobOutcome final {
+  imp::ImportReport report;
+  int completions = 0;
+  int final_events = 0;
+  imp::ImportPhase final_phase = imp::ImportPhase::kPending;
+};
+
+class ImportJobOutcomeTest : public testing::Test {
+protected:
+  ImportJobOutcomeTest()
+    : reader_(imp::CreateAsyncFileReader(loop_.Driver()))
+    , pool_(loop_, 1)
+    , tables_(loop_.Driver(),
+        oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()))
+    , indexes_(
+        oxygen::make_observer(&oxygen::content::cooked::RealCookerStorage()))
+  {
+    std::filesystem::create_directories(Root());
+    WriteSource("original");
+  }
+
+  [[nodiscard]] auto Root() const -> std::filesystem::path
+  {
+    return temp_.Path() / "root";
+  }
+
+  [[nodiscard]] auto Source() const -> std::filesystem::path
+  {
+    return temp_.Path() / "source.bin";
+  }
+
+  auto WriteSource(const std::string_view content) const -> void
+  {
+    std::ofstream(Source(), std::ios::binary) << content;
+  }
+
+  [[nodiscard]] auto Params() -> imp::detail::ImportJobParams
+  {
+    imp::ImportRequest request;
+    request.source_path = Source();
+    request.asset_virtual_path = "/Cooked/source.omat";
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.cooked_root = Root();
+    return imp::detail::ImportJobParams {
+      .id = imp::ImportJobId { 1 },
+      .request = std::move(request),
+      .on_complete = [this](auto, const imp::ImportReport& report) -> void {
+        outcome_.report = report;
+        ++outcome_.completions;
+      },
+      .on_progress = [this](const imp::ProgressEvent& event) -> void {
+        if (event.header.kind == imp::ProgressEventKind::kJobFinished) {
+          ++outcome_.final_events;
+          outcome_.final_phase = event.header.phase;
+        }
+      },
+      .cancel_event = {},
+      .reader = oxygen::make_observer(reader_.get()),
+      .driver = oxygen::make_observer(&loop_.Driver()),
+      .thread_pool = oxygen::make_observer(&pool_),
+      .registry = oxygen::make_observer(&tables_),
+      .index_registry = oxygen::make_observer(&indexes_),
+      .concurrency = {},
+      .script_compile_callback = {},
+      .stop_token = {},
+      .model_import_record = {},
+    };
+  }
+
+  [[nodiscard]] auto HasIndex() const -> bool
+  {
+    return std::filesystem::exists(Root() / "container.index.bin");
+  }
+
+  [[nodiscard]] auto Reported(const std::string_view code) const -> bool
+  {
+    return std::ranges::any_of(outcome_.report.diagnostics,
+      [code](const imp::ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code == code;
+      });
+  }
+
+  oxygen::testing::ScopedTempDir temp_;
+  imp::ImportEventLoop loop_;
+  std::unique_ptr<imp::IAsyncFileReader> reader_;
+  co::ThreadPool pool_;
+  imp::ResourceTableRegistry tables_;
+  imp::LooseCookedIndexRegistry indexes_;
+  JobOutcome outcome_;
+};
+
+//! A cancelled job says so, keeps what it found and ends with one final event.
+NOLINT_TEST_F(ImportJobOutcomeTest, CancelledJobKeepsWhatItGathered)
+{
+  auto job = GatherThenWaitJob(Params());
+  co::Run(loop_, [&] -> co::Co<> {
+    OXCO_WITH_NURSERY(jobs)
+    {
+      co_await jobs.Start(&imp::detail::ImportJob::ActivateAsync, &job);
+      job.Run();
+      co_await job.waiting;
+      job.Stop();
+      co_await job.Wait();
+      co_return co::kJoin;
+    };
+  });
+
+  EXPECT_FALSE(outcome_.report.success);
+  EXPECT_TRUE(outcome_.report.cancelled);
+  EXPECT_TRUE(Reported(kGatheredCode));
+  EXPECT_TRUE(Reported(imp::import_codes::kCanceled));
+  EXPECT_EQ(outcome_.completions, 1);
+  EXPECT_EQ(outcome_.final_events, 1);
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kCancelled);
+  EXPECT_FALSE(HasIndex());
+}
+
+//! A job that throws is failed, not cancelled, and keeps what it found.
+NOLINT_TEST_F(ImportJobOutcomeTest, FailedJobKeepsWhatItGathered)
+{
+  auto job = GatherThenThrowJob(Params());
+  co::Run(loop_, RunFailingJob(&job));
+
+  EXPECT_FALSE(outcome_.report.success);
+  EXPECT_FALSE(outcome_.report.cancelled);
+  EXPECT_TRUE(Reported(kGatheredCode));
+  EXPECT_TRUE(Reported(imp::import_codes::kException));
+  EXPECT_EQ(outcome_.completions, 1);
+  EXPECT_EQ(outcome_.final_events, 1);
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kFailed);
+}
+
+//! A plain job with no capture and no record still finds a changed source, and
+//! publishes nothing.
+NOLINT_TEST_F(ImportJobOutcomeTest, SourceChangedAfterReadPublishesNothing)
+{
+  auto job = ReadThenEmitJob(
+    Params(), [this] -> void { WriteSource("changed under the job"); });
+  co::Run(loop_, RunFailingJob(&job));
+
+  EXPECT_FALSE(outcome_.report.success);
+  EXPECT_FALSE(outcome_.report.cancelled);
+  EXPECT_TRUE(Reported(imp::import_codes::kSourceChanged));
+  EXPECT_TRUE(outcome_.report.products.empty());
+  EXPECT_FALSE(HasIndex());
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kFailed);
+}
+
+//! The same job over an unchanged source publishes.
+NOLINT_TEST_F(ImportJobOutcomeTest, UnchangedSourcePublishes)
+{
+  auto job = ReadThenEmitJob(Params(), [] -> void { });
+  co::Run(loop_, RunFailingJob(&job));
+
+  EXPECT_TRUE(outcome_.report.success);
+  EXPECT_EQ(outcome_.report.products.size(), 1U);
+  EXPECT_TRUE(HasIndex());
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kComplete);
+}
+
+//! A progress callback that throws after publication cannot make the job a
+//! failure: the report tells what happened to the output.
+NOLINT_TEST_F(ImportJobOutcomeTest, ThrowingProgressCannotFailAPublishedJob)
+{
+  auto params = Params();
+  params.on_progress = [](const imp::ProgressEvent&) -> void {
+    throw std::runtime_error("A broken progress listener");
+  };
+  auto job = ReadThenEmitJob(std::move(params), [] -> void { });
+  co::Run(loop_, RunFailingJob(&job));
+
+  EXPECT_TRUE(outcome_.report.success);
+  EXPECT_FALSE(outcome_.report.cancelled);
+  EXPECT_EQ(outcome_.completions, 1);
+  EXPECT_TRUE(HasIndex());
+}
+
+//! A refusal found before registration is the job's alone: typed, with
+//! nothing published.
+NOLINT_TEST_F(ImportJobOutcomeTest, RefusalBeforeCommitPublishesNothing)
+{
+  auto params = Params();
+  params.request.source_mount_path = {};
+  auto job = ReadThenEmitJob(std::move(params), [] -> void { });
+  co::Run(loop_, RunFailingJob(&job));
+
+  EXPECT_FALSE(outcome_.report.success);
+  EXPECT_TRUE(Reported(imp::mount_codes::kSourceOutsideMount.id));
+  EXPECT_TRUE(outcome_.report.products.empty());
+  EXPECT_TRUE(outcome_.report.outputs.empty());
+  EXPECT_FALSE(HasIndex());
+}
+
+//! A job that never ran still ends with its one final event and completion.
+NOLINT_TEST_F(ImportJobOutcomeTest, CancelUnstartedCompletesAsCancelled)
+{
+  auto job = GatherThenWaitJob(Params());
+  job.CancelUnstarted();
+
+  EXPECT_TRUE(outcome_.report.cancelled);
+  EXPECT_TRUE(Reported(imp::import_codes::kCanceled));
+  EXPECT_EQ(outcome_.completions, 1);
+  EXPECT_EQ(outcome_.final_events, 1);
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kCancelled);
+}
+
+NOLINT_TEST_F(ImportJobOutcomeTest, RefuseUnstartedCompletesAsFailed)
+{
+  auto job = GatherThenWaitJob(Params());
+  job.RefuseUnstarted(imp::import_codes::kQueueFull, "The queue is full");
+
+  EXPECT_FALSE(outcome_.report.success);
+  EXPECT_FALSE(outcome_.report.cancelled);
+  EXPECT_TRUE(Reported(imp::import_codes::kQueueFull));
+  EXPECT_EQ(outcome_.completions, 1);
+  EXPECT_EQ(outcome_.final_events, 1);
+  EXPECT_EQ(outcome_.final_phase, imp::ImportPhase::kFailed);
 }
 
 } // namespace

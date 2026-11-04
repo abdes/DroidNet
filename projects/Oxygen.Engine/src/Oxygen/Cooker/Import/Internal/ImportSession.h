@@ -48,6 +48,10 @@ class AssetEmitter;
 class ResourceDescriptorEmitter;
 class LooseCookedIndexRegistry;
 
+namespace detail {
+  class ImportSourceSnapshot;
+} // namespace detail
+
 //! Per-import-job state including diagnostics and output tracking.
 /*!
  The session provides a clean boundary between:
@@ -276,6 +280,14 @@ public:
    @return Import report with success flag, diagnostics, and asset counts.
   */
   OXGN_COOK_NDAPI auto Finalize() -> co::Co<ImportReport>;
+
+  //! Have `Finalize` verify these observed sources before it commits.
+  /*!
+   A source that changed fails the import with `import.source_changed` and
+   nothing of it is published. A null snapshot verifies nothing.
+  */
+  OXGN_COOK_API auto VerifySourcesBeforeCommit(
+    std::shared_ptr<detail::ImportSourceSnapshot> snapshot) noexcept -> void;
   //! Called after producers join: retires the registry participations. The
   //! writes ended with the producers' nursery.
   OXGN_COOK_NDAPI auto DrainAndRetire() -> co::Co<>;
@@ -310,6 +322,7 @@ private:
   bool surface_source_processed_ = false;
   std::optional<ImportSessionToken> table_participation_;
   std::optional<ImportSessionToken> index_participation_;
+  std::shared_ptr<detail::ImportSourceSnapshot> source_snapshot_;
   std::vector<ImportDiagnostic> diagnostics_;
   std::unordered_set<std::string> diagnostic_keys_;
   bool has_errors_ = false;

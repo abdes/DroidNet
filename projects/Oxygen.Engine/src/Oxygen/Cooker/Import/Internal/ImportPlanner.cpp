@@ -81,13 +81,6 @@ auto ImportPlanner::AddBufferResource(
     PlanItemKind::kBufferResource, std::move(debug_name), work_handle);
 }
 
-auto ImportPlanner::AddAudioResource(
-  std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId
-{
-  return AddItem(
-    PlanItemKind::kAudioResource, std::move(debug_name), work_handle);
-}
-
 auto ImportPlanner::AddMaterialAsset(
   std::string debug_name, WorkPayloadHandle work_handle) -> PlanItemId
 {
@@ -114,9 +107,9 @@ auto ImportPlanner::AddSceneAsset(
   return AddItem(PlanItemKind::kSceneAsset, std::move(debug_name), work_handle);
 }
 
-auto ImportPlanner::AddDependency(PlanItemId consumer, PlanItemId producer)
-  -> void
+auto ImportPlanner::AddDependency(const PlanDependency& dependency) -> void
 {
+  const auto [consumer, producer] = dependency;
   EnsureMutable();
 
   // These two statements are important as they validate the IDs.

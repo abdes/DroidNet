@@ -5,9 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
-#include <filesystem>
+#include <format>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -18,14 +19,18 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
-#include <Oxygen/Cooker/Import/Internal/Jobs/FbxImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Jobs/ModelImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelSettings.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
@@ -39,7 +44,7 @@
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
-#include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Co.h>
@@ -48,7 +53,7 @@
 
 namespace oxygen::content::import::detail {
 
-struct FbxImportJob::PlannedFbxImport final {
+struct PlannedModelImport final {
   ImportPlanner planner;
   WorkPayloadStore payloads;
   std::vector<PlanStep> plan;
@@ -68,6 +73,119 @@ struct FbxImportJob::PlannedFbxImport final {
 };
 
 namespace {
+
+  [[nodiscard]] auto MakeModelAdapter(const ModelFormatKind kind)
+    -> ModelAdapter
+  {
+    if (kind == ModelFormatKind::kGltf) {
+      return std::make_shared<adapters::GltfAdapter>();
+    }
+    return std::make_shared<adapters::FbxAdapter>();
+  }
+
+  [[nodiscard]] auto IsMissing(const ModelAdapter& adapter) -> bool
+  {
+    return std::visit(
+      [](const auto& parser) -> bool { return parser == nullptr; }, adapter);
+  }
+
+  template <typename Tag, typename Sink>
+  [[nodiscard]] auto BuildWorkItemsOf(const ModelAdapter& adapter, Tag tag,
+    Sink& sink, const adapters::AdapterInput& input)
+    -> adapters::WorkItemStreamResult
+  {
+    return std::visit(
+      [&](const auto& parser) -> adapters::WorkItemStreamResult {
+        return parser->BuildWorkItems(tag, sink, input);
+      },
+      adapter);
+  }
+
+  struct PlannerTextureSink final : adapters::TextureWorkItemSink {
+    explicit PlannerTextureSink(PlannedModelImport& plan)
+      : plan_(&plan)
+    {
+    }
+
+    auto Consume(TexturePipeline::WorkItem item) -> bool override
+    {
+      plan_->pending_textures.push_back(std::move(item));
+      return true;
+    }
+
+    observer_ptr<PlannedModelImport> plan_;
+  };
+
+  struct PlannerMaterialSink final : adapters::MaterialWorkItemSink {
+    explicit PlannerMaterialSink(PlannedModelImport& plan)
+      : plan_(&plan)
+    {
+    }
+
+    auto Consume(MaterialPipeline::WorkItem item) -> bool override
+    {
+      plan_->pending_materials.push_back(std::move(item));
+      return true;
+    }
+
+    observer_ptr<PlannedModelImport> plan_;
+  };
+
+  struct PlannerGeometrySink final : adapters::GeometryWorkItemSink {
+    explicit PlannerGeometrySink(PlannedModelImport& plan)
+      : plan_(&plan)
+    {
+    }
+
+    auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
+    {
+      const auto handle = plan_->payloads.Store(std::move(item));
+      auto& payload = plan_->payloads.MeshBuild(handle);
+      const auto mesh_build_id
+        = plan_->planner.AddMeshBuild(payload.item.mesh_name, handle);
+
+      const auto geometry_handle = plan_->payloads.Store(
+        GeometryFinalizeWorkItem { .mesh_build_item = mesh_build_id });
+      const auto geometry_id = plan_->planner.AddGeometryAsset(
+        payload.item.mesh_name, geometry_handle);
+      plan_->planner.AddDependency(
+        { .consumer = geometry_id, .producer = mesh_build_id });
+      plan_->product_names.geometries.insert(payload.item.storage_mesh_name);
+      for (const auto surface : payload.item.surfaces_used) {
+        if (surface >= plan_->surfaces.size()) {
+          continue;
+        }
+        if (const auto* material
+          = std::get_if<PlanItemId>(&plan_->surfaces.at(surface))) {
+          plan_->planner.AddDependency(
+            { .consumer = geometry_id, .producer = *material });
+        }
+      }
+      plan_->geometry_items.push_back(geometry_id);
+      return true;
+    }
+
+    observer_ptr<PlannedModelImport> plan_;
+  };
+
+  struct PlannerSceneSink final : adapters::SceneWorkItemSink {
+    explicit PlannerSceneSink(PlannedModelImport& plan)
+      : plan_(&plan)
+    {
+    }
+
+    auto Consume(ScenePipeline::WorkItem item) -> bool override
+    {
+      const auto handle = plan_->payloads.Store(std::move(item));
+      auto& payload = plan_->payloads.Scene(handle);
+      const auto id
+        = plan_->planner.AddSceneAsset(payload.item.source_id, handle);
+      plan_->scene_items.push_back(id);
+      return true;
+    }
+
+    observer_ptr<PlannedModelImport> plan_;
+  };
 
   auto AddDiagnostics(
     ImportSession& session, std::vector<ImportDiagnostic> diagnostics) -> void
@@ -118,20 +236,22 @@ namespace {
 
 } // namespace
 
-/*!
- Execute the FBX import workflow.
+ModelImportJob::ModelImportJob(
+  ImportJobParams params, const ModelFormat& format)
+  : ImportJob(std::move(params))
+  , format_(format)
+{
+}
 
- The current implementation wires the job lifecycle and progress reporting.
- Phase 5 will populate the parse/cook/emit stages with real pipeline work.
-*/
-auto FbxImportJob::ExecuteAsync() -> co::Co<ImportReport>
+//! Execute the model import workflow: parse, plan, cook and emit.
+auto ModelImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
   EnsureCookedRoot();
   auto& session = Session();
   co_return co_await ExecuteSessionAsync(session);
 }
 
-auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
+auto ModelImportJob::ExecuteSessionAsync(ImportSession& session)
   -> co::Co<ImportReport>
 {
   DLOG_F(INFO, "Starting job: job_id={} path={}", JobId(),
@@ -147,12 +267,6 @@ auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
     .emit_duration = std::chrono::microseconds { 0 },
     .finalize_duration = std::chrono::microseconds { 0 },
     .total_duration = std::chrono::microseconds { 0 },
-  };
-  const auto MakeDuration
-    = [](const std::chrono::steady_clock::time_point start,
-        const std::chrono::steady_clock::time_point end)
-    -> std::chrono::microseconds {
-    return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   };
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
@@ -179,14 +293,16 @@ auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Parsing FBX...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0F,
+    std::format("Parsing {}...", format_.display_name));
   const auto load_start = std::chrono::steady_clock::now();
-  auto scene = co_await ParseScene(session);
+  auto model = co_await ParseSource(session);
   const auto load_end = std::chrono::steady_clock::now();
   session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
-  AddDiagnostics(session, std::move(scene.diagnostics));
-  if (scene.canceled || !scene.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "FBX parse failed");
+  AddDiagnostics(session, std::move(model.diagnostics));
+  if (model.canceled || !model.success) {
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
+      std::format("{} parse failed", format_.display_name));
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -195,7 +311,7 @@ auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
   const auto remap = internal::ResolveMaterialRemap(session, request_copy);
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
-    [this, &scene, &request_copy, &remap, stop_token](
+    [this, &model, &request_copy, &remap, stop_token](
       co::ThreadPool::CancelToken canceled) -> PlanBuildOutcome {
       DLOG_F(1, "Build plan task begin");
       if (canceled || stop_token.stop_requested()) {
@@ -203,7 +319,7 @@ auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
         canceled_outcome.canceled = true;
         return canceled_outcome;
       }
-      return BuildPlan(scene, request_copy, remap, stop_token);
+      return BuildPlan(model, request_copy, remap, stop_token);
     });
   AddDiagnostics(session, std::move(plan_outcome.diagnostics));
   if (plan_outcome.canceled || !plan_outcome.plan) {
@@ -229,44 +345,52 @@ auto FbxImportJob::ExecuteSessionAsync(ImportSession& session)
   co_return report;
 }
 
-//! Parse the FBX source into an intermediate scene representation.
-auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
+//! Read the source through the job's reader and parse it into a model.
+auto ModelImportJob::ParseSource(ImportSession& session) -> co::Co<ParsedModel>
 {
   const auto request_copy = Request();
   const auto stop_token = StopToken();
   const auto naming_service = observer_ptr { &GetNamingService() };
   auto reader = FileReader();
-  std::shared_ptr<serio::ByteBuffer> source_bytes;
+  const auto source_snapshot = SourceSnapshot();
 
-  if (reader != nullptr) {
-    const auto read_start = std::chrono::steady_clock::now();
-    auto read_result
-      = co_await reader.get()->ReadFile(request_copy.source_path);
-    const auto read_end = std::chrono::steady_clock::now();
-    session.AddIoDuration(MakeDuration(read_start, read_end));
-    if (read_result.has_value()) {
-      source_bytes
-        = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
-    } else {
-      if (auto too_large = SourceTooLargeDiagnostic(read_result.error(),
-            request_copy.source_path, reader.get()->SourceLimit())) {
-        session.AddDiagnostic(std::move(*too_large));
-      } else {
-        session.AddDiagnostic(MakeErrorDiagnostic("fbx.read_failed",
-          "Failed to read FBX source bytes", request_copy.source_path.string(),
-          ""));
-      }
-      ParsedFbxScene failed;
+  const auto ReadFailed = [&] -> ParsedModel {
+    session.AddDiagnostic(
+      MakeErrorDiagnostic(std::string(format_.read_failed_code),
+        std::string(format_.read_failed_message),
+        request_copy.source_path.string(), ""));
+    ParsedModel failed;
+    failed.success = false;
+    return failed;
+  };
+
+  if (reader == nullptr) {
+    co_return ReadFailed();
+  }
+
+  const auto read_start = std::chrono::steady_clock::now();
+  auto read_result = co_await reader.get()->ReadFile(request_copy.source_path);
+  const auto read_end = std::chrono::steady_clock::now();
+  session.AddIoDuration(MakeDuration(read_start, read_end));
+  if (!read_result.has_value()) {
+    if (auto too_large = SourceTooLargeDiagnostic(read_result.error(),
+          request_copy.source_path, reader.get()->SourceLimit())) {
+      session.AddDiagnostic(std::move(*too_large));
+      ParsedModel failed;
       failed.success = false;
       co_return failed;
     }
+    co_return ReadFailed();
   }
+  const auto source_bytes
+    = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
 
   auto parsed = co_await ThreadPool()->Run(
-    [request_copy, stop_token, naming_service, source_bytes](
-      co::ThreadPool::CancelToken canceled) -> ParsedFbxScene {
-      DLOG_F(1, "Parse scene task begin");
-      ParsedFbxScene out;
+    [request_copy, stop_token, naming_service, source_bytes, source_snapshot,
+      kind = format_.kind](
+      co::ThreadPool::CancelToken canceled) -> ParsedModel {
+      DLOG_F(1, "Parse source task begin");
+      ParsedModel out;
       if (canceled || stop_token.stop_requested()) {
         out.canceled = true;
         return out;
@@ -282,16 +406,21 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
         .naming_service = naming_service,
         .stop_token = stop_token,
         .external_texture_bytes = {},
+        .source_snapshot = source_snapshot,
       };
 
-      auto adapter = std::make_shared<adapters::FbxAdapter>();
-      const auto parse_result = source_bytes
-        ? adapter->Parse(std::as_const(*source_bytes).Bytes(), input)
-        : adapter->Parse(request_copy.source_path, input);
+      auto adapter = MakeModelAdapter(kind);
+      // Each adapter has its own result type, of the same shape.
+      std::visit(
+        [&](const auto& parser) -> void {
+          auto parse_result
+            = parser->Parse(std::as_const(*source_bytes).Bytes(), input);
+          out.diagnostics = std::move(parse_result.diagnostics);
+          out.success = parse_result.success;
+        },
+        adapter);
       out.adapter = std::move(adapter);
       out.source_bytes = source_bytes;
-      out.diagnostics = parse_result.diagnostics;
-      out.success = parse_result.success;
       return out;
     });
 
@@ -299,17 +428,18 @@ auto FbxImportJob::ParseScene(ImportSession& session) -> co::Co<ParsedFbxScene>
 }
 
 //! Build the planner-driven execution plan for this import.
-auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
-  const ImportRequest& request, const internal::MaterialRemapKeys& remap,
-  std::stop_token stop_token) -> PlanBuildOutcome
+auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
+  const internal::MaterialRemapKeys& remap, const std::stop_token& stop_token)
+  -> PlanBuildOutcome
 {
-  DLOG_F(1, "Build plan begin");
   PlanBuildOutcome outcome;
-  if (!scene.success || scene.adapter == nullptr) {
+  if (!model.success || IsMissing(model.adapter)) {
     return outcome;
   }
 
-  auto plan = std::make_unique<PlannedFbxImport>();
+  DLOG_F(1, "Build plan begin");
+
+  auto plan = std::make_unique<PlannedModelImport>();
   plan->planner.RegisterPipeline<TexturePipeline>(
     PlanItemKind::kTextureResource);
   plan->planner.RegisterPipeline<BufferPipeline>(PlanItemKind::kBufferResource);
@@ -328,38 +458,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     .default_material_key = DefaultMaterialKey(),
     .request = request,
     .naming_service = observer_ptr { &GetNamingService() },
-    .stop_token = std::move(stop_token),
+    .stop_token = stop_token,
     .external_texture_bytes = {},
-  };
-
-  struct PlannerTextureSink final : adapters::TextureWorkItemSink {
-    explicit PlannerTextureSink(PlannedFbxImport& plan)
-      : plan_(&plan)
-    {
-    }
-
-    auto Consume(TexturePipeline::WorkItem item) -> bool override
-    {
-      plan_->pending_textures.push_back(std::move(item));
-      return true;
-    }
-
-    observer_ptr<PlannedFbxImport> plan_;
-  };
-
-  struct PlannerMaterialSink final : adapters::MaterialWorkItemSink {
-    explicit PlannerMaterialSink(PlannedFbxImport& plan)
-      : plan_(&plan)
-    {
-    }
-
-    auto Consume(MaterialPipeline::WorkItem item) -> bool override
-    {
-      plan_->pending_materials.push_back(std::move(item));
-      return true;
-    }
-
-    observer_ptr<PlannedFbxImport> plan_;
   };
 
   const auto add_texture = [&](TexturePipeline::WorkItem item) -> void {
@@ -385,14 +485,14 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
 
       const auto it = plan->texture_by_source_id.find(binding.source_id);
       if (it == plan->texture_by_source_id.end()) {
-        outcome.diagnostics.push_back(
-          MakeWarningDiagnostic("material.texture_missing",
-            "Material texture is missing; it binds the error texture",
-            payload.item.source_id, binding.source_id));
+        outcome.diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kMaterialTextureMissing),
+          "Material texture is missing; it binds the error texture",
+          payload.item.source_id, binding.source_id));
         return;
       }
 
-      plan->planner.AddDependency(id, it->second);
+      plan->planner.AddDependency({ .consumer = id, .producer = it->second });
     };
 
     for (const auto& slot : MaterialSource::TextureSlots()) {
@@ -401,63 +501,9 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
     return id;
   };
 
-  struct PlannerGeometrySink final : adapters::GeometryWorkItemSink {
-    explicit PlannerGeometrySink(PlannedFbxImport& plan)
-      : plan_(&plan)
-    {
-    }
-
-    auto Consume(MeshBuildPipeline::WorkItem item) -> bool override
-    {
-      const auto handle = plan_->payloads.Store(std::move(item));
-      auto& payload = plan_->payloads.MeshBuild(handle);
-      const auto mesh_build_id
-        = plan_->planner.AddMeshBuild(payload.item.mesh_name, handle);
-
-      const auto geometry_handle = plan_->payloads.Store(
-        GeometryFinalizeWorkItem { .mesh_build_item = mesh_build_id });
-      const auto geometry_id = plan_->planner.AddGeometryAsset(
-        payload.item.mesh_name, geometry_handle);
-      plan_->planner.AddDependency(geometry_id, mesh_build_id);
-      plan_->product_names.geometries.insert(payload.item.storage_mesh_name);
-      for (const auto surface : payload.item.surfaces_used) {
-        if (surface >= plan_->surfaces.size()) {
-          continue;
-        }
-        if (const auto* material
-          = std::get_if<PlanItemId>(&plan_->surfaces.at(surface))) {
-          plan_->planner.AddDependency(geometry_id, *material);
-        }
-      }
-      plan_->geometry_items.push_back(geometry_id);
-      return true;
-    }
-
-    observer_ptr<PlannedFbxImport> plan_;
-  };
-
-  struct PlannerSceneSink final : adapters::SceneWorkItemSink {
-    explicit PlannerSceneSink(PlannedFbxImport& plan)
-      : plan_(&plan)
-    {
-    }
-
-    auto Consume(ScenePipeline::WorkItem item) -> bool override
-    {
-      const auto handle = plan_->payloads.Store(std::move(item));
-      auto& payload = plan_->payloads.Scene(handle);
-      const auto id
-        = plan_->planner.AddSceneAsset(payload.item.source_id, handle);
-      plan_->scene_items.push_back(id);
-      return true;
-    }
-
-    observer_ptr<PlannedFbxImport> plan_;
-  };
-
   PlannerTextureSink texture_sink(*plan);
-  const auto texture_result = scene.adapter->BuildWorkItems(
-    adapters::TextureWorkTag {}, texture_sink, input);
+  const auto texture_result = BuildWorkItemsOf(
+    model.adapter, adapters::TextureWorkTag {}, texture_sink, input);
   for (const auto& diagnostic : texture_result.diagnostics) {
     outcome.diagnostics.push_back(diagnostic);
   }
@@ -466,8 +512,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   }
 
   PlannerMaterialSink material_sink(*plan);
-  const auto material_result = scene.adapter->BuildWorkItems(
-    adapters::MaterialWorkTag {}, material_sink, input);
+  const auto material_result = BuildWorkItemsOf(
+    model.adapter, adapters::MaterialWorkTag {}, material_sink, input);
   for (const auto& diagnostic : material_result.diagnostics) {
     outcome.diagnostics.push_back(diagnostic);
   }
@@ -507,8 +553,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   plan->pending_materials.clear();
 
   PlannerGeometrySink geometry_sink(*plan);
-  const auto geometry_result = scene.adapter->BuildWorkItems(
-    adapters::GeometryWorkTag {}, geometry_sink, input);
+  const auto geometry_result = BuildWorkItemsOf(
+    model.adapter, adapters::GeometryWorkTag {}, geometry_sink, input);
   for (const auto& diagnostic : geometry_result.diagnostics) {
     outcome.diagnostics.push_back(diagnostic);
   }
@@ -525,8 +571,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
   }
 
   PlannerSceneSink scene_sink(*plan);
-  const auto scene_result = scene.adapter->BuildWorkItems(
-    adapters::SceneWorkTag {}, scene_sink, input);
+  const auto scene_result = BuildWorkItemsOf(
+    model.adapter, adapters::SceneWorkTag {}, scene_sink, input);
   for (const auto& diagnostic : scene_result.diagnostics) {
     outcome.diagnostics.push_back(diagnostic);
   }
@@ -536,7 +582,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
 
   for (const auto scene_item : plan->scene_items) {
     for (const auto geometry_item : plan->geometry_items) {
-      plan->planner.AddDependency(scene_item, geometry_item);
+      plan->planner.AddDependency(
+        { .consumer = scene_item, .producer = geometry_item });
     }
   }
 
@@ -546,8 +593,8 @@ auto FbxImportJob::BuildPlan(ParsedFbxScene& scene,
 }
 
 //! Execute the planner-driven import plan.
-auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
-  -> co::Co<bool>
+auto ModelImportJob::ExecutePlan(
+  PlannedModelImport& plan, ImportSession& session) -> co::Co<bool>
 {
   bool success = false;
   std::optional<WorkDispatcher::ProgressReporter> progress;
@@ -585,7 +632,7 @@ auto FbxImportJob::ExecutePlan(PlannedFbxImport& plan, ImportSession& session)
 }
 
 //! Finalize the session and return the import report.
-auto FbxImportJob::FinalizeSession(ImportSession& session)
+auto ModelImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {
   co_return co_await session.Finalize();
