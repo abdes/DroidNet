@@ -55,6 +55,7 @@
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelDependency.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelLodNames.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
 #include <Oxygen/Cooker/Import/Internal/ModelSceneNodes.h>
@@ -110,20 +111,6 @@ FbxAdapter::FbxAdapter()
 FbxAdapter::~FbxAdapter() = default;
 
 namespace {
-
-  //! Checks if a string starts with a prefix, case-insensitive.
-  [[nodiscard]] inline auto StartsWithIgnoreCase(
-    std::string_view str, std::string_view prefix) -> bool
-  {
-    if (str.size() < prefix.size()) {
-      return false;
-    }
-    return std::equal(
-      prefix.begin(), prefix.end(), str.begin(), [](char a, char b) -> bool {
-        return std::tolower(static_cast<unsigned char>(a))
-          == std::tolower(static_cast<unsigned char>(b));
-      });
-  }
 
   //! Clamps a float to the [0, 1] range.
   [[nodiscard]] inline auto Clamp01(const float v) noexcept -> float
@@ -1877,33 +1864,6 @@ namespace {
     };
   }
 
-  //! Splits `<base>_LOD<n>`, with `LOD` in any case and `n` of one or two
-  //! digits.
-  [[nodiscard]] auto ParseLodSuffix(const std::string_view name)
-    -> std::optional<std::pair<std::string_view, size_t>>
-  {
-    constexpr auto kTag = std::string_view { "LOD" };
-    constexpr auto kMaxDigits = size_t { 2 };
-    constexpr auto kRadix = size_t { 10 };
-    const auto separator = name.rfind('_');
-    if (separator == std::string_view::npos || separator == 0) {
-      return std::nullopt;
-    }
-    const auto suffix = name.substr(separator + 1);
-    if (suffix.size() <= kTag.size() || suffix.size() > kTag.size() + kMaxDigits
-      || !StartsWithIgnoreCase(suffix, kTag)) {
-      return std::nullopt;
-    }
-    size_t level = 0;
-    for (const auto digit : suffix.substr(kTag.size())) {
-      if (std::isdigit(static_cast<unsigned char>(digit)) == 0) {
-        return std::nullopt;
-      }
-      level = (level * kRadix) + static_cast<size_t>(digit - '0');
-    }
-    return std::pair { name.substr(0, separator), level };
-  }
-
   /*!
    Collects the scene's LOD groups. A group keeps its levels from LOD0 up to the
    first level that is missing or unusable, at most `kMaxLodCount`; it imports
@@ -1969,7 +1929,7 @@ namespace {
       for (const auto node : skipped) {
         const auto problem = problems.find(node);
         result.notes.push_back({
-          .code = std::string(import_codes::kFbxLodLevelSkipped),
+          .code = std::string(import_codes::kLodLevelSkipped),
           .message = "LOD level '"
             + std::string(ToStringView(ItemAt(scene.nodes, node)->name))
             + "' of '" + lods.name + "' is not imported: "
@@ -2001,7 +1961,7 @@ namespace {
     const auto ignore
       = [&](const ufbx_node& node, const std::string& message) -> void {
       result.notes.push_back({
-        .code = std::string(import_codes::kFbxLodGroupIgnored),
+        .code = std::string(import_codes::kLodGroupIgnored),
         .message = message,
         .node = index_of(&node),
       });
@@ -2039,20 +1999,18 @@ namespace {
     };
 
     const auto add_named_levels = [&](const ufbx_node& parent) -> void {
-      auto bases
-        = std::map<std::string_view, std::map<size_t, const ufbx_node*>> {};
+      auto bases = internal::NamedLods {};
       for (const auto* child : Items(parent.children)) {
-        if (const auto parsed = ParseLodSuffix(ToStringView(child->name));
-          child != parent.geometry_transform_helper && parsed.has_value()) {
-          bases[parsed->first].try_emplace(parsed->second, child);
+        if (child != parent.geometry_transform_helper) {
+          internal::AddNamedLod(
+            bases, ToStringView(child->name), index_of(child));
         }
       }
       for (const auto& [base, named] : bases) {
-        const auto first = named.find(0);
-        if (first == named.end() || !named.contains(1)) {
+        if (!internal::HasNamedLodPair(named)) {
           continue;
         }
-        const auto& host = *first->second;
+        const auto& host = *ItemAt(scene.nodes, named.at(0));
         const auto host_local = LocalTransform(host, basis);
         if (!internal::IsBakeTransformInvertible(host_local)) {
           ignore(host,
@@ -2067,26 +2025,25 @@ namespace {
           .name = std::string(base),
           .levels = {},
         };
-        auto skipped = std::vector<size_t> {};
         auto members = std::vector<size_t> {};
-        auto expected = size_t { 0 };
-        for (const auto& [level, node] : named) {
+        for (const auto& [level, node_index] : named) {
+          const auto* node = ItemAt(scene.nodes, node_index);
           if (level != 0) {
-            members.push_back(index_of(node));
+            members.push_back(node_index);
           }
           if (node->geometry_transform_helper != nullptr) {
             members.push_back(index_of(node->geometry_transform_helper));
           }
-          const auto to_group = level == 0
-            ? glm::mat4 { 1.0F }
-            : to_host * LocalTransform(*node, basis);
-          if (!skipped.empty() || level != expected
-            || !try_add_level(lods, *node, to_group)) {
-            skipped.push_back(index_of(node));
-          }
-          ++expected;
         }
-        if (lods.levels.size() < 2) {
+        const auto skipped = internal::TakeConsecutiveLods(
+          named, [&](const size_t level, const size_t node_index) -> bool {
+            const auto& node = *ItemAt(scene.nodes, node_index);
+            const auto to_group = level == 0
+              ? glm::mat4 { 1.0F }
+              : to_host * LocalTransform(node, basis);
+            return try_add_level(lods, node, to_group);
+          });
+        if (lods.levels.size() < internal::kMinNamedLodLevels) {
           ignore(host,
             "'" + std::string(base)
               + "' has no usable LOD0 and LOD1; its levels import as separate "

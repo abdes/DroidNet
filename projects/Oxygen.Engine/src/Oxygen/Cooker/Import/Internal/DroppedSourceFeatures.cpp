@@ -115,6 +115,7 @@ namespace {
     "EXT_meshopt_compression",
     "EXT_texture_webp",
     "KHR_texture_basisu",
+    "MSFT_lod",
   });
 
   //! Extensions the material format cannot hold, whose loss is reported once
@@ -255,6 +256,12 @@ namespace {
     note(material.has_diffuse_transmission != 0, "diffuse transmission");
     note(material.has_anisotropy != 0, "anisotropy");
     note(material.has_dispersion != 0, "dispersion");
+    note(std::ranges::any_of(
+           std::span(material.extensions, material.extensions_count),
+           [](const cgltf_extension& extension) -> bool {
+             return std::string_view(extension.name) == "MSFT_lod";
+           }),
+      "LOD material list");
     if (!unsupported.empty()) {
       const auto separator
         = [&unsupported](const std::size_t at) -> std::string_view {
@@ -305,6 +312,15 @@ auto ReportDroppedSourceFeatures(const cgltf_data& source,
         source_path, path + "/primitives/" + std::to_string(index) + "/targets",
         diagnostics, NameOf(mesh.name));
     }
+  }
+  for (const auto& [index, node] :
+    std::views::enumerate(std::span(source.nodes, source.nodes_count))) {
+    Drop(node.extras.data != nullptr
+        && std::string_view(node.extras.data).contains("MSFT_screencoverage"),
+      "MSFT_screencoverage is not imported; the geometry's LODs switch by "
+      "the default screen-space error.",
+      source_path, "/nodes/" + std::to_string(index), diagnostics,
+      NameOf(node.name));
   }
   for (const auto& [mesh_index, mesh] :
     std::views::enumerate(std::span(source.meshes, source.meshes_count))) {

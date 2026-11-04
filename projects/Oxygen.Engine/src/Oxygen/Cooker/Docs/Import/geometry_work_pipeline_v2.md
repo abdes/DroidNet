@@ -569,14 +569,13 @@ coverage.
   - A level is usable when it holds a static mesh, directly or on its geometry
     transform helper, and has no children, camera or light. A group keeps its
     levels up to the first missing or unusable one, at most 8, and reports each
-    level it leaves out (`fbx.lod.level_skipped`); a group with no usable LOD0
-    imports as separate nodes (`fbx.lod_group.ignored`).
+    level it leaves out (`import.lod.level_skipped`); a group with no usable LOD0
+    imports as separate nodes (`import.lod_group.ignored`).
   - Each level's transform into the group's space is its `MeshLod`
     `bake_transform`. With `bake_transforms_into_meshes`, the host node's own
     transform bakes into the whole geometry and the host keeps an identity
     transform, under the same rules as any mesh's node. Coarser LODs renumber their material slots to LOD0's by
-    material, so a material is one surface with a binding per LOD. The
-    geometry's layout witness hashes every level's mesh witness and transform.
+    material, so a material is one surface with a binding per LOD.
   - FBX level distances are not mapped. A model geometry with several LODs
     takes a Screen-space error policy: boundary `i` enters its finer LOD at a
     projected radius of 256 / 2^i pixels and its coarser LOD at 0.8 of that
@@ -614,8 +613,17 @@ tangent.w`, points up the image, so the engine's is its negation.
   - Set `has_material_textures` when any bound texture exists (base color,
     normal, metallic-roughness, occlusion, emissive).
 - **LODs**
-  - Map LODs explicitly when the importer provides authored LOD ordering.
-  - Otherwise emit a single `LOD0` per primitive.
+  - A node with `MSFT_lod` is one geometry shown by that node, which is LOD0;
+    the nodes its `ids` list are LOD1, LOD2, …. Otherwise sibling nodes named
+    `<base>_LOD<n>` are one geometry named `<base>`, by the rule the FBX adapter
+    shares (`ModelLodNames.h`). A usable level holds a mesh without skin or
+    morph targets, and has no children, camera or light; what is left out is
+    reported (`import.lod.level_skipped`, `import.lod_group.ignored`). Level
+    nodes are not imported as scene nodes.
+  - `MSFT_screencoverage` is reported and not imported; the LODs switch by the
+    same Screen-space error policy as FBX levels. `MSFT_lod` on a material is
+    reported and not imported.
+  - Any other mesh is a single `LOD0` entry.
 
 ### Adapter Outputs and Post-Processing
 

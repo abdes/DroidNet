@@ -66,6 +66,7 @@
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/ModelDependency.h>
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelLodNames.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
 #include <Oxygen/Cooker/Import/Internal/ModelSceneNodes.h>
@@ -1354,8 +1355,299 @@ namespace {
     return converted;
   }
 
+  //! One LOD level of a group: the node holding its mesh and the transform
+  //! that takes that mesh into the group's geometry space.
+  struct GltfLodLevel final {
+    const cgltf_node* node = nullptr;
+    std::optional<glm::mat4> transform;
+  };
+
+  //! Nodes that form one geometry with several LODs: a node with `MSFT_lod`, or
+  //! siblings named `<base>_LOD<n>`, shown by the LOD0 node.
+  struct GltfLodGroup final {
+    size_t host_node = internal::kNoBakeIndex;
+    std::string name;
+    //! The group has the name its level nodes share, which its geometry
+    //! takes; a node that lists its levels leaves its mesh's name.
+    bool named = false;
+    std::vector<GltfLodLevel> levels;
+  };
+
+  //! Why a LOD level, or a whole group, is not imported as authored.
+  struct GltfLodNote final {
+    std::string code;
+    std::string message;
+    size_t node = internal::kNoBakeIndex;
+  };
+
+  //! The LOD groups of a glTF document and the nodes they take over.
+  struct GltfLodGroups final {
+    std::vector<GltfLodGroup> groups;
+    //! Per node: the group it hosts, or `kNoBakeIndex`.
+    std::vector<size_t> host_group;
+    //! Per node: 1 when the node is a level the group replaces, so the scene
+    //! imports neither it nor its subtree.
+    std::vector<uint8_t> member;
+    std::vector<GltfLodNote> notes;
+  };
+
+  //! The geometry plan of a glTF document: the shared mesh variants, then one
+  //! variant per LOD group, in group order.
+  struct GltfBakePlan final {
+    internal::MeshBakePlan plan;
+    GltfLodGroups lods;
+  };
+
+  //! The node's transform in the model's space.
+  [[nodiscard]] auto WorldOf(const cgltf_node& node,
+    const CoordinateConversionPolicy& policy) -> glm::mat4
+  {
+    auto matrix = std::array<cgltf_float, 16> {};
+    cgltf_node_transform_world(&node, matrix.data());
+    return ConvertGltfTransform(glm::make_mat4(matrix.data()), policy);
+  }
+
+  //! The nodes `MSFT_lod` lists on `node`, finest first, or none. `problem`
+  //! says why a stated list cannot be read.
+  [[nodiscard]] auto ReadMsftLodIds(const cgltf_node& node,
+    const size_t node_count, std::string& problem) -> std::vector<size_t>
+  {
+    auto ids = std::vector<size_t> {};
+    for (const auto& extension :
+      std::span(node.extensions, node.extensions_count)) {
+      if (std::string_view(extension.name) != "MSFT_lod") {
+        continue;
+      }
+      const auto document = nlohmann::json::parse(
+        extension.data, nullptr, /*allow_exceptions=*/false);
+      if (!document.is_object() || !document.contains("ids")
+        || !document.at("ids").is_array()) {
+        problem = "states no list of node ids";
+        return {};
+      }
+      for (const auto& id : document.at("ids")) {
+        if (!id.is_number_unsigned() || id.get<size_t>() >= node_count) {
+          problem = "names a node the file does not have";
+          return {};
+        }
+        ids.push_back(id.get<size_t>());
+      }
+    }
+    return ids;
+  }
+
+  /*!
+   Collects the document's LOD groups, by the rule FBX has: a group keeps its
+   levels from LOD0 up to the first level that is missing or unusable, at most
+   `kMaxLodCount`, imports none after that one and notes each. A usable level
+   holds a mesh without skin or morph targets, and has no children, camera or
+   light. A group without a usable LOD0, and named siblings without usable LOD0
+   and LOD1, are no group: their nodes import as authored.
+  */
+  [[nodiscard]] auto FindGltfLodGroups(const cgltf_data& data,
+    const CoordinateConversionPolicy& policy,
+    const std::unordered_map<const cgltf_mesh*, const cgltf_skin*>& skins)
+    -> GltfLodGroups
+  {
+    const auto nodes = std::span(data.nodes, data.nodes_count);
+    auto result = GltfLodGroups {
+      .groups = {},
+      .host_group = std::vector(data.nodes_count, internal::kNoBakeIndex),
+      .member = std::vector<uint8_t>(data.nodes_count, 0),
+      .notes = {},
+    };
+    const auto index_of = [&data](const cgltf_node* node) -> size_t {
+      return cgltf_node_index(&data, node);
+    };
+    const auto name_of = [](const cgltf_node& node) -> std::string_view {
+      return node.name != nullptr ? std::string_view(node.name)
+                                  : std::string_view {};
+    };
+    auto problems = std::unordered_map<size_t, std::string> {};
+    const auto problem_of = [&](const cgltf_node& node) -> std::string {
+      if (node.mesh == nullptr) {
+        return "has no mesh";
+      }
+      if (node.children_count != 0) {
+        return "has child nodes";
+      }
+      if (node.camera != nullptr || node.light != nullptr) {
+        return "has a camera or a light";
+      }
+      const auto morphed = std::ranges::any_of(
+        std::span(node.mesh->primitives, node.mesh->primitives_count),
+        [](const cgltf_primitive& primitive) -> bool {
+          return primitive.targets_count != 0;
+        });
+      if (node.skin != nullptr || skins.contains(node.mesh) || morphed) {
+        return "is skinned or deformed";
+      }
+      return {};
+    };
+    const auto try_add = [&](GltfLodGroup& group, const cgltf_node& node,
+                           const glm::mat4& host_world) -> bool {
+      const auto index = index_of(&node);
+      if (group.levels.size() == data::pak::geometry::kMaxLodCount) {
+        problems.emplace(index,
+          "is beyond the " + std::to_string(data::pak::geometry::kMaxLodCount)
+            + " LODs a geometry has");
+        return false;
+      }
+      if (auto problem = problem_of(node); !problem.empty()) {
+        problems.emplace(index, std::move(problem));
+        return false;
+      }
+      const auto world = WorldOf(node, policy);
+      if (!internal::IsBakeTransformInvertible(world)) {
+        problems.emplace(index, "has a non-invertible transform");
+        return false;
+      }
+      group.levels.push_back({
+        .node = &node,
+        .transform = world == host_world
+          ? std::nullopt
+          : std::optional(glm::inverse(host_world) * world),
+      });
+      return true;
+    };
+    const auto ignore = [&](const size_t node, std::string message) -> void {
+      result.notes.push_back({
+        .code = std::string(import_codes::kLodGroupIgnored),
+        .message = std::move(message),
+        .node = node,
+      });
+    };
+    struct LevelNodes {
+      std::span<const size_t> skipped;
+      std::span<const size_t> members;
+    };
+    const auto commit
+      = [&](GltfLodGroup group, const LevelNodes levels) -> void {
+      for (const auto node : levels.skipped) {
+        const auto problem = problems.find(node);
+        result.notes.push_back({
+          .code = std::string(import_codes::kLodLevelSkipped),
+          .message = "LOD level '" + std::string(name_of(nodes[node]))
+            + "' of '" + group.name + "' is not imported: "
+            + (problem != problems.end()
+                ? "it " + problem->second
+                : std::string("a level before it is not imported")),
+          .node = node,
+        });
+      }
+      // A replaced node's subtree goes with it.
+      const auto replace = [&](auto&& self, const size_t node) -> void {
+        result.member.at(node) = 1;
+        for (const auto* child :
+          std::span(nodes[node].children, nodes[node].children_count)) {
+          self(self, index_of(child));
+        }
+      };
+      for (const auto node : levels.members) {
+        replace(replace, node);
+      }
+      result.host_group.at(group.host_node) = result.groups.size();
+      result.groups.push_back(std::move(group));
+    };
+    const auto taken = [&](const size_t node) -> bool {
+      return result.member.at(node) != 0
+        || result.host_group.at(node) != internal::kNoBakeIndex;
+    };
+
+    // A node that states its levels says what they are.
+    for (const auto& node : nodes) {
+      const auto host = index_of(&node);
+      auto problem = std::string {};
+      const auto ids = ReadMsftLodIds(node, nodes.size(), problem);
+      if (!problem.empty()) {
+        ignore(host,
+          "The MSFT_lod of '" + std::string(name_of(node)) + "' " + problem
+            + "; it imports without its levels");
+        continue;
+      }
+      if (ids.empty() || taken(host)
+        || std::ranges::any_of(ids,
+          [&](const size_t id) -> bool { return id == host || taken(id); })) {
+        continue;
+      }
+      auto group = GltfLodGroup {
+        .host_node = host,
+        .name = std::string(name_of(node)),
+        .named = false,
+        .levels = {},
+      };
+      const auto host_world = WorldOf(node, policy);
+      if (!try_add(group, node, host_world)) {
+        ignore(host,
+          "The MSFT_lod of '" + group.name + "' is not imported: this node "
+            + problems.at(host)
+            + ". It imports as authored, and its levels only if the scene "
+              "reaches them");
+        continue;
+      }
+      auto skipped = std::vector<size_t> {};
+      for (const auto id : ids) {
+        if (!skipped.empty() || !try_add(group, nodes[id], host_world)) {
+          skipped.push_back(id);
+        }
+      }
+      commit(std::move(group), { .skipped = skipped, .members = ids });
+    }
+
+    // Otherwise siblings named as levels are a group.
+    const auto add_named = [&](const std::span<cgltf_node* const> siblings) {
+      auto bases = internal::NamedLods {};
+      for (const auto* sibling : siblings) {
+        if (!taken(index_of(sibling))) {
+          internal::AddNamedLod(bases, name_of(*sibling), index_of(sibling));
+        }
+      }
+      for (const auto& [base, named] : bases) {
+        if (!internal::HasNamedLodPair(named)) {
+          continue;
+        }
+        const auto host = named.at(0);
+        const auto host_world = WorldOf(nodes[host], policy);
+        auto group = GltfLodGroup {
+          .host_node = host,
+          .name = std::string(base),
+          .named = true,
+          .levels = {},
+        };
+        const auto skipped = internal::TakeConsecutiveLods(
+          named, [&](const size_t /*level*/, const size_t node) -> bool {
+            return try_add(group, nodes[node], host_world);
+          });
+        if (group.levels.size() < internal::kMinNamedLodLevels) {
+          ignore(host,
+            "'" + group.name
+              + "' has no usable LOD0 and LOD1; its levels import as separate "
+                "nodes");
+          continue;
+        }
+        auto members = std::vector<size_t> {};
+        for (const auto& [level, node] : named) {
+          if (level != 0) {
+            members.push_back(node);
+          }
+        }
+        commit(std::move(group), { .skipped = skipped, .members = members });
+      }
+    };
+    auto roots = std::vector<cgltf_node*> {};
+    for (auto& node : nodes) {
+      if (node.parent == nullptr) {
+        roots.push_back(&node);
+      }
+      add_named(
+        std::span<cgltf_node* const>(node.children, node.children_count));
+    }
+    add_named(roots);
+    return result;
+  }
+
   [[nodiscard]] auto BuildGltfBakePlan(const cgltf_data& data,
-    const CoordinateConversionPolicy& policy) -> internal::MeshBakePlan
+    const CoordinateConversionPolicy& policy) -> GltfBakePlan
   {
     std::vector<internal::MeshBakeNode> nodes(data.nodes_count);
     std::vector<uint8_t> emit_mesh(data.meshes_count);
@@ -1377,10 +1669,32 @@ namespace {
       }
     }
     const auto skins = SkinsOfMeshes(data);
+    auto lods = FindGltfLodGroups(data, policy, skins);
+    // A mesh only LOD groups use makes no geometry of its own.
+    const auto grouped = [&lods](const size_t node) -> bool {
+      return lods.member.at(node) != 0
+        || lods.host_group.at(node) != internal::kNoBakeIndex;
+    };
+    auto grouped_use = std::vector<uint8_t>(data.meshes_count, 0);
+    auto own_use = std::vector<uint8_t>(data.meshes_count, 0);
     for (size_t index = 0;
       const auto& node : std::span(data.nodes, data.nodes_count)) {
-      auto& input = nodes.at(index++);
-      if (node.mesh == nullptr) {
+      if (node.mesh != nullptr) {
+        auto& use = grouped(index) ? grouped_use : own_use;
+        use.at(static_cast<size_t>(node.mesh - data.meshes)) = 1;
+      }
+      ++index;
+    }
+    for (size_t mesh = 0; mesh < data.meshes_count; ++mesh) {
+      if (grouped_use.at(mesh) != 0 && own_use.at(mesh) == 0) {
+        emit_mesh.at(mesh) = 0;
+      }
+    }
+    for (size_t index = 0;
+      const auto& node : std::span(data.nodes, data.nodes_count)) {
+      const auto node_index = index++;
+      auto& input = nodes.at(node_index);
+      if (node.mesh == nullptr || grouped(node_index)) {
         continue;
       }
       input.mesh_index = static_cast<size_t>(node.mesh - data.meshes);
@@ -1403,8 +1717,51 @@ namespace {
         input.retain_reason = "morph target transform";
       }
     }
-    return internal::BuildMeshBakePlan(
+    auto plan = internal::BuildMeshBakePlan(
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
+    // Each group is one geometry, shown by its host node. Its levels carry
+    // their transforms into the group's space per LOD; the host's own
+    // transform bakes into the whole geometry as another mesh's node would.
+    for (const auto& group : lods.groups) {
+      const auto& host = base::CheckedAt(
+        std::span(data.nodes, data.nodes_count), group.host_node);
+      auto matrix = std::array<cgltf_float, 16> {};
+      cgltf_node_transform_local(&host, matrix.data());
+      const auto local
+        = ConvertGltfTransform(glm::make_mat4(matrix.data()), policy);
+      auto transform = std::optional<glm::mat4> {};
+      if (policy.bake_transforms_into_meshes && local != glm::mat4(1.0F)) {
+        auto& reason = plan.retained_reasons.at(group.host_node);
+        if (animated_or_joint.contains(&host)) {
+          reason = "animation or skinning transform";
+        } else if (!internal::IsBakeTransformInvertible(local)) {
+          reason = "non-invertible transform";
+        } else {
+          transform = local;
+        }
+      }
+      plan.node_variant.at(group.host_node) = plan.variants.size();
+      plan.variants.push_back(internal::MeshBakeVariant {
+        .mesh_index = static_cast<size_t>(host.mesh - data.meshes),
+        .representative_node = group.host_node,
+        .material_binding = 0,
+        .transform = transform,
+        .name_suffix = {},
+      });
+    }
+    return { .plan = std::move(plan), .lods = std::move(lods) };
+  }
+
+  //! The LOD group a plan variant stands for, or null.
+  [[nodiscard]] auto LodGroupOf(const GltfBakePlan& bake,
+    const internal::MeshBakeVariant& variant) -> const GltfLodGroup*
+  {
+    if (variant.representative_node == internal::kNoBakeIndex) {
+      return nullptr;
+    }
+    const auto group = bake.lods.host_group.at(variant.representative_node);
+    return group == internal::kNoBakeIndex ? nullptr
+                                           : &bake.lods.groups.at(group);
   }
 
   //! Whether cgltf can read the positions of every primitive of `mesh`: it
@@ -1442,8 +1799,8 @@ namespace {
       return result;
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
-    const auto bake_plan
-      = BuildGltfBakePlan(data, input.request.options.coordinate);
+    const auto bake = BuildGltfBakePlan(data, input.request.options.coordinate);
+    const auto& bake_plan = bake.plan;
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
       if (!bake_plan.retained_reasons.at(index).empty()) {
         // The node keeps its transform and the world geometry is unchanged:
@@ -1457,6 +1814,11 @@ namespace {
           .object_path = "/nodes/" + std::to_string(index),
         });
       }
+    }
+    for (const auto& note : bake.lods.notes) {
+      result.diagnostics.push_back(
+        MakeWarningDiagnostic(note.code, note.message, input.source_id_prefix,
+          "/nodes/" + std::to_string(note.node)));
     }
     result.sources.reserve(bake_plan.variants.size());
     for (size_t variant_index = 0; variant_index < bake_plan.variants.size();
@@ -1473,8 +1835,11 @@ namespace {
       if (mesh == nullptr) {
         continue;
       }
-      const auto authored_name
-        = std::string_view(mesh->name != nullptr ? mesh->name : "");
+      // A named LOD group's geometry takes the group's name.
+      const auto* group = LodGroupOf(bake, variant);
+      const auto authored_name = group != nullptr && group->named
+        ? std::string_view(group->name)
+        : std::string_view(mesh->name != nullptr ? mesh->name : "");
       const auto context = NamingContext {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
@@ -1544,665 +1909,717 @@ namespace {
     if (!result.success) {
       return result;
     }
+    const auto bake = BuildGltfBakePlan(data, input.request.options.coordinate);
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
-      const auto* mesh = &base::CheckedAt(
-        std::span(data.meshes, data.meshes_count), variant.mesh_index);
       const auto& mesh_name = source.name;
 
-      std::vector<PrimitiveInfo> primitives;
-      primitives.reserve(mesh->primitives_count);
-
-      bool all_normals = true;
-      bool all_texcoords = true;
-      bool all_tangents = true;
-      bool any_texcoords = false;
-      bool any_colors = false;
-      bool any_skin = false;
-      bool has_material_textures = false;
-      bool has_tangent_space_textures = false;
-
-      size_t total_vertices = 0;
-      size_t total_indices = 0;
-
-      for (cgltf_size prim_i = 0; prim_i < mesh->primitives_count; ++prim_i) {
-        if (input.stop_token.stop_requested()) {
-          result.success = false;
-          result.diagnostics.push_back(
-            MakeCancelDiagnostic(input.source_id_prefix));
-          return result;
+      // The meshes of the geometry's LODs: a variant's one mesh, or a LOD
+      // group's levels, each with the transform into the group's space.
+      struct LodInput final {
+        const cgltf_mesh* mesh = nullptr;
+        std::optional<glm::mat4> transform;
+      };
+      auto levels = std::vector<LodInput> {};
+      if (const auto* group = LodGroupOf(bake, variant); group != nullptr) {
+        for (const auto& level : group->levels) {
+          levels.push_back({
+            .mesh = level.node->mesh,
+            .transform = level.transform,
+          });
         }
+      } else {
+        levels.push_back({
+          .mesh = &base::CheckedAt(
+            std::span(data.meshes, data.meshes_count), variant.mesh_index),
+          .transform = std::nullopt,
+        });
+      }
 
-        const auto& prim = base::CheckedAt(
-          std::span(mesh->primitives, mesh->primitives_count), prim_i);
-        if (prim.type != cgltf_primitive_type_triangles) {
+      // LOD0 is the geometry; a coarser level that cannot be built is left
+      // out of it.
+      auto geometry = std::optional<MeshBuildPipeline::WorkItem> {};
+      auto dropped_levels = size_t { 0 };
+      const auto note_dropped = [&](const size_t reached) -> void {
+        if (geometry.has_value()
+          && geometry->lods.size() + dropped_levels < reached) {
           result.diagnostics.push_back(
-            MakeWarningDiagnostic(std::string(import_codes::kGltfPrimitiveType),
+            MakeWarningDiagnostic(std::string(import_codes::kMeshLodDropped),
+              "glTF LOD " + std::to_string(reached - 1)
+                + " cannot be built; the level is dropped",
+              input.source_id_prefix, mesh_name));
+          ++dropped_levels;
+        }
+      };
+      for (size_t lod_index = 0; lod_index < levels.size(); ++lod_index) {
+        note_dropped(lod_index);
+        if (lod_index != 0 && !geometry.has_value()) {
+          break;
+        }
+        const auto* mesh = levels.at(lod_index).mesh;
+
+        std::vector<PrimitiveInfo> primitives;
+        primitives.reserve(mesh->primitives_count);
+
+        bool all_normals = true;
+        bool all_texcoords = true;
+        bool all_tangents = true;
+        bool any_texcoords = false;
+        bool any_colors = false;
+        bool any_skin = false;
+        bool has_material_textures = false;
+        bool has_tangent_space_textures = false;
+
+        size_t total_vertices = 0;
+        size_t total_indices = 0;
+
+        for (cgltf_size prim_i = 0; prim_i < mesh->primitives_count; ++prim_i) {
+          if (input.stop_token.stop_requested()) {
+            result.success = false;
+            result.diagnostics.push_back(
+              MakeCancelDiagnostic(input.source_id_prefix));
+            return result;
+          }
+
+          const auto& prim = base::CheckedAt(
+            std::span(mesh->primitives, mesh->primitives_count), prim_i);
+          if (prim.type != cgltf_primitive_type_triangles) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kGltfPrimitiveType),
               "glTF primitive " + std::to_string(prim_i) + " has mode "
                 + std::to_string(static_cast<int>(prim.type))
                 + ", not a triangle list (4); the primitive is dropped",
               input.source_id_prefix, mesh_name));
-          continue;
-        }
+            continue;
+          }
 
-        const cgltf_accessor* positions = nullptr;
-        const cgltf_accessor* normals = nullptr;
-        const cgltf_accessor* texcoords = nullptr;
-        const cgltf_accessor* tangents = nullptr;
-        const cgltf_accessor* colors = nullptr;
-        const cgltf_accessor* joints = nullptr;
-        const cgltf_accessor* weights = nullptr;
-        std::map<cgltf_size, const cgltf_accessor*> texcoords_by_index;
-        std::optional<cgltf_size> color_index;
-        std::unordered_map<uint32_t, const cgltf_accessor*> joints_by_index;
-        std::unordered_map<uint32_t, const cgltf_accessor*> weights_by_index;
+          const cgltf_accessor* positions = nullptr;
+          const cgltf_accessor* normals = nullptr;
+          const cgltf_accessor* texcoords = nullptr;
+          const cgltf_accessor* tangents = nullptr;
+          const cgltf_accessor* colors = nullptr;
+          const cgltf_accessor* joints = nullptr;
+          const cgltf_accessor* weights = nullptr;
+          std::map<cgltf_size, const cgltf_accessor*> texcoords_by_index;
+          std::optional<cgltf_size> color_index;
+          std::unordered_map<uint32_t, const cgltf_accessor*> joints_by_index;
+          std::unordered_map<uint32_t, const cgltf_accessor*> weights_by_index;
 
-        for (const auto& attr :
-          std::span(prim.attributes, prim.attributes_count)) {
-          switch (attr.type) {
-          case cgltf_attribute_type_position:
-            positions = attr.data;
-            break;
-          case cgltf_attribute_type_normal:
-            normals = attr.data;
-            break;
-          case cgltf_attribute_type_texcoord:
-            texcoords_by_index[attr.index] = attr.data;
-            break;
-          case cgltf_attribute_type_tangent:
-            tangents = attr.data;
-            break;
-          case cgltf_attribute_type_color:
-            if (!color_index.has_value()
-              || std::cmp_less(attr.index, color_index.value())) {
-              color_index = attr.index;
-              colors = attr.data;
+          for (const auto& attr :
+            std::span(prim.attributes, prim.attributes_count)) {
+            switch (attr.type) {
+            case cgltf_attribute_type_position:
+              positions = attr.data;
+              break;
+            case cgltf_attribute_type_normal:
+              normals = attr.data;
+              break;
+            case cgltf_attribute_type_texcoord:
+              texcoords_by_index[attr.index] = attr.data;
+              break;
+            case cgltf_attribute_type_tangent:
+              tangents = attr.data;
+              break;
+            case cgltf_attribute_type_color:
+              if (!color_index.has_value()
+                || std::cmp_less(attr.index, color_index.value())) {
+                color_index = attr.index;
+                colors = attr.data;
+              }
+              break;
+            case cgltf_attribute_type_joints:
+              joints_by_index[attr.index] = attr.data;
+              break;
+            case cgltf_attribute_type_weights:
+              weights_by_index[attr.index] = attr.data;
+              break;
+            default:
+              break;
             }
-            break;
-          case cgltf_attribute_type_joints:
-            joints_by_index[attr.index] = attr.data;
-            break;
-          case cgltf_attribute_type_weights:
-            weights_by_index[attr.index] = attr.data;
-            break;
-          default:
-            break;
-          }
-        }
-
-        if (!texcoords_by_index.empty()) {
-          // The UV set of each texture the material samples, in slot order.
-          std::vector<cgltf_size> preferred_uv_sets;
-          if (prim.material != nullptr) {
-            VisitMaterialTextures(*prim.material,
-              [&preferred_uv_sets](const cgltf_texture_view& view,
-                const TextureUsage /*usage*/) -> void {
-                if (view.texture != nullptr) {
-                  preferred_uv_sets.push_back(
-                    static_cast<cgltf_size>(DeclaredUvSet(view)));
-                }
-              });
           }
 
-          auto selected_uv_set = texcoords_by_index.begin()->first;
-          if (!preferred_uv_sets.empty()) {
-            const auto first_uv = preferred_uv_sets.front();
-            if (std::ranges::any_of(preferred_uv_sets,
-                  [first_uv](const cgltf_size uv_set) -> bool {
-                    return uv_set != first_uv;
-                  })) {
+          if (!texcoords_by_index.empty()) {
+            // The UV set of each texture the material samples, in slot order.
+            std::vector<cgltf_size> preferred_uv_sets;
+            if (prim.material != nullptr) {
+              VisitMaterialTextures(*prim.material,
+                [&preferred_uv_sets](const cgltf_texture_view& view,
+                  const TextureUsage /*usage*/) -> void {
+                  if (view.texture != nullptr) {
+                    preferred_uv_sets.push_back(
+                      static_cast<cgltf_size>(DeclaredUvSet(view)));
+                  }
+                });
+            }
+
+            auto selected_uv_set = texcoords_by_index.begin()->first;
+            if (!preferred_uv_sets.empty()) {
+              const auto first_uv = preferred_uv_sets.front();
+              if (std::ranges::any_of(preferred_uv_sets,
+                    [first_uv](const cgltf_size uv_set) -> bool {
+                      return uv_set != first_uv;
+                    })) {
+                result.diagnostics.push_back(MakeWarningDiagnostic(
+                  std::string(import_codes::kMeshUvSetConflict),
+                  "Material uses multiple UV sets; using the first available",
+                  input.source_id_prefix, mesh_name));
+              }
+              if (texcoords_by_index.contains(first_uv)) {
+                selected_uv_set = first_uv;
+              } else {
+                result.diagnostics.push_back(MakeWarningDiagnostic(
+                  std::string(import_codes::kMeshUvSetMissing),
+                  "Material requests a UV set not present on the primitive; "
+                  "using the first available",
+                  input.source_id_prefix, mesh_name));
+              }
+            }
+
+            // A mesh keeps one UV set: what the others carry is left out.
+            if (texcoords_by_index.size() > 1U) {
+              std::ostringstream message;
+              message << "glTF primitive has UV sets {";
+              bool first = true;
+              for (const auto& [uv_set, accessor] : texcoords_by_index) {
+                (void)accessor;
+                message << (first ? "" : ",") << uv_set;
+                first = false;
+              }
+              message << "}; only set " << selected_uv_set
+                      << " is imported, and textures of the other sets use it";
               result.diagnostics.push_back(MakeWarningDiagnostic(
-                std::string(import_codes::kMeshUvSetConflict),
-                "Material uses multiple UV sets; using the first available",
+                std::string(import_codes::kMeshUvSetsDropped), message.str(),
                 input.source_id_prefix, mesh_name));
             }
-            if (texcoords_by_index.contains(first_uv)) {
-              selected_uv_set = first_uv;
-            } else {
-              result.diagnostics.push_back(MakeWarningDiagnostic(
-                std::string(import_codes::kMeshUvSetMissing),
-                "Material requests a UV set not present on the primitive; "
-                "using the first available",
-                input.source_id_prefix, mesh_name));
+
+            if (const auto it = texcoords_by_index.find(selected_uv_set);
+              it != texcoords_by_index.end()) {
+              texcoords = it->second;
             }
           }
 
-          // A mesh keeps one UV set: what the others carry is left out.
-          if (texcoords_by_index.size() > 1U) {
-            std::ostringstream message;
-            message << "glTF primitive has UV sets {";
-            bool first = true;
-            for (const auto& [uv_set, accessor] : texcoords_by_index) {
-              (void)accessor;
-              message << (first ? "" : ",") << uv_set;
-              first = false;
+          if (!joints_by_index.empty() && !weights_by_index.empty()) {
+            const auto& pick = joints_by_index;
+            uint32_t selected_index = std::numeric_limits<uint32_t>::max();
+            for (const auto& [index, accessor] : pick) {
+              if (weights_by_index.contains(index) && index < selected_index) {
+                selected_index = index;
+                joints = accessor;
+                weights = weights_by_index.at(index);
+              }
             }
-            message << "}; only set " << selected_uv_set
-                    << " is imported, and textures of the other sets use it";
+          }
+
+          if (positions == nullptr) {
             result.diagnostics.push_back(MakeWarningDiagnostic(
-              std::string(import_codes::kMeshUvSetsDropped), message.str(),
+              std::string(import_codes::kMeshMissingPositions),
+              "glTF primitive missing POSITION attribute; the primitive is "
+              "dropped",
               input.source_id_prefix, mesh_name));
+            continue;
           }
 
-          if (const auto it = texcoords_by_index.find(selected_uv_set);
-            it != texcoords_by_index.end()) {
-            texcoords = it->second;
+          // KHR_draco_mesh_compression: an accessor with no view holds no data,
+          // only its decoded shape. A primitive with uncompressed fallback data
+          // has views, and imports from those.
+          if (prim.has_draco_mesh_compression != 0
+            && (positions->buffer_view == nullptr
+              || (prim.indices != nullptr
+                && prim.indices->buffer_view == nullptr))) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kGltfPrimitiveDracoSkipped),
+              "glTF primitive holds only Draco-compressed data, which import "
+              "does "
+              "not decode; the primitive is dropped",
+              input.source_id_prefix, mesh_name));
+            continue;
           }
-        }
 
-        if (!joints_by_index.empty() && !weights_by_index.empty()) {
-          const auto& pick = joints_by_index;
-          uint32_t selected_index = std::numeric_limits<uint32_t>::max();
-          for (const auto& [index, accessor] : pick) {
-            if (weights_by_index.contains(index) && index < selected_index) {
-              selected_index = index;
-              joints = accessor;
-              weights = weights_by_index.at(index);
+          const auto vertex_count = static_cast<uint32_t>(positions->count);
+          if (vertex_count == 0) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshMissingPositions),
+              "glTF primitive contains no vertex positions; the primitive is "
+              "dropped",
+              input.source_id_prefix, mesh_name));
+            continue;
+          }
+
+          const bool has_normals
+            = normals != nullptr && normals->count == positions->count;
+          const bool has_texcoords
+            = texcoords != nullptr && texcoords->count == positions->count;
+          const bool has_tangents
+            = tangents != nullptr && tangents->count == positions->count;
+          const bool has_colors
+            = colors != nullptr && colors->count == positions->count;
+          const bool has_joints
+            = joints != nullptr && joints->count == positions->count;
+          const bool has_weights
+            = weights != nullptr && weights->count == positions->count;
+          const bool has_skin = has_joints && has_weights;
+
+          all_normals = all_normals && has_normals;
+          all_texcoords = all_texcoords && has_texcoords;
+          all_tangents = all_tangents && has_tangents;
+          any_texcoords = any_texcoords || has_texcoords;
+          any_colors = any_colors || has_colors;
+          any_skin = any_skin || has_skin;
+
+          const auto surface = [&] -> uint32_t {
+            if (prim.material == nullptr) {
+              return static_cast<uint32_t>(data.materials_count);
             }
+            if (const auto it = material_index.find(prim.material);
+              it != material_index.end()) {
+              return it->second;
+            }
+            return 0;
+          }();
+
+          if (prim.material != nullptr && !input.material_keys.empty()
+            && surface >= input.material_keys.size()) {
+            result.diagnostics.push_back(
+              MakeWarningDiagnostic(std::string(import_codes::kMeshSurfaceOob),
+                "glTF material index exceeds imported material key count",
+                input.source_id_prefix, mesh_name));
           }
-        }
 
-        if (positions == nullptr) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kMeshMissingPositions),
-            "glTF primitive missing POSITION attribute; the primitive is "
-            "dropped",
-            input.source_id_prefix, mesh_name));
-          continue;
-        }
-
-        // KHR_draco_mesh_compression: an accessor with no view holds no data,
-        // only its decoded shape. A primitive with uncompressed fallback data
-        // has views, and imports from those.
-        if (prim.has_draco_mesh_compression != 0
-          && (positions->buffer_view == nullptr
-            || (prim.indices != nullptr
-              && prim.indices->buffer_view == nullptr))) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kGltfPrimitiveDracoSkipped),
-            "glTF primitive holds only Draco-compressed data, which import "
-            "does "
-            "not decode; the primitive is dropped",
-            input.source_id_prefix, mesh_name));
-          continue;
-        }
-
-        const auto vertex_count = static_cast<uint32_t>(positions->count);
-        if (vertex_count == 0) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kMeshMissingPositions),
-            "glTF primitive contains no vertex positions; the primitive is "
-            "dropped",
-            input.source_id_prefix, mesh_name));
-          continue;
-        }
-
-        const bool has_normals
-          = normals != nullptr && normals->count == positions->count;
-        const bool has_texcoords
-          = texcoords != nullptr && texcoords->count == positions->count;
-        const bool has_tangents
-          = tangents != nullptr && tangents->count == positions->count;
-        const bool has_colors
-          = colors != nullptr && colors->count == positions->count;
-        const bool has_joints
-          = joints != nullptr && joints->count == positions->count;
-        const bool has_weights
-          = weights != nullptr && weights->count == positions->count;
-        const bool has_skin = has_joints && has_weights;
-
-        all_normals = all_normals && has_normals;
-        all_texcoords = all_texcoords && has_texcoords;
-        all_tangents = all_tangents && has_tangents;
-        any_texcoords = any_texcoords || has_texcoords;
-        any_colors = any_colors || has_colors;
-        any_skin = any_skin || has_skin;
-
-        const auto surface = [&] -> uint32_t {
-          if (prim.material == nullptr) {
-            return static_cast<uint32_t>(data.materials_count);
+          if (prim.material != nullptr) {
+            const auto needs = NeedsOf(*prim.material);
+            has_material_textures = has_material_textures || needs.uvs;
+            has_tangent_space_textures
+              = has_tangent_space_textures || needs.tangents;
           }
-          if (const auto it = material_index.find(prim.material);
-            it != material_index.end()) {
-            return it->second;
+
+          uint32_t index_count = 0;
+          if (prim.indices != nullptr) {
+            index_count = static_cast<uint32_t>(prim.indices->count);
+          } else {
+            index_count = vertex_count;
           }
-          return 0;
-        }();
 
-        if (prim.material != nullptr && !input.material_keys.empty()
-          && surface >= input.material_keys.size()) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic(std::string(import_codes::kMeshSurfaceOob),
-              "glTF material index exceeds imported material key count",
-              input.source_id_prefix, mesh_name));
-        }
-
-        if (prim.material != nullptr) {
-          const auto needs = NeedsOf(*prim.material);
-          has_material_textures = has_material_textures || needs.uvs;
-          has_tangent_space_textures
-            = has_tangent_space_textures || needs.tangents;
-        }
-
-        uint32_t index_count = 0;
-        if (prim.indices != nullptr) {
-          index_count = static_cast<uint32_t>(prim.indices->count);
-        } else {
-          index_count = vertex_count;
-        }
-
-        if ((index_count % 3U) != 0U) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
+          if ((index_count % 3U) != 0U) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshInvalidRange),
               "glTF primitive index count is not a multiple of 3; the "
               "incomplete last triangle is dropped",
               input.source_id_prefix, mesh_name));
+          }
+
+          primitives.push_back(PrimitiveInfo {
+            .prim = &prim,
+            .positions = positions,
+            .normals = normals,
+            .texcoords = texcoords,
+            .tangents = tangents,
+            .colors = colors,
+            .joints = joints,
+            .weights = weights,
+            .surface = surface,
+            .vertex_count = vertex_count,
+            .index_count = index_count,
+            .has_normals = has_normals,
+            .has_texcoords = has_texcoords,
+            .has_tangents = has_tangents,
+            .has_colors = has_colors,
+            .has_skin = has_skin,
+          });
+
+          total_vertices += vertex_count;
+          total_indices += index_count;
         }
 
-        primitives.push_back(PrimitiveInfo {
-          .prim = &prim,
-          .positions = positions,
-          .normals = normals,
-          .texcoords = texcoords,
-          .tangents = tangents,
-          .colors = colors,
-          .joints = joints,
-          .weights = weights,
-          .surface = surface,
-          .vertex_count = vertex_count,
-          .index_count = index_count,
-          .has_normals = has_normals,
-          .has_texcoords = has_texcoords,
-          .has_tangents = has_tangents,
-          .has_colors = has_colors,
-          .has_skin = has_skin,
-        });
-
-        total_vertices += vertex_count;
-        total_indices += index_count;
-      }
-
-      if (primitives.empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshEmptyPrimitives),
+        if (primitives.empty()) {
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshEmptyPrimitives),
             "glTF mesh has no supported primitives; skipping",
             input.source_id_prefix, mesh_name));
-        continue;
-      }
-
-      // Primitives may share one accessor, each adding a copy of it: a small
-      // file can ask for far more memory than it has, and more vertices than
-      // an index reaches.
-      const auto mesh_bytes = (total_vertices * sizeof(glm::vec3))
-        + (total_indices * sizeof(uint32_t));
-      if (total_vertices > std::numeric_limits<uint32_t>::max()
-        || total_indices > std::numeric_limits<uint32_t>::max()
-        || serio::ByteCount { mesh_bytes } > SourceLimitOf(input)) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
-            "glTF mesh takes " + std::to_string(total_vertices)
-              + " vertices and " + std::to_string(total_indices)
-              + " indices across its primitives, more than an import holds; "
-                "the mesh is dropped",
-            input.source_id_prefix, mesh_name));
-        continue;
-      }
-
-      if (any_texcoords && !all_texcoords) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshMissingUvs),
-            "glTF mesh has mixed UV availability across primitives; some "
-            "submeshes will use default UVs",
-            input.source_id_prefix, mesh_name));
-      }
-
-      MeshBuildPipeline::WorkItem item;
-      if (!CanReadPositions(*mesh)) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
-            "Could not read the glTF mesh's positions; the mesh is dropped",
-            input.source_id_prefix, mesh_name));
-        continue;
-      }
-      item.source_id = source.source_id;
-      item.mesh_name = mesh_name;
-      item.storage_mesh_name = mesh_name;
-      item.source_key = variant.representative_node != internal::kNoBakeIndex
-        ? static_cast<const void*>(
-            &base::CheckedAt(std::span(data.nodes, data.nodes_count),
-              variant.representative_node))
-        : static_cast<const void*>(mesh);
-      item.bake_transform = variant.transform;
-      item.material_keys.assign(
-        input.material_keys.begin(), input.material_keys.end());
-      item.default_material_key = input.default_material_key;
-      item.want_textures = true;
-      item.has_material_textures = has_material_textures;
-      item.has_tangent_space_textures = has_tangent_space_textures;
-      item.request = input.request;
-      item.naming_service = input.naming_service;
-      if (!all_normals
-        && item.request.options.normal_policy
-          == GeometryAttributePolicy::kPreserveIfPresent) {
-        item.request.options.normal_policy
-          = GeometryAttributePolicy::kGenerateMissing;
-      }
-      // glTF gives a primitive without normals flat ones; only a recalculation
-      // smooths them.
-      if (!all_normals
-        && item.request.options.normal_policy
-          != GeometryAttributePolicy::kAlwaysRecalculate) {
-        item.request.options.normals_smoothing_angle_deg = 0.0F;
-      }
-      if (!all_tangents
-        && item.request.options.tangent_policy
-          == GeometryAttributePolicy::kPreserveIfPresent) {
-        item.request.options.tangent_policy
-          = GeometryAttributePolicy::kGenerateMissing;
-      }
-
-      const bool keep_normals = all_normals
-        && item.request.options.normal_policy != GeometryAttributePolicy::kNone;
-      const bool keep_texcoords = any_texcoords;
-      const bool keep_tangents = all_tangents && keep_normals && keep_texcoords
-        && item.request.options.tangent_policy
-          != GeometryAttributePolicy::kNone;
-      const bool keep_colors = any_colors;
-      const bool keep_skin = any_skin;
-      item.stop_token = input.stop_token;
-
-      struct MeshBuffers final {
-        std::vector<glm::vec3> positions;
-        std::vector<glm::vec3> normals;
-        std::vector<glm::vec2> texcoords;
-        std::vector<glm::vec3> tangents;
-        std::vector<glm::vec3> bitangents;
-        std::vector<glm::vec4> colors;
-        std::vector<glm::uvec4> joint_indices;
-        std::vector<glm::vec4> joint_weights;
-        std::vector<glm::mat4> inverse_bind_matrices;
-        std::vector<uint32_t> joint_remap;
-        std::vector<uint32_t> indices;
-        std::vector<TriangleRange> ranges;
-      };
-
-      auto owner = std::make_shared<MeshBuffers>();
-      owner->positions.reserve(total_vertices);
-      if (keep_normals) {
-        owner->normals.reserve(total_vertices);
-      }
-      if (keep_texcoords) {
-        owner->texcoords.reserve(total_vertices);
-      }
-      if (keep_tangents) {
-        owner->tangents.reserve(total_vertices);
-        owner->bitangents.reserve(total_vertices);
-      }
-      if (keep_colors) {
-        owner->colors.reserve(total_vertices);
-      }
-      if (keep_skin) {
-        owner->joint_indices.reserve(total_vertices);
-        owner->joint_weights.reserve(total_vertices);
-      }
-      owner->indices.reserve(total_indices);
-      owner->ranges.reserve(primitives.size());
-
-      for (const auto& prim_info : primitives) {
-        auto positions_vec = ReadVec3(prim_info.positions);
-        if (positions_vec.empty()) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kMeshMissingPositions),
-            "glTF primitive positions cannot be read; the primitive is "
-            "dropped",
-            input.source_id_prefix, mesh_name));
           continue;
         }
 
-        for (auto& position : positions_vec) {
-          position
-            = ConvertGltfPosition(position, input.request.options.coordinate);
-        }
-
-        const auto base_vertex = static_cast<uint32_t>(owner->positions.size());
-        owner->positions.insert(
-          owner->positions.end(), positions_vec.begin(), positions_vec.end());
-
-        if (keep_normals) {
-          if (prim_info.has_normals) {
-            auto normals_vec = ReadVec3(prim_info.normals);
-            for (auto& normal : normals_vec) {
-              normal = ConvertGltfDirection(normal);
-            }
-            owner->normals.insert(
-              owner->normals.end(), normals_vec.begin(), normals_vec.end());
-          } else {
-            owner->normals.insert(
-              owner->normals.end(), positions_vec.size(), glm::vec3(0.0F));
-          }
-        }
-
-        if (keep_texcoords) {
-          if (prim_info.has_texcoords) {
-            auto texcoords_vec = ReadVec2(prim_info.texcoords);
-            if (!texcoords_vec.empty()) {
-              bool has_invalid_uv = false;
-              auto min_uv = glm::vec2 { std::numeric_limits<float>::max() };
-              auto max_uv = glm::vec2 { std::numeric_limits<float>::lowest() };
-              for (const auto& uv : texcoords_vec) {
-                if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
-                  has_invalid_uv = true;
-                  break;
-                }
-                min_uv = glm::min(min_uv, uv);
-                max_uv = glm::max(max_uv, uv);
-              }
-              if (has_invalid_uv) {
-                result.diagnostics.push_back(MakeWarningDiagnostic(
-                  std::string(import_codes::kMeshInvalidUvs),
-                  "glTF primitive has NaN/Inf UVs; rendering may be corrupted",
-                  input.source_id_prefix, mesh_name));
-              } else {
-                DLOG_F(INFO,
-                  "glTF mesh '{}' UV range min=({:.4f},{:.4f}) "
-                  "max=({:.4f},{:.4f})",
-                  mesh_name, min_uv.x, min_uv.y, max_uv.x, max_uv.y);
-                constexpr float kUvAbsLimit = 10000.0F;
-                const auto max_abs
-                  = glm::max(glm::abs(min_uv), glm::abs(max_uv));
-                if (max_abs.x > kUvAbsLimit || max_abs.y > kUvAbsLimit) {
-                  std::ostringstream message;
-                  message.setf(std::ios::fixed);
-                  message << "glTF primitive UV range is extremely large; "
-                             "textures may appear noisy ("
-                          << "min=" << std::setprecision(3) << min_uv.x << ","
-                          << min_uv.y << " max=" << max_uv.x << "," << max_uv.y
-                          << ")";
-                  result.diagnostics.push_back(MakeWarningDiagnostic(
-                    std::string(import_codes::kMeshUvRangeSuspicious),
-                    message.str(), input.source_id_prefix, mesh_name));
-                }
-              }
-            }
-            owner->texcoords.insert(owner->texcoords.end(),
-              texcoords_vec.begin(), texcoords_vec.end());
-          } else {
-            owner->texcoords.insert(
-              owner->texcoords.end(), positions_vec.size(), glm::vec2(0.0F));
-          }
-        }
-
-        if (keep_colors) {
-          if (prim_info.has_colors) {
-            auto colors_vec = ReadVec4(prim_info.colors);
-            owner->colors.insert(
-              owner->colors.end(), colors_vec.begin(), colors_vec.end());
-          } else {
-            owner->colors.insert(
-              owner->colors.end(), positions_vec.size(), glm::vec4(1.0F));
-          }
-        }
-
-        if (keep_skin) {
-          if (prim_info.has_skin) {
-            auto joint_indices_vec = ReadUVec4(prim_info.joints);
-            auto joint_weights_vec = ReadVec4(prim_info.weights);
-            owner->joint_indices.insert(owner->joint_indices.end(),
-              joint_indices_vec.begin(), joint_indices_vec.end());
-            owner->joint_weights.insert(owner->joint_weights.end(),
-              joint_weights_vec.begin(), joint_weights_vec.end());
-          } else {
-            owner->joint_indices.insert(
-              owner->joint_indices.end(), positions_vec.size(), glm::uvec4(0U));
-            owner->joint_weights.insert(owner->joint_weights.end(),
-              positions_vec.size(), glm::vec4(0.0F));
-          }
-        }
-
-        if (keep_tangents) {
-          if (prim_info.has_tangents) {
-            auto tangents_vec = ReadVec4(prim_info.tangents);
-            const auto normal_offset
-              = owner->normals.size() - positions_vec.size();
-            for (size_t i = 0; i < tangents_vec.size(); ++i) {
-              const auto& t = tangents_vec.at(i);
-              const auto& n = owner->normals.at(normal_offset + i);
-              const auto tangent
-                = ConvertGltfDirection(glm::vec3 { t.x, t.y, t.z });
-              owner->tangents.push_back(tangent);
-              // glTF's bitangent, cross(N, T) * w, follows the image's up;
-              // Oxygen's follows its down (`space::texture`).
-              const auto bitangent = -glm::cross(n, tangent) * t.w;
-              owner->bitangents.push_back(bitangent);
-            }
-          } else {
-            owner->tangents.insert(
-              owner->tangents.end(), positions_vec.size(), glm::vec3(0.0F));
-            owner->bitangents.insert(
-              owner->bitangents.end(), positions_vec.size(), glm::vec3(0.0F));
-          }
-        }
-
-        auto indices_vec = ReadIndices(prim_info.prim->indices);
-        if (indices_vec.empty()) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kGltfMissingIndices),
-            "glTF primitive missing indices; generated sequential indices",
-            input.source_id_prefix, mesh_name));
-          indices_vec.resize(positions_vec.size());
-          for (size_t i = 0; i < indices_vec.size(); ++i) {
-            indices_vec.at(i) = static_cast<uint32_t>(i);
-          }
-        }
-
-        // An incomplete last triangle and the triangles that name a vertex
-        // the primitive does not have are dropped; the rest are kept.
-        indices_vec.resize(indices_vec.size() - (indices_vec.size() % 3U));
-        const auto vertex_count_u32
-          = static_cast<uint32_t>(positions_vec.size());
-        const auto authored_triangles = indices_vec.size() / 3U;
-        auto kept = size_t { 0 };
-        for (size_t triangle = 0; triangle < authored_triangles; ++triangle) {
-          const auto first = triangle * 3U;
-          if (indices_vec.at(first) < vertex_count_u32
-            && indices_vec.at(first + 1U) < vertex_count_u32
-            && indices_vec.at(first + 2U) < vertex_count_u32) {
-            indices_vec.at(kept * 3U) = indices_vec.at(first);
-            indices_vec.at((kept * 3U) + 1U) = indices_vec.at(first + 1U);
-            indices_vec.at((kept * 3U) + 2U) = indices_vec.at(first + 2U);
-            ++kept;
-          }
-        }
-        indices_vec.resize(kept * 3U);
-        if (kept != authored_triangles) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kMeshInvalidIndices),
-            "glTF primitive has " + std::to_string(authored_triangles - kept)
-              + " triangles that reference out-of-range vertices; they are "
-                "dropped",
-            input.source_id_prefix, mesh_name));
-        }
-        if (indices_vec.empty()) {
-          result.diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kMeshMissingIndices),
-            "glTF primitive has no usable triangles; the primitive is dropped",
-            input.source_id_prefix, mesh_name));
+        // Primitives may share one accessor, each adding a copy of it: a small
+        // file can ask for far more memory than it has, and more vertices than
+        // an index reaches.
+        const auto mesh_bytes = (total_vertices * sizeof(glm::vec3))
+          + (total_indices * sizeof(uint32_t));
+        if (total_vertices > std::numeric_limits<uint32_t>::max()
+          || total_indices > std::numeric_limits<uint32_t>::max()
+          || serio::ByteCount { mesh_bytes } > SourceLimitOf(input)) {
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+              "glTF mesh takes " + std::to_string(total_vertices)
+                + " vertices and " + std::to_string(total_indices)
+                + " indices across its primitives, more than an import holds; "
+                  "the mesh is dropped",
+              input.source_id_prefix, mesh_name));
           continue;
         }
 
-        const auto first_index = static_cast<uint32_t>(owner->indices.size());
-        for (auto& index : indices_vec) {
-          index += base_vertex;
+        if (any_texcoords && !all_texcoords) {
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshMissingUvs),
+              "glTF mesh has mixed UV availability across primitives; some "
+              "submeshes will use default UVs",
+              input.source_id_prefix, mesh_name));
         }
-        owner->indices.insert(
-          owner->indices.end(), indices_vec.begin(), indices_vec.end());
 
-        owner->ranges.push_back(TriangleRange {
-          .surface = prim_info.surface,
-          .source_slot = prim_info.prim->material != nullptr
-            ? prim_info.surface
-            : std::numeric_limits<uint32_t>::max(),
-          .first_index = first_index,
-          .index_count = static_cast<uint32_t>(indices_vec.size()),
-        });
-      }
+        MeshBuildPipeline::WorkItem item;
+        if (!CanReadPositions(*mesh)) {
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+              "Could not read the glTF mesh's positions; the mesh is dropped",
+              input.source_id_prefix, mesh_name));
+          continue;
+        }
+        item.source_id = source.source_id;
+        item.mesh_name = mesh_name;
+        item.storage_mesh_name = mesh_name;
+        item.source_key = variant.representative_node != internal::kNoBakeIndex
+          ? static_cast<const void*>(
+              &base::CheckedAt(std::span(data.nodes, data.nodes_count),
+                variant.representative_node))
+          : static_cast<const void*>(mesh);
+        item.bake_transform = variant.transform;
+        item.material_keys.assign(
+          input.material_keys.begin(), input.material_keys.end());
+        item.default_material_key = input.default_material_key;
+        item.want_textures = true;
+        item.has_material_textures = has_material_textures;
+        item.has_tangent_space_textures = has_tangent_space_textures;
+        item.request = input.request;
+        item.naming_service = input.naming_service;
+        if (!all_normals
+          && item.request.options.normal_policy
+            == GeometryAttributePolicy::kPreserveIfPresent) {
+          item.request.options.normal_policy
+            = GeometryAttributePolicy::kGenerateMissing;
+        }
+        // glTF gives a primitive without normals flat ones; only a
+        // recalculation smooths them.
+        if (!all_normals
+          && item.request.options.normal_policy
+            != GeometryAttributePolicy::kAlwaysRecalculate) {
+          item.request.options.normals_smoothing_angle_deg = 0.0F;
+        }
+        if (!all_tangents
+          && item.request.options.tangent_policy
+            == GeometryAttributePolicy::kPreserveIfPresent) {
+          item.request.options.tangent_policy
+            = GeometryAttributePolicy::kGenerateMissing;
+        }
 
-      if (owner->ranges.empty()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
-            "glTF mesh has no usable primitives; the mesh is dropped",
-            input.source_id_prefix, mesh_name));
-        continue;
-      }
+        const bool keep_normals = all_normals
+          && item.request.options.normal_policy
+            != GeometryAttributePolicy::kNone;
+        const bool keep_texcoords = any_texcoords;
+        const bool keep_tangents = all_tangents && keep_normals
+          && keep_texcoords
+          && item.request.options.tangent_policy
+            != GeometryAttributePolicy::kNone;
+        const bool keep_colors = any_colors;
+        const bool keep_skin = any_skin;
+        item.stop_token = input.stop_token;
 
-      auto is_skinned = keep_skin && !owner->joint_indices.empty()
-        && !owner->joint_weights.empty();
-
-      if (is_skinned) {
-        // Skin data that cannot bind the mesh is dropped: the mesh imports as
-        // static geometry in its bind pose.
-        const auto drop_skin
-          = [&](const std::string_view code, const char* reason) -> void {
-          result.diagnostics.push_back(MakeWarningDiagnostic(std::string(code),
-            std::string(reason)
-              + "; the mesh imports as static geometry in its bind pose",
-            input.source_id_prefix, mesh_name));
-          is_skinned = false;
-          owner->joint_indices.clear();
-          owner->joint_weights.clear();
-          owner->inverse_bind_matrices.clear();
+        struct MeshBuffers final {
+          std::vector<glm::vec3> positions;
+          std::vector<glm::vec3> normals;
+          std::vector<glm::vec2> texcoords;
+          std::vector<glm::vec3> tangents;
+          std::vector<glm::vec3> bitangents;
+          std::vector<glm::vec4> colors;
+          std::vector<glm::uvec4> joint_indices;
+          std::vector<glm::vec4> joint_weights;
+          std::vector<glm::mat4> inverse_bind_matrices;
+          std::vector<uint32_t> joint_remap;
+          std::vector<uint32_t> indices;
+          std::vector<TriangleRange> ranges;
         };
-        const auto found_skin = skins.find(mesh);
-        const auto* skin
-          = found_skin != skins.end() ? found_skin->second : nullptr;
-        if (skin == nullptr) {
-          drop_skin(import_codes::kMeshMissingInverseBind,
-            "glTF mesh has joint data but no node gives it a skin");
-        } else {
-          // In glTF, a skin without the accessor means identity matrices.
-          owner->inverse_bind_matrices = skin->inverse_bind_matrices != nullptr
-            ? ReadMat4(skin->inverse_bind_matrices)
-            : std::vector(skin->joints_count, glm::mat4 { 1.0F });
-          const auto joint_count = DetermineJointCount(owner->joint_indices);
-          if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
+
+        auto owner = std::make_shared<MeshBuffers>();
+        owner->positions.reserve(total_vertices);
+        if (keep_normals) {
+          owner->normals.reserve(total_vertices);
+        }
+        if (keep_texcoords) {
+          owner->texcoords.reserve(total_vertices);
+        }
+        if (keep_tangents) {
+          owner->tangents.reserve(total_vertices);
+          owner->bitangents.reserve(total_vertices);
+        }
+        if (keep_colors) {
+          owner->colors.reserve(total_vertices);
+        }
+        if (keep_skin) {
+          owner->joint_indices.reserve(total_vertices);
+          owner->joint_weights.reserve(total_vertices);
+        }
+        owner->indices.reserve(total_indices);
+        owner->ranges.reserve(primitives.size());
+
+        for (const auto& prim_info : primitives) {
+          auto positions_vec = ReadVec3(prim_info.positions);
+          if (positions_vec.empty()) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshMissingPositions),
+              "glTF primitive positions cannot be read; the primitive is "
+              "dropped",
+              input.source_id_prefix, mesh_name));
+            continue;
+          }
+
+          for (auto& position : positions_vec) {
+            position
+              = ConvertGltfPosition(position, input.request.options.coordinate);
+          }
+
+          const auto base_vertex
+            = static_cast<uint32_t>(owner->positions.size());
+          owner->positions.insert(
+            owner->positions.end(), positions_vec.begin(), positions_vec.end());
+
+          if (keep_normals) {
+            if (prim_info.has_normals) {
+              auto normals_vec = ReadVec3(prim_info.normals);
+              for (auto& normal : normals_vec) {
+                normal = ConvertGltfDirection(normal);
+              }
+              owner->normals.insert(
+                owner->normals.end(), normals_vec.begin(), normals_vec.end());
+            } else {
+              owner->normals.insert(
+                owner->normals.end(), positions_vec.size(), glm::vec3(0.0F));
+            }
+          }
+
+          if (keep_texcoords) {
+            if (prim_info.has_texcoords) {
+              auto texcoords_vec = ReadVec2(prim_info.texcoords);
+              if (!texcoords_vec.empty()) {
+                bool has_invalid_uv = false;
+                auto min_uv = glm::vec2 { std::numeric_limits<float>::max() };
+                auto max_uv
+                  = glm::vec2 { std::numeric_limits<float>::lowest() };
+                for (const auto& uv : texcoords_vec) {
+                  if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
+                    has_invalid_uv = true;
+                    break;
+                  }
+                  min_uv = glm::min(min_uv, uv);
+                  max_uv = glm::max(max_uv, uv);
+                }
+                if (has_invalid_uv) {
+                  result.diagnostics.push_back(MakeWarningDiagnostic(
+                    std::string(import_codes::kMeshInvalidUvs),
+                    "glTF primitive has NaN/Inf UVs; rendering may be "
+                    "corrupted",
+                    input.source_id_prefix, mesh_name));
+                } else {
+                  DLOG_F(INFO,
+                    "glTF mesh '{}' UV range min=({:.4f},{:.4f}) "
+                    "max=({:.4f},{:.4f})",
+                    mesh_name, min_uv.x, min_uv.y, max_uv.x, max_uv.y);
+                  constexpr float kUvAbsLimit = 10000.0F;
+                  const auto max_abs
+                    = glm::max(glm::abs(min_uv), glm::abs(max_uv));
+                  if (max_abs.x > kUvAbsLimit || max_abs.y > kUvAbsLimit) {
+                    std::ostringstream message;
+                    message.setf(std::ios::fixed);
+                    message << "glTF primitive UV range is extremely large; "
+                               "textures may appear noisy ("
+                            << "min=" << std::setprecision(3) << min_uv.x << ","
+                            << min_uv.y << " max=" << max_uv.x << ","
+                            << max_uv.y << ")";
+                    result.diagnostics.push_back(MakeWarningDiagnostic(
+                      std::string(import_codes::kMeshUvRangeSuspicious),
+                      message.str(), input.source_id_prefix, mesh_name));
+                  }
+                }
+              }
+              owner->texcoords.insert(owner->texcoords.end(),
+                texcoords_vec.begin(), texcoords_vec.end());
+            } else {
+              owner->texcoords.insert(
+                owner->texcoords.end(), positions_vec.size(), glm::vec2(0.0F));
+            }
+          }
+
+          if (keep_colors) {
+            if (prim_info.has_colors) {
+              auto colors_vec = ReadVec4(prim_info.colors);
+              owner->colors.insert(
+                owner->colors.end(), colors_vec.begin(), colors_vec.end());
+            } else {
+              owner->colors.insert(
+                owner->colors.end(), positions_vec.size(), glm::vec4(1.0F));
+            }
+          }
+
+          if (keep_skin) {
+            if (prim_info.has_skin) {
+              auto joint_indices_vec = ReadUVec4(prim_info.joints);
+              auto joint_weights_vec = ReadVec4(prim_info.weights);
+              owner->joint_indices.insert(owner->joint_indices.end(),
+                joint_indices_vec.begin(), joint_indices_vec.end());
+              owner->joint_weights.insert(owner->joint_weights.end(),
+                joint_weights_vec.begin(), joint_weights_vec.end());
+            } else {
+              owner->joint_indices.insert(owner->joint_indices.end(),
+                positions_vec.size(), glm::uvec4(0U));
+              owner->joint_weights.insert(owner->joint_weights.end(),
+                positions_vec.size(), glm::vec4(0.0F));
+            }
+          }
+
+          if (keep_tangents) {
+            if (prim_info.has_tangents) {
+              auto tangents_vec = ReadVec4(prim_info.tangents);
+              const auto normal_offset
+                = owner->normals.size() - positions_vec.size();
+              for (size_t i = 0; i < tangents_vec.size(); ++i) {
+                const auto& t = tangents_vec.at(i);
+                const auto& n = owner->normals.at(normal_offset + i);
+                const auto tangent
+                  = ConvertGltfDirection(glm::vec3 { t.x, t.y, t.z });
+                owner->tangents.push_back(tangent);
+                // glTF's bitangent, cross(N, T) * w, follows the image's up;
+                // Oxygen's follows its down (`space::texture`).
+                const auto bitangent = -glm::cross(n, tangent) * t.w;
+                owner->bitangents.push_back(bitangent);
+              }
+            } else {
+              owner->tangents.insert(
+                owner->tangents.end(), positions_vec.size(), glm::vec3(0.0F));
+              owner->bitangents.insert(
+                owner->bitangents.end(), positions_vec.size(), glm::vec3(0.0F));
+            }
+          }
+
+          auto indices_vec = ReadIndices(prim_info.prim->indices);
+          if (indices_vec.empty()) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kGltfMissingIndices),
+              "glTF primitive missing indices; generated sequential indices",
+              input.source_id_prefix, mesh_name));
+            indices_vec.resize(positions_vec.size());
+            for (size_t i = 0; i < indices_vec.size(); ++i) {
+              indices_vec.at(i) = static_cast<uint32_t>(i);
+            }
+          }
+
+          // An incomplete last triangle and the triangles that name a vertex
+          // the primitive does not have are dropped; the rest are kept.
+          indices_vec.resize(indices_vec.size() - (indices_vec.size() % 3U));
+          const auto vertex_count_u32
+            = static_cast<uint32_t>(positions_vec.size());
+          const auto authored_triangles = indices_vec.size() / 3U;
+          auto kept = size_t { 0 };
+          for (size_t triangle = 0; triangle < authored_triangles; ++triangle) {
+            const auto first = triangle * 3U;
+            if (indices_vec.at(first) < vertex_count_u32
+              && indices_vec.at(first + 1U) < vertex_count_u32
+              && indices_vec.at(first + 2U) < vertex_count_u32) {
+              indices_vec.at(kept * 3U) = indices_vec.at(first);
+              indices_vec.at((kept * 3U) + 1U) = indices_vec.at(first + 1U);
+              indices_vec.at((kept * 3U) + 2U) = indices_vec.at(first + 2U);
+              ++kept;
+            }
+          }
+          indices_vec.resize(kept * 3U);
+          if (kept != authored_triangles) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshInvalidIndices),
+              "glTF primitive has " + std::to_string(authored_triangles - kept)
+                + " triangles that reference out-of-range vertices; they are "
+                  "dropped",
+              input.source_id_prefix, mesh_name));
+          }
+          if (indices_vec.empty()) {
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshMissingIndices),
+              "glTF primitive has no usable triangles; the primitive is "
+              "dropped",
+              input.source_id_prefix, mesh_name));
+            continue;
+          }
+
+          const auto first_index = static_cast<uint32_t>(owner->indices.size());
+          for (auto& index : indices_vec) {
+            index += base_vertex;
+          }
+          owner->indices.insert(
+            owner->indices.end(), indices_vec.begin(), indices_vec.end());
+
+          owner->ranges.push_back(TriangleRange {
+            .surface = prim_info.surface,
+            .source_slot = prim_info.prim->material != nullptr
+              ? prim_info.surface
+              : std::numeric_limits<uint32_t>::max(),
+            .first_index = first_index,
+            .index_count = static_cast<uint32_t>(indices_vec.size()),
+          });
+        }
+
+        if (owner->ranges.empty()) {
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+              "glTF mesh has no usable primitives; the mesh is dropped",
+              input.source_id_prefix, mesh_name));
+          continue;
+        }
+
+        auto is_skinned = keep_skin && !owner->joint_indices.empty()
+          && !owner->joint_weights.empty();
+
+        if (is_skinned) {
+          // Skin data that cannot bind the mesh is dropped: the mesh imports as
+          // static geometry in its bind pose.
+          const auto drop_skin
+            = [&](const std::string_view code, const char* reason) -> void {
+            result.diagnostics.push_back(
+              MakeWarningDiagnostic(std::string(code),
+                std::string(reason)
+                  + "; the mesh imports as static geometry in its bind pose",
+                input.source_id_prefix, mesh_name));
+            is_skinned = false;
+            owner->joint_indices.clear();
+            owner->joint_weights.clear();
+            owner->inverse_bind_matrices.clear();
+          };
+          const auto found_skin = skins.find(mesh);
+          const auto* skin
+            = found_skin != skins.end() ? found_skin->second : nullptr;
+          if (skin == nullptr) {
             drop_skin(import_codes::kMeshMissingInverseBind,
-              "glTF skinned mesh missing inverse bind matrices");
-          } else if (owner->inverse_bind_matrices.size() < joint_count) {
-            drop_skin(import_codes::kMeshSkinningBuffersMismatch,
-              "glTF skin inverse bind count is smaller than joint count");
-          } else if (skin->joints_count < joint_count) {
-            drop_skin(import_codes::kMeshSkinningBuffersMismatch,
-              "glTF vertices name joints their skin does not have");
+              "glTF mesh has joint data but no node gives it a skin");
           } else {
-            owner->joint_remap.resize(joint_count);
-            std::iota(owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
+            // In glTF, a skin without the accessor means identity matrices.
+            owner->inverse_bind_matrices
+              = skin->inverse_bind_matrices != nullptr
+              ? ReadMat4(skin->inverse_bind_matrices)
+              : std::vector(skin->joints_count, glm::mat4 { 1.0F });
+            const auto joint_count = DetermineJointCount(owner->joint_indices);
+            if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
+              drop_skin(import_codes::kMeshMissingInverseBind,
+                "glTF skinned mesh missing inverse bind matrices");
+            } else if (owner->inverse_bind_matrices.size() < joint_count) {
+              drop_skin(import_codes::kMeshSkinningBuffersMismatch,
+                "glTF skin inverse bind count is smaller than joint count");
+            } else if (skin->joints_count < joint_count) {
+              drop_skin(import_codes::kMeshSkinningBuffersMismatch,
+                "glTF vertices name joints their skin does not have");
+            } else {
+              owner->joint_remap.resize(joint_count);
+              std::iota(
+                owner->joint_remap.begin(), owner->joint_remap.end(), 0U);
+            }
           }
         }
-      }
 
-      std::optional<Bounds3> bounds3;
+        std::optional<Bounds3> bounds3;
 
-      TriangleMesh triangle_mesh {
+        TriangleMesh triangle_mesh {
         .mesh_type = is_skinned ? data::MeshType::kSkinned
                                 : data::MeshType::kStandard,
         .streams = MeshStreamView {
@@ -2235,49 +2652,92 @@ namespace {
         .bounds = bounds3,
       };
 
-      if (!owner->ranges.empty()) {
-        uint32_t max_surface = 0;
-        for (const auto& range : owner->ranges) {
-          max_surface = (std::max)(max_surface, range.surface);
-        }
+        if (!owner->ranges.empty()) {
+          uint32_t max_surface = 0;
+          for (const auto& range : owner->ranges) {
+            max_surface = (std::max)(max_surface, range.surface);
+          }
 
-        std::vector<uint8_t> used(max_surface + 1, 0);
-        for (const auto& range : owner->ranges) {
-          used.at(range.surface) = static_cast<uint8_t>(1);
-        }
+          std::vector<uint8_t> used(max_surface + 1, 0);
+          for (const auto& range : owner->ranges) {
+            used.at(range.surface) = static_cast<uint8_t>(1);
+          }
 
-        item.surfaces_used.clear();
-        for (uint32_t i = 0; i < used.size(); ++i) {
-          if (used.at(i) != 0U) {
-            item.surfaces_used.push_back(i);
-            const auto authored = i < data.materials_count;
-            const auto* label = authored
-              ? base::CheckedAt(
-                  std::span(data.materials, data.materials_count), i)
-                  .name
-              : nullptr;
-            const auto* fallback = authored ? "Material" : "Default";
-            item.surface_names.emplace(
-              authored ? i : std::numeric_limits<uint32_t>::max(),
-              label != nullptr ? label : fallback);
-            item.surface_materials.emplace(
-              authored ? i : std::numeric_limits<uint32_t>::max(),
-              authored
-                ? std::optional(std::string(label != nullptr ? label : ""))
-                : std::nullopt);
+          item.surfaces_used.clear();
+          for (uint32_t i = 0; i < used.size(); ++i) {
+            if (used.at(i) != 0U) {
+              item.surfaces_used.push_back(i);
+              const auto authored = i < data.materials_count;
+              const auto* label = authored
+                ? base::CheckedAt(
+                    std::span(data.materials, data.materials_count), i)
+                    .name
+                : nullptr;
+              const auto* fallback = authored ? "Material" : "Default";
+              item.surface_names.emplace(
+                authored ? i : std::numeric_limits<uint32_t>::max(),
+                label != nullptr ? label : fallback);
+              item.surface_materials.emplace(
+                authored ? i : std::numeric_limits<uint32_t>::max(),
+                authored
+                  ? std::optional(std::string(label != nullptr ? label : ""))
+                  : std::nullopt);
+            }
           }
         }
+
+        item.lods = {
+          MeshLod {
+            .lod_name = "LOD"
+              + std::to_string(
+                geometry.has_value() ? geometry->lods.size() : 0U),
+            .source = triangle_mesh,
+            .source_owner = std::move(owner),
+            .bake_transform = levels.at(lod_index).transform,
+          },
+        };
+
+        if (!geometry.has_value()) {
+          geometry = std::move(item);
+          continue;
+        }
+        // A material index is the slot of every level, so a material used by
+        // several LODs is one surface with a binding in each.
+        geometry->lods.push_back(std::move(item.lods.front()));
+        geometry->surface_names.insert(
+          item.surface_names.begin(), item.surface_names.end());
+        geometry->surface_materials.insert(
+          item.surface_materials.begin(), item.surface_materials.end());
+        for (const auto surface : item.surfaces_used) {
+          if (std::ranges::find(geometry->surfaces_used, surface)
+            == geometry->surfaces_used.end()) {
+            geometry->surfaces_used.push_back(surface);
+          }
+        }
+        geometry->has_material_textures
+          = geometry->has_material_textures || item.has_material_textures;
+        geometry->has_tangent_space_textures
+          = geometry->has_tangent_space_textures
+          || item.has_tangent_space_textures;
+        // A level missing an attribute asks the geometry to generate it.
+        auto& options = geometry->request.options;
+        if (item.request.options.normal_policy
+          == GeometryAttributePolicy::kGenerateMissing) {
+          options.normal_policy = GeometryAttributePolicy::kGenerateMissing;
+          options.normals_smoothing_angle_deg
+            = item.request.options.normals_smoothing_angle_deg;
+        }
+        if (item.request.options.tangent_policy
+          == GeometryAttributePolicy::kGenerateMissing) {
+          options.tangent_policy = GeometryAttributePolicy::kGenerateMissing;
+        }
+      }
+      note_dropped(levels.size());
+      if (!geometry.has_value()) {
+        continue;
       }
 
-      item.lods = {
-        MeshLod {
-          .lod_name = "LOD0",
-          .source = triangle_mesh,
-          .source_owner = std::move(owner),
-        },
-      };
-
-      if (!sink.Consume(std::move(item))) {
+      if (!sink.Consume(std::move(*geometry))) {
         return result;
       }
       emitted_variants.push_back(source.variant_index);
@@ -2962,7 +3422,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& data = *impl_->data_owner;
   const auto& request = *input.request;
 
-  const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
+  const auto bake = BuildGltfBakePlan(data, request.options.coordinate);
+  const auto& bake_plan = bake.plan;
 
   if (input.geometry_keys.size() > impl_->emitted_variants.size()) {
     diagnostics.push_back(
@@ -2999,6 +3460,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       return;
     }
     const auto source_node_index = cgltf_node_index(&data, node);
+    // A LOD level is a level of its group's geometry, not a node.
+    if (bake.lods.member.at(source_node_index) != 0) {
+      return;
+    }
     if (reached.at(source_node_index)) {
       diagnostics.push_back(
         MakeErrorDiagnostic(std::string(import_codes::kGltfNodeReachedTwice),

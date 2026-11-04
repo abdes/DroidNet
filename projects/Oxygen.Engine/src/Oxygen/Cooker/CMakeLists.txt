@@ -262,6 +262,7 @@ set(
   "Import/Internal/LooseCookedLayout.h"
   "Import/Internal/LooseCookedWriter.h"
   "Import/Internal/ModelDependency.h"
+  "Import/Internal/ModelLodNames.h"
   "Import/Internal/ModelNodeIdentity.h"
   "Import/Internal/ModelSceneNodes.h"
   "Import/Internal/ModelSettings.h"

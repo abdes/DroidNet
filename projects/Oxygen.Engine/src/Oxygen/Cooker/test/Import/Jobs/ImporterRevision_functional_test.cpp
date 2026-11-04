@@ -32,10 +32,12 @@
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Testing/GTest.h>
@@ -53,6 +55,8 @@ namespace {
   //! What an importer cooks from its fixed source, at the revision it had.
   struct GoldenOutput {
     Importer importer;
+    //! What the fixture exercises; none for the importer's plainest one.
+    std::string_view scenario;
     uint32_t revision = 0;
     //! The SHA-256 of every file the job writes but the index, in path order.
     std::string_view digest;
@@ -67,15 +71,73 @@ namespace {
   constexpr auto kGolden = std::to_array<GoldenOutput>({
     {
       .importer = Importer::kGltf,
-      .revision = 9,
+      .scenario = "",
+      .revision = 10,
       .digest
       = "92ab1078d93d153dafdaf0aa5a43fcef19af8daa8c593e7627c0b0659b29f9bf",
     },
     {
+      .importer = Importer::kGltf,
+      .scenario = "textured",
+      .revision = 10,
+      .digest
+      = "7af0dad5d0c7dd758bf5f10f714275c5379279c43b16c7493c58d1a9a9f7913d",
+    },
+    {
+      .importer = Importer::kGltf,
+      .scenario = "lights",
+      .revision = 10,
+      .digest
+      = "5d86ac4faec2da9753c923edc90c34c2abc696fa72bf165e7ff26b9dd95c8e80",
+    },
+    {
+      .importer = Importer::kGltf,
+      .scenario = "remap",
+      .revision = 10,
+      .digest
+      = "b6af0c6813de0d33eeb4784c0ce0e8f3e2855f9320706cb02c4635074a7f4a08",
+    },
+    {
+      .importer = Importer::kGltf,
+      .scenario = "tuned",
+      .revision = 10,
+      .digest
+      = "b6f136eadc81a44bfba15d865a9ab0651f2d5f5651407ce087ecfff7eec2c2d9",
+    },
+    {
       .importer = Importer::kFbx,
-      .revision = 9,
+      .scenario = "",
+      .revision = 10,
       .digest
       = "a9b32f1b8808aeb4458a188a7d57cb25638eb34919df30f44542aa0def2d720a",
+    },
+    {
+      .importer = Importer::kFbx,
+      .scenario = "textured",
+      .revision = 10,
+      .digest
+      = "b3d5c812c13886d3516dd7f9544a911699c6652e921db38208502b6096876039",
+    },
+    {
+      .importer = Importer::kFbx,
+      .scenario = "skinned",
+      .revision = 10,
+      .digest
+      = "1e4f4c52960a2a1f138ced9d1786ad91f81c98f55ee565ac145c58f2218034aa",
+    },
+    {
+      .importer = Importer::kFbx,
+      .scenario = "lights",
+      .revision = 10,
+      .digest
+      = "dd3ee147914364abef8812eafbc8dd00bc3b3bf8a83403157d47253be9085b3b",
+    },
+    {
+      .importer = Importer::kFbx,
+      .scenario = "tuned",
+      .revision = 10,
+      .digest
+      = "021f4f1375d16bebdff573a57f694f711c9d06b9b0572597601b2ff575df241e",
     },
     {
       .importer = Importer::kTexture,
@@ -305,7 +367,8 @@ namespace {
   protected:
     //! Cooks `request` and expects its output to be the golden one of the
     //! importer that cooks it.
-    auto ExpectGoldenOutput(ImportRequest request) -> void
+    auto ExpectGoldenOutput(
+      ImportRequest request, const std::string_view scenario = {}) -> void
     {
       const auto importer = ImporterOf(request);
       ASSERT_HAS_VALUE(importer) << "No importer cooks the request";
@@ -316,11 +379,13 @@ namespace {
       ASSERT_HAS_VALUE(report);
       ASSERT_TRUE(report->success) << "The fixture must cook";
       const auto digest = DigestOutputs(cooked_root, *report);
-      const auto golden
-        = std::ranges::find(kGolden, *importer, &GoldenOutput::importer);
+      const auto golden = std::ranges::find_if(
+        kGolden, [&](const GoldenOutput& output) -> bool {
+          return output.importer == *importer && output.scenario == scenario;
+        });
       ASSERT_NE(golden, kGolden.end())
         << "No golden output for the " << nostd::to_string(*importer)
-        << " importer";
+        << " importer's '" << scenario << "' fixture";
       if (golden->revision != RevisionOf(*importer)) {
         ADD_FAILURE() << "The " << nostd::to_string(*importer)
                       << " importer is at revision " << RevisionOf(*importer)
@@ -386,10 +451,11 @@ namespace {
       const auto golden
         = std::ranges::find(kGolden, importer, &GoldenOutput::importer);
       ASSERT_NE(golden, kGolden.end()) << nostd::to_string(importer);
-      EXPECT_EQ(golden->revision, RevisionOf(importer))
-        << nostd::to_string(importer);
     }
-    EXPECT_EQ(kGolden.size(), kImporters.size());
+    for (const auto& golden : kGolden) {
+      EXPECT_EQ(golden.revision, RevisionOf(golden.importer))
+        << nostd::to_string(golden.importer) << " '" << golden.scenario << "'";
+    }
   }
 
   NOLINT_TEST_F(ImporterRevisionTest, MaterialDescriptor)
@@ -452,6 +518,97 @@ namespace {
     const auto cooked = ScenarioRoots("fbx").cooked;
 
     ExpectGoldenOutput(ModelRequest("static_scalar_triangle.fbx", cooked));
+  }
+
+  //! The textures a model's materials bind, cooked with them.
+  NOLINT_TEST_F(ImporterRevisionTest, GltfTextured)
+  {
+    const auto cooked = ScenarioRoots("gltf_textured").cooked;
+
+    ExpectGoldenOutput(
+      ModelRequest("static_textured_triangle.gltf", cooked), "textured");
+  }
+
+  NOLINT_TEST_F(ImporterRevisionTest, FbxTextured)
+  {
+    const auto cooked = ScenarioRoots("fbx_textured").cooked;
+
+    ExpectGoldenOutput(
+      ModelRequest("static_textured_triangle.fbx", cooked), "textured");
+  }
+
+  //! Joints and weights in the geometry.
+  NOLINT_TEST_F(ImporterRevisionTest, FbxSkinned)
+  {
+    const auto cooked = ScenarioRoots("fbx_skinned").cooked;
+
+    ExpectGoldenOutput(
+      ModelRequest("skinned_character.fbx", cooked), "skinned");
+  }
+
+  //! Lights in the scene, with the units each format states.
+  NOLINT_TEST_F(ImporterRevisionTest, GltfLights)
+  {
+    const auto cooked = ScenarioRoots("gltf_lights").cooked;
+
+    ExpectGoldenOutput(ModelRequest("light_overrides.gltf", cooked), "lights");
+  }
+
+  NOLINT_TEST_F(ImporterRevisionTest, FbxLights)
+  {
+    const auto cooked = ScenarioRoots("fbx_lights").cooked;
+
+    ExpectGoldenOutput(ModelRequest("light_overrides.fbx", cooked), "lights");
+  }
+
+  //! A remapped material binds the existing one and makes none of its own.
+  NOLINT_TEST_F(ImporterRevisionTest, GltfMaterialRemap)
+  {
+    const auto scenario = ScenarioRoots("gltf_remap");
+    CookPrerequisite(MaterialRequest(scenario, "Paint"));
+    auto request = ModelRequest("static_scalar_triangle.gltf", scenario.cooked);
+    request.options.material_remap["Scalar"] = "Materials/Paint.omat";
+
+    ExpectGoldenOutput(std::move(request), "remap");
+  }
+
+  //! The settings a default import leaves alone.
+  [[nodiscard]] auto TunedModelRequest(const std::string_view file,
+    const std::filesystem::path& cooked) -> ImportRequest
+  {
+    auto request = ModelRequest(file, cooked);
+    auto& options = request.options;
+    options.coordinate.unit_normalization
+      = UnitNormalizationPolicy::kPreserveSource;
+    options.coordinate.bake_transforms_into_meshes = true;
+    options.normal_policy = GeometryAttributePolicy::kAlwaysRecalculate;
+    options.lod_generation.enabled = true;
+    options.lod_generation.levels = 1;
+    options.node_pruning = NodePruningPolicy::kDropEmptyNodes;
+    auto& tuning = options.texture_tuning;
+    tuning.enabled = true;
+    tuning.max_size = 2;
+    tuning.mip_policy = MipPolicy::kFullChain;
+    tuning.color_output_format = Format::kRGBA8UNormSRGB;
+    tuning.data_output_format = Format::kRGBA8UNorm;
+    tuning.bc7_quality = Bc7Quality::kNone;
+    return request;
+  }
+
+  NOLINT_TEST_F(ImporterRevisionTest, GltfTuned)
+  {
+    const auto cooked = ScenarioRoots("gltf_tuned").cooked;
+
+    ExpectGoldenOutput(
+      TunedModelRequest("static_textured_triangle.gltf", cooked), "tuned");
+  }
+
+  NOLINT_TEST_F(ImporterRevisionTest, FbxTuned)
+  {
+    const auto cooked = ScenarioRoots("fbx_tuned").cooked;
+
+    ExpectGoldenOutput(
+      TunedModelRequest("static_textured_triangle.fbx", cooked), "tuned");
   }
 
   NOLINT_TEST_F(ImporterRevisionTest, Texture)

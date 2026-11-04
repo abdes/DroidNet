@@ -636,8 +636,8 @@ same engine model for the same scene.
   key, the name of the source material, and survive reimport, moving the model,
   editing its vertices, reordering slots and renaming one material.
 - glTF and FBX parity: units, handedness, up axis (`CoordTransform.h`),
-  pivots, negative scales and light units agree; a shared scenario test
-  compares them.
+  pivots, negative scales, light units and name-based LOD groups agree; a
+  shared scenario test compares them.
 - `DroppedSourceFeatures`: every feature not imported is reported, not
   silently dropped.
 - `FbxAdapter.cpp` (3 900 lines) and `GltfAdapter.cpp` (3 400 lines): source

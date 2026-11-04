@@ -38,5 +38,17 @@ under `DCC/` keeps its upstream `LICENSE.md`.
   roughness maps, re-encoded from JPEG to lossy WebP under `Images/webp/`.
   [Source](https://ambientcg.com/view?id=Rock030).
 
+## LOD glTF samples (CC BY 4.0)
+
+Unmodified copies from the Babylon.js assets repository, licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+`Models/LodStacked.gltf` is `MSFT_lod_test.gltf` with each sphere moved above the
+box, and `Models/LodNamedSiblings.gltf` is that with its nodes renamed and its
+`MSFT_lod` removed.
+
+- **MSFT_lod_test:** [Source](https://github.com/BabylonJS/Assets/tree/master/meshes/MSFT_lod_test).
+- **MSFT_lod_complex_hierarchy:**
+  [Source](https://github.com/BabylonJS/Assets/tree/master/meshes/MSFT_lod_complex_hierarchy).
+
 The scene descriptors, procedural demonstrations and scripts supplied by Oxygen
 remain covered by Oxygen's repository license.

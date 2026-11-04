@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -17,6 +18,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <future>
 #include <ios>
 #include <iterator>
 #include <limits>
@@ -32,6 +34,7 @@
 #include <system_error>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <glm/common.hpp>
@@ -54,9 +57,11 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
@@ -75,6 +80,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -161,6 +167,39 @@ auto DecodeParseOnly(const oxygen::content::cooked::CookedContent& content,
     .parse_only = true,
   };
   return decode(context);
+}
+
+//! The vertices of every vertex buffer of the cooked root.
+auto CookedVertexBuffers(const oxygen::content::cooked::CookedContent& content)
+  -> std::vector<std::vector<oxygen::data::Vertex>>
+{
+  using BufferDesc = oxygen::data::pak::core::BufferResourceDesc;
+  const auto& buffers
+    = content.ResourceTable(oxygen::data::ResourceKind::kBuffer);
+  const auto table_bytes
+    = oxygen::cooker::test::ReadBytes(buffers.RowsStored().file);
+  const auto data_bytes
+    = oxygen::cooker::test::ReadBytes(buffers.DataStored().file);
+  auto table = std::vector<BufferDesc>(table_bytes.size() / sizeof(BufferDesc));
+  std::memcpy(
+    table.data(), table_bytes.data(), table.size() * sizeof(BufferDesc));
+  auto result = std::vector<std::vector<oxygen::data::Vertex>> {};
+  for (const auto& desc : table) {
+    if ((desc.usage_flags
+          & static_cast<uint32_t>(
+            oxygen::data::BufferResource::UsageFlags::kVertexBuffer))
+      == 0U) {
+      continue;
+    }
+    auto& vertices
+      = result.emplace_back(desc.size_bytes / sizeof(oxygen::data::Vertex));
+    std::memcpy(vertices.data(),
+      std::span(data_bytes)
+        .subspan(static_cast<std::size_t>(desc.data_offset))
+        .data(),
+      vertices.size() * sizeof(oxygen::data::Vertex));
+  }
+  return result;
 }
 
 //! Copies the one vertex buffer and the one index buffer of the cooked root
@@ -2053,6 +2092,205 @@ NOLINT_TEST_F(ModelFormatsTest, RefusedRemapTargetsStopTheImport)
       << code;
     EXPECT_EQ(report.geometry_written, 0U);
   }
+}
+
+//! Siblings named `<base>_LOD<n>` are one geometry shown by the LOD0 node, by
+//! one rule in both formats: the levels are no nodes, and a material used by
+//! both is one surface with a binding in each.
+NOLINT_TEST_F(ModelFormatsTest, NamedLodSiblingsAreOneGeometryInBothFormats)
+{
+  const auto models = ImportBothFormats("named_lods",
+    {
+      { .name = "Rock_LOD0", .kind = ParityKind::kMesh },
+      { .name = "Rock_lod1", .kind = ParityKind::kMesh },
+      { .name = "Other" },
+    });
+  for (const auto& model : models) {
+    EXPECT_TRUE(model.nodes.contains("Rock_LOD0"));
+    EXPECT_FALSE(model.nodes.contains("Rock_lod1"));
+    LoadAndVerify(model.report, [](const CookedModel& cooked) -> void {
+      const auto& surfaces = cooked.geometry->Surfaces().surfaces;
+      ASSERT_EQ(surfaces.size(), 1U);
+      EXPECT_EQ(surfaces.front().bindings.size(), 2U);
+    });
+  }
+  EXPECT_EQ(
+    models[0].nodes.at("Rock_LOD0").id, models[1].nodes.at("Rock_LOD0").id);
+}
+
+//! A group keeps its levels up to the first unusable one and reports the rest,
+//! which import as neither levels nor nodes.
+NOLINT_TEST_F(ModelFormatsTest, LodLevelsAfterAnUnusableOneAreSkipped)
+{
+  using oxygen::content::import::import_codes::kLodLevelSkipped;
+  const auto models = ImportBothFormats("skipped_lods",
+    {
+      { .name = "Rock_LOD0", .kind = ParityKind::kMesh },
+      { .name = "Rock_LOD1", .kind = ParityKind::kMesh },
+      { .name = "Rock_LOD2" },
+      { .name = "Rock_LOD3", .kind = ParityKind::kMesh },
+    });
+  for (const auto& model : models) {
+    EXPECT_TRUE(Reports(model.report, kLodLevelSkipped));
+    EXPECT_FALSE(model.nodes.contains("Rock_LOD2"));
+    EXPECT_FALSE(model.nodes.contains("Rock_LOD3"));
+    LoadAndVerify(model.report, [](const CookedModel& cooked) -> void {
+      EXPECT_EQ(
+        cooked.geometry->Surfaces().surfaces.front().bindings.size(), 2U);
+    });
+  }
+}
+
+//! Named siblings without a LOD1 are no group: they import as authored.
+NOLINT_TEST_F(ModelFormatsTest, ALod0WithoutALod1IsNoGroup)
+{
+  const auto models = ImportBothFormats("no_lods",
+    {
+      { .name = "Rock_LOD0", .kind = ParityKind::kMesh },
+      { .name = "Rock_LOD2" },
+    });
+  for (const auto& model : models) {
+    EXPECT_TRUE(model.nodes.contains("Rock_LOD0"));
+    EXPECT_TRUE(model.nodes.contains("Rock_LOD2"));
+  }
+}
+
+//! `MSFT_lod` states a node's coarser levels, whatever they are called; the
+//! geometry holds them in the node's space, and they are no nodes.
+NOLINT_TEST_F(ModelFormatsTest, GltfMsftLodStatesALodGroup)
+{
+  using nlohmann::json;
+  auto document = ParityGltf(TestModelsDirFromFile(),
+    {
+      {
+        .name = "Rock",
+        .kind = ParityKind::kMesh,
+        .translation = { 1.0F, 0.0F, 0.0F },
+      },
+      {
+        .name = "Far",
+        .kind = ParityKind::kMesh,
+        .translation = { 1.0F, 0.0F, 3.0F },
+      },
+    });
+  document["nodes"][0]["extensions"]["MSFT_lod"]
+    = json { { "ids", json::array({ 1 }) } };
+  document["extensionsUsed"].push_back("MSFT_lod");
+
+  const auto report
+    = RunImport(MakeRequest("msft_lod", ModelFormat::kGltf, document.dump()))
+        .report;
+
+  ASSERT_TRUE(report.success);
+  EXPECT_FALSE(Reports(
+    report, oxygen::content::import::import_codes::kSourceFeatureDropped));
+  const auto inspection = LoadInspection(report.cooked_root);
+  const auto scene_entry
+    = FindAssetOfType(inspection, oxygen::data::AssetType::kScene);
+  const auto geometry_entry
+    = FindAssetOfType(inspection, oxygen::data::AssetType::kGeometry);
+  ASSERT_HAS_VALUE(scene_entry);
+  ASSERT_HAS_VALUE(geometry_entry);
+  const auto scene = DecodeParseOnly(
+    inspection, *scene_entry, [](const auto& context) -> auto {
+      return oxygen::content::loaders::LoadSceneAsset(context);
+    });
+  ASSERT_TRUE(scene);
+  auto names = std::vector<std::string> {};
+  for (const auto& node : scene->GetNodes()) {
+    names.emplace_back(scene->GetNodeName(node));
+  }
+  EXPECT_THAT(names, testing::ElementsAre("Rock"));
+  const auto geometry = DecodeParseOnly(
+    inspection, *geometry_entry, [](const auto& context) -> auto {
+      return oxygen::content::loaders::LoadGeometryAsset(context);
+    });
+  ASSERT_TRUE(geometry);
+  EXPECT_EQ(geometry->Surfaces().surfaces.front().bindings.size(), 2U);
+
+  // The level holds its offset from the node that shows it: 3 m along glTF's
+  // +Z, the engine's -Y.
+  const auto buffers = CookedVertexBuffers(inspection);
+  ASSERT_EQ(buffers.size(), 2U);
+  ASSERT_EQ(buffers[0].size(), buffers[1].size());
+  for (size_t index = 0; index < buffers[0].size(); ++index) {
+    const auto offset = buffers[1][index].position - buffers[0][index].position;
+    EXPECT_NEAR(offset.x, 0.0F, 1e-4F);
+    EXPECT_NEAR(std::abs(offset.y), 3.0F, 1e-4F);
+    EXPECT_NEAR(offset.z, 0.0F, 1e-4F);
+  }
+}
+
+//! A list that does not read warns, and the node imports without its levels.
+NOLINT_TEST_F(ModelFormatsTest, GltfMsftLodThatDoesNotReadWarns)
+{
+  using nlohmann::json;
+  auto document = ParityGltf(TestModelsDirFromFile(),
+    {
+      { .name = "Rock", .kind = ParityKind::kMesh },
+      { .name = "Far" },
+    });
+  document["nodes"][0]["extensions"]["MSFT_lod"]
+    = json { { "ids", json::array({ 99 }) } };
+  document["extensionsUsed"].push_back("MSFT_lod");
+
+  const auto model = ImportModel(
+    MakeRequest("msft_lod_bad", ModelFormat::kGltf, document.dump()));
+
+  EXPECT_TRUE(Reports(
+    model.report, oxygen::content::import::import_codes::kLodGroupIgnored));
+  EXPECT_TRUE(model.nodes.contains("Far"));
+}
+
+//! A stop between the geometry and the scene ends the job cancelled: it commits
+//! no index, states no provenance to record, and the next import is whole.
+NOLINT_TEST_F(ModelFormatsTest, AStopBeforeTheSceneCommitsNothing)
+{
+  using oxygen::content::import::AsyncImportService;
+  using oxygen::content::import::ImportReport;
+  using oxygen::content::import::ProgressEvent;
+  using oxygen::content::import::ProgressEventKind;
+  const auto text = ParityGltf(TestModelsDirFromFile(),
+    { { .name = "Triangle", .kind = ParityKind::kMesh } })
+                      .dump();
+  auto request = MakeRequest("cancel_scene", ModelFormat::kGltf, text);
+  ASSERT_HAS_VALUE(request.cooked_root);
+  const auto cooked = *request.cooked_root;
+  request.model_import = oxygen::content::import::ModelImportInputs {};
+
+  auto service = AsyncImportService(MakeMaxConcurrencyConfig());
+  auto stopped = std::atomic<bool> { false };
+  auto report = std::promise<ImportReport> {};
+  const auto job = service.SubmitImport(
+    request,
+    [&](const auto /*id*/, const ImportReport& finished) -> void {
+      report.set_value(finished);
+    },
+    [&](const ProgressEvent& event) -> void {
+      const auto* item
+        = std::get_if<oxygen::content::import::ItemProgress>(&event.payload);
+      if (event.header.kind == ProgressEventKind::kItemFinished
+        && item != nullptr && item->item_kind.contains("Mesh")
+        && !stopped.exchange(true)) {
+        static_cast<void>(service.CancelJob(event.header.job_id));
+      }
+    });
+  ASSERT_TRUE(job.has_value());
+  const auto cancelled = report.get_future().get();
+  service.Stop();
+
+  ASSERT_TRUE(stopped.load());
+  EXPECT_FALSE(cancelled.success);
+  EXPECT_TRUE(cancelled.cancelled);
+  EXPECT_TRUE(cancelled.surface_provenance_json.empty());
+  EXPECT_FALSE(std::filesystem::exists(
+    cooked / oxygen::data::loose_cooked::kIndexFileName));
+
+  const auto whole = RunImport(std::move(request)).report;
+  EXPECT_TRUE(whole.success);
+  EXPECT_FALSE(whole.surface_provenance_json.empty());
+  EXPECT_TRUE(std::filesystem::exists(
+    cooked / oxygen::data::loose_cooked::kIndexFileName));
 }
 
 //! A node with a name of its own keeps its ID, in either format, whatever else

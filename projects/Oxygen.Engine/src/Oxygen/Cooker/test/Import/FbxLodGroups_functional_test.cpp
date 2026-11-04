@@ -282,7 +282,7 @@ NOLINT_TEST_F(FbxLodGroupsTest, LodGroupIsOneGeometryWithALodPerChild)
   EXPECT_EQ(imported.renderable_count, 1U);
   EXPECT_EQ(imported.node_count, 1U) << "the group's node";
   EXPECT_EQ(Count(imported.diagnostics,
-              oxygen::content::import::import_codes::kFbxLodLevelSkipped),
+              oxygen::content::import::import_codes::kLodLevelSkipped),
     0U);
 }
 
@@ -371,7 +371,7 @@ NOLINT_TEST_F(FbxLodGroupsTest, LevelsAfterAnUnusableOneAreReportedAndSkipped)
   ASSERT_EQ(imported.geometries.size(), 1U);
   EXPECT_EQ(imported.geometries.front().lod_count, 1U);
   EXPECT_EQ(Count(imported.diagnostics,
-              oxygen::content::import::import_codes::kFbxLodLevelSkipped),
+              oxygen::content::import::import_codes::kLodLevelSkipped),
     2U);
   EXPECT_EQ(imported.renderable_count, 1U);
   EXPECT_EQ(imported.node_count, 1U);

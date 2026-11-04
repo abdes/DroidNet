@@ -1,0 +1,189 @@
+{
+  "schema_version": 1,
+  "source": "../SourceMedia/DCC/MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.gltf",
+  "settings": {
+    "name": "MSFT_lod_complex_hierarchy"
+  },
+  "source_identity": "0196f2a1-0002-7000-8000-00000000006d",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD1_0_LOD1",
+            "surface_id": "f54636b5-2d6e-4ffb-78f2-fd571b97ae09"
+          }
+        ],
+        "geometry_asset_key": "2a7a4535-c75d-0662-1baf-0b7a8ff0e31c",
+        "layout_revision": "e87ffdeaa5159b386e80806b2d08560cef68d7994fe82e2b4920be910f77cf6c",
+        "source_geometry_anchor": "Cone.001_LOD1",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "182a0648-9330-7e35-8426-888030535d42",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD1_0_LOD1",
+            "surface_id": "f54636b5-2d6e-4ffb-78f2-fd571b97ae09"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD1_1_LOD1",
+            "surface_id": "5e12fe18-c751-b9c6-ffd3-5991d3ac3012"
+          }
+        ],
+        "geometry_asset_key": "db4de47b-2d5b-52fa-fa1d-dfeb8330a925",
+        "layout_revision": "cff96b15dae5e2059c2713fe2047848b06756c24a32380dbdda0271969630234",
+        "source_geometry_anchor": "Cone.003_LOD1",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "74a6dead-df27-49e6-a966-5f0c31cdab9d",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD1_1_LOD1",
+            "surface_id": "5e12fe18-c751-b9c6-ffd3-5991d3ac3012"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD2_LOD2",
+            "surface_id": "586d9ad8-aa1c-fed0-347e-f60a07854537"
+          }
+        ],
+        "geometry_asset_key": "9e07c313-b4ed-a18d-001f-1d96be4321d8",
+        "layout_revision": "8ad581d1c9b5194e035fc33438aba66e213423297741472281c9568eb9669a1b",
+        "source_geometry_anchor": "Cube.001_LOD2",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "22bd941f-796e-5950-cddf-2e04ea6a6f43",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD2_LOD2",
+            "surface_id": "586d9ad8-aa1c-fed0-347e-f60a07854537"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD0_LOD0",
+            "surface_id": "7e69800d-a90d-ee98-f9cd-d22256f64d3d"
+          }
+        ],
+        "geometry_asset_key": "4a530283-b906-98e7-7302-51dabaa47074",
+        "layout_revision": "03a5ce8c38a8f482016352d71a5a7105c73082a7ac8f4b226badf298120e8fd9",
+        "source_geometry_anchor": "Sphere.001_LOD0",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "1e66c31b-fd7c-33a7-ca79-9f159ea273d5",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD0_LOD0",
+            "surface_id": "7e69800d-a90d-ee98-f9cd-d22256f64d3d"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD0_LOD0",
+            "surface_id": "ecb45d3e-fc6e-48c7-37ff-60178edd0b7d"
+          }
+        ],
+        "geometry_asset_key": "0010a645-3a02-429c-aaf7-a42ecd4eb32e",
+        "layout_revision": "f6414919bced1bbe7290dbdf329c6770fe736b9ddb81cb788c0ca0cbcae083d8",
+        "source_geometry_anchor": "Sphere.003_LOD0",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "1e66c31b-fd7c-33a7-ca79-9f159ea273d5",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD0_LOD0",
+            "surface_id": "ecb45d3e-fc6e-48c7-37ff-60178edd0b7d"
+          }
+        ]
+      },
+      {
+        "allocations": [
+          {
+            "declaration_key": "Material_LOD0_LOD0",
+            "surface_id": "e9abe6ce-71ae-c3f2-b213-0e6d8df9005e"
+          }
+        ],
+        "geometry_asset_key": "c108099f-d3a9-25af-36db-5413634604df",
+        "layout_revision": "026993237955b26c575763de15a0da6f579fa17bfaa0aed15722a7b4503c0fa0",
+        "source_geometry_anchor": "Sphere0_LOD0",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "1e66c31b-fd7c-33a7-ca79-9f159ea273d5",
+                "lod_index": 0,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "Material_LOD0_LOD0",
+            "surface_id": "e9abe6ce-71ae-c3f2-b213-0e6d8df9005e"
+          }
+        ]
+      }
+    ],
+    "schema_version": 3
+  },
+  "published_nodes": [
+    {
+      "anchor": "LOD0_LOD0",
+      "node_id": "d100c0c2-e2f3-1069-e5ae-d243413f7aa4"
+    },
+    {
+      "anchor": "LOD0_LOD0/Node0_0_LOD0",
+      "node_id": "0332ec8c-3fe7-8069-ca4d-3da1f3f9f4a5"
+    },
+    {
+      "anchor": "LOD0_LOD0/Node0_0_LOD0/Sphere1_LOD0",
+      "node_id": "8c1ec9cf-fc26-cdb1-eb37-48e37465f306"
+    },
+    {
+      "anchor": "LOD0_LOD0/Node0_0_LOD0/Sphere2_LOD0",
+      "node_id": "03fe7e37-e8d5-97a5-34a7-d21cf025c33f"
+    }
+  ],
+  "source_fingerprint": {
+    "files": [
+      {
+        "path": "MSFT_lod_complex_hierarchy.bin",
+        "sha256": "a8f9d12f24d43a3e67773ff5a09e664adf279b12e2e5127df0e48cc0fc6c7585",
+        "size": 215504
+      }
+    ],
+    "sha256": "28f17c3ef1a6241b0c53e4e080fcc46a994e703e550bef4f948e4f9163848fed",
+    "size": 10562
+  },
+  "node_continuity": [],
+  "new_nodes": [],
+  "vanished_nodes": []
+}

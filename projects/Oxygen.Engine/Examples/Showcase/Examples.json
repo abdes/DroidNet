@@ -63,6 +63,12 @@
       "tags": ["showcase", "models"]
     },
     {
+      "name": "ModelLods",
+      "description": "LOD groups imported from a real MSFT_lod file and from named siblings, checked by a script.",
+      "scenes": ["ModelLods"],
+      "tags": ["validation", "models", "scripting"]
+    },
+    {
       "name": "MultiScript",
       "description": "A scene driven by several scripts: day-night cycle and orbiting shapes.",
       "scenes": ["MultiScript"],

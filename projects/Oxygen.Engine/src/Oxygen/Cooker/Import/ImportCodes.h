@@ -60,6 +60,8 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kGltfSceneMissing = "import.gltf_scene_missing";
   inline constexpr std::string_view kLodGenerationSkipped = "import.lod_generation.skipped";
   inline constexpr std::string_view kLodGenerationStopped = "import.lod_generation.stopped";
+  inline constexpr std::string_view kLodGroupIgnored = "import.lod_group.ignored";
+  inline constexpr std::string_view kLodLevelSkipped = "import.lod.level_skipped";
   inline constexpr std::string_view kMaterialRemapTargetMissing = "import.material_remap_target_missing";
   inline constexpr std::string_view kModelNodeDepthExceeded = "import.model_node_depth_exceeded";
   inline constexpr std::string_view kNameCollision = "import.name_collision";
@@ -128,8 +130,6 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kFbxLeftHandedAxesReplaced = "fbx.left_handed_axes_replaced";
   inline constexpr std::string_view kFbxLightDecayUnsupported = "fbx.light.decay_unsupported";
   inline constexpr std::string_view kFbxLightUnsupportedType = "fbx.light.unsupported_type";
-  inline constexpr std::string_view kFbxLodGroupIgnored = "fbx.lod_group.ignored";
-  inline constexpr std::string_view kFbxLodLevelSkipped = "fbx.lod.level_skipped";
   inline constexpr std::string_view kFbxMaterialFullyTransparent = "fbx.material_fully_transparent";
   inline constexpr std::string_view kFbxMemoryLimitExceeded = "fbx.memory_limit_exceeded";
   inline constexpr std::string_view kFbxNormalMapConventionAssumed = "fbx.normal_map_convention_assumed";

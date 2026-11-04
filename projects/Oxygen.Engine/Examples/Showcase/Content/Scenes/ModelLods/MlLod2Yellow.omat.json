@@ -1,0 +1,11 @@
+{
+  "name": "MlLod2Yellow",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.95, 0.75, 0.08, 1.0],
+    "metalness": 0.0,
+    "roughness": 0.45,
+    "ambient_occlusion": 1.0
+  }
+}

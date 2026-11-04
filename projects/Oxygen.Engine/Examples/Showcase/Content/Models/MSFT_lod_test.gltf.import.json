@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "source": "../SourceMedia/DCC/MSFT_lod_test/MSFT_lod_test.gltf",
+  "settings": {
+    "name": "MSFT_lod_test"
+  },
+  "source_identity": "0196f2a1-0001-7000-8000-00000000006d",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": "mat1",
+            "surface_id": "71a50b15-3472-ae92-0ed2-63719023505e"
+          },
+          {
+            "declaration_key": "mat2",
+            "surface_id": "4ad60cd1-66c9-7019-8c92-bff307ac905a"
+          }
+        ],
+        "geometry_asset_key": "5f269589-2287-cc61-4fe6-a961cbe6ced7",
+        "layout_revision": "70e3a16b0364ce79a1d48d94d7a20d3bdc9f5a0b8252aef57fbaf7ccfdcce264",
+        "source_geometry_anchor": "Mesh_0",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "1f7beb0f-3ace-600d-239e-2bbda3da0bef",
+                "lod_index": 0,
+                "submesh_index": 0
+              },
+              {
+                "default_material_key": "1f7beb0f-3ace-600d-239e-2bbda3da0bef",
+                "lod_index": 1,
+                "submesh_index": 0
+              },
+              {
+                "default_material_key": "1f7beb0f-3ace-600d-239e-2bbda3da0bef",
+                "lod_index": 2,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "mat1",
+            "surface_id": "71a50b15-3472-ae92-0ed2-63719023505e"
+          },
+          {
+            "bindings": [
+              {
+                "default_material_key": "ab95fc4b-c074-bfeb-8144-6736ab94ea6d",
+                "lod_index": 0,
+                "submesh_index": 1
+              },
+              {
+                "default_material_key": "ab95fc4b-c074-bfeb-8144-6736ab94ea6d",
+                "lod_index": 1,
+                "submesh_index": 1
+              },
+              {
+                "default_material_key": "ab95fc4b-c074-bfeb-8144-6736ab94ea6d",
+                "lod_index": 2,
+                "submesh_index": 1
+              }
+            ],
+            "display_name": "mat2",
+            "surface_id": "4ad60cd1-66c9-7019-8c92-bff307ac905a"
+          }
+        ]
+      }
+    ],
+    "schema_version": 3
+  },
+  "published_nodes": [
+    {
+      "anchor": "sphere1_merged",
+      "node_id": "6ce8d3d8-892e-2a2e-39d8-75a0200c1eb6"
+    }
+  ],
+  "source_fingerprint": {
+    "files": [
+      {
+        "path": "MSFT_lod_test_data.bin",
+        "sha256": "2a7ad6806da8b6bb1409a32c7d39f7682ae2f61ec0fbfea30b90f3dbc255f150",
+        "size": 35696
+      }
+    ],
+    "sha256": "0f5fb371a3994f1fae2a5db70d7208133e872430e2eebdbe11a149e0dc8a19de",
+    "size": 5700
+  },
+  "node_continuity": [],
+  "new_nodes": [],
+  "vanished_nodes": []
+}

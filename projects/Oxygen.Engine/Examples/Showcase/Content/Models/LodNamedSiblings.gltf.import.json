@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "source": "LodNamedSiblings.gltf",
+  "settings": {
+    "name": "LodNamedSiblings"
+  },
+  "source_identity": "0196f2a1-0003-7000-8000-00000000006d",
+  "surface_provenance": {
+    "geometries": [
+      {
+        "allocations": [
+          {
+            "declaration_key": "mat1",
+            "surface_id": "351d807a-d494-b830-a1e3-3d19080a2690"
+          },
+          {
+            "declaration_key": "mat2",
+            "surface_id": "b461f0eb-bc79-ca00-6c5e-eb95ba4f6d17"
+          }
+        ],
+        "geometry_asset_key": "51bc99cf-0be6-d0db-51c1-57de67d45cb9",
+        "layout_revision": "e704d24d2f752bfda72bf6a169610f789c6ce6c7473416dbf0a6df071a0484e8",
+        "source_geometry_anchor": "Sphere",
+        "surfaces": [
+          {
+            "bindings": [
+              {
+                "default_material_key": "69c18259-e7f4-ef66-94e1-eb31f69ef8fc",
+                "lod_index": 0,
+                "submesh_index": 0
+              },
+              {
+                "default_material_key": "69c18259-e7f4-ef66-94e1-eb31f69ef8fc",
+                "lod_index": 1,
+                "submesh_index": 0
+              },
+              {
+                "default_material_key": "69c18259-e7f4-ef66-94e1-eb31f69ef8fc",
+                "lod_index": 2,
+                "submesh_index": 0
+              }
+            ],
+            "display_name": "mat1",
+            "surface_id": "351d807a-d494-b830-a1e3-3d19080a2690"
+          },
+          {
+            "bindings": [
+              {
+                "default_material_key": "a06cd6b1-709a-324f-99d6-4464b4e76052",
+                "lod_index": 0,
+                "submesh_index": 1
+              },
+              {
+                "default_material_key": "a06cd6b1-709a-324f-99d6-4464b4e76052",
+                "lod_index": 1,
+                "submesh_index": 1
+              },
+              {
+                "default_material_key": "a06cd6b1-709a-324f-99d6-4464b4e76052",
+                "lod_index": 2,
+                "submesh_index": 1
+              }
+            ],
+            "display_name": "mat2",
+            "surface_id": "b461f0eb-bc79-ca00-6c5e-eb95ba4f6d17"
+          }
+        ]
+      }
+    ],
+    "schema_version": 3
+  },
+  "published_nodes": [
+    {
+      "anchor": "Sphere_LOD0",
+      "node_id": "ae4aa8cc-f874-08c9-ff55-d115b5a89ce3"
+    }
+  ],
+  "source_fingerprint": {
+    "files": [
+      {
+        "path": "LodStacked_data.bin",
+        "sha256": "0219d5d18ce712e388ac5e9e87267c31d3403675ee9bda7df3e6dd7f2c51b216",
+        "size": 35696
+      }
+    ],
+    "sha256": "9a024c4e3782806a3815e82bf6a6eca9fa62d09d1048b946932b0597f2bc0d94",
+    "size": 5523
+  },
+  "node_continuity": [],
+  "new_nodes": [],
+  "vanished_nodes": []
+}

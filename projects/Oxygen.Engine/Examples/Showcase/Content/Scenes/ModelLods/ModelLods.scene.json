@@ -1,0 +1,377 @@
+{
+  "schema_version": 16,
+  "name": "ModelLods",
+  "starting_camera": {
+    "node": 17
+  },
+  "nodes": [
+    {
+      "id": "980f8d55-81c1-5b33-babc-7db2f31bb893",
+      "name": "Root"
+    },
+    {
+      "id": "e1fb498f-f1ba-5080-bddd-df3e6b973b43",
+      "name": "Floor",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 20.0, 0.0],
+        "scale": [400.0, 400.0, 1.0]
+      }
+    },
+    {
+      "id": "ac4c6ede-a9a3-570f-ae4b-ccbc227fd7cb",
+      "name": "Msft_Lane",
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, 24.0, 0.02],
+        "scale": [8.0, 80.0, 1.0]
+      }
+    },
+    {
+      "id": "2f396705-b005-5928-bc07-4a894e3aef88",
+      "name": "Msft_Default",
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, 0.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "f517309c-a63f-588b-aa46-3ee8418e079e",
+      "name": "Msft_Lod1",
+      "parent": 0,
+      "transform": {
+        "translation": [-13.0, 4.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "16f4e45e-f403-5e4c-b3f2-44baf0443b2a",
+      "name": "Msft_Lod2",
+      "parent": 0,
+      "transform": {
+        "translation": [-13.0, 12.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "cd7dd8a7-74d6-5660-a55e-90ec2a4c727e",
+      "name": "Msft_Lod3",
+      "parent": 0,
+      "transform": {
+        "translation": [-13.0, 20.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "0b54dadd-bfc0-569e-9b0c-05bd14d088bf",
+      "name": "Msft_Instance",
+      "parent": 0,
+      "transform": {
+        "translation": [-13.0, 30.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      },
+      "instance": {
+        "scene_ref": "../../Models/LodStacked.gltf/LodStacked.oscene"
+      }
+    },
+    {
+      "id": "adb1e3db-f3f4-51b8-95d6-7b57ca0aa809",
+      "name": "Named_Lane",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, 24.0, 0.02],
+        "scale": [8.0, 80.0, 1.0]
+      }
+    },
+    {
+      "id": "9378f045-99e8-5ee5-9893-b3314241eb2e",
+      "name": "Named_Default",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, 0.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "31325922-138e-57e0-a72b-1ee24119190b",
+      "name": "Named_Lod1",
+      "parent": 0,
+      "transform": {
+        "translation": [13.0, 4.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "242957b2-43bc-5f32-8c37-ebb3a61651d7",
+      "name": "Named_Lod2",
+      "parent": 0,
+      "transform": {
+        "translation": [13.0, 12.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "813ea7fd-c6ec-56d2-89b4-e502c437bb07",
+      "name": "Named_Lod3",
+      "parent": 0,
+      "transform": {
+        "translation": [13.0, 20.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "f9179d71-6cdb-598b-9c9d-7778de02264c",
+      "name": "Named_Instance",
+      "parent": 0,
+      "transform": {
+        "translation": [13.0, 30.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      },
+      "instance": {
+        "scene_ref": "../../Models/LodNamedSiblings.gltf/LodNamedSiblings.oscene"
+      }
+    },
+    {
+      "id": "b9f54933-4aac-555c-9b89-ae5661295578",
+      "name": "Real_Instance",
+      "parent": 0,
+      "transform": {
+        "translation": [-20.0, 30.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      },
+      "instance": {
+        "scene_ref": "../../Models/MSFT_lod_test.gltf/MSFT_lod_test.oscene"
+      }
+    },
+    {
+      "id": "135c8593-0323-5d3b-8069-a124d3a85e8f",
+      "name": "Real_Default",
+      "parent": 0,
+      "transform": {
+        "translation": [20.0, 30.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "d5b69d05-95e7-5d63-8347-f0f2fd0053c9",
+      "name": "Complex_Instance",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 44.0, 6.0],
+        "scale": [1.5, 1.5, 1.5]
+      },
+      "instance": {
+        "scene_ref": "../../Models/MSFT_lod_complex_hierarchy.gltf/MSFT_lod_complex_hierarchy.oscene"
+      }
+    },
+    {
+      "id": "a7cdf50b-744e-5a4a-bdc7-174170ee88f5",
+      "name": "Camera",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, -26.0, 9.0],
+        "rotation": [0.0, 0.10452846, 0.9945219, 0.0]
+      }
+    },
+    {
+      "id": "00875992-2d85-5dc7-8318-3ddd1ecab228",
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 40.0],
+        "rotation": [0.40557978, -0.18352, 0.40557978, 0.79728]
+      }
+    },
+    {
+      "id": "f115d2b6-4d36-5f38-ab86-e0be2b0a0613",
+      "name": "Checks",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.0]
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "MlFloor.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "MlLaneMsft.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 3,
+      "geometry_ref": "../../Models/LodStacked.gltf/Stacked.ogeo"
+    },
+    {
+      "node": 4,
+      "geometry_ref": "../../Models/LodStacked.gltf/Stacked.ogeo"
+    },
+    {
+      "node": 5,
+      "geometry_ref": "../../Models/LodStacked.gltf/Stacked.ogeo"
+    },
+    {
+      "node": 6,
+      "geometry_ref": "../../Models/LodStacked.gltf/Stacked.ogeo"
+    },
+    {
+      "node": 8,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "MlLaneNamed.omat"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "node": 9,
+      "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
+    },
+    {
+      "node": 10,
+      "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
+    },
+    {
+      "node": 11,
+      "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
+    },
+    {
+      "node": 12,
+      "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
+    },
+    {
+      "node": 15,
+      "geometry_ref": "../../Models/MSFT_lod_test.gltf/Mesh_0.ogeo"
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 17,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 2000.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 18,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.95, 0.86],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.125,
+            "normal_bias": 0.02,
+            "contact_shadows": true,
+            "resolution_hint": 1
+          }
+        },
+        "angular_size_radians": 0.00951,
+        "atmosphere_light_slot": 1,
+        "cascade_count": 4,
+        "split_mode": 1,
+        "max_shadow_distance": 200.0,
+        "cascade_distances": [20.0, 50.0, 100.0, 200.0],
+        "distribution_exponent": 2.0,
+        "transition_fraction": 0.12,
+        "distance_fadeout_fraction": 0.1,
+        "intensity_lux": 25000.0
+      }
+    ]
+  },
+  "environment": {
+    "sky_atmosphere": {
+      "enabled": true,
+      "planet_radius_m": 6360000.0,
+      "atmosphere_height_m": 100000.0,
+      "ground_albedo_rgb": [0.16, 0.15, 0.14],
+      "rayleigh_scattering_rgb": [5.802e-6, 1.3558e-5, 3.31e-5],
+      "rayleigh_scale_height_m": 8000.0,
+      "mie_scattering_rgb": [3.996e-6, 3.996e-6, 3.996e-6],
+      "mie_absorption_rgb": [4.405e-7, 4.405e-7, 4.405e-7],
+      "mie_scale_height_m": 1200.0,
+      "mie_anisotropy": 0.8,
+      "ozone_absorption_rgb": [6.5e-7, 1.881e-6, 8.5e-8],
+      "ozone_density_profile": [10000.0, 25000.0, 40000.0],
+      "multi_scattering_factor": 1.0,
+      "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "aerial_perspective_distance_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "aerial_perspective_start_depth_m": 40.0,
+      "height_fog_contribution": 1.0,
+      "trace_sample_count_scale": 1.0,
+      "transmittance_min_light_elevation_deg": -90.0,
+      "sun_disk_enabled": true,
+      "holdout": false,
+      "render_in_main_pass": true
+    },
+    "sky_light": {
+      "enabled": true,
+      "source": 0,
+      "intensity": 1.0,
+      "tint_rgb": [0.95, 0.96, 1.0],
+      "diffuse_intensity": 1.0,
+      "specular_intensity": 0.5,
+      "lower_hemisphere_color": [0.03, 0.03, 0.03],
+      "volumetric_scattering_intensity": 1.5,
+      "affect_reflections": true
+    }
+  },
+  "references": {
+    "materials": [
+      "MlFloor.omat",
+      "MlLaneMsft.omat",
+      "MlLaneNamed.omat",
+      "MlLod1Green.omat",
+      "MlLod2Yellow.omat",
+      "MlLod3Red.omat",
+      "../../Models/MSFT_lod_test.gltf/mat1.omat",
+      "../../Models/MSFT_lod_test.gltf/mat2.omat",
+      "../../Models/LodStacked.gltf/mat1.omat",
+      "../../Models/LodStacked.gltf/mat2.omat",
+      "../../Models/LodNamedSiblings.gltf/mat1.omat",
+      "../../Models/LodNamedSiblings.gltf/mat2.omat"
+    ],
+    "scripts": ["model_lods.oscript"]
+  }
+}

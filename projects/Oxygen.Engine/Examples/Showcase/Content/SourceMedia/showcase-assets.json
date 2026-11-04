@@ -97,6 +97,34 @@
       "bytes": 23744,
       "sha256": "61e963d81fbf4e0772b5b8d542a44dbb0c794affa9994b6d5715f425d71fc97d",
       "archive": "kenney_furniture-kit.zip"
+    },
+    {
+      "name": "MSFT_lod_test.gltf",
+      "path": "/Showcase/SourceMedia/DCC/MSFT_lod_test/MSFT_lod_test.gltf",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/155ea624b1d22eff1fb52040389cee4343b56012/meshes/MSFT_lod_test/MSFT_lod_test.gltf",
+      "bytes": 5700,
+      "sha256": "0f5fb371a3994f1fae2a5db70d7208133e872430e2eebdbe11a149e0dc8a19de"
+    },
+    {
+      "name": "MSFT_lod_test_data.bin",
+      "path": "/Showcase/SourceMedia/DCC/MSFT_lod_test/MSFT_lod_test_data.bin",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/155ea624b1d22eff1fb52040389cee4343b56012/meshes/MSFT_lod_test/MSFT_lod_test_data.bin",
+      "bytes": 35696,
+      "sha256": "2a7ad6806da8b6bb1409a32c7d39f7682ae2f61ec0fbfea30b90f3dbc255f150"
+    },
+    {
+      "name": "MSFT_lod_complex_hierarchy.gltf",
+      "path": "/Showcase/SourceMedia/DCC/MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.gltf",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/155ea624b1d22eff1fb52040389cee4343b56012/meshes/MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.gltf",
+      "bytes": 10562,
+      "sha256": "28f17c3ef1a6241b0c53e4e080fcc46a994e703e550bef4f948e4f9163848fed"
+    },
+    {
+      "name": "MSFT_lod_complex_hierarchy.bin",
+      "path": "/Showcase/SourceMedia/DCC/MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.bin",
+      "url": "https://raw.githubusercontent.com/BabylonJS/Assets/155ea624b1d22eff1fb52040389cee4343b56012/meshes/MSFT_lod_complex_hierarchy/MSFT_lod_complex_hierarchy.bin",
+      "bytes": 215504,
+      "sha256": "a8f9d12f24d43a3e67773ff5a09e664adf279b12e2e5127df0e48cc0fc6c7585"
     }
   ]
 }

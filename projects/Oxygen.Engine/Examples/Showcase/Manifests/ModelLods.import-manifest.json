@@ -1,0 +1,244 @@
+{
+  "$schema": "oxygen.import-manifest.schema.json",
+  "schema_version": 2,
+  "project_root": "..",
+  "mounts": [
+    {
+      "name": "Showcase",
+      "kind": "Source",
+      "path": "Content"
+    }
+  ],
+  "max_in_flight_jobs": 1,
+  "jobs": [
+    {
+      "id": "/Showcase/Models/MSFT_lod_test.gltf",
+      "type": "model",
+      "virtual_path": "/Showcase/Models/MSFT_lod_test.gltf"
+    },
+    {
+      "id": "/Showcase/Models/MSFT_lod_complex_hierarchy.gltf",
+      "type": "model",
+      "virtual_path": "/Showcase/Models/MSFT_lod_complex_hierarchy.gltf"
+    },
+    {
+      "id": "/Showcase/Models/LodStacked.gltf",
+      "type": "model",
+      "virtual_path": "/Showcase/Models/LodStacked.gltf"
+    },
+    {
+      "id": "/Showcase/Models/LodNamedSiblings.gltf",
+      "type": "model",
+      "virtual_path": "/Showcase/Models/LodNamedSiblings.gltf"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlFloor.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlFloor.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlFloor.omat",
+      "name": "MlFloor"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlLaneMsft.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlLaneMsft.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlLaneMsft.omat",
+      "name": "MlLaneMsft"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlLaneNamed.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlLaneNamed.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlLaneNamed.omat",
+      "name": "MlLaneNamed"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlLod1Green.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlLod1Green.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlLod1Green.omat",
+      "name": "MlLod1Green"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat",
+      "name": "MlLod2Yellow"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/MlLod3Red.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/MlLod3Red.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/MlLod3Red.omat",
+      "name": "MlLod3Red"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/model_lods.oscript",
+      "type": "script",
+      "source": "/Showcase/Scenes/ModelLods/model_lods.lua",
+      "virtual_path": "/Showcase/Scenes/ModelLods/model_lods.oscript",
+      "name": "ModelLodsScript",
+      "compile": false,
+      "script_storage": "external"
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/ModelLods.oscene",
+      "type": "scene-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/ModelLods.scene.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/ModelLods.oscene",
+      "name": "ModelLods",
+      "depends_on": [
+        "/Showcase/Models/MSFT_lod_test.gltf",
+        "/Showcase/Models/MSFT_lod_complex_hierarchy.gltf",
+        "/Showcase/Models/LodStacked.gltf",
+        "/Showcase/Models/LodNamedSiblings.gltf",
+        "/Showcase/Scenes/ModelLods/MlFloor.omat",
+        "/Showcase/Scenes/ModelLods/MlLaneMsft.omat",
+        "/Showcase/Scenes/ModelLods/MlLaneNamed.omat",
+        "/Showcase/Scenes/ModelLods/MlLod1Green.omat",
+        "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat",
+        "/Showcase/Scenes/ModelLods/MlLod3Red.omat",
+        "/Showcase/Scenes/ModelLods/model_lods.oscript"
+      ]
+    },
+    {
+      "id": "/Showcase/Scenes/ModelLods/ModelLods.oscene#script-sidecar",
+      "type": "script-sidecar",
+      "name": "model_lods_script_sidecar",
+      "target_scene_virtual_path": "/Showcase/Scenes/ModelLods/ModelLods.oscene",
+      "depends_on": [
+        "/Showcase/Scenes/ModelLods/ModelLods.oscene",
+        "/Showcase/Scenes/ModelLods/model_lods.oscript",
+        "/Showcase/Models/MSFT_lod_test.gltf",
+        "/Showcase/Models/MSFT_lod_complex_hierarchy.gltf",
+        "/Showcase/Models/LodStacked.gltf",
+        "/Showcase/Models/LodNamedSiblings.gltf",
+        "/Showcase/Scenes/ModelLods/MlFloor.omat",
+        "/Showcase/Scenes/ModelLods/MlLaneMsft.omat",
+        "/Showcase/Scenes/ModelLods/MlLaneNamed.omat",
+        "/Showcase/Scenes/ModelLods/MlLod1Green.omat",
+        "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat",
+        "/Showcase/Scenes/ModelLods/MlLod3Red.omat"
+      ],
+      "bindings": [
+        {
+          "node_index": 19,
+          "slot_id": "35f9fcf4-f871-5acc-b3e4-67599bf1a787",
+          "script_virtual_path": "model_lods.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "msft_lod1",
+              "type": "node",
+              "value": {
+                "node": 4
+              }
+            },
+            {
+              "key": "msft_lod2",
+              "type": "node",
+              "value": {
+                "node": 5
+              }
+            },
+            {
+              "key": "msft_lod3",
+              "type": "node",
+              "value": {
+                "node": 6
+              }
+            },
+            {
+              "key": "msft_default",
+              "type": "node",
+              "value": {
+                "node": 3
+              }
+            },
+            {
+              "key": "named_lod1",
+              "type": "node",
+              "value": {
+                "node": 10
+              }
+            },
+            {
+              "key": "named_lod2",
+              "type": "node",
+              "value": {
+                "node": 11
+              }
+            },
+            {
+              "key": "named_lod3",
+              "type": "node",
+              "value": {
+                "node": 12
+              }
+            },
+            {
+              "key": "named_default",
+              "type": "node",
+              "value": {
+                "node": 9
+              }
+            },
+            {
+              "key": "real_default",
+              "type": "node",
+              "value": {
+                "node": 15
+              }
+            },
+            {
+              "key": "msft_mat1",
+              "type": "asset",
+              "value": "../../Models/LodStacked.gltf/mat1.omat"
+            },
+            {
+              "key": "msft_mat2",
+              "type": "asset",
+              "value": "../../Models/LodStacked.gltf/mat2.omat"
+            },
+            {
+              "key": "named_mat1",
+              "type": "asset",
+              "value": "../../Models/LodNamedSiblings.gltf/mat1.omat"
+            },
+            {
+              "key": "named_mat2",
+              "type": "asset",
+              "value": "../../Models/LodNamedSiblings.gltf/mat2.omat"
+            },
+            {
+              "key": "real_mat1",
+              "type": "asset",
+              "value": "../../Models/MSFT_lod_test.gltf/mat1.omat"
+            },
+            {
+              "key": "real_mat2",
+              "type": "asset",
+              "value": "../../Models/MSFT_lod_test.gltf/mat2.omat"
+            },
+            {
+              "key": "color_lod1",
+              "type": "asset",
+              "value": "MlLod1Green.omat"
+            },
+            {
+              "key": "color_lod2",
+              "type": "asset",
+              "value": "MlLod2Yellow.omat"
+            },
+            {
+              "key": "color_lod3",
+              "type": "asset",
+              "value": "MlLod3Red.omat"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
