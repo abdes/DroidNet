@@ -10,7 +10,6 @@
 #include <mutex>
 #include <shared_mutex>
 #include <stdexcept>
-#include <string.h>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -55,7 +54,7 @@ auto TypeRegistry::Get() -> TypeRegistry&
 
 auto TypeRegistry::RegisterType(const char* name) const -> TypeId
 {
-  if ((name == nullptr) || strnlen(name, 1) == 0) {
+  if ((name == nullptr) || *name == '\0') {
     throw std::invalid_argument(
       "cannot use `null` or empty type name to register a type");
   }
@@ -108,10 +107,19 @@ auto TypeRegistry::ExtractQualifiedClassName(
     return {};
   }
 
-  // Walk backward to find the start of the class name
+  // Walk backward to find the start of the class name. A space or a backtick
+  // inside template arguments does not end it.
   std::size_t start = method_pos;
-  while (
-    start > 0 && signature[start - 1] != ' ' && signature[start - 1] != '`') {
+  auto template_depth = 0;
+  while (start > 0) {
+    const auto previous = signature[start - 1];
+    if (previous == '>') {
+      ++template_depth;
+    } else if (previous == '<') {
+      --template_depth;
+    } else if (template_depth == 0 && (previous == ' ' || previous == '`')) {
+      break;
+    }
     --start;
   }
 

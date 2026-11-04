@@ -35,6 +35,18 @@ NOLINT_TEST_F(TypeSystemTests, CanRegisterAndGetTypes)
   EXPECT_EQ(id, registry_.GetTypeId("test::MyType"));
 }
 
+//! A class name keeps its template arguments whole, spaces included.
+NOLINT_TEST_F(TypeSystemTests, ExtractsTemplateClassNamesWhole)
+{
+  EXPECT_EQ(oxygen::TypeRegistry::ExtractQualifiedClassName(
+              "auto __cdecl a::b::Plain::ClassTypeName(void) noexcept"),
+    "a::b::Plain");
+  EXPECT_EQ(oxygen::TypeRegistry::ExtractQualifiedClassName(
+              "auto __cdecl a::Job<struct a::Traits, class a::Other<int> >"
+              "::ClassTypeName(void) noexcept"),
+    "a::Job<struct a::Traits, class a::Other<int> >");
+}
+
 NOLINT_TEST_F(TypeSystemTests, HandlesBadInput)
 {
   EXPECT_THROW(registry_.RegisterType(nullptr), std::invalid_argument);
@@ -55,6 +67,7 @@ NOLINT_TEST_F(TypeSystemTests, TypeNotRegistered)
 NOLINT_TEST_F(TypeSystemTests, ThreadSafety)
 {
   std::vector<std::thread> threads;
+  threads.reserve(10);
   for (int i = 0; i < 10; ++i) {
     threads.emplace_back([this, i] -> void {
       const auto typeName = "test::Type" + std::to_string(i);
