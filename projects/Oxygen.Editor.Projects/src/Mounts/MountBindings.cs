@@ -69,7 +69,7 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
 
         var path = projectRoot.Combine(ProjectMounts.FileName).FullPath;
         var snapshot = await files.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-        var document = snapshot.Version.Exists ? Read(path, snapshot.Content) : new JsonObject { ["schema_version"] = 2 };
+        var document = snapshot.Version.Exists ? Read(path, snapshot.Content) : new JsonObject { ["schema_version"] = ProjectMounts.SchemaVersion };
         if (document["mounts"] is not JsonObject mounts)
         {
             mounts = [];
@@ -102,9 +102,9 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
         try
         {
             return JsonNode.Parse(content.AsSpan()) is JsonObject document
-                && document["schema_version"] is JsonValue version && version.TryGetValue<int>(out var number) && number == 2
+                && document["schema_version"] is JsonValue version && version.TryGetValue<int>(out var number) && number == ProjectMounts.SchemaVersion
                     ? document
-                    : throw new InvalidDataException($"'{path}' is not a mounts file of schema_version 2; fix it before binding a mount.");
+                    : throw new InvalidDataException($"'{path}' is not a mounts file of schema_version {ProjectMounts.SchemaVersion}; fix it before binding a mount.");
         }
         catch (JsonException exception)
         {

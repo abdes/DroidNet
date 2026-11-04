@@ -32,6 +32,9 @@ public static class ProjectMounts
         RegexOptions.CultureInvariant,
         TimeSpan.FromSeconds(1)));
 
+    /// <summary>Gets the version a mounts file states, from the engine's schema.</summary>
+    public static int SchemaVersion => SchemaDocument.Value.RootElement.GetProperty("properties").GetProperty("schema_version").GetProperty("const").GetInt32();
+
     /// <summary>Checks a mount name against the engine's name rule, from its schema.</summary>
     /// <param name="name">The name.</param>
     /// <returns><see langword="true"/> when the name follows the rule.</returns>
@@ -162,10 +165,10 @@ public static class ProjectMounts
     private static bool IsAccepted(JsonElement root, FileSystemPath path, MountTableBuilder builder)
     {
         var hasVersion = root.TryGetProperty("schema_version", out var version);
-        if (!hasVersion || !(version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out var number) && number == 2))
+        if (!hasVersion || !(version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out var number) && number == SchemaVersion))
         {
             var stated = hasVersion ? version.GetRawText() : "none";
-            builder.Report(MountCodes.FileVersion, $"'{path}' has schema_version {stated}; only schema_version 2 is read.", file: path);
+            builder.Report(MountCodes.FileVersion, $"'{path}' has schema_version {stated}; only schema_version {SchemaVersion} is read.", file: path);
             return false;
         }
 

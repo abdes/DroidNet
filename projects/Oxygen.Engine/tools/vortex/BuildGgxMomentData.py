@@ -15,6 +15,8 @@ import struct
 
 from InspectGgxMomentTable import validate_structure
 
+SCHEMA_VERSION = 1
+
 
 def encode_manifest(document):
     # Match repository JSON exponent spelling without touching quoted hashes,
@@ -67,7 +69,7 @@ def pack(args):
     ):
         raise ValueError("Moment payload changed during packaging")
     manifest = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "model_revision": 1,
         "view_nodes": table["view_nodes"],
         "roughness_nodes": table["roughness_nodes"],
@@ -94,7 +96,7 @@ def embed(args):
     payload = args.payload.read_bytes()
     width, height = manifest["view_nodes"], manifest["roughness_nodes"]
     if (
-        manifest["schema_version"] != 1
+        manifest["schema_version"] != SCHEMA_VERSION
         or manifest["model_revision"] != 1
         or manifest["format"] != "RG32Float"
     ):

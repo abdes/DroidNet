@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -25,7 +26,7 @@ public sealed record ContentImportMountsFile(
 
     /// <summary>Gets the version of the mounts file format.</summary>
     [JsonPropertyName("schema_version")]
-    public int Version => 2;
+    public int Version => ProjectMounts.SchemaVersion;
 
     /// <summary>Gets a value indicating whether the file stops the walk up the folder hierarchy; it always does.</summary>
     [JsonPropertyName("root")]

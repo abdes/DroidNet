@@ -11,6 +11,8 @@ import math
 from pathlib import Path
 import struct
 
+SCHEMA_VERSION = 1
+
 
 def sample(values, width, height, x, y):
     x = min(max(x, 0.0), width - 1)
@@ -82,7 +84,7 @@ def generate(args):
         return {"maximum": data[-1], "p99": data[int(0.99 * (len(data) - 1))]}
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": SCHEMA_VERSION,
         "model_revision": 2,
         "view_nodes": size,
         "roughness_nodes": size,
@@ -113,7 +115,7 @@ def embed(args):
     payload = args.payload.read_bytes()
     width, height = metadata["view_nodes"], metadata["roughness_nodes"]
     if (
-        metadata["schema_version"] != 1
+        metadata["schema_version"] != SCHEMA_VERSION
         or metadata["model_revision"] != 2
         or metadata["format"] != "RG32Float"
         or width != 32

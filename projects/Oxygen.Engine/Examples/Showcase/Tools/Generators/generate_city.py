@@ -31,6 +31,20 @@ from pathlib import Path
 # The examples project: this script is Tools/Generators/generate_city.py.
 PROJECT = Path(__file__).resolve().parents[2]
 SCENE_NAME = "CityEnvironmentValidation"
+
+
+def schema_version(file_name: str) -> int:
+    """The version a schema requires, from the source tree or an installed SDK."""
+    for folder in (
+        PROJECT.parents[1] / "src" / "Oxygen" / "Cooker" / "Import" / "Schemas",
+        PROJECT.parent / "schemas",
+    ):
+        if (folder / file_name).is_file():
+            schema = json.loads((folder / file_name).read_text(encoding="utf-8"))
+            return int(schema["properties"]["schema_version"]["const"])
+    raise FileNotFoundError(file_name)
+
+
 HERE = PROJECT / "Content" / "Scenes" / SCENE_NAME
 # The scene folder's mount path in the Showcase mount; every file this script
 # writes is cooked to its mount path with the cooked extension. The files
@@ -776,7 +790,7 @@ def scene_document() -> dict:
         flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
     )
     return {
-        "schema_version": 16,
+        "schema_version": schema_version("oxygen.scene-descriptor.schema.json"),
         "name": SCENE_NAME,
         "starting_camera": {"node": camera},
         "nodes": s.nodes,
@@ -916,7 +930,7 @@ def manifest_document() -> dict:
     )
     return {
         "$schema": "oxygen.import-manifest.schema.json",
-        "schema_version": 2,
+        "schema_version": schema_version("oxygen.import-manifest.schema.json"),
         "project_root": "..",
         "mounts": [{"name": "Showcase", "kind": "Source", "path": "Content"}],
         "max_in_flight_jobs": 1,

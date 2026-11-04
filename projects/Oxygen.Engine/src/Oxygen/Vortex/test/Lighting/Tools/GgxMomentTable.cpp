@@ -37,6 +37,8 @@
 #include <Oxygen/Vortex/test/Lighting/Reference/ReferenceQuadrature.h>
 
 namespace {
+//! The version the report states.
+constexpr std::uint32_t kMomentTableSchemaVersion = 1U;
 
 namespace reference = oxygen::vortex::testing::reference;
 constexpr double kMinimumRoughness = 0.045;
@@ -213,7 +215,7 @@ auto WriteCandidate(const std::filesystem::path& output, const TableShape shape,
   hash.Update(std::as_bytes(std::span(moments)));
   hash.Update(std::as_bytes(std::span(means)));
   const auto document = nlohmann::json {
-    { "schema_version", 1U },
+    { "schema_version", kMomentTableSchemaVersion },
     { "model_revision", kModelRevision },
     {
       "qualification_status",

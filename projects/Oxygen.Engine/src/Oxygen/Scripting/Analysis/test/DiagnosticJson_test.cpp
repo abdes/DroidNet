@@ -16,7 +16,7 @@
 
 #include <Oxygen/Scripting/Analysis/DiagnosticJson.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
-#include <Oxygen/Scripting/Analysis/Test/ScriptDiagnostic_schema.h>
+#include <Oxygen/Scripting/Analysis/test/ScriptDiagnostic_schema.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scripting::testing {

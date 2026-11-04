@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -15,6 +16,9 @@
 
 namespace oxygen::vortex::testing {
 namespace {
+  //! The version the report states.
+  constexpr std::uint32_t kMemoryCaptureSchemaVersion = 1U;
+
   auto SegmentReport(const graphics::d3d12::MemorySegmentStatistics& segment)
     -> nlohmann::json
   {
@@ -84,7 +88,7 @@ auto D3D12MemoryCapture::Report() const -> nlohmann::json
     });
   }
   return {
-    { "schema_version", 1U },
+    { "schema_version", kMemoryCaptureSchemaVersion },
     { "complete", true },
     { "capacity", capacity_.get() },
     { "samples", std::move(rows) },
