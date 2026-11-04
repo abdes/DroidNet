@@ -610,7 +610,8 @@ wrapper), `Cooker/Import/Internal/fbx/{FbxAdapter.*,CoordTransform.h,FbxMaterial
 `Cooker/Import/Internal/DroppedSourceFeatures.*`,
 `Cooker/Import/Internal/ImportedLightSemantics.h`,
 `Cooker/Import/Internal/ImportedPropertyCommit.h`,
-`Cooker/Import/Internal/Jobs/{Glb,Fbx}*`, `Cooker/Import/SurfaceProvenance.*`,
+`Cooker/Import/Internal/Jobs/ModelImportJob.*` (`GlbImportJob`, `FbxImportJob`),
+`Cooker/Import/SurfaceProvenance.*`,
 `Cooker/Import/SceneImportSettings.*`.
 
 **Objectives.** A reimport of a changed source keeps every identity the
@@ -619,17 +620,25 @@ same engine model for the same scene.
 
 **Critical points.**
 
-- `ModelNodeIdentity` and `NodePathTable`: node identities survive reorder,
-  rename of siblings and insertion; duplicate names get stable,
-  documented disambiguation.
-- `material_remap` and `SurfaceProvenance`: remaps are relative or explicit
-  cross-mount references and survive reimport.
+- `ModelNodeIdentity`: a node's ID derives from the model's source identity and
+  its anchor, the path of names in the source hierarchy, so it survives moving
+  the model, reordering siblings and inserting nodes. Same-named siblings are
+  numbered in file order. A renamed or moved node keeps its ID only through the
+  record's node continuity (`import.node_continuity_conflict`,
+  `import.node_continuity_cycle`).
+- `NodePathTable`: interns the node ID paths of a cooked scene, within the
+  format's limits.
+- `material_remap`: a target is relative to the folder of the model's identity,
+  or absolute in another mount, and survives reimport; a refused, unmounted or
+  missing target has its own code.
+- `SurfaceProvenance`: surface IDs are found by geometry anchor and source
+  layout witness, and survive reimport and moving the model.
 - glTF and FBX parity: units, handedness, up axis (`CoordTransform.h`),
   pivots, negative scales and light units agree; a shared scenario test
   compares them.
 - `DroppedSourceFeatures`: every feature not imported is reported, not
   silently dropped.
-- `FbxAdapter.cpp` (3 800 lines) and `GltfAdapter.cpp` (3 400 lines): source
+- `FbxAdapter.cpp` (3 900 lines) and `GltfAdapter.cpp` (3 400 lines): source
   data is bounds-checked before use, since `ufbx` and `cgltf` hand back
   file-controlled indices.
 - The glTF and FBX importer revisions (`PakFormatVersions.inc`) are bumped by every output change.
