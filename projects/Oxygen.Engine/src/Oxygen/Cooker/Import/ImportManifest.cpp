@@ -746,8 +746,7 @@ namespace {
     ReadValue(obj, "unit_scale", settings.unit_scale);
     settings.unit_scale_set
       = settings.unit_scale_set || obj.contains("unit_scale");
-    ReadValue(
-      obj, "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m);
+    ReadValue(obj, "omitted_light_range_m", settings.omitted_light_range_m);
     ReadValue(obj, "gltf_scene", settings.gltf_scene);
     ReadValue(obj, "up_axis", settings.up_axis);
     ReadValue(obj, "import_lights", settings.import_lights);

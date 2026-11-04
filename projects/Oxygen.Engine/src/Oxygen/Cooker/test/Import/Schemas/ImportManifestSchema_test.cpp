@@ -217,7 +217,7 @@ NOLINT_TEST(ImportManifestSchemaTest, ModelDefaultsMatchTheImportOptions)
       return properties.at(key).at("default").get<bool>();
     };
     EXPECT_FLOAT_EQ(
-      number("gltf_omitted_light_range_m"), options.gltf_omitted_light_range_m)
+      number("omitted_light_range_m"), options.omitted_light_range_m)
       << section;
     EXPECT_FLOAT_EQ(number("normals_smoothing_angle_deg"),
       options.normals_smoothing_angle_deg)

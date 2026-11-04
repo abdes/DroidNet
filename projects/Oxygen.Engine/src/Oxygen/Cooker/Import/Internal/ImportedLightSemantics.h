@@ -9,9 +9,14 @@
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
@@ -77,6 +82,43 @@ inline auto CommitImportedLightColor(ImportedPropertyCommit& commit,
     common.color_rgb[channel] = commit(kChannels[channel],
       ranges.color[channel], color[channel], common.color_rgb[channel]);
   }
+}
+
+//! Commits an imported spot cone into `light`; its profile, or nothing with a
+//! warning when the angles form no cone and the light must be dropped.
+/*!
+ The angles are half angles in radians. Each is a property of the schema, but
+ the pair is a rule across both, which the scene pipeline refuses to cook: the
+ importer drops such a light rather than fail the model.
+*/
+inline auto CommitImportedSpotCone(ImportedPropertyCommit& commit,
+  const float inner_half_angle_radians, const float outer_half_angle_radians,
+  data::pak::world::SpotLightRecord& light, const std::string_view source_id,
+  const std::string_view object_path,
+  std::vector<ImportDiagnostic>& diagnostics)
+  -> std::optional<lighting::SpotConeProfile>
+{
+  namespace light_schema = data::schema::spot_light;
+  light.inner_cone_angle_radians = commit("inner_cone_angle_radians",
+    light_schema::kInnerConeAngleRadiansRange, inner_half_angle_radians,
+    light.inner_cone_angle_radians);
+  light.outer_cone_angle_radians = commit("outer_cone_angle_radians",
+    light_schema::kOuterConeAngleRadiansRange, outer_half_angle_radians,
+    light.outer_cone_angle_radians);
+  const auto cone = lighting::ResolveSpotConeProfile(
+    light.inner_cone_angle_radians, light.outer_cone_angle_radians);
+  if (!cone) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = std::string(import_codes::kSceneLightPhotometryInvalid),
+      .message = "Spot cone angles do not form a representable cone pair; the "
+                 "light is dropped",
+      .source_path = std::string(source_id),
+      .object_path = std::string(object_path),
+    });
+    return std::nullopt;
+  }
+  return *cone;
 }
 
 } // namespace oxygen::content::import::detail

@@ -509,17 +509,31 @@ item).
 
 ## Node Pruning (Deterministic Rules)
 
-Node pruning and reparenting are performed by the adapter during the scene
-stage. When a node is dropped the adapter must reparent its children to the
-nearest kept ancestor and recompute each child’s local transform as:
+Both model adapters prune through `PruneModelNodes` during the scene stage, so a
+node lands in the same place from either format. When a node is dropped, its
+children move to the nearest kept ancestor and each child's local transform
+becomes:
 
 $$
 T_{local}' = T_{parent}^{-1} \cdot T_{world}
 $$
 
 where $T_{world}$ is the original world transform and $T_{parent}$ is the new
-parent’s world transform. Use float32 math; if inversion fails (singular), the
-adapter should emit a blocking diagnostic and keep the original parent.
+parent's world transform, in float32. Every other case keeps the node where the
+source places it, except the last:
+
+- With no kept ancestor, the node becomes a root and its local transform is
+  $T_{world}$.
+- With a kept ancestor that is rotated or scaled unevenly, the node becomes a
+  root at $T_{world}$, with the warning `scene.pruning.reparent_skipped`.
+- With a singular kept ancestor, the node stays under it with its authored local
+  transform, with the warning `scene.pruning.singular`. No transform can place
+  it there.
+
+An FBX scene's implicit root is not a node of the model: the file's top-level
+nodes are the model's roots, as in a glTF scene. It stays, as `#root`, only if
+the file attaches content to it. A scale helper ufbx adds for a node that ignores
+its parent's scale does not appear in its children's anchors.
 
 ---
 

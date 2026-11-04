@@ -167,15 +167,14 @@ public static class ModelImportSettingCatalog
         Minimum = 0,
     };
 
-    /// <summary>Gets the range, in metres, of a glTF light without one.</summary>
+    /// <summary>Gets the range, in metres, of a light without one.</summary>
     public static ModelImportSetting OmittedLightRange { get; } = new()
     {
-        Key = "gltf_omitted_light_range_m",
+        Key = "omitted_light_range_m",
         Kind = ModelImportSettingKind.Number,
         Default = 4096d,
         Minimum = 0,
         IsMinimumExclusive = true,
-        Formats = ModelSourceFormats.Gltf,
     };
 
     /// <summary>Gets whether the file's cameras are imported.</summary>

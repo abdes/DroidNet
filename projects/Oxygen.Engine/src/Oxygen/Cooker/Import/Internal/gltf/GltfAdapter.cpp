@@ -69,6 +69,7 @@
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
+#include <Oxygen/Cooker/Import/Internal/ModelSceneNodes.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -791,7 +792,8 @@ namespace {
 
     std::vector<glm::vec4> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      auto v = std::array<cgltf_float, 4> {};
+      // A VEC3 COLOR_0 fills three components and means opaque.
+      auto v = std::array<cgltf_float, 4> { 0.0F, 0.0F, 0.0F, 1.0F };
       cgltf_accessor_read_float(accessor, i, v.data(), v.size());
       out.at(i) = glm::make_vec4(v.data());
     }
@@ -1061,12 +1063,22 @@ namespace {
     return id;
   }
 
-  [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
+  //! The UV set a texture view names, as the file wrote it.
+  [[nodiscard]] auto DeclaredUvSet(const cgltf_texture_view& view) -> cgltf_int
   {
     if ((view.has_transform != 0) && (view.transform.has_texcoord != 0)) {
-      return static_cast<uint8_t>(view.transform.texcoord);
+      return view.transform.texcoord;
     }
-    return static_cast<uint8_t>(view.texcoord);
+    return view.texcoord;
+  }
+
+  //! The UV set a material binding stores. A set no binding can hold names no
+  //! set a mesh has either, and the geometry warns about it.
+  [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
+  {
+    const auto declared = DeclaredUvSet(view);
+    return std::in_range<uint8_t>(declared) ? static_cast<uint8_t>(declared)
+                                            : uint8_t { 0 };
   }
 
   auto ApplyTextureBinding(MaterialTextureBinding& binding,
@@ -1274,20 +1286,7 @@ namespace {
     return request.GetSceneName();
   }
 
-  struct NodeInput final {
-    std::string authored_name;
-    std::string base_name;
-    //! The node's anchor, its model node identity (ModelNodeIdentity).
-    std::string anchor;
-    uint32_t parent_index = 0;
-    glm::mat4 local_matrix { 1.0F };
-    glm::mat4 world_matrix { 1.0F };
-    bool has_renderable = false;
-    bool has_camera = false;
-    bool has_light = false;
-    bool visible = true;
-    const void* source_node = nullptr;
-  };
+  using NodeInput = internal::ModelNodeInput;
 
   [[nodiscard]] auto GltfToOxygenBasis() -> glm::mat4
   {
@@ -1622,8 +1621,7 @@ namespace {
         const cgltf_accessor* colors = nullptr;
         const cgltf_accessor* joints = nullptr;
         const cgltf_accessor* weights = nullptr;
-        std::unordered_map<cgltf_size, const cgltf_accessor*>
-          texcoords_by_index;
+        std::map<cgltf_size, const cgltf_accessor*> texcoords_by_index;
         std::optional<cgltf_size> color_index;
         std::unordered_map<uint32_t, const cgltf_accessor*> joints_by_index;
         std::unordered_map<uint32_t, const cgltf_accessor*> weights_by_index;
@@ -1669,7 +1667,8 @@ namespace {
               [&preferred_uv_sets](const cgltf_texture_view& view,
                 const TextureUsage /*usage*/) -> void {
                 if (view.texture != nullptr) {
-                  preferred_uv_sets.push_back(ResolveUvSet(view));
+                  preferred_uv_sets.push_back(
+                    static_cast<cgltf_size>(DeclaredUvSet(view)));
                 }
               });
           }
@@ -2211,11 +2210,14 @@ namespace {
         const auto found_skin = skins.find(mesh);
         const auto* skin
           = found_skin != skins.end() ? found_skin->second : nullptr;
-        if (skin == nullptr || skin->inverse_bind_matrices == nullptr) {
+        if (skin == nullptr) {
           drop_skin(import_codes::kMeshMissingInverseBind,
-            "glTF skinned mesh missing inverse bind matrices");
+            "glTF mesh has joint data but no node gives it a skin");
         } else {
-          owner->inverse_bind_matrices = ReadMat4(skin->inverse_bind_matrices);
+          // In glTF, a skin without the accessor means identity matrices.
+          owner->inverse_bind_matrices = skin->inverse_bind_matrices != nullptr
+            ? ReadMat4(skin->inverse_bind_matrices)
+            : std::vector(skin->joints_count, glm::mat4 { 1.0F });
           const auto joint_count = DetermineJointCount(owner->joint_indices);
           if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
             drop_skin(import_codes::kMeshMissingInverseBind,
@@ -2571,6 +2573,11 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
         = static_cast<float>(pbr.base_color_factor[3]);
       item.material.inputs.metalness = static_cast<float>(pbr.metallic_factor);
       item.material.inputs.roughness = static_cast<float>(pbr.roughness_factor);
+    } else if (material.has_pbr_specular_glossiness == 0) {
+      // In glTF, a material without the block takes the block's defaults, which
+      // are not the engine's: fully metallic and fully rough.
+      item.material.inputs.metalness = 1.0F;
+      item.material.inputs.roughness = 1.0F;
     }
 
     // KHR_materials_emissive_strength scales the emission; the factor holds
@@ -3101,15 +3108,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   if (nodes.empty()) {
-    NodeInput root;
-    root.authored_name = "root";
-    root.base_name = "root";
-    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
-    root.parent_index = 0;
-    root.local_matrix = glm::mat4 { 1.0F };
-    root.world_matrix = glm::mat4 { 1.0F };
-    root.visible = true;
-    nodes.push_back(std::move(root));
+    nodes.push_back(internal::MakeSynthesizedRootNode());
   }
 
   {
@@ -3123,102 +3122,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
   }
 
-  std::vector<uint32_t> kept_indices;
-  kept_indices.reserve(nodes.size());
-
-  if (request.options.node_pruning == NodePruningPolicy::kDropEmptyNodes) {
-    for (uint32_t i = 0; i < nodes.size(); ++i) {
-      const auto& node = nodes.at(i);
-      if (node.has_renderable || node.has_camera || node.has_light) {
-        kept_indices.push_back(i);
-      }
-    }
-  } else {
-    for (uint32_t i = 0; i < nodes.size(); ++i) {
-      kept_indices.push_back(i);
-    }
-  }
-
-  if (kept_indices.empty()) {
-    NodeInput root;
-    root.authored_name = "root";
-    root.base_name = "root";
-    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
-    root.parent_index = 0;
-    root.local_matrix = glm::mat4 { 1.0F };
-    root.world_matrix = glm::mat4 { 1.0F };
-    root.visible = true;
-    nodes.clear();
-    nodes.push_back(std::move(root));
-    kept_indices.push_back(0);
-  }
-
-  std::vector old_to_new(nodes.size(), -1);
-  for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    old_to_new.at(kept_indices.at(new_index)) = static_cast<int32_t>(new_index);
-  }
-
-  std::vector<NodeInput> pruned_nodes;
-  pruned_nodes.reserve(kept_indices.size());
-
-  for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    const auto old_index = kept_indices.at(new_index);
-    auto node = nodes.at(old_index);
-
-    uint32_t parent = node.parent_index;
-    while (parent < nodes.size() && old_to_new.at(parent) < 0) {
-      const auto next_parent = nodes.at(parent).parent_index;
-      if (next_parent == parent) {
-        break;
-      }
-      parent = next_parent;
-    }
-
-    uint32_t new_parent_index = new_index;
-    if (parent < nodes.size() && old_to_new.at(parent) >= 0) {
-      new_parent_index = static_cast<uint32_t>(old_to_new.at(parent));
-    }
-
-    // A retained parent needs only index remapping, never transform
-    // reparenting.
-    if (new_parent_index != new_index && parent != node.parent_index) {
-      const auto parent_old_index = kept_indices.at(new_parent_index);
-      const auto& parent_world = nodes.at(parent_old_index).world_matrix;
-
-      glm::vec3 parent_translation {};
-      glm::vec3 parent_scale { 1.0F, 1.0F, 1.0F };
-      glm::quat parent_rotation {};
-      const bool parent_decomposed = transforms::TryDecomposeTransform(
-        parent_world, parent_translation, parent_rotation, parent_scale);
-      const bool can_reparent = parent_decomposed
-        && transforms::IsUniformScale(parent_scale)
-        && transforms::IsIdentityRotation(parent_rotation);
-
-      if (!can_reparent) {
-        diagnostics.push_back(MakeWarningDiagnostic(
-          std::string(import_codes::kScenePruningReparentSkipped),
-          "Skipped reparenting due to non-uniform or rotated parent; "
-          "preserving world transform",
-          input.source_id, node.base_name));
-        new_parent_index = new_index;
-        node.local_matrix = node.world_matrix;
-      } else {
-        const auto det = glm::determinant(parent_world);
-        constexpr auto kSingularDeterminant = 1e-6F;
-        if (std::abs(det) > kSingularDeterminant) {
-          node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
-        } else {
-          diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kScenePruningSingular),
-            "Node keeps its local transform: its parent transform is singular",
-            input.source_id, node.base_name));
-        }
-      }
-    }
-
-    node.parent_index = new_parent_index;
-    pruned_nodes.push_back(std::move(node));
-  }
+  auto pruned_nodes = internal::PruneModelNodes(std::move(nodes),
+    request.options.node_pruning, input.source_id, diagnostics);
 
   SceneBuild build;
   build.flags = data::pak::world::SceneAssetFlags::kModelScene;
@@ -3402,14 +3307,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           /*default_affects_world=*/true,
           /*default_casts_shadows=*/true);
       };
-      auto light_node_index = i;
-      if (light.type == cgltf_light_type_directional
-        || light.type == cgltf_light_type_spot) {
-        // A light-only child turns the glTF light frame into the node frame,
-        // which emits along its forward. Point lights need no basis.
-        light_node_index
-          = append_attachment(node, i, "Light", GltfEmitterToNodeFrame());
-      }
+      // A light-only child turns the glTF light frame into the node frame,
+      // which emits along its forward. Point lights need no basis.
+      const auto emitter_node = [&] -> uint32_t {
+        return append_attachment(node, i, "Light", GltfEmitterToNodeFrame());
+      };
       auto commit = detail::ImportedPropertyCommit {};
       const auto color
         = std::array { light.color[0], light.color[1], light.color[2] };
@@ -3418,12 +3320,12 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       // An omitted glTF range takes the importer's policy, not the schema's.
       const auto local_range = light.has_range != 0
         ? light.range * ComputeUnitScale(request.options.coordinate)
-        : request.options.gltf_omitted_light_range_m;
+        : request.options.omitted_light_range_m;
       switch (light.type) {
       case cgltf_light_type_directional: {
         namespace light_schema = data::schema::directional_light;
         auto rec_light = MakeDefaultRecord<DirectionalLightRecord>();
-        rec_light.node_index = light_node_index;
+        rec_light.node_index = emitter_node();
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
@@ -3451,30 +3353,18 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       case cgltf_light_type_spot: {
         namespace light_schema = data::schema::spot_light;
         auto rec_light = MakeDefaultRecord<SpotLightRecord>();
-        rec_light.node_index = light_node_index;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kSpotLightCommonRanges, color, rec_light.common);
         rec_light.range = commit(
           "range", light_schema::kRangeRange, local_range, rec_light.range);
-        rec_light.inner_cone_angle_radians = commit("inner_cone_angle_radians",
-          light_schema::kInnerConeAngleRadiansRange,
-          light.spot_inner_cone_angle, rec_light.inner_cone_angle_radians);
-        rec_light.outer_cone_angle_radians = commit("outer_cone_angle_radians",
-          light_schema::kOuterConeAngleRadiansRange,
-          light.spot_outer_cone_angle, rec_light.outer_cone_angle_radians);
-        // The cone pair is a rule across both angles, not a single property.
-        const auto cone
-          = lighting::ResolveSpotConeProfile(rec_light.inner_cone_angle_radians,
-            rec_light.outer_cone_angle_radians);
+        const auto cone = detail::CommitImportedSpotCone(commit,
+          light.spot_inner_cone_angle, light.spot_outer_cone_angle, rec_light,
+          input.source_id, name, diagnostics);
         if (!cone) {
-          diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kSceneLightPhotometryInvalid),
-            "Spot cone angles do not form a representable cone pair; the "
-            "light is dropped",
-            input.source_id, name));
           break;
         }
+        rec_light.node_index = emitter_node();
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
             CandelaToLumens(intensity, cone->solid_angle_sr),

@@ -41,6 +41,7 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -61,10 +62,12 @@
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
+#include <Oxygen/Cooker/test/Support/GltfDocuments.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/test/Support/TestValues.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -72,10 +75,12 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
@@ -1160,6 +1165,1128 @@ NOLINT_TEST_F(ModelValuesTest, FbxSettingsShapeTheCookedModel)
       }
     });
   }
+}
+
+//! What a node of a parity model holds.
+enum class ParityKind : uint8_t {
+  kEmpty,
+  kMesh,
+  kCamera,
+  kSun,
+  kLamp,
+  kSpot,
+};
+
+//! A node written the same way to both formats. An FBX camera and light start
+//! along other axes than glTF's: the FBX writer turns them to match.
+struct ParityNode {
+  std::string name;
+  std::string parent;
+  ParityKind kind = ParityKind::kEmpty;
+  glm::vec3 translation { 0.0F };
+  float rotation_z_degrees = 0.0F;
+  glm::vec3 scale { 1.0F };
+};
+
+//! A spot light's full cone angles, in degrees.
+struct ParityCone {
+  float inner_degrees = 40.0F;
+  float outer_degrees = 60.0F;
+};
+
+// One FBX `Intensity` of 100 reads as 15 lumens, and 500 as 5 lux.
+constexpr auto kParityFlux = 15.0F;
+constexpr auto kParitySunLux = 5.0F;
+
+auto FbxFile(const std::string_view objects, const std::string_view connections,
+  const int coord_axis_sign = 1) -> std::string
+{
+  auto text = std::string {
+    "; FBX 7.4.0 project file\n"
+    "FBXHeaderExtension: {\n    FBXHeaderVersion: 1003\n    FBXVersion: 7400\n"
+    "    Creator: \"Oxygen.Engine Test Fixture\"\n}\n"
+    "GlobalSettings: {\n    Version: 1000\n    Properties70: {\n"
+    "        P: \"UpAxis\", \"int\", \"Integer\", \"\",1\n"
+    "        P: \"UpAxisSign\", \"int\", \"Integer\", \"\",1\n"
+    "        P: \"FrontAxis\", \"int\", \"Integer\", \"\",2\n"
+    "        P: \"FrontAxisSign\", \"int\", \"Integer\", \"\",1\n"
+    "        P: \"CoordAxis\", \"int\", \"Integer\", \"\",0\n"
+  };
+  text += R"(        P: "CoordAxisSign", "int", "Integer", "",)"
+    + std::to_string(coord_axis_sign) + "\n";
+  text += "        P: \"UnitScaleFactor\", \"double\", \"Number\", \"\",100\n"
+          "    }\n}\nObjects: {\n";
+  text += objects;
+  text += "}\nConnections: {\n";
+  text += connections;
+  text += "}\n";
+  return text;
+}
+
+auto FbxTriangleGeometry(
+  const std::string_view polygon_vertices = "*3 { a: 0,1,-3 }") -> std::string
+{
+  auto text
+    = std::string { "    Geometry: 1001, \"Geometry::Triangle\", \"Mesh\" {\n"
+                    "        Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }\n"
+                    "        PolygonVertexIndex: " };
+  text += polygon_vertices;
+  text += "\n        LayerElementMaterial: 0 {\n"
+          "            Version: 101\n"
+          "            MappingInformationType: \"AllSame\"\n"
+          "            ReferenceInformationType: \"IndexToDirect\"\n"
+          "            Materials: *1 { a: 0 }\n        }\n"
+          "        Layer: 0 {\n            Version: 100\n"
+          "            LayerElement: {\n"
+          "                Type: \"LayerElementMaterial\"\n"
+          "                TypedIndex: 0\n            }\n        }\n    }\n";
+  return text;
+}
+
+auto FbxMaterial(const std::string_view extra_properties = {}) -> std::string
+{
+  auto text = std::string {
+    "    Material: 1003, \"Material::Scalar\", \"\" {\n"
+    "        Version: 102\n        ShadingModel: \"phong\"\n"
+    "        Properties70: {\n"
+    "            P: \"DiffuseColor\", \"Color\", \"\", \"A\",0.8,0.2,0.1\n"
+    "            P: \"DiffuseFactor\", \"Number\", \"\", \"A\",1\n"
+  };
+  text += extra_properties;
+  text += "        }\n    }\n";
+  return text;
+}
+
+auto FbxVector3(const std::string_view property, const glm::vec3 value)
+  -> std::string
+{
+  auto text = "            P: \"" + std::string(property) + "\", \""
+    + std::string(property) + R"(", "", "A",)";
+  text += std::to_string(value.x) + "," + std::to_string(value.y) + ","
+    + std::to_string(value.z) + "\n";
+  return text;
+}
+
+auto ParityFbx(const std::vector<ParityNode>& nodes, const ParityCone cone = {})
+  -> std::string
+{
+  constexpr auto kModelIds = 2000U;
+  constexpr auto kAttributeIds = 3000U;
+  auto objects = FbxTriangleGeometry() + FbxMaterial();
+  auto connections = std::string {};
+  const auto connect = [&](const size_t child, const size_t parent) -> void {
+    connections += "    C: \"OO\"," + std::to_string(child) + ","
+      + std::to_string(parent) + "\n";
+  };
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    const auto& node = nodes.at(i);
+    const auto model_id = kModelIds + i;
+    const auto attribute_id = kAttributeIds + i;
+
+    auto rotation = glm::vec3 { 0.0F, 0.0F, node.rotation_z_degrees };
+    auto attribute = std::string {};
+    const auto light = [&](const int type, const int intensity,
+                         const std::string_view extra) -> std::string {
+      auto text = "    NodeAttribute: " + std::to_string(attribute_id)
+        + ", \"NodeAttribute::" + node.name + "\", \"Light\" {\n"
+        + "        TypeFlags: \"Light\"\n        Properties70: {\n"
+        + R"(            P: "LightType", "enum", "", "",)"
+        + std::to_string(type) + "\n"
+        + "            P: \"Color\", \"ColorRGB\", \"Color\", "
+          "\"\",0.8,0.7,0.6\n"
+        + R"(            P: "Intensity", "double", "Number", "",)"
+        + std::to_string(intensity) + "\n";
+      text += extra;
+      text += "        }\n    }\n";
+      return text;
+    };
+    switch (node.kind) {
+    case ParityKind::kEmpty:
+      break;
+    case ParityKind::kMesh:
+      connect(1001, model_id);
+      connect(1003, model_id);
+      break;
+    case ParityKind::kCamera:
+      // An FBX camera looks along its +X; a quarter turn makes that glTF's -Z.
+      rotation = { 0.0F, 90.0F, 0.0F };
+      attribute = "    NodeAttribute: " + std::to_string(attribute_id)
+        + ", \"NodeAttribute::" + node.name + "\", \"Camera\" {\n"
+        + "        TypeFlags: \"Camera\"\n        Properties70: {\n"
+        + "            P: \"CameraProjectionType\", \"enum\", \"\", \"\",0\n"
+        + "            P: \"FieldOfView\", \"FieldOfView\", \"\", \"\",60\n"
+        + "            P: \"NearPlane\", \"double\", \"Number\", \"\",0.2\n"
+        + "            P: \"FarPlane\", \"double\", \"Number\", \"\",250\n"
+        + "            P: \"AspectWidth\", \"double\", \"Number\", \"\",16\n"
+        + "            P: \"AspectHeight\", \"double\", \"Number\", \"\",9\n"
+        + "        }\n    }\n";
+      break;
+    case ParityKind::kSun:
+      // An FBX light points down its -Y; a quarter turn makes that glTF's -Z.
+      rotation = { 90.0F, 0.0F, 0.0F };
+      attribute = light(1, 500, {});
+      break;
+    case ParityKind::kLamp:
+      attribute = light(0, 100, {});
+      break;
+    case ParityKind::kSpot: {
+      rotation = { 90.0F, 0.0F, 0.0F };
+      const auto angles
+        = R"(            P: "InnerAngle", "double", "Number", "",)"
+        + std::to_string(cone.inner_degrees)
+        + "\n            P: \"OuterAngle\", \"double\", \"Number\", \"\","
+        + std::to_string(cone.outer_degrees) + "\n";
+      attribute = light(2, 100, angles);
+      break;
+    }
+    }
+    if (!attribute.empty()) {
+      objects += attribute;
+      connect(attribute_id, model_id);
+    }
+
+    const auto model_class = [&] -> std::string_view {
+      switch (node.kind) {
+      case ParityKind::kEmpty:
+        return "Null";
+      case ParityKind::kMesh:
+        return "Mesh";
+      case ParityKind::kCamera:
+        return "Camera";
+      default:
+        return "Light";
+      }
+    }();
+    objects += "    Model: " + std::to_string(model_id)
+      + ", \"Model::" + node.name + "\", \"" + std::string(model_class)
+      + "\" {\n        Version: 232\n" + "        Properties70: {\n"
+      + FbxVector3("Lcl Translation", node.translation)
+      + FbxVector3("Lcl Rotation", rotation)
+      + FbxVector3("Lcl Scaling", node.scale) + "        }\n    }\n";
+
+    const auto parent
+      = std::ranges::find(nodes, node.parent, &ParityNode::name);
+    connect(model_id,
+      parent == nodes.end() ? size_t { 0 }
+                            : kModelIds
+          + static_cast<size_t>(std::distance(nodes.begin(), parent)));
+  }
+  return FbxFile(objects, connections);
+}
+
+auto ParityGltf(const std::filesystem::path& models,
+  const std::vector<ParityNode>& nodes, const ParityCone cone = {})
+  -> nlohmann::json
+{
+  using nlohmann::json;
+  std::ifstream input(models / "static_scalar_camera_sun.gltf");
+  auto document = json::parse(input);
+  document["cameras"][0]["perspective"]["yfov"]
+    = std::numbers::pi_v<float> / 3.0F;
+
+  auto lights = json::array();
+  auto written = json::array();
+  auto roots = json::array();
+  for (size_t i = 0; i < nodes.size(); ++i) {
+    const auto& node = nodes.at(i);
+    const auto half_turn = glm::radians(node.rotation_z_degrees) / 2.0F;
+    auto entry = json {
+      { "name", node.name },
+      {
+        "translation",
+        json::array(
+          { node.translation.x, node.translation.y, node.translation.z }),
+      },
+      {
+        "rotation",
+        json::array({ 0.0F, 0.0F, std::sin(half_turn), std::cos(half_turn) }),
+      },
+      { "scale", json::array({ node.scale.x, node.scale.y, node.scale.z }) },
+    };
+    auto children = json::array();
+    for (size_t child = 0; child < nodes.size(); ++child) {
+      if (nodes.at(child).parent == node.name) {
+        children.push_back(child);
+      }
+    }
+    if (!children.empty()) {
+      entry["children"] = children;
+    }
+    const auto add_light = [&](json light) -> void {
+      light["color"] = json::array({ 0.8F, 0.7F, 0.6F });
+      entry["extensions"]["KHR_lights_punctual"]["light"] = lights.size();
+      lights.push_back(std::move(light));
+    };
+    switch (node.kind) {
+    case ParityKind::kEmpty:
+      break;
+    case ParityKind::kMesh:
+      entry["mesh"] = 0;
+      break;
+    case ParityKind::kCamera:
+      entry["camera"] = 0;
+      break;
+    case ParityKind::kSun:
+      add_light({ { "type", "directional" }, { "intensity", kParitySunLux } });
+      break;
+    case ParityKind::kLamp:
+      add_light({
+        { "type", "point" },
+        { "intensity", kParityFlux / (4.0F * std::numbers::pi_v<float>)},
+      });
+      break;
+    case ParityKind::kSpot: {
+      const auto inner = glm::radians(cone.inner_degrees) / 2.0F;
+      const auto outer = glm::radians(cone.outer_degrees) / 2.0F;
+      const auto profile
+        = oxygen::lighting::ResolveSpotConeProfile(inner, outer);
+      add_light({
+        { "type", "spot" },
+        { "intensity", profile ? kParityFlux / profile->solid_angle_sr : 1.0F },
+        {
+          "spot",
+          { { "innerConeAngle", inner }, { "outerConeAngle", outer } },
+        },
+      });
+      break;
+    }
+    }
+    written.push_back(std::move(entry));
+    if (node.parent.empty()) {
+      roots.push_back(i);
+    }
+  }
+  document["nodes"] = written;
+  document["scenes"][0]["nodes"] = roots;
+  document["extensions"]["KHR_lights_punctual"]["lights"] = lights;
+  return document;
+}
+
+//! A node of an imported model, found by name.
+struct ImportedNode {
+  std::string parent;
+  oxygen::data::NodeId id;
+  glm::mat4 world { 1.0F };
+};
+
+//! What two imports of the same model must agree on.
+struct ImportedModel {
+  std::map<std::string, ImportedNode, std::less<>> nodes;
+  std::vector<glm::vec3> world_vertices;
+  std::array<float, 4> base_color {};
+  oxygen::data::MaterialDomain domain {};
+  std::vector<PerspectiveCameraRecord> cameras;
+  std::vector<glm::mat4> camera_worlds;
+  std::vector<DirectionalLightRecord> suns;
+  std::vector<glm::mat4> sun_worlds;
+  std::vector<oxygen::data::pak::world::PointLightRecord> lamps;
+  std::vector<oxygen::data::pak::world::SpotLightRecord> spots;
+  std::vector<glm::mat4> spot_worlds;
+  oxygen::content::import::ImportReport report;
+};
+
+//! The file format of a model a test writes.
+enum class ModelFormat : uint8_t {
+  kGltf,
+  kFbx,
+};
+
+class ModelFormatsTest : public ModelValuesTest {
+protected:
+  //! The request of an import of `text`, written in `folder` as `format`, under
+  //! this test's one source identity: a node's ID derives from it and its
+  //! anchor.
+  auto MakeRequest(const std::string_view folder, const ModelFormat format,
+    const std::string_view text) -> oxygen::content::import::ImportRequest
+  {
+    const auto root = MakeTempDir(folder);
+    const auto source
+      = root / (format == ModelFormat::kFbx ? "model.fbx" : "model.gltf");
+    {
+      std::ofstream output(source, std::ios::binary);
+      output << text;
+    }
+    auto request = oxygen::content::import::ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.source_mount_path = oxygen::cooker::test::SourceMountPath(source);
+    request.cooked_root = root / "cooked";
+    request.options.coordinate.bake_transforms_into_meshes = false;
+    request.surface_provenance
+      = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
+        identity_);
+    return request;
+  }
+
+  auto ImportModel(oxygen::content::import::ImportRequest request)
+    -> ImportedModel
+  {
+    auto imported = ImportedModel {};
+    imported.report = RunImport(std::move(request)).report;
+    if (!imported.report.success) {
+      ADD_FAILURE() << "The import failed";
+      return imported;
+    }
+    LoadAndVerify(imported.report, [&](const CookedModel& model) -> void {
+      const auto& scene = *model.scene;
+      for (SceneNodeIndexT i = 0; i < scene.GetNodes().size(); ++i) {
+        const auto& node = scene.GetNode(i);
+        imported.nodes.emplace(std::string(scene.GetNodeName(node)),
+          ImportedNode {
+            .parent = node.parent_index == i
+              ? std::string {}
+              : std::string(
+                  scene.GetNodeName(scene.GetNode(node.parent_index))),
+            .id = node.node_id,
+            .world = WorldTransform(scene, i),
+          });
+      }
+      const auto renderables = scene.GetComponents<RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      const auto mesh_world
+        = WorldTransform(scene, renderables.front().node_index);
+      for (const auto& vertex : model.vertices) {
+        imported.world_vertices.emplace_back(
+          mesh_world * glm::vec4(vertex.position, 1.0F));
+      }
+      const auto color = model.material->GetBaseColor();
+      std::ranges::copy(color, imported.base_color.begin());
+      imported.domain = model.material->GetMaterialDomain();
+      for (const auto& camera :
+        scene.GetComponents<PerspectiveCameraRecord>()) {
+        imported.cameras.push_back(camera);
+        imported.camera_worlds.push_back(
+          WorldTransform(scene, camera.node_index));
+      }
+      for (const auto& sun : scene.GetComponents<DirectionalLightRecord>()) {
+        imported.suns.push_back(sun);
+        imported.sun_worlds.push_back(WorldTransform(scene, sun.node_index));
+      }
+      for (const auto& lamp :
+        scene.GetComponents<oxygen::data::pak::world::PointLightRecord>()) {
+        imported.lamps.push_back(lamp);
+      }
+      for (const auto& spot :
+        scene.GetComponents<oxygen::data::pak::world::SpotLightRecord>()) {
+        imported.spots.push_back(spot);
+        imported.spot_worlds.push_back(WorldTransform(scene, spot.node_index));
+      }
+    });
+    return imported;
+  }
+
+  //! Imports `nodes` once per format, in that order: glTF, FBX.
+  auto ImportBothFormats(const std::string_view label,
+    const std::vector<ParityNode>& nodes,
+    const oxygen::content::import::NodePruningPolicy pruning
+    = oxygen::content::import::NodePruningPolicy::kKeepAll,
+    const ParityCone cone = {}) -> std::array<ImportedModel, 2>
+  {
+    auto gltf = MakeRequest(std::string(label) + "_gltf", ModelFormat::kGltf,
+      ParityGltf(TestModelsDirFromFile(), nodes, cone).dump());
+    auto fbx = MakeRequest(
+      std::string(label) + "_fbx", ModelFormat::kFbx, ParityFbx(nodes, cone));
+    gltf.options.node_pruning = pruning;
+    fbx.options.node_pruning = pruning;
+    return { ImportModel(std::move(gltf)), ImportModel(std::move(fbx)) };
+  }
+
+  oxygen::Uuid identity_ = oxygen::Uuid::Generate();
+};
+
+auto ExpectSameTransform(const glm::mat4& actual, const glm::mat4& expected)
+  -> void
+{
+  for (glm::length_t column = 0; column < 4; ++column) {
+    ExpectVec3Near(glm::vec3(actual[column]), glm::vec3(expected[column]));
+  }
+}
+
+auto Origin(const glm::mat4& world) -> glm::vec3
+{
+  return { world * glm::vec4(0.0F, 0.0F, 0.0F, 1.0F) };
+}
+
+auto Forward(const glm::mat4& world) -> glm::vec3
+{
+  return glm::normalize(glm::mat3(world) * oxygen::space::node::Forward);
+}
+
+//! A model imports the same from either format: the same nodes under the same
+//! parents with the same IDs, at the same places, with the same values. No node
+//! exists for FBX's implicit scene root.
+NOLINT_TEST_F(ModelFormatsTest, SameModelImportsTheSameFromBothFormats)
+{
+  const auto [gltf, fbx] = ImportBothFormats("parity",
+    {
+      {
+        .name = "Group",
+        .translation = { 1.0F, 2.0F, 3.0F },
+        .scale = glm::vec3 { 2.0F },
+      },
+      {
+        .name = "Triangle",
+        .parent = "Group",
+        .kind = ParityKind::kMesh,
+        .translation = { 1.0F, 0.0F, 0.0F },
+      },
+      {
+        .name = "Lamp",
+        .parent = "Group",
+        .kind = ParityKind::kLamp,
+        .translation = { 0.0F, 1.0F, 0.0F },
+      },
+      {
+        .name = "View",
+        .kind = ParityKind::kCamera,
+        .translation = { 0.0F, 2.0F, 5.0F },
+      },
+      { .name = "Sun", .kind = ParityKind::kSun },
+      {
+        .name = "Beam",
+        .kind = ParityKind::kSpot,
+        .translation = { 3.0F, 0.0F, 0.0F },
+      },
+    });
+  ASSERT_FALSE(gltf.nodes.empty());
+
+  EXPECT_EQ(gltf.nodes.size(), fbx.nodes.size());
+  for (const auto& [name, node] : gltf.nodes) {
+    SCOPED_TRACE(name);
+    const auto found = fbx.nodes.find(name);
+    ASSERT_NE(found, fbx.nodes.end());
+    EXPECT_EQ(found->second.parent, node.parent);
+    EXPECT_EQ(found->second.id, node.id);
+    ExpectVec3Near(Origin(found->second.world), Origin(node.world));
+  }
+  EXPECT_FALSE(fbx.nodes.contains("root"));
+  EXPECT_TRUE(fbx.nodes.at("Group").parent.empty());
+  ExpectSameTransform(
+    fbx.nodes.at("Group").world, gltf.nodes.at("Group").world);
+  ExpectSameTransform(
+    fbx.nodes.at("Triangle").world, gltf.nodes.at("Triangle").world);
+  // Both could agree and be wrong: source (3,2,3), Y up, lands at (3,-3,2).
+  ExpectVec3Near(Origin(fbx.nodes.at("Triangle").world), { 3.0F, -3.0F, 2.0F });
+
+  ASSERT_EQ(fbx.world_vertices.size(), gltf.world_vertices.size());
+  for (const auto point : gltf.world_vertices) {
+    EXPECT_TRUE(std::ranges::any_of(
+      fbx.world_vertices, [&](const glm::vec3 other) -> bool {
+        return glm::distance(other, point) < 0.0001F;
+      }));
+  }
+  for (const auto& model : { std::cref(gltf), std::cref(fbx) }) {
+    const auto& color = model.get().base_color;
+    ExpectVec3Near({ color[0], color[1], color[2] }, { 0.8F, 0.2F, 0.1F });
+    EXPECT_FLOAT_EQ(color[3], 1.0F);
+  }
+
+  ASSERT_EQ(gltf.cameras.size(), 1U);
+  ASSERT_EQ(fbx.cameras.size(), 1U);
+  EXPECT_NEAR(fbx.cameras.front().fov_y, gltf.cameras.front().fov_y, 0.0001F);
+  EXPECT_NEAR(fbx.cameras.front().aspect_ratio,
+    gltf.cameras.front().aspect_ratio, 0.0001F);
+  EXPECT_NEAR(
+    fbx.cameras.front().near_plane, gltf.cameras.front().near_plane, 0.0001F);
+  EXPECT_NEAR(
+    fbx.cameras.front().far_plane, gltf.cameras.front().far_plane, 0.0001F);
+  ExpectVec3Near(
+    Forward(fbx.camera_worlds.front()), Forward(gltf.camera_worlds.front()));
+
+  ASSERT_EQ(gltf.suns.size(), 1U);
+  ASSERT_EQ(fbx.suns.size(), 1U);
+  EXPECT_NEAR(gltf.suns.front().intensity_lux, kParitySunLux, 0.001F);
+  EXPECT_NEAR(fbx.suns.front().intensity_lux, kParitySunLux, 0.001F);
+  ExpectVec3Near(
+    Forward(fbx.sun_worlds.front()), Forward(gltf.sun_worlds.front()));
+
+  ASSERT_EQ(gltf.lamps.size(), 1U);
+  ASSERT_EQ(fbx.lamps.size(), 1U);
+  EXPECT_NEAR(gltf.lamps.front().luminous_flux_lm, kParityFlux, 0.001F);
+  EXPECT_NEAR(fbx.lamps.front().luminous_flux_lm, kParityFlux, 0.001F);
+  // Neither file states a range, so both take the same policy.
+  EXPECT_FLOAT_EQ(gltf.lamps.front().range, 4096.0F);
+  EXPECT_FLOAT_EQ(fbx.lamps.front().range, 4096.0F);
+
+  ASSERT_EQ(gltf.spots.size(), 1U);
+  ASSERT_EQ(fbx.spots.size(), 1U);
+  EXPECT_NEAR(gltf.spots.front().luminous_flux_lm, kParityFlux, 0.001F);
+  EXPECT_NEAR(fbx.spots.front().luminous_flux_lm, kParityFlux, 0.001F);
+  EXPECT_FLOAT_EQ(gltf.spots.front().range, 4096.0F);
+  EXPECT_FLOAT_EQ(fbx.spots.front().range, 4096.0F);
+  EXPECT_NEAR(fbx.spots.front().inner_cone_angle_radians,
+    gltf.spots.front().inner_cone_angle_radians, 0.0001F);
+  EXPECT_NEAR(fbx.spots.front().outer_cone_angle_radians,
+    gltf.spots.front().outer_cone_angle_radians, 0.0001F);
+  ExpectVec3Near(
+    Forward(fbx.spot_worlds.front()), Forward(gltf.spot_worlds.front()));
+}
+
+//! A dropped parent takes nothing with it, in either format: a node with no
+//! kept ancestor becomes a root where the source placed it.
+NOLINT_TEST_F(ModelFormatsTest, PruningWithNoKeptAncestorKeepsTheWorldTransform)
+{
+  const auto models = ImportBothFormats("prune_root",
+    {
+      {
+        .name = "Mover",
+        .translation = { 5.0F, 0.0F, 0.0F },
+      },
+      {
+        .name = "Triangle",
+        .parent = "Mover",
+        .kind = ParityKind::kMesh,
+        .translation = { 0.0F, 1.0F, 0.0F },
+      },
+    },
+    oxygen::content::import::NodePruningPolicy::kDropEmptyNodes);
+  for (const auto& model : models) {
+    ASSERT_TRUE(model.nodes.contains("Triangle"));
+    EXPECT_FALSE(model.nodes.contains("Mover"));
+    EXPECT_TRUE(model.nodes.at("Triangle").parent.empty());
+    ExpectVec3Near(
+      Origin(model.nodes.at("Triangle").world), { 5.0F, 0.0F, 1.0F });
+  }
+}
+
+//! A kept parent the node's transform can sit under takes it; a rotated one
+//! cannot, and the node becomes a root with a warning. Neither moves the node.
+NOLINT_TEST_F(ModelFormatsTest, PruningUnderAKeptAncestorKeepsTheWorldTransform)
+{
+  using oxygen::content::import::NodePruningPolicy;
+  using oxygen::content::import::import_codes::kScenePruningReparentSkipped;
+  const auto nodes = [](const float rotation_z) -> std::vector<ParityNode> {
+    return {
+      {
+        .name = "Base",
+        .kind = ParityKind::kLamp,
+        .translation = { 1.0F, 0.0F, 0.0F },
+        .rotation_z_degrees = rotation_z,
+      },
+      {
+        .name = "Spacer",
+        .parent = "Base",
+        .translation = { 0.0F, 2.0F, 0.0F },
+      },
+      {
+        .name = "Triangle",
+        .parent = "Spacer",
+        .kind = ParityKind::kMesh,
+        .translation = { 0.0F, 0.0F, 1.0F },
+      },
+    };
+  };
+  const auto kept = ImportBothFormats(
+    "prune_kept", nodes(0.0F), NodePruningPolicy::kDropEmptyNodes);
+  const auto turned = ImportBothFormats(
+    "prune_turned", nodes(90.0F), NodePruningPolicy::kDropEmptyNodes);
+  const auto turned_all = ImportBothFormats("prune_turned_all", nodes(90.0F));
+  for (size_t format = 0; format < kept.size(); ++format) {
+    SCOPED_TRACE(format);
+    ASSERT_TRUE(kept.at(format).nodes.contains("Triangle"));
+    EXPECT_EQ(kept.at(format).nodes.at("Triangle").parent, "Base");
+    EXPECT_FALSE(Reports(kept.at(format).report, kScenePruningReparentSkipped));
+    // Source (1,2,1), Y up.
+    ExpectVec3Near(Origin(kept.at(format).nodes.at("Triangle").world),
+      { 1.0F, -1.0F, 2.0F });
+
+    ASSERT_TRUE(turned.at(format).nodes.contains("Triangle"));
+    EXPECT_TRUE(turned.at(format).nodes.at("Triangle").parent.empty());
+    EXPECT_TRUE(Warns(
+      turned.at(format).report, kScenePruningReparentSkipped, "Triangle"));
+    ExpectSameTransform(turned.at(format).nodes.at("Triangle").world,
+      turned_all.at(format).nodes.at("Triangle").world);
+    // The lamp's own frame turns none of its children: source (-1,0,1), Y up.
+    ExpectVec3Near(Origin(turned_all.at(format).nodes.at("Triangle").world),
+      { -1.0F, -1.0F, 0.0F });
+  }
+}
+
+//! Two angles that form no cone drop the light with a warning in either format,
+//! and leave no node behind for it. The model still imports.
+NOLINT_TEST_F(ModelFormatsTest, SpotWithNoConeIsDroppedAndLeavesNoNode)
+{
+  using oxygen::content::import::import_codes::kSceneLightPhotometryInvalid;
+  const auto models = ImportBothFormats("bad_cone",
+    {
+      { .name = "Triangle", .kind = ParityKind::kMesh },
+      { .name = "Beam", .kind = ParityKind::kSpot },
+    },
+    oxygen::content::import::NodePruningPolicy::kKeepAll,
+    ParityCone { .inner_degrees = 60.0F, .outer_degrees = 40.0F });
+  for (const auto& model : models) {
+    EXPECT_TRUE(model.report.success);
+    EXPECT_TRUE(model.spots.empty());
+    EXPECT_TRUE(Warns(model.report, kSceneLightPhotometryInvalid, "Beam"));
+    EXPECT_TRUE(model.nodes.contains("Beam"));
+    EXPECT_FALSE(model.nodes.contains("Beam_Light"));
+  }
+}
+
+//! An FBX light's flux follows its intensity all the way: a light once brighter
+//! than the old threshold must not import dimmer than a weaker one.
+NOLINT_TEST_F(ModelFormatsTest, FbxLightFluxIsProportionalToIntensity)
+{
+  auto text = ParityFbx({
+    { .name = "Triangle", .kind = ParityKind::kMesh },
+    { .name = "Lamp", .kind = ParityKind::kLamp },
+  });
+  const auto stated
+    = std::string { R"("Intensity", "double", "Number", "",100)" };
+  const auto at = text.find(stated);
+  ASSERT_NE(at, std::string::npos);
+  text.replace(
+    at, stated.size(), R"("Intensity", "double", "Number", "",2000)");
+  const auto model = ImportModel(MakeRequest("flux", ModelFormat::kFbx, text));
+  ASSERT_EQ(model.lamps.size(), 1U);
+  EXPECT_NEAR(model.lamps.front().luminous_flux_lm, 20.0F * kParityFlux, 0.01F);
+}
+
+//! A lamp model with `properties` added to its light, in a file of
+//! `unit_factor` centimeters per unit.
+auto LampFbx(const std::string_view properties, const int unit_factor = 100)
+  -> std::string
+{
+  auto text = ParityFbx({
+    { .name = "Triangle", .kind = ParityKind::kMesh },
+    { .name = "Lamp", .kind = ParityKind::kLamp },
+  });
+  const auto intensity
+    = std::string { R"(P: "Intensity", "double", "Number", "",100)" };
+  text.insert(
+    text.find(intensity) + intensity.size(), "\n" + std::string(properties));
+  const auto units
+    = std::string { R"("UnitScaleFactor", "double", "Number", "",100)" };
+  text.replace(text.find(units), units.size(),
+    R"("UnitScaleFactor", "double", "Number", "",)"
+      + std::to_string(unit_factor));
+  return text;
+}
+
+//! An enabled far attenuation is the FBX light's stated range, in the file's
+//! units; the option covers only a light that states none.
+NOLINT_TEST_F(ModelFormatsTest, FbxFarAttenuationIsTheLightsRange)
+{
+  constexpr auto kFarAttenuation
+    = R"(P: "EnableFarAttenuation", "bool", "", "",1
+         P: "FarAttenuationEnd", "double", "Number", "",500)";
+  const auto meters = ImportModel(
+    MakeRequest("far_meters", ModelFormat::kFbx, LampFbx(kFarAttenuation)));
+  ASSERT_EQ(meters.lamps.size(), 1U);
+  EXPECT_NEAR(meters.lamps.front().range, 500.0F, 0.01F);
+
+  const auto centimeters = ImportModel(MakeRequest(
+    "far_centimeters", ModelFormat::kFbx, LampFbx(kFarAttenuation, 1)));
+  ASSERT_EQ(centimeters.lamps.size(), 1U);
+  EXPECT_NEAR(centimeters.lamps.front().range, 5.0F, 0.001F);
+
+  const auto disabled = ImportModel(MakeRequest("far_disabled",
+    ModelFormat::kFbx, LampFbx(R"(P: "EnableFarAttenuation", "bool", "", "",0
+               P: "FarAttenuationEnd", "double", "Number", "",500)")));
+  ASSERT_EQ(disabled.lamps.size(), 1U);
+  EXPECT_FLOAT_EQ(disabled.lamps.front().range, 4096.0F);
+
+  auto request = MakeRequest("omitted_option", ModelFormat::kFbx, LampFbx({}));
+  request.options.omitted_light_range_m = 64.0F;
+  const auto chosen = ImportModel(std::move(request));
+  ASSERT_EQ(chosen.lamps.size(), 1U);
+  EXPECT_FLOAT_EQ(chosen.lamps.front().range, 64.0F);
+}
+
+//! Oxygen has one falloff. A file that chose another decay learns its light
+//! will differ; quadratic is that falloff, and a file that states none never
+//! chose.
+NOLINT_TEST_F(ModelFormatsTest, FbxDecayOtherThanQuadraticWarns)
+{
+  using oxygen::content::import::import_codes::kFbxLightDecayUnsupported;
+  const auto import_with
+    = [&](const std::string_view label,
+        const std::string_view properties) -> ImportedModel {
+    return ImportModel(
+      MakeRequest(label, ModelFormat::kFbx, LampFbx(properties)));
+  };
+  for (const auto [label, decay] : {
+         std::pair { "decay_none", 0 },
+         std::pair { "decay_linear", 1 },
+         std::pair { "decay_cubic", 3 },
+       }) {
+    SCOPED_TRACE(label);
+    const auto model = import_with(
+      label, R"(P: "DecayType", "enum", "", "",)" + std::to_string(decay));
+    EXPECT_TRUE(Warns(model.report, kFbxLightDecayUnsupported, "Lamp"));
+    EXPECT_EQ(model.lamps.size(), 1U);
+  }
+  EXPECT_FALSE(Reports(
+    import_with("decay_quadratic", R"(P: "DecayType", "enum", "", "",2)")
+      .report,
+    kFbxLightDecayUnsupported));
+  EXPECT_FALSE(Reports(
+    import_with("decay_unstated", {}).report, kFbxLightDecayUnsupported));
+}
+
+//! A node that ignores its parent's scale keeps its own, whether the parent's
+//! scale is uniform, which a compensating scale undoes, or not, which takes a
+//! helper node. The helper changes no node's identity.
+NOLINT_TEST_F(ModelFormatsTest, FbxInheritModesPlaceNodesAsAuthored)
+{
+  const auto import_with = [&](const std::string_view label,
+                             const glm::vec3 parent_scale) -> ImportedModel {
+    auto objects = FbxTriangleGeometry() + FbxMaterial();
+    const auto model = [&](const int id, const std::string_view name,
+                         const glm::vec3 translation, const glm::vec3 scale,
+                         const std::string_view extra) -> std::string {
+      auto text = "    Model: " + std::to_string(id)
+        + ", \"Model::" + std::string(name)
+        + "\", \"Mesh\" {\n        Version: 232\n" + "        Properties70: {\n"
+        + FbxVector3("Lcl Translation", translation)
+        + FbxVector3("Lcl Scaling", scale);
+      text += extra;
+      text += "        }\n    }\n";
+      return text;
+    };
+    objects += model(2000, "Parent", glm::vec3 { 0.0F }, parent_scale, {});
+    objects
+      += model(2001, "Compensated", { 1.0F, 0.0F, 0.0F }, glm::vec3 { 1.0F },
+        "            P: \"InheritType\", \"enum\", \"\", \"\",2\n");
+    objects
+      += model(2002, "Plain", { 1.0F, 0.0F, 0.0F }, glm::vec3 { 1.0F }, {});
+    return ImportModel(MakeRequest(label, ModelFormat::kFbx,
+      FbxFile(objects,
+        "    C: \"OO\",2000,0\n    C: \"OO\",2001,2000\n"
+        "    C: \"OO\",2002,2000\n    C: \"OO\",1001,2001\n"
+        "    C: \"OO\",1003,2001\n")));
+  };
+  const auto uniform = import_with("inherit_uniform", glm::vec3 { 2.0F });
+  const auto uneven = import_with("inherit_uneven", { 2.0F, 3.0F, 4.0F });
+
+  const auto scale_x = [](const glm::mat4& world) -> float {
+    return glm::length(glm::vec3(world[0]));
+  };
+  for (const auto& model : { std::cref(uniform), std::cref(uneven) }) {
+    const auto& nodes = model.get().nodes;
+    ASSERT_TRUE(nodes.contains("Compensated"));
+    ASSERT_TRUE(nodes.contains("Plain"));
+    EXPECT_NEAR(scale_x(nodes.at("Compensated").world), 1.0F, 0.0001F);
+    EXPECT_NEAR(scale_x(nodes.at("Plain").world), 2.0F, 0.0001F);
+    // The parent's scale still moves a child that ignores it.
+    ExpectVec3Near(Origin(nodes.at("Compensated").world), { 2.0F, 0.0F, 0.0F });
+    ExpectVec3Near(Origin(nodes.at("Plain").world), { 2.0F, 0.0F, 0.0F });
+  }
+  EXPECT_EQ(uniform.nodes.at("Plain").id, uneven.nodes.at("Plain").id);
+  EXPECT_EQ(
+    uniform.nodes.at("Compensated").id, uneven.nodes.at("Compensated").id);
+}
+
+//! A classic FBX material states transparency as a factor of a colour. Opacity
+//! under 1 blends; the common spellings of an opaque material stay opaque, and
+//! one that claims to be fully invisible warns and stays opaque.
+NOLINT_TEST_F(ModelFormatsTest, FbxOpacityReachesTheMaterial)
+{
+  using oxygen::content::import::import_codes::kFbxMaterialFullyTransparent;
+  using oxygen::data::MaterialDomain;
+  const auto transparency = [](const std::string_view factor,
+                              const std::string_view color) -> std::string {
+    return R"(            P: "TransparencyFactor", "Number", "", "A",)"
+      + std::string(factor)
+      + "\n            P: \"TransparentColor\", \"Color\", \"\", \"A\","
+      + std::string(color) + "\n";
+  };
+  const auto import_with = [&](const std::string_view label,
+                             const std::string& properties) -> ImportedModel {
+    return ImportModel(MakeRequest(label, ModelFormat::kFbx,
+      FbxFile(FbxTriangleGeometry() + FbxMaterial(properties)
+          + "    Model: 2000, \"Model::Triangle\", \"Mesh\" {\n"
+            "        Version: 232\n    }\n",
+        "    C: \"OO\",2000,0\n    C: \"OO\",1001,2000\n"
+        "    C: \"OO\",1003,2000\n")));
+  };
+
+  const auto glass = import_with("glass", transparency("0.25", "1,1,1"));
+  EXPECT_NEAR(glass.base_color[3], 0.75F, 0.0001F);
+  EXPECT_EQ(glass.domain, MaterialDomain::kAlphaBlended);
+  EXPECT_NEAR(glass.base_color[0], 0.8F, 0.0001F);
+
+  const auto stated_opaque
+    = import_with("stated_opaque", transparency("1", "0,0,0"));
+  EXPECT_FLOAT_EQ(stated_opaque.base_color[3], 1.0F);
+  EXPECT_EQ(stated_opaque.domain, MaterialDomain::kOpaque);
+  EXPECT_FALSE(Reports(stated_opaque.report, kFbxMaterialFullyTransparent));
+
+  const auto silent = import_with("silent", {});
+  EXPECT_FLOAT_EQ(silent.base_color[3], 1.0F);
+  EXPECT_EQ(silent.domain, MaterialDomain::kOpaque);
+
+  const auto invisible = import_with("invisible", transparency("1", "1,1,1"));
+  EXPECT_FLOAT_EQ(invisible.base_color[3], 1.0F);
+  EXPECT_EQ(invisible.domain, MaterialDomain::kOpaque);
+  EXPECT_TRUE(Warns(invisible.report, kFbxMaterialFullyTransparent, "Scalar"));
+}
+
+//! A chosen up axis reads the file as right-handed. A left-handed file then
+//! imports mirrored, which only the warning can tell the author; its own axes
+//! import it correctly.
+NOLINT_TEST_F(ModelFormatsTest, ChosenUpAxisWarnsThatItMirrorsALeftHandedFile)
+{
+  using oxygen::content::import::SourceUpAxis;
+  using oxygen::content::import::import_codes::kFbxLeftHandedAxesReplaced;
+  const auto objects = FbxTriangleGeometry() + FbxMaterial()
+    + "    Model: 2000, \"Model::Triangle\", \"Mesh\" {\n"
+      "        Version: 232\n    }\n";
+  const auto connections = std::string {
+    "    C: \"OO\",2000,0\n    C: \"OO\",1001,2000\n    C: \"OO\",1003,2000\n"
+  };
+  const auto import_with = [&](const std::string_view label, const int sign,
+                             const SourceUpAxis up) -> ImportedModel {
+    auto request = MakeRequest(
+      label, ModelFormat::kFbx, FbxFile(objects, connections, sign));
+    request.options.coordinate.up_axis = up;
+    return ImportModel(std::move(request));
+  };
+  EXPECT_TRUE(Reports(import_with("left_chosen", -1, SourceUpAxis::kY).report,
+    kFbxLeftHandedAxesReplaced));
+  EXPECT_FALSE(
+    Reports(import_with("left_own", -1, SourceUpAxis::kFromFile).report,
+      kFbxLeftHandedAxesReplaced));
+  EXPECT_FALSE(Reports(import_with("right_chosen", 1, SourceUpAxis::kY).report,
+    kFbxLeftHandedAxesReplaced));
+}
+
+//! Bad faces are counted, not reported one by one, and a face with no triangles
+//! leaves nothing behind. A mesh that binds no material has nothing to warn of.
+NOLINT_TEST_F(ModelFormatsTest, FbxBadFacesWarnOnceAndNoMaterialIsNotADefect)
+{
+  using oxygen::content::import::import_codes::kMeshFaceMaterialMissing;
+  using oxygen::content::import::import_codes::kMeshInvalidFace;
+  const auto imported = RunImport(MakeRequest("bad_faces", ModelFormat::kFbx,
+    FbxFile("    Geometry: 1001, \"Geometry::Triangle\", \"Mesh\" {\n"
+            "        Vertices: *9 { a: 0,0,0,1,0,0,0,1,0 }\n"
+            "        PolygonVertexIndex: *7 { a: 0,-2,0,1,-3,1,-3 }\n    }\n"
+            "    Model: 2000, \"Model::Triangle\", \"Mesh\" {\n"
+            "        Version: 232\n    }\n",
+      "    C: \"OO\",2000,0\n    C: \"OO\",1001,2000\n")));
+  ASSERT_TRUE(imported.report.success);
+  const auto invalid = std::ranges::count_if(
+    imported.report.diagnostics, [](const auto& diagnostic) -> bool {
+      return diagnostic.code == kMeshInvalidFace;
+    });
+  EXPECT_EQ(invalid, 1);
+  EXPECT_FALSE(Reports(imported.report, kMeshFaceMaterialMissing));
+}
+
+//! glTF's own defaults hold where the engine's differ: an RGB colour attribute
+//! is opaque, a material with no PBR block is metallic and rough, and the
+//! lowest UV set is the first whatever the file's order.
+NOLINT_TEST_F(ModelFormatsTest, GltfDefaultsAreGltfs)
+{
+  using nlohmann::json;
+  namespace test = oxygen::content::import::test;
+  auto bytes = std::vector<unsigned char> {};
+  const auto add = [&](const auto& values) -> std::size_t {
+    return test::AppendAligned(bytes, std::as_bytes(std::span(values)));
+  };
+  const auto positions
+    = std::array { 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F };
+  const auto colors
+    = std::array { 0.5F, 0.5F, 0.5F, 0.5F, 0.5F, 0.5F, 0.5F, 0.5F, 0.5F };
+  const auto uv_first = std::array { 0.25F, 0.25F, 0.25F, 0.25F, 0.25F, 0.25F };
+  const auto uv_second
+    = std::array { 0.75F, 0.75F, 0.75F, 0.75F, 0.75F, 0.75F };
+  auto views = json::array();
+  auto accessors = json::array();
+  const auto describe = [&](const std::size_t offset, const std::size_t size,
+                          const std::string_view type) -> void {
+    views.push_back(
+      { { "buffer", 0 }, { "byteOffset", offset }, { "byteLength", size } });
+    accessors.push_back({
+      { "bufferView", views.size() - 1 },
+      { "componentType", 5126 },
+      { "type", type },
+      { "count", 3 },
+    });
+  };
+  describe(add(positions), sizeof(positions), "VEC3");
+  describe(add(colors), sizeof(colors), "VEC3");
+  describe(add(uv_first), sizeof(uv_first), "VEC2");
+  describe(add(uv_second), sizeof(uv_second), "VEC2");
+  const auto document = json {
+    { "asset", { { "version", "2.0" } } },
+    {
+      "buffers",
+      json::array({
+        {
+          { "byteLength", bytes.size() },
+          { "uri", test::DataUri(bytes) },
+        },
+      }),
+    },
+    { "bufferViews", views },
+    { "accessors", accessors },
+    { "materials", json::array({ { { "name", "Paint" } } }) },
+    {
+      "meshes",
+      json::array({
+        {
+          { "name", "Triangle" },
+          {
+            "primitives",
+            json::array({
+              {
+                {
+                  "attributes",
+                  {
+                    { "POSITION", 0 },
+                    { "COLOR_0", 1 },
+                    { "TEXCOORD_1", 3 },
+                    { "TEXCOORD_0", 2 },
+                  },
+                },
+                { "material", 0 },
+              },
+            }),
+          },
+        },
+      }),
+    },
+    { "nodes", json::array({ { { "name", "Triangle" }, { "mesh", 0 } } }) },
+    { "scenes", json::array({ { { "nodes", json::array({ 0 }) } } }) },
+    { "scene", 0 },
+  };
+  const auto imported = RunImport(
+    MakeRequest("gltf_defaults", ModelFormat::kGltf, document.dump()));
+  ASSERT_TRUE(imported.report.success);
+  LoadAndVerify(imported.report, [](const CookedModel& model) -> void {
+    ASSERT_FALSE(model.vertices.empty());
+    for (const auto& vertex : model.vertices) {
+      EXPECT_NEAR(vertex.color.r, 0.5F, 0.0001F);
+      EXPECT_FLOAT_EQ(vertex.color.a, 1.0F);
+      EXPECT_NEAR(vertex.texcoord.x, 0.25F, 0.0001F);
+    }
+    EXPECT_NEAR(model.material->GetMetalness(), 1.0F, 0.001F);
+    EXPECT_NEAR(model.material->GetRoughness(), 1.0F, 0.001F);
+  });
+}
+
+//! In glTF, a skin without inverse bind matrices means identity matrices: the
+//! mesh stays skinned. Dropping a skin always warns.
+NOLINT_TEST_F(ModelFormatsTest, GltfSkinWithoutInverseBindMatricesStaysSkinned)
+{
+  using nlohmann::json;
+  using oxygen::content::import::import_codes::kMeshMissingInverseBind;
+  namespace test = oxygen::content::import::test;
+  auto bytes = std::vector<unsigned char> {};
+  const auto positions
+    = std::array { 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F };
+  const auto weights = std::array {
+    1.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+    1.0F,
+    0.0F,
+    0.0F,
+    0.0F,
+  };
+  const auto joints = std::array<unsigned char, 12> {};
+  const auto positions_at
+    = test::AppendAligned(bytes, std::as_bytes(std::span(positions)));
+  const auto weights_at
+    = test::AppendAligned(bytes, std::as_bytes(std::span(weights)));
+  const auto joints_at
+    = test::AppendAligned(bytes, std::as_bytes(std::span(joints)));
+  const auto document = json {
+    { "asset", { { "version", "2.0" } } },
+    {
+      "buffers",
+      json::array({
+        {
+          { "byteLength", bytes.size() },
+          { "uri", test::DataUri(bytes) },
+        },
+      }),
+    },
+    {
+      "bufferViews",
+      json::array({
+        {
+          { "buffer", 0 },
+          { "byteOffset", positions_at },
+          { "byteLength", sizeof(positions) },
+        },
+        {
+          { "buffer", 0 },
+          { "byteOffset", weights_at },
+          { "byteLength", sizeof(weights) },
+        },
+        {
+          { "buffer", 0 },
+          { "byteOffset", joints_at },
+          { "byteLength", sizeof(joints) },
+        },
+      }),
+    },
+    {
+      "accessors",
+      json::array({
+        {
+          { "bufferView", 0 },
+          { "componentType", 5126 },
+          { "type", "VEC3" },
+          { "count", 3 },
+        },
+        {
+          { "bufferView", 1 },
+          { "componentType", 5126 },
+          { "type", "VEC4" },
+          { "count", 3 },
+        },
+        {
+          { "bufferView", 2 },
+          { "componentType", 5121 },
+          { "type", "VEC4" },
+          { "count", 3 },
+        },
+      }),
+    },
+    { "materials", json::array({ { { "name", "Paint" } } }) },
+    {
+      "meshes",
+      json::array({
+        {
+          { "name", "Triangle" },
+          {
+            "primitives",
+            json::array({
+              {
+                {
+                  "attributes",
+                  { { "POSITION", 0 }, { "WEIGHTS_0", 1 }, { "JOINTS_0", 2 } },
+                },
+                { "material", 0 },
+              },
+            }),
+          },
+        },
+      }),
+    },
+    { "skins", json::array({ { { "joints", json::array({ 1 }) } } }) },
+    {
+      "nodes",
+      json::array({
+        { { "name", "Triangle" }, { "mesh", 0 }, { "skin", 0 } },
+        { { "name", "Bone" } },
+      }),
+    },
+    { "scenes", json::array({ { { "nodes", json::array({ 0, 1 }) } } }) },
+    { "scene", 0 },
+  };
+  const auto imported
+    = RunImport(MakeRequest("gltf_skin", ModelFormat::kGltf, document.dump()));
+  EXPECT_TRUE(imported.report.success);
+  EXPECT_FALSE(Reports(imported.report, kMeshMissingInverseBind));
 }
 
 } // namespace

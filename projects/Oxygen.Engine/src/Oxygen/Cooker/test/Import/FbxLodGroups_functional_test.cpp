@@ -280,7 +280,7 @@ NOLINT_TEST_F(FbxLodGroupsTest, LodGroupIsOneGeometryWithALodPerChild)
   EXPECT_GE(geometry.bounds_max.z, 5.0F)
     << "LOD1 keeps its level's translation";
   EXPECT_EQ(imported.renderable_count, 1U);
-  EXPECT_EQ(imported.node_count, 2U) << "the root and the group's node";
+  EXPECT_EQ(imported.node_count, 1U) << "the group's node";
   EXPECT_EQ(Count(imported.diagnostics,
               oxygen::content::import::import_codes::kFbxLodLevelSkipped),
     0U);
@@ -344,7 +344,7 @@ NOLINT_TEST_F(FbxLodGroupsTest, NamedSiblingsAreOneGeometryShownByLod0)
   ASSERT_EQ(imported.geometries.size(), 1U);
   EXPECT_EQ(imported.geometries.front().lod_count, 3U);
   EXPECT_EQ(imported.renderable_count, 1U);
-  EXPECT_EQ(imported.node_count, 2U) << "the root and Rock_LOD0";
+  EXPECT_EQ(imported.node_count, 1U) << "Rock_LOD0";
 }
 
 //! A group keeps its levels up to the first unusable one and reports each
@@ -374,7 +374,7 @@ NOLINT_TEST_F(FbxLodGroupsTest, LevelsAfterAnUnusableOneAreReportedAndSkipped)
               oxygen::content::import::import_codes::kFbxLodLevelSkipped),
     2U);
   EXPECT_EQ(imported.renderable_count, 1U);
-  EXPECT_EQ(imported.node_count, 2U);
+  EXPECT_EQ(imported.node_count, 1U);
 }
 
 } // namespace

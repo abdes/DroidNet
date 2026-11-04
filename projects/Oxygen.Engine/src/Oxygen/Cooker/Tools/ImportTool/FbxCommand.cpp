@@ -231,6 +231,16 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .StoreTo(&options_.light_intensity_scale)
         .Build();
 
+  auto omitted_light_range
+    = Option::WithKey("omitted-light-range")
+        .About(
+          fmt::format("Range in meters for lights without a range (default {})",
+            ImportOptions::kDefaultOmittedLightRangeM))
+        .Long("omitted-light-range")
+        .WithValue<float>()
+        .StoreTo(&options_.omitted_light_range_m)
+        .Build();
+
   auto max_texture_size
     = Option::WithKey("max-texture-size")
         .About("Largest stored texture width or height (default: source size)")
@@ -273,6 +283,7 @@ auto FbxCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(no_import_lights))
     .WithOption(std::move(no_import_cameras))
     .WithOption(std::move(light_intensity_scale))
+    .WithOption(std::move(omitted_light_range))
     .WithOption(std::move(max_texture_size))
     .WithOption(std::move(up_axis));
 }

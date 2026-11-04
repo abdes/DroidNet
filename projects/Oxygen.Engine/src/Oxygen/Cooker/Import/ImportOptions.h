@@ -410,8 +410,8 @@ struct LodGenerationOptions final {
  belong in the domain's descriptor payload, not here.
 */
 struct ImportOptions final {
-  //! Range of a glTF local light with no authored range, in meters.
-  static constexpr float kDefaultGltfOmittedLightRangeM = 4096.0F;
+  //! Range of a local light with no authored range, in meters.
+  static constexpr float kDefaultOmittedLightRangeM = 4096.0F;
   //! Factor on every imported light's intensity.
   static constexpr float kDefaultLightIntensityScale = 1.0F;
   //! Largest angle, in degrees, between faces that share a smoothed normal.
@@ -419,10 +419,11 @@ struct ImportOptions final {
 
   CoordinateConversionPolicy coordinate = {};
 
-  //! Finite support for glTF local lights with no authored range, in meters.
-  //! Explicit source ranges are preserved. This is an import approximation of
-  //! glTF's unbounded influence, independent of intensity, exposure and scene.
-  float gltf_omitted_light_range_m = kDefaultGltfOmittedLightRangeM;
+  //! Finite support for local lights with no authored range, in meters, from
+  //! either model format. Explicit source ranges are preserved. This is an
+  //! import approximation of an unbounded influence, independent of intensity,
+  //! exposure and scene.
+  float omitted_light_range_m = kDefaultOmittedLightRangeM;
 
   //! The glTF scene that becomes the model scene: a scene's name, or `#N` for
   //! the scene at index N. Empty selects the default scene, else the first.

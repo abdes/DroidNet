@@ -173,16 +173,16 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     return std::nullopt;
   }
 
-  if (!std::isfinite(settings.gltf_omitted_light_range_m)
-    || settings.gltf_omitted_light_range_m <= 0.0F
-    || !std::isfinite(1.0F / settings.gltf_omitted_light_range_m)) {
+  if (!std::isfinite(settings.omitted_light_range_m)
+    || settings.omitted_light_range_m <= 0.0F
+    || !std::isfinite(1.0F / settings.omitted_light_range_m)) {
     RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
       "omitted light range must be finite and positive",
-      "/gltf_omitted_light_range_m");
+      "/omitted_light_range_m");
     return std::nullopt;
   }
   auto options = request.options;
-  options.gltf_omitted_light_range_m = settings.gltf_omitted_light_range_m;
+  options.omitted_light_range_m = settings.omitted_light_range_m;
   options.gltf_scene = settings.gltf_scene;
   options.import_lights = settings.import_lights;
   options.import_cameras = settings.import_cameras;

@@ -964,7 +964,7 @@ auto ModelImportRecord::MakeSettings(const SceneImportSettings& settings)
       },
     },
     { "bake_transforms", settings.bake_transforms },
-    { "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m },
+    { "omitted_light_range_m", settings.omitted_light_range_m },
     { "import_lights", settings.import_lights },
     { "import_cameras", settings.import_cameras },
     { "light_intensity_scale", settings.light_intensity_scale },

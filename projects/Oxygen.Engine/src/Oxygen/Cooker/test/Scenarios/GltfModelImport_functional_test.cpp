@@ -806,7 +806,7 @@ NOLINT_TEST_F(
     request.source_mount_path
       = oxygen::cooker::test::SourceMountPath(request.source_path);
     request.cooked_root = root / "cooked";
-    request.options.gltf_omitted_light_range_m = fallback;
+    request.options.omitted_light_range_m = fallback;
     const auto imported = RunImport(std::move(request));
     ASSERT_TRUE(imported.report.success);
     const auto scene = LoadCameraScene(imported.report);

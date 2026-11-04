@@ -210,15 +210,23 @@ Oxygen defaults imported lights to casting shadows. Supported
 precedence over light overrides. Missing overrides do not disable shadows;
 source node names do not change light types or shadow eligibility.
 
-The glTF adapter preserves explicit positive source ranges. When the source omits
-range, the importer uses a configurable **4,096 m** finite fallback, approved on
-2026-09-24. `ImportOptions::gltf_omitted_light_range_m`, the manifest field of the
-same name and ImportTool's `gltf --omitted-light-range` select this value. The
-fallback is in Oxygen meters; explicit source ranges follow import unit conversion.
-Neither node scale, source intensity nor camera exposure changes the chosen range.
-Zero, negative, nonfinite and unrepresentable explicit ranges are rejected.
+Both model adapters preserve explicit positive source ranges: glTF's `range`, and
+FBX's `FarAttenuationEnd` when `EnableFarAttenuation` is set. When the source
+states none, the importer uses a configurable **4,096 m** finite fallback, approved
+on 2026-09-24. `ImportOptions::omitted_light_range_m`, the manifest field of the
+same name and ImportTool's `--omitted-light-range`, on both its `gltf` and `fbx`
+commands, select this value. The fallback is in Oxygen meters; explicit source
+ranges follow import unit conversion. Neither node scale, source intensity nor
+camera exposure changes the chosen range. Zero, negative, nonfinite and
+unrepresentable explicit ranges are rejected.
 
-This is an explicit approximation of glTF's unbounded inverse-square influence.
+Oxygen has one falloff, so an FBX light's `DecayType` has no property to reach. A
+file that states anything but quadratic decay imports with the warning
+`fbx.light.decay_unsupported`; a file that states none imports silently, since it
+never chose one. Intensity does not compensate: no single scale matches another
+curve at every distance.
+
+This is an explicit approximation of an unbounded inverse-square influence.
 A large bounded radius retains distant contributions while keeping finite bounds
 and projections in the existing renderer. It can increase cluster overlap and
 shadow coverage, so imported lights remain editable after conversion. Godot uses

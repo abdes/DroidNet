@@ -20,7 +20,7 @@
     "flip_y": false,
     "force_rgba": true,
     "generate_lods": false,
-    "gltf_omitted_light_range_m": 4096.0,
+    "omitted_light_range_m": 4096.0,
     "hdr_handling": "tonemap",
     "import_cameras": true,
     "import_lights": true,

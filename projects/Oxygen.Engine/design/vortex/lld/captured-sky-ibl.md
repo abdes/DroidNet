@@ -56,11 +56,9 @@ recipes/settings and recook before native qualification. Canonical readers
 reject the retired field; the old capture-unavailable branches retire with it.
 
 Scene source/packed version **8** removes the four-byte scheduling field;
-`SkyLightEnvironmentRecord` is **88 bytes**. Use
-[`MigrateSceneV8.py`](../../../tools/content/MigrateSceneV8.py) on v7 source
-JSON, then recook with the current ImportTool. The migration changes the version, its versioned schema identifier when present,
-and the retired field. The editor descriptor generator emits the same v8
-schema.
+`SkyLightEnvironmentRecord` is **88 bytes**. Older source is refused rather than
+migrated: change its version and drop the retired field, then recook with the
+current ImportTool. The editor descriptor generator emits the same schema.
 
 DemoShell environment settings **v6** omit the field. Loading v5 removes either
 boolean value and persists the v6 marker without rewriting saved custom controls,

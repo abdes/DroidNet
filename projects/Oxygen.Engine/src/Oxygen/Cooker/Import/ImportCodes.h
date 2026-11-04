@@ -123,9 +123,12 @@ namespace oxygen::content::import::import_codes {
   //! What the FBX adapter found.
   inline constexpr std::string_view kFbxAxisUnknown = "fbx.axis_unknown";
   inline constexpr std::string_view kFbxInvalidCustomUnitScale = "fbx.invalid_custom_unit_scale";
+  inline constexpr std::string_view kFbxLeftHandedAxesReplaced = "fbx.left_handed_axes_replaced";
+  inline constexpr std::string_view kFbxLightDecayUnsupported = "fbx.light.decay_unsupported";
   inline constexpr std::string_view kFbxLightUnsupportedType = "fbx.light.unsupported_type";
   inline constexpr std::string_view kFbxLodGroupIgnored = "fbx.lod_group.ignored";
   inline constexpr std::string_view kFbxLodLevelSkipped = "fbx.lod.level_skipped";
+  inline constexpr std::string_view kFbxMaterialFullyTransparent = "fbx.material_fully_transparent";
   inline constexpr std::string_view kFbxMemoryLimitExceeded = "fbx.memory_limit_exceeded";
   inline constexpr std::string_view kFbxNormalMapConventionAssumed = "fbx.normal_map_convention_assumed";
   inline constexpr std::string_view kFbxParseFailed = "fbx.parse_failed";

@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <memory>
 #include <numbers>
@@ -57,6 +58,7 @@
 #include <Oxygen/Cooker/Import/Internal/ModelGeometrySource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
+#include <Oxygen/Cooker/Import/Internal/ModelSceneNodes.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
@@ -158,15 +160,15 @@ namespace {
     return base::CheckedAt(Items(list), index);
   }
 
+  //! The luminous flux of a point or spot light of ufbx `intensity`, where a
+  //! file's usual `Intensity` of 100 reads as 1. FBX states no photometric
+  //! unit; the flux stays proportional, so a brighter light never imports
+  //! dimmer.
   [[nodiscard]] auto FbxIntensityToLumens(const float intensity) noexcept
     -> float
   {
-    constexpr float kMultiplierRangeEnd = 15.0F;
-    constexpr float kCandleLumens = 15.0F;
-    if (intensity <= kMultiplierRangeEnd) {
-      return intensity * kCandleLumens;
-    }
-    return intensity;
+    constexpr float kLumensPerIntensity = 15.0F;
+    return intensity * kLumensPerIntensity;
   }
 
   [[nodiscard]] auto ToStringView(const ufbx_string& s) -> std::string_view
@@ -183,6 +185,36 @@ namespace {
       Items(props.props), [&](const ufbx_prop& prop) -> bool {
         return ToStringView(prop.name) == name;
       });
+  }
+
+  //! The range a local light states: the far attenuation limit the file
+  //! enables, in the model's units. A light with none is unbounded, as a glTF
+  //! light with no range.
+  [[nodiscard]] auto StatedLightRange(
+    const ufbx_light& light, const ufbx_scene& scene) -> std::optional<float>
+  {
+    if (!ufbx_find_bool(&light.props, "EnableFarAttenuation", false)) {
+      return std::nullopt;
+    }
+    return static_cast<float>(
+      ufbx_find_real(&light.props, "FarAttenuationEnd", 0.0)
+      * scene.metadata.geometry_scale);
+  }
+
+  //! The name of a decay Oxygen's one falloff, quadratic, cannot follow.
+  [[nodiscard]] auto UnsupportedDecayName(const ufbx_light_decay decay)
+    -> std::string_view
+  {
+    switch (decay) {
+    case UFBX_LIGHT_DECAY_NONE:
+      return "no";
+    case UFBX_LIGHT_DECAY_LINEAR:
+      return "linear";
+    case UFBX_LIGHT_DECAY_CUBIC:
+      return "cubic";
+    default:
+      return {};
+    }
   }
 
   //! A perspective FBX camera's vertical field of view, in radians.
@@ -318,6 +350,28 @@ namespace {
       .source_path = std::string(source_id),
       .object_path = std::string(object_path),
     };
+  }
+
+  //! How opaque an FBX material says it is, in [0, 1].
+  /*!
+   A shader with its own opacity states it. A classic FBX material states
+   transparency as a factor of a colour, each of which defaults like the FBX
+   material template: factor 0, white. So Maya's factor 1 of black is opaque.
+  */
+  [[nodiscard]] auto MaterialOpacity(const ufbx_material& material) -> float
+  {
+    if (material.pbr.opacity.has_value) {
+      return Clamp01(static_cast<float>(material.pbr.opacity.value_real));
+    }
+    const auto& factor = material.fbx.transparency_factor;
+    const auto& color = material.fbx.transparency_color;
+    const auto amount
+      = factor.has_value ? static_cast<float>(factor.value_real) : 0.0F;
+    const auto tint = color.has_value
+      ? static_cast<float>(
+          (color.value_vec3.x + color.value_vec3.y + color.value_vec3.z) / 3.0)
+      : 1.0F;
+    return Clamp01(1.0F - (amount * tint));
   }
 
   [[nodiscard]] auto ToVec3(const ufbx_vec3 v) -> glm::vec3
@@ -735,21 +789,37 @@ namespace {
       for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
         face_surfaces.at(face_i) = ItemAt(mesh.face_material, face_i);
       }
-    } else {
+    } else if (mesh.materials.count > 0) {
       diagnostics.push_back(MakeWarningDiagnostic(
         std::string(import_codes::kMeshFaceMaterialMissing),
         "FBX face material list missing; defaulting to single material",
         source_id, object_path));
     }
 
+    size_t invalid_faces = 0;
+    size_t untriangulated_faces = 0;
+    size_t unbound_slot_faces = 0;
     for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
       const auto face
         = base::CheckedAt(std::span(mesh.faces.data, mesh.faces.count), face_i);
       if (face.num_indices < 3) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidFace),
-            "FBX mesh contains face with fewer than 3 indices; skipping",
-            source_id, object_path));
+        ++invalid_faces;
+        continue;
+      }
+
+      const auto tri_count = ufbx_triangulate_face(
+        tri_indices.data(), tri_indices.size(), &mesh, face);
+      if (tri_count == 0) {
+        ++untriangulated_faces;
+        continue;
+      }
+
+      const auto tri_index_count = static_cast<size_t>(tri_count) * 3U;
+      const auto used_indices = std::span(tri_indices).first(tri_index_count);
+      if (std::ranges::any_of(used_indices, [&](const uint32_t idx) -> bool {
+            return idx >= mesh.num_indices;
+          })) {
+        ++out_of_range_faces;
         continue;
       }
 
@@ -764,6 +834,10 @@ namespace {
             surface = it->second;
           }
         }
+      }
+      if (surface == material_key_count && source_slot != UFBX_NO_INDEX
+        && material_list != nullptr && material_list->count > 0) {
+        ++unbound_slot_faces;
       }
 
       auto it = range_map.find(source_slot);
@@ -780,25 +854,6 @@ namespace {
                    .indices = {},
                  })
                .first;
-      }
-
-      const auto tri_count = ufbx_triangulate_face(
-        tri_indices.data(), tri_indices.size(), &mesh, face);
-      if (tri_count == 0) {
-        diagnostics.push_back(MakeWarningDiagnostic(
-          std::string(import_codes::kMeshTriangulateFailed),
-          "FBX face triangulation produced no triangles; skipping face",
-          source_id, object_path));
-        continue;
-      }
-
-      const auto tri_index_count = static_cast<size_t>(tri_count) * 3U;
-      const auto used_indices = std::span(tri_indices).first(tri_index_count);
-      if (std::ranges::any_of(used_indices, [&](const uint32_t idx) -> bool {
-            return idx >= mesh.num_indices;
-          })) {
-        ++out_of_range_faces;
-        continue;
       }
 
       it->second.indices.insert(
@@ -819,6 +874,28 @@ namespace {
           "FBX mesh has " + std::to_string(out_of_range_faces)
             + " faces that reference out-of-range indices; they are dropped",
           source_id, object_path));
+    }
+    if (invalid_faces > 0) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidFace),
+          "FBX mesh has " + std::to_string(invalid_faces)
+            + " faces with fewer than 3 indices; they are dropped",
+          source_id, object_path));
+    }
+    if (untriangulated_faces > 0) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshTriangulateFailed),
+          "FBX mesh has " + std::to_string(untriangulated_faces)
+            + " faces that produced no triangles; they are dropped",
+          source_id, object_path));
+    }
+    if (unbound_slot_faces > 0) {
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMeshFaceMaterialMissing),
+        "FBX mesh has " + std::to_string(unbound_slot_faces)
+          + " faces naming a material slot that holds no material; they use "
+            "the default material",
+        source_id, object_path));
     }
 
     if (const auto* skin_deformer = FindSkinDeformer(mesh);
@@ -1364,20 +1441,7 @@ namespace {
     return request.GetSceneName();
   }
 
-  struct NodeInput final {
-    std::string authored_name;
-    std::string base_name;
-    //! The node's anchor, its model node identity (ModelNodeIdentity).
-    std::string anchor;
-    uint32_t parent_index = 0;
-    glm::mat4 local_matrix { 1.0F };
-    glm::mat4 world_matrix { 1.0F };
-    bool has_renderable = false;
-    bool has_camera = false;
-    bool has_light = false;
-    bool visible = true;
-    const void* source_node = nullptr;
-  };
+  using NodeInput = internal::ModelNodeInput;
 
   [[nodiscard]] auto MakeLocalTransformMatrix(const ufbx_transform& transform)
     -> glm::mat4
@@ -1426,8 +1490,24 @@ namespace {
         static_cast<float>(rotation.y), static_cast<float>(rotation.z)));
   }
 
+  //! The rotation ufbx adds to a camera or light node to give it the target
+  //! axes (`target_camera_axes`, `target_light_axes`), as a rotation.
+  [[nodiscard]] auto EmitterAxes(const ufbx_node& node) -> glm::quat
+  {
+    if (!node.has_adjust_transform) {
+      return glm::quat { 1.0F, 0.0F, 0.0F, 0.0F };
+    }
+    const auto& axes = node.adjust_post_rotation;
+    return glm::quat { static_cast<float>(axes.w), static_cast<float>(axes.x),
+      static_cast<float>(axes.y), static_cast<float>(axes.z) };
+  }
+
   //! A node's local transform in Oxygen axes, for geometry rotated by `basis`.
   /*!
+   ufbx keeps a camera or light's target axes in its node's rotation, where they
+   would also turn the node's children. The file's transform leaves them out, as
+   a glTF node has none, and the component's own child node holds them.
+
    With `C` the basis and `L` ufbx's local transform, a top-level node whose
    `L` starts with ufbx's axis rotation, which is `C`, takes `L * inverse(C)`,
    and any other node `C * L * inverse(C)`. Each node's world transform is then
@@ -1440,7 +1520,15 @@ namespace {
     if (node.is_root) {
       return glm::mat4 { 1.0F };
     }
-    const auto local = MakeLocalTransformMatrix(node.local_transform);
+    auto authored = node.local_transform;
+    if (node.has_adjust_transform) {
+      auto undo_axes = node.adjust_post_rotation;
+      undo_axes.x = -undo_axes.x;
+      undo_axes.y = -undo_axes.y;
+      undo_axes.z = -undo_axes.z;
+      authored.rotation = ufbx_quat_mul(authored.rotation, undo_axes);
+    }
+    const auto local = MakeLocalTransformMatrix(authored);
     const auto to_source = glm::transpose(basis);
     const auto& axes = node.adjust_pre_rotation;
     const bool axes_in_local = node.node_depth <= 1
@@ -1566,6 +1654,10 @@ namespace {
     opts.geometry_transform_handling
       = UFBX_GEOMETRY_TRANSFORM_HANDLING_HELPER_NODES;
     opts.space_conversion = UFBX_SPACE_CONVERSION_MODIFY_GEOMETRY;
+    // A node that ignores its parent's scale, as Maya joints do, needs the
+    // parent's scale undone: Oxygen's hierarchy always inherits it. What a
+    // compensating scale cannot express becomes a helper node.
+    opts.inherit_mode_handling = UFBX_INHERIT_MODE_HANDLING_COMPENSATE;
     // ufbx mirrors only a left-handed file, along Oxygen's forward axis.
     opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_Y;
     if (const auto target_unit_meters = coord::ComputeTargetUnitMeters(policy);
@@ -1600,16 +1692,43 @@ namespace {
   }
 
   //! Warns of a file whose axes are incomplete, read as FBX's default.
-  auto ReportUnknownAxes(const ufbx_scene& scene, const AdapterInput& input,
+  //! Whether a file's complete axes form a left-handed frame.
+  [[nodiscard]] auto IsLeftHanded(const ufbx_coordinate_axes& axes) -> bool
+  {
+    const auto unit = [](const ufbx_coordinate_axis axis) -> glm::vec3 {
+      auto direction = glm::vec3 { 0.0F };
+      const auto value = static_cast<int>(axis);
+      direction[value / 2] = value % 2 == 0 ? 1.0F : -1.0F;
+      return direction;
+    };
+    return glm::dot(
+             glm::cross(unit(axes.right), unit(axes.up)), unit(axes.front))
+      < 0.0F;
+  }
+
+  //! Warns when the axes the import reads a file with are not the file's own.
+  auto ReportAxes(const ufbx_scene& scene, const AdapterInput& input,
     std::vector<ImportDiagnostic>& diagnostics) -> void
   {
-    if (input.request.options.coordinate.up_axis == SourceUpAxis::kFromFile
-      && !ufbx_coordinate_axes_valid(scene.settings.axes)) {
-      diagnostics.push_back(
-        MakeWarningDiagnostic(std::string(import_codes::kFbxAxisUnknown),
-          "FBX axis metadata is incomplete; the source is read as right-handed "
-          "Y up, FBX's default (set up_axis to choose)",
-          input.source_id_prefix, input.object_path_prefix));
+    const auto& axes = scene.settings.axes;
+    const auto from_file
+      = input.request.options.coordinate.up_axis == SourceUpAxis::kFromFile;
+    if (!ufbx_coordinate_axes_valid(axes)) {
+      if (from_file) {
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kFbxAxisUnknown),
+            "FBX axis metadata is incomplete; the source is read as "
+            "right-handed Y up, FBX's default (set up_axis to choose)",
+            input.source_id_prefix, input.object_path_prefix));
+      }
+      return;
+    }
+    if (!from_file && IsLeftHanded(axes)) {
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kFbxLeftHandedAxesReplaced),
+        "The FBX file's axes are left-handed, but a chosen up_axis reads it as "
+        "right-handed, so it imports mirrored (use the file's axes instead)",
+        input.source_id_prefix, input.object_path_prefix));
     }
   }
 
@@ -1685,7 +1804,7 @@ namespace {
 
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
-    ReportUnknownAxes(*scene, input, diagnostics);
+    ReportAxes(*scene, input, diagnostics);
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
@@ -1758,7 +1877,7 @@ namespace {
 
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
-    ReportUnknownAxes(*scene, input, diagnostics);
+    ReportAxes(*scene, input, diagnostics);
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
@@ -2920,7 +3039,19 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       item.material.inputs.base_color[0] = Clamp01(base.x * base_factor);
       item.material.inputs.base_color[1] = Clamp01(base.y * base_factor);
       item.material.inputs.base_color[2] = Clamp01(base.z * base_factor);
-      item.material.inputs.base_color[3] = Clamp01(base.w * base_factor);
+      const auto opacity = MaterialOpacity(*material);
+      if (opacity <= 0.0F) {
+        // Exporters state an opaque material this way as often as an invisible
+        // one, and an invisible model is the worse guess.
+        result.diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kFbxMaterialFullyTransparent),
+          "FBX material states no opacity at all; it imports opaque",
+          input.source_id_prefix, material_name));
+      } else if (opacity < 1.0F) {
+        item.material.inputs.base_color[3] = opacity;
+        item.material.alpha_mode = MaterialAlphaMode::kBlended;
+        item.material.domain = data::MaterialDomain::kAlphaBlended;
+      }
 
       if (material->pbr.metalness.has_value) {
         item.material.inputs.metalness
@@ -3424,6 +3555,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   auto identity = internal::ModelNodeIdentity::ForRequest(
     request, input.source_id, diagnostics);
 
+  constexpr auto kNoParent = std::numeric_limits<uint32_t>::max();
+
   auto traverse = [&](auto&& self, const ufbx_node* node, uint32_t parent,
                     uint32_t& ordinal, const glm::mat4& parent_world) -> void {
     if (node == nullptr || input.stop_token.stop_requested()) {
@@ -3431,6 +3564,14 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
     // A LOD level is part of its group's geometry, shown by the group's host.
     if (bake.lods.member.at(source_node_indices.at(node)) != 0) {
+      return;
+    }
+    // ufbx's scene root is no node of the file: the file's top-level nodes are
+    // the model's roots, as a glTF scene's are.
+    if (node->is_root && node->attrib == nullptr) {
+      for (size_t i = 0; i < node->children.count; ++i) {
+        self(self, ItemAt(node->children, i), kNoParent, ordinal, parent_world);
+      }
       return;
     }
 
@@ -3456,20 +3597,28 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     NodeInput node_input;
     node_input.authored_name = std::string(authored);
     node_input.base_name = base_name;
-    // The scene root is the importer's; its children are the model's roots.
-    if (node == scene.root_node) {
+    // A scene root that holds content stays the importer's node.
+    if (node->is_root) {
       node_input.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
     } else {
-      const auto& parent_anchor = nodes.at(parent).anchor;
+      // A scale helper comes and goes with the author's scale, so its parent's
+      // path stands in for it, and its children keep their anchors.
+      const auto* path_parent
+        = parent == kNoParent ? nullptr : std::addressof(nodes.at(parent));
+      if (path_parent != nullptr
+        && static_cast<const ufbx_node*>(path_parent->source_node)
+          ->is_scale_helper) {
+        path_parent = std::addressof(nodes.at(path_parent->parent_index));
+      }
       node_input.anchor = identity.SourceAnchor({
-        .parent_anchor
-        = parent_anchor == internal::ModelNodeIdentity::kSynthesizedRoot
+        .parent_anchor = path_parent == nullptr
+            || path_parent->anchor
+              == internal::ModelNodeIdentity::kSynthesizedRoot
           ? std::string_view {}
-          : std::string_view { parent_anchor },
+          : std::string_view { path_parent->anchor },
         .name = authored,
       });
     }
-    node_input.parent_index = parent;
     node_input.local_matrix = local_matrix;
     node_input.world_matrix = world_matrix;
     node_input.visible = node->visible;
@@ -3484,9 +3633,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     node_input.has_renderable = geometry_key_of(variant_index).has_value();
 
     const auto index = static_cast<uint32_t>(nodes.size());
-    if (index == 0) {
-      node_input.parent_index = 0;
-    }
+    node_input.parent_index = parent == kNoParent ? index : parent;
 
     nodes.push_back(std::move(node_input));
 
@@ -3499,19 +3646,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
 
   uint32_t ordinal = 0;
   if (scene.root_node != nullptr) {
-    traverse(traverse, scene.root_node, 0, ordinal, glm::mat4 { 1.0F });
+    traverse(traverse, scene.root_node, kNoParent, ordinal, glm::mat4 { 1.0F });
   }
 
   if (nodes.empty()) {
-    NodeInput root;
-    root.authored_name = "root";
-    root.base_name = "root";
-    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
-    root.parent_index = 0;
-    root.local_matrix = glm::mat4 { 1.0F };
-    root.world_matrix = glm::mat4 { 1.0F };
-    root.visible = true;
-    nodes.push_back(std::move(root));
+    nodes.push_back(internal::MakeSynthesizedRootNode());
   }
 
   {
@@ -3525,116 +3664,26 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
   }
 
-  std::vector<uint32_t> kept_indices;
-  kept_indices.reserve(nodes.size());
-
-  if (request.options.node_pruning == NodePruningPolicy::kDropEmptyNodes) {
-    for (uint32_t i = 0; i < nodes.size(); ++i) {
-      const auto& node = nodes.at(i);
-      if (node.has_renderable || node.has_camera || node.has_light) {
-        kept_indices.push_back(i);
-      }
-    }
-  } else {
-    for (uint32_t i = 0; i < nodes.size(); ++i) {
-      kept_indices.push_back(i);
-    }
-  }
-
-  if (kept_indices.empty()) {
-    NodeInput root;
-    root.authored_name = "root";
-    root.base_name = "root";
-    root.anchor = internal::ModelNodeIdentity::kSynthesizedRoot;
-    root.parent_index = 0;
-    root.local_matrix = glm::mat4 { 1.0F };
-    root.world_matrix = glm::mat4 { 1.0F };
-    root.visible = true;
-    nodes.clear();
-    nodes.push_back(std::move(root));
-    kept_indices.push_back(0);
-  }
-
-  std::vector old_to_new(nodes.size(), -1);
-  for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    old_to_new.at(kept_indices.at(new_index)) = static_cast<int32_t>(new_index);
-  }
-
-  std::vector<NodeInput> pruned_nodes;
-  pruned_nodes.reserve(kept_indices.size());
-
-  for (uint32_t new_index = 0; new_index < kept_indices.size(); ++new_index) {
-    const auto old_index = kept_indices.at(new_index);
-    auto node = nodes.at(old_index);
-
-    uint32_t parent = node.parent_index;
-    while (parent < nodes.size() && old_to_new.at(parent) < 0) {
-      const auto next_parent = nodes.at(parent).parent_index;
-      if (next_parent == parent) {
-        break;
-      }
-      parent = next_parent;
-    }
-
-    uint32_t new_parent_index = new_index;
-    if (parent < nodes.size() && old_to_new.at(parent) >= 0) {
-      new_parent_index = static_cast<uint32_t>(old_to_new.at(parent));
-    }
-
-    // A retained parent needs only index remapping, never transform
-    // reparenting.
-    if (new_parent_index != new_index && parent != node.parent_index) {
-      const auto parent_old_index = kept_indices.at(new_parent_index);
-      const auto& parent_world = nodes.at(parent_old_index).world_matrix;
-
-      glm::vec3 parent_translation {};
-      glm::vec3 parent_scale { 1.0F, 1.0F, 1.0F };
-      glm::quat parent_rotation {};
-      const bool parent_decomposed = transforms::TryDecomposeTransform(
-        parent_world, parent_translation, parent_rotation, parent_scale);
-      const bool can_reparent = parent_decomposed
-        && transforms::IsUniformScale(parent_scale)
-        && transforms::IsIdentityRotation(parent_rotation);
-
-      if (!can_reparent) {
-        diagnostics.push_back(MakeWarningDiagnostic(
-          std::string(import_codes::kScenePruningReparentSkipped),
-          "Skipped reparenting due to non-uniform or rotated parent; "
-          "preserving world transform",
-          input.source_id, node.base_name));
-        new_parent_index = new_index;
-        node.local_matrix = node.world_matrix;
-      } else {
-        const auto det = glm::determinant(parent_world);
-        constexpr auto kSingularDeterminant = 1e-6F;
-        if (std::abs(det) > kSingularDeterminant) {
-          node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
-        } else {
-          diagnostics.push_back(MakeWarningDiagnostic(
-            std::string(import_codes::kScenePruningSingular),
-            "Node keeps its local transform: its parent transform is singular",
-            input.source_id, node.base_name));
-        }
-      }
-    }
-
-    node.parent_index = new_parent_index;
-    pruned_nodes.push_back(std::move(node));
-  }
+  auto pruned_nodes = internal::PruneModelNodes(std::move(nodes),
+    request.options.node_pruning, input.source_id, diagnostics);
 
   SceneBuild build;
   build.flags = data::pak::world::SceneAssetFlags::kModelScene;
   build.nodes.reserve(pruned_nodes.size());
 
   // A camera or light keeps the frame ufbx gave it. Its node's transform is
-  // in Oxygen axes for geometry rotated by the basis (LocalTransform), so the
-  // component sits on a child whose local transform is the basis, as in the
-  // glTF adapter; the owner's mesh and children keep the owner's frame.
+  // in Oxygen axes for geometry rotated by the basis, without the component's
+  // target axes (LocalTransform), so the component sits on a child whose local
+  // transform is the basis and those axes, as in the glTF adapter; the owner's
+  // mesh and children keep the owner's frame.
   std::vector<NodeRecord> component_attachments;
   const auto component_node
     = [&](const NodeInput& owner, const uint32_t owner_index,
         const std::string_view role) -> uint32_t {
-    if (basis == glm::mat4 { 1.0F }) {
+    const auto frame = basis
+      * glm::mat4_cast(
+        EmitterAxes(*static_cast<const ::ufbx_node*>(owner.source_node)));
+    if (frame == glm::mat4 { 1.0F }) {
       return owner_index;
     }
     const auto index = static_cast<uint32_t>(
@@ -3645,7 +3694,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     };
     const auto name = input.naming_service->MakeUniqueName(
       owner.base_name + "_" + std::string(role), context);
-    const auto rotation = glm::quat_cast(basis);
+    const auto rotation = glm::quat_cast(frame);
     NodeRecord attachment {};
     attachment.node_id
       = identity.Emit(internal::ModelNodeIdentity::AddedAnchor({
@@ -3786,11 +3835,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         ufbx_node != nullptr ? &ufbx_node->props : nullptr);
       const auto& light = *ufbx_node->light;
       const auto light_semantics = ReadImportedLightSemantics(&light.props);
-      // A point light has no direction to keep.
-      const auto light_node
-        = light.type == UFBX_LIGHT_DIRECTIONAL || light.type == UFBX_LIGHT_SPOT
-        ? component_node(node, i, "Light")
-        : i;
       const auto resolve_common
         = [&](const data::pak::world::LightCommonRecord& defaults)
         -> data::pak::world::LightCommonRecord {
@@ -3809,11 +3853,24 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       // FBX rule.
       const auto intensity = static_cast<float>(light.intensity);
       const auto intensity_scale = request.options.light_intensity_scale;
+      const auto local_range
+        = StatedLightRange(light, scene)
+            .value_or(request.options.omitted_light_range_m);
+      // A file that states no decay never chose one.
+      if (const auto decay = UnsupportedDecayName(light.decay);
+        light.type != UFBX_LIGHT_DIRECTIONAL && !decay.empty()
+        && StatesProperty(light.props, "DecayType")) {
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kFbxLightDecayUnsupported),
+          "FBX light states " + std::string(decay)
+            + " decay; it imports with Oxygen's inverse-square falloff",
+          input.source_id, name));
+      }
       switch (light.type) {
       case UFBX_LIGHT_DIRECTIONAL: {
         namespace light_schema = data::schema::directional_light;
         auto rec_light = MakeDefaultRecord<DirectionalLightRecord>();
-        rec_light.node_index = light_node;
+        rec_light.node_index = component_node(node, i, "Light");
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kDirectionalLightCommonRanges, color, rec_light.common);
@@ -3828,10 +3885,13 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_VOLUME: {
         namespace light_schema = data::schema::point_light;
         auto rec_light = MakeDefaultRecord<PointLightRecord>();
-        rec_light.node_index = light_node;
+        // A point light has no direction to keep.
+        rec_light.node_index = i;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kPointLightCommonRanges, color, rec_light.common);
+        rec_light.range = commit(
+          "range", light_schema::kRangeRange, local_range, rec_light.range);
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
             FbxIntensityToLumens(intensity) * intensity_scale,
@@ -3852,10 +3912,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
       case UFBX_LIGHT_SPOT: {
         namespace light_schema = data::schema::spot_light;
         auto rec_light = MakeDefaultRecord<SpotLightRecord>();
-        rec_light.node_index = light_node;
         rec_light.common = resolve_common(rec_light.common);
         detail::CommitImportedLightColor(
           commit, data::kSpotLightCommonRanges, color, rec_light.common);
+        rec_light.range = commit(
+          "range", light_schema::kRangeRange, local_range, rec_light.range);
         rec_light.luminous_flux_lm
           = commit("luminous_flux_lm", light_schema::kLuminousFluxLmRange,
             FbxIntensityToLumens(intensity) * intensity_scale,
@@ -3864,14 +3925,14 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         // the angle from the axis in radians.
         constexpr auto kHalfConeRadiansPerDegree
           = std::numbers::pi_v<float> / 360.0F;
-        rec_light.inner_cone_angle_radians = commit("inner_cone_angle_radians",
-          light_schema::kInnerConeAngleRadiansRange,
+        const auto cone = detail::CommitImportedSpotCone(commit,
           static_cast<float>(light.inner_angle) * kHalfConeRadiansPerDegree,
-          rec_light.inner_cone_angle_radians);
-        rec_light.outer_cone_angle_radians = commit("outer_cone_angle_radians",
-          light_schema::kOuterConeAngleRadiansRange,
           static_cast<float>(light.outer_angle) * kHalfConeRadiansPerDegree,
-          rec_light.outer_cone_angle_radians);
+          rec_light, input.source_id, name, diagnostics);
+        if (!cone) {
+          break;
+        }
+        rec_light.node_index = component_node(node, i, "Light");
         build.spot_lights.push_back(rec_light);
         break;
       }

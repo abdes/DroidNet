@@ -57,7 +57,7 @@ namespace {
       "import_lights",
       "import_cameras",
       "light_intensity_scale",
-      "gltf_omitted_light_range_m",
+      "omitted_light_range_m",
     };
     if (std::ranges::contains(kContentKeys, key)) {
       return ImportSettingsGroup::kContent;

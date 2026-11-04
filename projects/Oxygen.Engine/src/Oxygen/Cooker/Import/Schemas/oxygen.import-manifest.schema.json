@@ -777,7 +777,7 @@
           "type": "number",
           "minimum": 0.0001
         },
-        "gltf_omitted_light_range_m": {
+        "omitted_light_range_m": {
           "type": "number",
           "exclusiveMinimum": 0,
           "default": 4096
@@ -1028,7 +1028,6 @@
           "force_rgba",
           "generate_lods",
           "geometry_defaults",
-          "gltf_omitted_light_range_m",
           "gltf_scene",
           "hdr_handling",
           "id",
@@ -1047,6 +1046,7 @@
           "node_pruning",
           "normals_policy",
           "normals_smoothing_angle_deg",
+          "omitted_light_range_m",
           "output",
           "output_format",
           "packing_policy",
@@ -1250,7 +1250,7 @@
           "type": "number",
           "minimum": 0.0001
         },
-        "gltf_omitted_light_range_m": {
+        "omitted_light_range_m": {
           "type": "number",
           "exclusiveMinimum": 0,
           "default": 4096

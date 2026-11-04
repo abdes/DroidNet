@@ -57,7 +57,7 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
         this.FlipNormalGreen = new("Flip normal map green", ModelImportSettingCatalog.FlipNormalGreen);
         this.ImportLights = new("Import lights", ModelImportSettingCatalog.ImportLights);
         this.LightIntensityScale = new("Light intensity scale", ModelImportSettingCatalog.LightIntensityScale, prefix: "×");
-        this.OmittedLightRange = new("Range of lights without one", ModelImportSettingCatalog.OmittedLightRange, unit: "m", qualifier: GltfFiles);
+        this.OmittedLightRange = new("Range of lights without one", ModelImportSettingCatalog.OmittedLightRange, unit: "m");
         this.ImportCameras = new("Import cameras", ModelImportSettingCatalog.ImportCameras);
         this.SelectedTexture = new SelectedTextureGroup(sizes, qualities);
         this.SelectedTexture.Edited += (_, args) => this.SettingEdited?.Invoke(this, args);
@@ -131,7 +131,7 @@ public sealed partial class ModelImportSettingsPanelViewModel : ObservableObject
     /// <summary>Gets the factor of every imported light's intensity.</summary>
     public NumberRow LightIntensityScale { get; }
 
-    /// <summary>Gets the range of a glTF light without one.</summary>
+    /// <summary>Gets the range of a light without one.</summary>
     public NumberRow OmittedLightRange { get; }
 
     /// <summary>Gets whether cameras are imported.</summary>

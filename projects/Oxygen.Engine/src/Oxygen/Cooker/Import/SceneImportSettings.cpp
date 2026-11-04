@@ -123,7 +123,7 @@ auto SceneImportSettings::FromOptions(const ImportOptions& options)
     throw std::invalid_argument("Invalid node pruning policy");
   }
   settings.bake_transforms = options.coordinate.bake_transforms_into_meshes;
-  settings.gltf_omitted_light_range_m = options.gltf_omitted_light_range_m;
+  settings.omitted_light_range_m = options.omitted_light_range_m;
   settings.gltf_scene = options.gltf_scene;
   switch (options.coordinate.up_axis) {
   case SourceUpAxis::kFromFile:

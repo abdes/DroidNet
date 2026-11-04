@@ -127,8 +127,8 @@ NOLINT_TEST(RequestRefusalsTest, AModelsRefusedSettingHasItsCodeAndPointer)
     },
     {
       .code = request_codes::kOptionOutOfRange,
-      .pointer = "/gltf_omitted_light_range_m",
-      .apply = [](auto& s) -> void { s.gltf_omitted_light_range_m = 0.0F; },
+      .pointer = "/omitted_light_range_m",
+      .apply = [](auto& s) -> void { s.omitted_light_range_m = 0.0F; },
     },
     {
       .code = request_codes::kOptionOutOfRange,
@@ -348,11 +348,11 @@ NOLINT_TEST(RequestRefusalsTest, AnalysisRefusesWhatTheCookRefusesWithOneCode)
     {
       .name = "omitted light range",
       .code = request_codes::kOptionOutOfRange,
-      .pointer = "/jobs/2/gltf_omitted_light_range_m",
+      .pointer = "/jobs/2/omitted_light_range_m",
       .apply = [](auto& job) -> void {
         job.job_type = "gltf";
         job.gltf = ValidSceneSettings();
-        job.gltf.gltf_omitted_light_range_m
+        job.gltf.omitted_light_range_m
           = std::numeric_limits<float>::denorm_min();
       },
     },

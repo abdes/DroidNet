@@ -56,7 +56,7 @@ public sealed class ModelImportSettingCatalogTests
     public void FormatSpecificSettingsNameTheirFormat()
     {
         _ = ModelImportSettingCatalog.UpAxis.Formats.Should().Be(ModelSourceFormats.Fbx, "glTF is Y up by specification");
-        _ = ModelImportSettingCatalog.OmittedLightRange.Formats.Should().Be(ModelSourceFormats.Gltf);
+        _ = ModelImportSettingCatalog.OmittedLightRange.Formats.Should().Be(ModelSourceFormats.All, "either format can leave a light's range unstated");
         _ = ModelImportSettingCatalog.GltfScene.Formats.Should().Be(ModelSourceFormats.Gltf);
         _ = ModelImportSettingCatalog.All.Should().OnlyHaveUniqueItems(static setting => setting.Key);
     }

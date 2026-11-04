@@ -141,12 +141,12 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto omitted_light_range
     = Option::WithKey("omitted-light-range")
-        .About(fmt::format(
-          "Range in meters for glTF lights without a range (default {})",
-          ImportOptions::kDefaultGltfOmittedLightRangeM))
+        .About(
+          fmt::format("Range in meters for lights without a range (default {})",
+            ImportOptions::kDefaultOmittedLightRangeM))
         .Long("omitted-light-range")
         .WithValue<float>()
-        .StoreTo(&options_.gltf_omitted_light_range_m)
+        .StoreTo(&options_.omitted_light_range_m)
         .Build();
 
   auto gltf_scene

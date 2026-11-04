@@ -75,7 +75,7 @@ namespace {
       .importer = Importer::kFbx,
       .revision = 9,
       .digest
-      = "455a997f0c24ac655127058ee80b181ab38423e8d67df756a831175af36cbe08",
+      = "87b9f57f2cf062f89353da5a948f20202531b175cb36d8b540ef1f22b926af13",
     },
     {
       .importer = Importer::kTexture,

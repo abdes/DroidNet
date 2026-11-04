@@ -58,8 +58,7 @@ struct SceneImportSettings {
   float unit_scale = CoordinateConversionPolicy {}.unit_scale;
   bool unit_scale_set = false;
   bool bake_transforms = false;
-  float gltf_omitted_light_range_m
-    = ImportOptions::kDefaultGltfOmittedLightRangeM;
+  float omitted_light_range_m = ImportOptions::kDefaultOmittedLightRangeM;
   std::string gltf_scene;
   std::string up_axis;
   bool import_lights = true;
