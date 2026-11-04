@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-03
+Last updated: 2026-11-04
 
 The portable-references plan ends its engine work with S6f. From S7 on, the
 editor is the content pipeline's main consumer: it reads cooked formats in
@@ -747,10 +747,14 @@ base correctly.
 `SourceAnalysisCommand`, `SourceMountOptions`, `ImportRunner`, `ServiceConfig`,
 `StopSignal`, `ReclaimCommand`, `RemoveCookedCommand` and the `UI/` screens),
 `Cooker/Tools/Inspector/*` (with `InventoryReport`, `DependencyReport`,
-`CookedRootCommand` and its schemas), `Cooker/Tools/Common/*`; the schema
-install rules in `cmake/Install.cmake` and the `Cooker`, `Data`, `Core`,
-`Player`, `PakTool` and `Inspector` `CMakeLists.txt`; the ImportTool,
-Inspector and Common READMEs, `cmake/SDK_README.md`.
+`AssetKeyMap`, `CookedRootCommand`, the scene, geometry and script metadata and
+`Schemas/`), `Cooker/Tools/Common/*`; the report schemas in
+`Cooker/Import/Schemas/` (`oxygen.source-analysis`,
+`oxygen.scene-source-inspection`, `oxygen.cooked-dependencies`,
+`oxygen.asset-key-map`); the schema install rules in
+`projects/Oxygen.Engine/cmake/Install.cmake` and the `Cooker`, `Data`, `Core`,
+`Player`, `PakTool` and `Inspector` `CMakeLists.txt`; the ImportTool, Inspector
+and Common READMEs, `projects/Oxygen.Engine/cmake/SDK_README.md`.
 
 **Objectives.** The editor's process boundary is a stable, versioned,
 schema-validated contract: arguments, exit codes, JSON reports and the
@@ -758,8 +762,9 @@ installed schemas.
 
 **Critical points.**
 
-- Every JSON output (import report, source analysis, inventory, dependency
-  report, pak build report) is validated against its installed schema in a
+- Every JSON output (import report, source analysis, scene source inspection,
+  inventory, dependency report, asset key map, cooked scene, geometry and script
+  metadata, pak build report) is validated against its installed schema in a
   test, and every schema has a version the producer writes.
 - Exit codes: success, refusal, cancellation and internal error are
   distinct and documented; a refusal always has diagnostics in the report.
@@ -769,7 +774,7 @@ installed schemas.
   carry what the README says.
 - Paths in reports are spelled consistently (absolute file paths, identities
   as virtual paths), so the editor can map diagnostics back to its files.
-- `BatchCommand.cpp` (2 000 lines): flags that duplicate manifest keys follow
+- `BatchCommand.cpp` (2 100 lines): flags that duplicate manifest keys follow
   one precedence rule.
 - The SDK installs every schema the editor validates against and nothing it
   must not depend on (engine build isolation).

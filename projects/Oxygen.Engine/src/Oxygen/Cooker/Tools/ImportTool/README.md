@@ -934,7 +934,7 @@ Notes:
 ## Reports and Exit Codes
 
 Per-command `--report` and batch `--report` write JSON report output, version
-`4`. Each job lists:
+`5`. Each job lists:
 
 - `importer`: the importer that cooks the job and its revision, as
   `{name, revision}`, the same as `versions` reports. A job no importer handles
