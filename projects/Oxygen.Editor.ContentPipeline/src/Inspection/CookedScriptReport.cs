@@ -31,6 +31,11 @@ public sealed class CookedScriptReport
             throw new InvalidDataException("The native script report does not match its schema.");
         }
 
+        if (!document.RootElement.GetProperty("complete").GetBoolean())
+        {
+            throw new InvalidDataException("The native script report has a script it could not read.");
+        }
+
         var declarations = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<ScriptParameter>>();
         foreach (var row in document.RootElement.GetProperty("scripts").EnumerateArray())
         {

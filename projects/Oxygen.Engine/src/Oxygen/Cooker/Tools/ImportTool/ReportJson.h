@@ -71,7 +71,6 @@ struct PhaseTiming {
 };
 
 struct ItemTiming {
-  std::string phase;
   std::string kind;
   std::string name;
   std::optional<std::chrono::steady_clock::time_point> started;
@@ -138,8 +137,5 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
 //! `not_submitted`.
 [[nodiscard]] auto JobStatusFromReport(const ImportReport& report)
   -> std::string_view;
-
-[[nodiscard]] auto BuildProgressJson(const JobProgressTrace& trace,
-  std::chrono::steady_clock::time_point fallback_start) -> ordered_json;
 
 } // namespace oxygen::content::import::tool

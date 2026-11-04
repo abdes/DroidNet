@@ -15,6 +15,7 @@
 
 #include <Oxygen/Cooker/Tools/Common/ToolApp.h>
 #include <Oxygen/Cooker/Tools/Inspector/DependencyReport.h>
+#include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
@@ -62,7 +63,14 @@ protected:
               }),
       0);
     auto stream = std::ifstream(output);
-    return nlohmann::json::parse(stream);
+    auto report = nlohmann::json::parse(stream);
+    static const auto schema = oxygen::cooker::test::LoadSchema(
+      "Import/Schemas/oxygen.cooked-dependencies.schema.json");
+    EXPECT_THAT(
+      oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
+    EXPECT_EQ(report.at("schema_version"),
+      oxygen::content::inspection::kDependencyReportSchemaVersion);
+    return report;
   }
 };
 

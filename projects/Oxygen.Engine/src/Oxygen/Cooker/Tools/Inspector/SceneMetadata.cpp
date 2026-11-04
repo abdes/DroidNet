@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <exception>
 #include <expected>
-#include <filesystem>
 #include <map>
 #include <memory>
 #include <optional>
@@ -21,7 +20,6 @@
 #include <vector>
 
 #include "SceneMetadata.h"
-#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
@@ -35,8 +33,8 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
-#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -592,19 +590,17 @@ auto BuildSceneMetadataCommand(SceneMetadataOptions& options)
 auto RunSceneMetadataReport(const SceneMetadataOptions& options)
   -> toolkit::ToolResult
 {
-  const auto root
-    = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path = toolkit::ResolveReportPath(options.output);
-  if (auto safe = toolkit::CheckToolReportDestination(
-        output_path, { .inputs = {}, .cooked_roots = { root } });
-    !safe) {
-    return safe;
+  const auto target = PrepareReport({
+    .cooked_root = options.cooked_root,
+    .output = options.output,
+  });
+  if (!target) {
+    return std::unexpected(target.error());
   }
   const auto content
-    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), target->root);
   auto root_scenes = RootScenes(content);
   auto scenes = json::array();
-  // Each scene that could not be read, as `scene '<path>' (<key>): <why>`.
   auto failures = std::vector<std::string> {};
   for (const auto& entry : content.Assets()) {
     if (entry.type != data::AssetType::kScene
@@ -634,30 +630,17 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
       row.at("complete") = true;
     } catch (const std::exception& error) {
       row.emplace("diagnostic", error.what());
-      failures.push_back(fmt::format("scene '{}' ({}): {}", entry.virtual_path,
-        nostd::to_string(entry.key), error.what()));
+      failures.push_back(RowFailure("scene", entry, error));
     }
     scenes.push_back(std::move(row));
   }
   const auto report = json {
-    { "schema", "oxygen.cooked-scenes.v2" },
+    { "schema", kSceneMetadataSchema },
     { "source_key", nostd::to_string(content.Summary().source_key) },
     { "complete", failures.empty() },
     { "scenes", std::move(scenes) },
   };
-  if (auto published
-    = toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
-    !published) {
-    return published;
-  }
-  if (!failures.empty()) {
-    auto message = std::string {};
-    for (const auto& failure : failures) {
-      message += message.empty() ? failure : "; " + failure;
-    }
-    return std::unexpected(toolkit::ToolError::Failed(std::move(message)));
-  }
-  return {};
+  return PublishRowReport(target->output, report, failures);
 }
 
 } // namespace oxygen::content::inspection

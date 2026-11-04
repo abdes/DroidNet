@@ -89,7 +89,7 @@ internal static partial class NativeInventoryFixture
 
         return JsonSerializer.Serialize(new
         {
-            schema_version = 1,
+            schema_version = 2,
             source_key = index.SourceGuid,
             index_size = indexBytes.Length,
             index_sha256 = Convert.ToHexStringLower(SHA256.HashData(indexBytes)),

@@ -36,6 +36,13 @@ The executable is produced under:
 
 - `out/build/bin/<Config>/Oxygen.Cooker.Inspector.exe`
 
+## Exit codes
+
+The [toolkit's codes](../Common/README.md#exit-codes). A cooked root that does
+not exist is refused with 1, as is an unusable `--output` or an invalid request.
+A root that exists and does not read, or a report row that could not be read,
+is a failed run: 2. A report with rows is written first.
+
 ## Usage
 
 Run `--help` for full CLI help:
@@ -81,6 +88,10 @@ Full verification checks each resource of a data file against the SHA-256 of its
 table row. An issue about a resource carries the reason `malformed_table`,
 `resource_out_of_bounds` or `resource_digest_mismatch`, and the optional
 `resource_row` it concerns in the data file its `relative_path` names.
+
+A mount accepts what a writer has not committed, but a root to publish holds
+none of it, so it is an issue here: `uncommitted` for a writer's file no commit
+lists, `uncommitted_tail` for bytes past a data file's committed length.
 
 Use this command for publication and explicit validation. Normal runtime
 mounting checks metadata without scanning every payload; it can opt into full
@@ -156,8 +167,7 @@ renderer startup. A malformed or incomplete scene adds a diagnostic scoped to
 its key/path, marks the row and report `complete=false`, and returns exit
 code 2. Other valid scene rows remain available in that report. A descriptor
 version is `null` when native parsing fails before a valid scene is available.
-Missing/invalid roots or output failures also return 2. An empty scene list is
-valid for a scene-free root. The output schema is
+An empty scene list is valid for a scene-free root. The output schema is
 `Schemas/oxygen.cooked-scenes.schema.json`, installed with Inspector tooling.
 This command contains no qualification hooks or payloads.
 
@@ -167,9 +177,9 @@ This command contains no qualification hooks or payloads.
 Oxygen.Cooker.Inspector.exe geometries <cooked_root> --output <geometries.json>
 ```
 
-Writes schema version 1 geometry inventories using
-`GeometryAsset::Surfaces()`. Each geometry reports its asset key, SHA-256
-layout revision, default LOD policy (`lod_policy`, in the shared
+Writes schema version 2 geometry inventories using
+`GeometryAsset::Surfaces()`. Each geometry reports its asset key, virtual path,
+`complete`, SHA-256 layout revision, default LOD policy (`lod_policy`, in the shared
 `oxygen.lod-policy.schema.json` spelling) and ordered surfaces. Each surface
 retains its opaque ID, display label, asset defaults (`visible`,
 `casts_shadows`) and exact LOD/submesh/default material bindings, each with
@@ -178,9 +188,9 @@ Equal labels or material keys never merge surfaces. Nil default material keys
 remain the omitted-reference sentinel.
 
 The native loader supplies these records without loading vertex/index buffers or
-starting the renderer. An invalid geometry returns exit code 2 before writing a
-report; successful reports contain every geometry in the root. Consumers must
-check the exit code before using output. The installed schema is
+starting the renderer. An invalid geometry adds a `diagnostic` to its row, marks
+the row and report `complete=false`, and returns exit code 2; the other rows
+remain available. The installed schema is
 `Schemas/oxygen.cooked-geometries.schema.json`. Use
 `--virtual-path /Content/Geometry/example.ogeo` to inspect one selected geometry
 without parsing other descriptors. A missing path yields an empty report.
@@ -192,14 +202,16 @@ Oxygen.Cooker.Inspector.exe scripts <cooked_root> --output <scripts.json>
 ```
 
 Writes schema version 1 script declarations using `ScriptAsset::Parameters()`.
-Each script reports its virtual path, asset key and the parameters it declares,
+Each script reports its virtual path, asset key, `complete` and the parameters
+it declares,
 in declaration order: name, type (`bool`, `int32`, `float`, `string`,
 `vec2`-`vec4`, `asset` or `node`), the default for value types and the asset
 kind for asset parameters. Authoring hints (range, unit, description, options,
 color) are not cooked, so they are not reported.
 
 The native loader reads only the descriptor; bytecode is not loaded. An invalid
-script returns exit code 2 before writing a report. The installed schema is
+script adds a `diagnostic` to its row, marks the row and report `complete=false`,
+and returns exit code 2; the other rows remain available. The installed schema is
 `Schemas/oxygen.cooked-scripts.schema.json`. Use
 `--virtual-path /Content/Scripts/example.oscript` to inspect one script.
 
@@ -209,14 +221,13 @@ script returns exit code 2 before writing a report. The installed schema is
 Oxygen.Cooker.Inspector.exe dependencies <cooked_root> --output <report.json>
 ```
 
-Writes `oxygen.cooked-dependencies.v3` metadata using the runtime descriptor
-decoders. Geometry and scene asset-key references are collected without loading
-vertex buffers, textures, or a rendering engine. Local resource indices remain
-local to their container; a texture another container holds appears as an
-`external` binding with its texture key among the key references. Each asset
-reports whether dependency inspection is complete; unsupported types, malformed
-descriptors and scene script sidecars retain a diagnostic instead of claiming an
-empty dependency set.
+Writes `schema_version` 4 metadata from the reference record the container
+stores for each asset: the loose index or the pak catalog. No descriptor is
+decoded, and nothing is loaded. Local resource indices remain local to their
+container; a texture another container holds appears as an `external` binding
+with its texture key among the key references. A root whose reference record
+cannot be read is corrupt, so the command fails with exit code 2 and writes no
+report; there are no partial rows.
 
 The report schema is installed as `oxygen.cooked-dependencies.schema.json`.
 

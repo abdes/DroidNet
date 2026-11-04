@@ -70,7 +70,7 @@ public sealed class CookedInventoryReportTests
         var indexSha = new string('a', 64);
         var fileSha = new string('b', 64);
         return $$"""
-            {"schema_version":1,"source_key":"{{sourceKey}}","index_size":256,"index_sha256":"{{indexSha}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{fileSha}}","file_kind":{{fileKind}}}],"assets":[],"resources":[],"issues":[]}
+            {"schema_version":2,"source_key":"{{sourceKey}}","index_size":256,"index_sha256":"{{indexSha}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{fileSha}}","file_kind":{{fileKind}}}],"assets":[],"resources":[],"issues":[]}
             """;
     }
 }

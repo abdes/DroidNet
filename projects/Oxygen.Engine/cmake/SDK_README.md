@@ -47,11 +47,36 @@ Oxygen targets supply their public dependency usage requirements. Do not add
 producer checkout paths or Conan cache paths to your application. SDK locations
 are available as `OXYGEN_SDK_ROOT`, `OXYGEN_RUNTIME_DIR`, and `OXYGEN_DATA_DIR`.
 
+## Contract schemas
+
+The content tools are driven through their command lines and JSON files. A tool
+writes these reports, and a consumer validates them against the schema here. Each
+schema states the version it describes.
+
+| Report                           | Written by                                |
+| -------------------------------- | ----------------------------------------- |
+| `oxygen.import-report`           | ImportTool `--report`                     |
+| `oxygen.source-analysis`         | ImportTool source analysis                |
+| `oxygen.scene-source-inspection` | ImportTool `inspect-source`               |
+| `oxygen.pak-build-report`        | PakTool `--report`                        |
+| `oxygen.cooked-inventory`        | Inspector `inventory`                     |
+| `oxygen.cooked-dependencies`     | Inspector `dependencies`                  |
+| `oxygen.cooked-scenes`           | Inspector `scenes`                        |
+| `oxygen.cooked-geometries`       | Inspector `geometries`                    |
+| `oxygen.cooked-scripts`          | Inspector `scripts`                       |
+| `oxygen.asset-key-map`           | Inspector `asset-keys`                    |
+| `oxygen.player-events`           | The player's event stream                 |
+| `oxygen.script-diagnostic`       | Script diagnostics in the player's events |
+
+The other schemas describe what you author: the import manifest, mounts, source
+descriptors and sidecars, and the player's launch file.
+
 ## Layout and relocation
 
 - `include`, `lib`, `bin`: Oxygen and dependency development/runtime files.
 - `lib/cmake`: native CMake package definitions.
-- `share/oxygen/schemas`: content authoring and tool schemas.
+- `share/oxygen/schemas`: content authoring and tool schemas; see
+  [Contract schemas](#contract-schemas).
 - `share/oxygen/Showcase`: the examples project: curated source inputs and
   scripts.
 - `share/oxygen/RenderScene`: showcase documentation and local settings, its

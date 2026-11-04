@@ -34,9 +34,8 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
         var root = document.RootElement;
         if (!Schema.Value.Evaluate(root).IsValid)
         {
-            var wireSchema = root.TryGetProperty("schema", out var schema) && schema.ValueKind == JsonValueKind.String
-                ? schema.GetString() : "<missing or invalid>";
-            throw new InvalidDataException($"The native dependency report does not match its schema. Expected oxygen.cooked-dependencies.v3; received '{wireSchema}'. Verify that the installed native Inspector matches the current SDK source.");
+            var version = root.TryGetProperty("schema_version", out var received) ? received.ToString() : "<missing>";
+            throw new InvalidDataException($"The native dependency report does not match its schema (received schema_version {version}). Verify that the installed native Inspector matches the current SDK source.");
         }
 
         var assets = root.GetProperty("assets").EnumerateArray().Select(ReadAsset).ToArray();
@@ -74,9 +73,7 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
             asset.GetProperty("asset_key").GetGuid().ToString("D"),
             asset.GetProperty("asset_type").GetByte(),
             asset.GetProperty("virtual_path").GetString()!,
-            dependencies,
-            asset.GetProperty("complete").GetBoolean(),
-            asset.TryGetProperty("diagnostic", out var diagnostic) ? diagnostic.GetString() : null)
+            dependencies)
         {
             KeyReferences = keyReferences,
             ResourceBindings = resourceBindings,

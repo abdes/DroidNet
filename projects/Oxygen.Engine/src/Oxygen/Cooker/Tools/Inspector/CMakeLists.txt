@@ -41,6 +41,8 @@ add_library(
   "ScriptMetadata.h"
   "InventoryReport.cpp"
   "InventoryReport.h"
+  "InspectorReport.cpp"
+  "InspectorReport.h"
   "ContainerCommands.cpp"
   "ContainerCommands.h"
   "CookedRootCommand.cpp"

@@ -24,13 +24,10 @@
     </ItemGroup>
 
     <!--
-      Bring the engine schemas (and editor overlays sitting next to them) that
-      the installed engine SDK ships into this assembly's output, without
-      copying them in source control.
-
-      Engine schemas: *.schema.json (excluding *.editor.schema.json — handled by
-      the second glob so we can give it a distinct link path / pattern).
-      Editor overlays: *.editor.schema.json
+      The output's Schemas folder holds the schemas the installed engine SDK
+      ships, without copying them in source control, and the editor's own
+      overlays beside them. Overlays live here only, whatever an older install
+      still holds.
     -->
     <ItemGroup>
         <Content
@@ -41,7 +38,7 @@
             Visible="true" />
 
         <Content
-            Include="$(OxygenSdkSchemasDir)\*.editor.schema.json"
+            Include="Schemas\*.editor.schema.json"
             Link="Schemas\%(FileName)%(Extension)"
             CopyToOutputDirectory="PreserveNewest"
             Visible="true" />

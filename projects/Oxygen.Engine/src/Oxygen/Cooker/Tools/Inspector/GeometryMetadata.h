@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Version of the `oxygen.cooked-geometries` report.
+inline constexpr int kGeometryMetadataSchemaVersion = 2;
+
 struct GeometryMetadataOptions {
   std::string cooked_root;
   std::string output;

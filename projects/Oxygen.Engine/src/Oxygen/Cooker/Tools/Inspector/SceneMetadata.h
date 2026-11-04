@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Identifier of the `oxygen.cooked-scenes` report.
+inline constexpr auto kSceneMetadataSchema = "oxygen.cooked-scenes.v2";
+
 struct SceneMetadataOptions {
   std::string cooked_root;
   std::string output;

@@ -28,6 +28,8 @@ oxygen_cooker_test(
     "AssetKeyMap_functional_test.cpp"
     "DependencyReport_functional_test.cpp"
     "GeometryMetadata_functional_test.cpp"
+    "InspectorReport_functional_test.cpp"
+    "InventoryReport_functional_test.cpp"
     "ScriptMetadata_functional_test.cpp"
     "SceneMetadata_functional_test.cpp"
 )

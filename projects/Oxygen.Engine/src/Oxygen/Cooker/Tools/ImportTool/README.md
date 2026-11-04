@@ -422,6 +422,8 @@ Shipped JSON schemas:
   `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
 - source-of-truth:
   `src/Oxygen/Cooker/Import/Schemas/oxygen.scripting-sidecar.schema.json`
+- source-of-truth:
+  `src/Oxygen/Cooker/Import/Schemas/oxygen.import-report.schema.json`
 - installed for users as: `schemas/oxygen.import-manifest.schema.json`
 - installed for users as: `schemas/oxygen.texture-descriptor.schema.json`
 - installed for users as: `schemas/oxygen.material-descriptor.schema.json`
@@ -430,6 +432,7 @@ Shipped JSON schemas:
 - installed for users as: `schemas/oxygen.input.schema.json`
 - installed for users as: `schemas/oxygen.physics-sidecar.schema.json`
 - installed for users as: `schemas/oxygen.scripting-sidecar.schema.json`
+- installed for users as: `schemas/oxygen.import-report.schema.json`
 
 Editor association examples (VSCode):
 
@@ -961,7 +964,8 @@ Notes:
 ## Reports and Exit Codes
 
 Per-command `--report` and batch `--report` write a JSON report whose
-`schema_version` is `6`. Each job has a `status`:
+`schema_version` is `6`, as `oxygen.import-report.schema.json` defines it. Each
+job has a `status`:
 
 | Status          | Meaning                                                                                                       |
 | --------------- | ------------------------------------------------------------------------------------------------------------- |

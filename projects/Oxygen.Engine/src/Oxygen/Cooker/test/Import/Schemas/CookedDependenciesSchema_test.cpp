@@ -113,14 +113,13 @@ auto Asset() -> json
     { "dependencies", json::array() },
     { "key_references", json::array() },
     { "resource_bindings", json::array() },
-    { "complete", true },
   };
 }
 
 auto Document(json asset) -> json
 {
   return json {
-    { "schema", Owned("/properties/schema/const") },
+    { "schema_version", Owned("/properties/schema_version/const") },
     { "source_key", kKey },
     { "assets", json::array({ std::move(asset) }) },
   };
@@ -134,8 +133,6 @@ auto Maximal() -> json
   asset["dependencies"] = json::array({ kOtherKey });
   asset["key_references"] = json::array({ KeyReference() });
   asset["resource_bindings"] = json::array({ Binding() });
-  asset["complete"] = false;
-  asset["diagnostic"] = "A texture is missing.";
   return Document(std::move(asset));
 }
 
@@ -155,6 +152,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, CookedDependenciesSchemaTest,
     Accepts("AcceptsNoAssets", With(Valid(), "/assets", json::array())),
     Accepts("AcceptsMinimalAsset", Valid()),
     Accepts("AcceptsMaximalAsset", Maximal()),
+    Accepts("AcceptsAnAssetAPakDoesNotList",
+      With(Valid(), "/assets/0/virtual_path", "")),
     Accepts("AcceptsAssetTypeAtMaximum",
       With(Valid(), "/assets/0/asset_type",
         Largest(std::string { kAsset } + "asset_type/maximum"))),
@@ -177,7 +176,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, CookedDependenciesSchemaTest,
         Largest(std::string { kAsset }
           + "resource_bindings/items/properties/index/maximum"))),
 
-    Rejects("RejectsMissingSchema", Without(Valid(), "/schema"), "'schema'"),
+    Rejects("RejectsMissingSchemaVersion", Without(Valid(), "/schema_version"),
+      "'schema_version'"),
     Rejects("RejectsMissingSourceKey", Without(Valid(), "/source_key"),
       "'source_key'"),
     Rejects("RejectsMissingAssets", Without(Valid(), "/assets"), "'assets'"),
@@ -193,8 +193,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, CookedDependenciesSchemaTest,
       Without(Valid(), "/assets/0/key_references"), "'key_references'"),
     Rejects("RejectsMissingResourceBindings",
       Without(Valid(), "/assets/0/resource_bindings"), "'resource_bindings'"),
-    Rejects("RejectsMissingComplete", Without(Valid(), "/assets/0/complete"),
-      "'complete'"),
     Rejects("RejectsMissingReferenceKey",
       Without(Maximal(), "/assets/0/key_references/0/asset_key"),
       "'asset_key'"),
@@ -221,10 +219,17 @@ INSTANTIATE_TEST_SUITE_P(Cases, CookedDependenciesSchemaTest,
       With(Maximal(), "/assets/0/resource_bindings/0/unknown", true),
       "'unknown'"),
 
-    Rejects("RejectsOtherSchemaIdentifier",
-      With(Valid(), "/schema",
-        Owned("/properties/schema/const").get<std::string>() + "x"),
-      "/schema: "),
+    Rejects("RejectsOtherSchemaVersion",
+      With(Valid(), "/schema_version",
+        Owned("/properties/schema_version/const").get<std::int64_t>() + 1),
+      "/schema_version: "),
+    Rejects("RejectsOldSchemaKey",
+      With(Valid(), "/schema", "oxygen.cooked-dependencies.v3"), "'schema'"),
+    Rejects("RejectsRowCompleteness", With(Valid(), "/assets/0/complete", true),
+      "'complete'"),
+    Rejects("RejectsRowDiagnostic",
+      With(Valid(), "/assets/0/diagnostic", "A texture is missing."),
+      "'diagnostic'"),
     Rejects("RejectsMalformedSourceKey",
       With(Valid(), "/source_key", "not-a-key"), "/source_key: "),
     Rejects("RejectsUppercaseSourceKey",
@@ -258,10 +263,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, CookedDependenciesSchemaTest,
       With(Valid(), "/assets/0/dependencies",
         json::array({ kOtherKey, kOtherKey })),
       "/assets/0/dependencies: "),
-    Rejects("RejectsNonBooleanComplete",
-      With(Valid(), "/assets/0/complete", "true"), "/assets/0/complete: "),
-    Rejects("RejectsNonStringDiagnostic",
-      With(Valid(), "/assets/0/diagnostic", 7), "/assets/0/diagnostic: "),
 
     Rejects("RejectsDuplicateKeyReferences",
       With(Valid(), kRefs, json::array({ KeyReference(), KeyReference() })),

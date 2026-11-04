@@ -10,12 +10,12 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
-/// <summary>Reads native batch outputs, products and diagnostics from the version-three report.</summary>
+/// <summary>Reads native batch outputs, products and diagnostics from the import report.</summary>
 internal static class NativeImportReportReader
 {
     private static readonly Lazy<JsonSchema> Schema = new(static () =>
     {
-        using var stream = typeof(NativeImportReportReader).Assembly.GetManifestResourceStream("Oxygen.Editor.ContentPipeline.Import.Schemas.native-import-report.schema.json")
+        using var stream = typeof(NativeImportReportReader).Assembly.GetManifestResourceStream("oxygen.import-report.schema.json")
             ?? throw new InvalidOperationException("The native import report schema is missing.");
         using var reader = new StreamReader(stream);
         return JsonSchema.FromText(reader.ReadToEnd());
@@ -31,7 +31,8 @@ internal static class NativeImportReportReader
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         if (!Schema.Value.Evaluate(root).IsValid
-            || FileSystemPath.From(root.GetProperty("session").GetProperty("cooked_root").GetString()!) != FileSystemPath.From(execution.Manifest.Output))
+            || !root.GetProperty("session").TryGetProperty("cooked_root", out var cookedRoot)
+            || FileSystemPath.From(cookedRoot.GetString()!) != FileSystemPath.From(execution.Manifest.Output))
         {
             throw new InvalidDataException("The native import report does not match this operation.");
         }

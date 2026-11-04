@@ -750,7 +750,8 @@ base correctly.
 `AssetKeyMap`, `CookedRootCommand`, the scene, geometry and script metadata and
 `Schemas/`), `Cooker/Tools/Common/*`; the report schemas in
 `Cooker/Import/Schemas/` (`oxygen.source-analysis`,
-`oxygen.scene-source-inspection`, `oxygen.cooked-dependencies`,
+`oxygen.import-report`, `oxygen.scene-source-inspection`,
+`oxygen.cooked-dependencies`,
 `oxygen.asset-key-map`); the schema install rules in
 `projects/Oxygen.Engine/cmake/Install.cmake` and the `Cooker`, `Data`, `Core`,
 `Player`, `PakTool` and `Inspector` `CMakeLists.txt`; the ImportTool, Inspector

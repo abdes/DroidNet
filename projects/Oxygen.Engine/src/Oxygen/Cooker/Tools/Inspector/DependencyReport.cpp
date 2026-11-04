@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <filesystem>
+#include <expected>
 #include <memory>
 #include <string>
 #include <utility>
@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
 
@@ -52,16 +53,15 @@ auto BuildDependencyCommand(DependencyReportOptions& options)
 auto RunDependencyReport(const DependencyReportOptions& options)
   -> toolkit::ToolResult
 {
-  const auto root
-    = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path = toolkit::ResolveReportPath(options.output);
-  if (auto safe = toolkit::CheckToolReportDestination(
-        output_path, { .inputs = {}, .cooked_roots = { root } });
-    !safe) {
-    return safe;
+  const auto target = PrepareReport({
+    .cooked_root = options.cooked_root,
+    .output = options.output,
+  });
+  if (!target) {
+    return std::unexpected(target.error());
   }
   const auto content
-    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), target->root);
   nlohmann::json assets = nlohmann::json::array();
   for (const auto& entry : content.Assets()) {
     nlohmann::json row = {
@@ -69,7 +69,6 @@ auto RunDependencyReport(const DependencyReportOptions& options)
       { "asset_type", nostd::to_underlying(entry.type) },
       { "virtual_path", entry.virtual_path },
       { "dependencies", nlohmann::json::array() },
-      { "complete", true },
     };
     row["key_references"] = nlohmann::json::array();
     row["resource_bindings"] = nlohmann::json::array();
@@ -106,11 +105,11 @@ auto RunDependencyReport(const DependencyReportOptions& options)
     assets.push_back(std::move(row));
   }
   const nlohmann::json report = {
-    { "schema", "oxygen.cooked-dependencies.v3" },
+    { "schema_version", kDependencyReportSchemaVersion },
     { "source_key", nostd::to_string(content.Summary().source_key) },
     { "assets", std::move(assets) },
   };
-  return toolkit::PublishToolReport(output_path, report.dump(2));
+  return toolkit::PublishToolReport(target->output, report.dump(2) + '\n');
 }
 
 } // namespace oxygen::content::inspection

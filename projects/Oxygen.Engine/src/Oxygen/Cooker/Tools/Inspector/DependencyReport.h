@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Version of the `oxygen.cooked-dependencies` report.
+inline constexpr int kDependencyReportSchemaVersion = 4;
+
 struct DependencyReportOptions {
   std::string cooked_root;
   std::string output;

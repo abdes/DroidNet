@@ -6,11 +6,12 @@
 
 #include <cstdint>
 #include <exception>
-#include <filesystem>
+#include <expected>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "GeometryMetadata.h"
 #include <nlohmann/json.hpp>
@@ -26,8 +27,8 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
-#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/StableId.h>
@@ -94,17 +95,17 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
   -> toolkit::ToolResult
 {
   using nlohmann::json;
-  const auto root
-    = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path = toolkit::ResolveReportPath(options.output);
-  if (auto safe = toolkit::CheckToolReportDestination(
-        output_path, { .inputs = {}, .cooked_roots = { root } });
-    !safe) {
-    return safe;
+  const auto target = PrepareReport({
+    .cooked_root = options.cooked_root,
+    .output = options.output,
+  });
+  if (!target) {
+    return std::unexpected(target.error());
   }
   const auto content
-    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), target->root);
   auto geometries = json::array();
+  auto failures = std::vector<std::string> {};
   for (const auto& entry : content.Assets()) {
     if (entry.type != data::AssetType::kGeometry) {
       continue;
@@ -113,6 +114,12 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
       && entry.virtual_path != options.virtual_path) {
       continue;
     }
+    auto row = json {
+      { "geometry_asset_key", nostd::to_string(entry.key) },
+      { "virtual_path", entry.virtual_path },
+      { "complete", false },
+      { "surfaces", json::array() },
+    };
     try {
       const auto bytes = content.Descriptor(entry.key);
       if (bytes.size() != entry.descriptor_size.get()) {
@@ -156,31 +163,24 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
       if (!lod_policy.has_value()) {
         throw std::runtime_error("geometry declares no LOD policy");
       }
-      geometries.push_back({
-        {
-          "geometry_asset_key",
-          nostd::to_string(inventory.geometry_asset_key),
-        },
-        {
-          "layout_revision",
-          base::ToHexString(inventory.layout_revision),
-        },
-        {
-          "lod_policy",
-          import::internal::WriteLodPolicy(*lod_policy),
-        },
-        { "surfaces", std::move(surfaces) },
-      });
+      row.at("geometry_asset_key")
+        = nostd::to_string(inventory.geometry_asset_key);
+      row["layout_revision"] = base::ToHexString(inventory.layout_revision);
+      row["lod_policy"] = import::internal::WriteLodPolicy(*lod_policy);
+      row.at("surfaces") = std::move(surfaces);
+      row.at("complete") = true;
     } catch (const std::exception& error) {
-      throw std::runtime_error("invalid geometry '" + entry.virtual_path + "' ("
-        + nostd::to_string(entry.key) + "): " + error.what());
+      row["diagnostic"] = error.what();
+      failures.push_back(RowFailure("geometry", entry, error));
     }
+    geometries.push_back(std::move(row));
   }
   const auto report = json {
-    { "schema_version", data::kSurfaceInventorySchemaVersion },
+    { "schema_version", kGeometryMetadataSchemaVersion },
+    { "complete", failures.empty() },
     { "geometries", std::move(geometries) },
   };
-  return toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
+  return PublishRowReport(target->output, report, failures);
 }
 
 } // namespace oxygen::content::inspection

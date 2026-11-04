@@ -144,9 +144,9 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
 
             var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
-            if (metadata?.Complete != true)
+            if (metadata is null)
             {
-                expansion.Diagnostics.Add(IncompleteInspectionIssue(consumer, metadata));
+                expansion.Diagnostics.Add(PendingInspectionIssue(consumer));
                 continue;
             }
 
@@ -294,10 +294,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private static bool HasProjectOwner(CookDependencyGraph graph, AssetPath uri)
         => graph.Assets.Any(input => input.OwnsOutput(uri.VirtualPath));
 
-    private static DiagnosticRecord IncompleteInspectionIssue(ContentCookInput consumer, CookedAssetDependencies? metadata)
-        => metadata is null
-            ? Issue(consumer, "asset_cook.library_inspection_required", "Library dependencies are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning }
-            : Issue(consumer, "asset_cook.library_inspection_failed", metadata.Diagnostic ?? "Library dependencies could not be inspected.");
+    private static DiagnosticRecord PendingInspectionIssue(ContentCookInput consumer)
+        => Issue(consumer, "asset_cook.library_inspection_required", "Library dependencies are awaiting inspection.") with { Severity = DiagnosticSeverity.Warning };
 
     private static DiagnosticRecord TypeMismatchIssue(ContentCookInput consumer, CookedKeyReference reference, CookedAssetMetadata target)
         => Issue(

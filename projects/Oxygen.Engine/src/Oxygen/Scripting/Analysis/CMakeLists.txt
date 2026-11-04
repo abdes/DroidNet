@@ -116,6 +116,16 @@ endif()
 # Deployment instructions
 # ==============================================================================
 
+if(OXYGEN_INSTALL)
+  # install-sdk: static
+  install(
+    FILES
+      "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.script-diagnostic.schema.json"
+    DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
+    COMPONENT Oxygen_data
+  )
+endif()
+
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}
   TARGETS

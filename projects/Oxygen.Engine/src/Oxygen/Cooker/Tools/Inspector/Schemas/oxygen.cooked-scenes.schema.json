@@ -27,7 +27,11 @@
         ],
         "properties": {
           "asset_key": { "$ref": "#/definitions/key" },
-          "virtual_path": { "type": "string", "pattern": "^/" },
+          "virtual_path": {
+            "description": "Empty when a pak's browse index does not list the asset.",
+            "type": "string",
+            "pattern": "^(/.*)?$"
+          },
           "descriptor_version": {
             "type": ["integer", "null"],
             "minimum": 0,

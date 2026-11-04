@@ -22,6 +22,9 @@ namespace oxygen::content::pak::tool {
 
 using nlohmann::ordered_json;
 
+//! Version of the `oxygen.pak-build-report` report.
+inline constexpr int kBuildReportSchemaVersion = 5;
+
 struct PakToolBuildReportInput {
   std::string tool_version;
   std::string command;

@@ -4,18 +4,27 @@
   "title": "Oxygen Cooked Script Declarations",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "scripts"],
+  "required": ["schema_version", "complete", "scripts"],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
+    "complete": { "type": "boolean" },
     "scripts": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["virtual_path", "asset_key", "parameters"],
+        "required": ["virtual_path", "asset_key", "complete", "parameters"],
+        "if": { "properties": { "complete": { "const": false } } },
+        "then": { "required": ["diagnostic"] },
         "properties": {
-          "virtual_path": { "type": "string", "pattern": "^/" },
+          "virtual_path": {
+            "description": "Empty when a pak's browse index does not list the asset.",
+            "type": "string",
+            "pattern": "^(/.*)?$"
+          },
           "asset_key": { "$ref": "#/definitions/key" },
+          "complete": { "type": "boolean" },
+          "diagnostic": { "type": "string", "minLength": 1 },
           "parameters": {
             "type": "array",
             "items": { "$ref": "#/definitions/parameter" }

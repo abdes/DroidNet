@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ScriptCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/test/CapturingWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/test/ImportReportSchema.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -88,6 +89,7 @@ NOLINT_TEST_F(ImportRefusalTest, ACommandRefusalIsAFailedEntryOfItsReport)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  tool::test::ExpectValidReport(report);
   ASSERT_EQ(report.at("jobs").size(), 1U);
   const auto& job = report.at("jobs").at(0);
   EXPECT_EQ(job.at("type"), "script");
@@ -126,6 +128,7 @@ NOLINT_TEST_F(ImportRefusalTest, ARefusalSpellsARelativeSourceAbsolute)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  tool::test::ExpectValidReport(report);
   const auto source = std::filesystem::path {
     report.at("jobs")
       .at(0)
@@ -167,6 +170,7 @@ NOLINT_TEST_F(ImportRefusalTest, AJobSpellsARelativeCommandLineAbsolute)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  tool::test::ExpectValidReport(report);
   const auto cooked_root = std::filesystem::path {
     report.at("session").at("cooked_root").get<std::string>(),
   };
@@ -208,6 +212,7 @@ NOLINT_TEST_F(ImportRefusalTest, AStoppedJobReportsItselfCancelled)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  tool::test::ExpectValidReport(report);
   EXPECT_EQ(report.at("schema_version"), tool::kReportSchemaVersion);
   EXPECT_EQ(report.at("jobs").at(0).at("status"), "cancelled");
   EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 1);

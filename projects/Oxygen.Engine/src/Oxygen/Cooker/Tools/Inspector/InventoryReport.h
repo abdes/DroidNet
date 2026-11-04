@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Version of the `oxygen.cooked-inventory` report.
+inline constexpr int kInventoryReportSchemaVersion = 2;
+
 struct InventoryReportOptions final {
   std::string cooked_root;
   std::string output;

@@ -14,7 +14,7 @@ public sealed class CookedDependencyReportTests
 {
     private const string ReportJson = """
         {
-          "schema": "oxygen.cooked-dependencies.v3",
+          "schema_version": 4,
           "source_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           "assets": [
             {
@@ -32,8 +32,7 @@ public sealed class CookedDependencyReportTests
                 { "kind": 2, "index": 0, "state": "fallback" },
                 { "kind": 2, "index": 4294967295, "state": "error" },
                 { "kind": 5, "index": 3, "state": "external" }
-              ],
-              "complete": true
+              ]
             }
           ]
         }
@@ -67,13 +66,13 @@ public sealed class CookedDependencyReportTests
     }
 
     [TestMethod]
-    public void Parse_RejectsLegacyWireSchemaIdentifier()
+    public void Parse_RejectsAnotherVersion()
     {
-        var legacy = ReportJson.Replace("oxygen.cooked-dependencies.v3", "oxygen.cooked-dependencies.v2", StringComparison.Ordinal);
+        var legacy = ReportJson.Replace("\"schema_version\": 4", "\"schema_version\": 3", StringComparison.Ordinal);
 
         var parse = () => CookedDependencyReport.Parse(legacy);
         _ = parse.Should().Throw<InvalidDataException>()
-            .WithMessage("*Expected oxygen.cooked-dependencies.v3; received 'oxygen.cooked-dependencies.v2'*installed native Inspector*");
+            .WithMessage("*received schema_version 3*installed native Inspector*");
     }
 
     [TestMethod]

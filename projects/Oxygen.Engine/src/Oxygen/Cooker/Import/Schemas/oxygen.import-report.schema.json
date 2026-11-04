@@ -1,0 +1,229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen-engine.org/schemas/oxygen.import-report.schema.json",
+  "title": "Oxygen Import Report",
+  "description": "What one ImportTool run did: its session, a summary, and one entry per job it reached.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "session", "summary", "jobs"],
+  "properties": {
+    "schema_version": { "const": 6 },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "started_utc",
+        "ended_utc",
+        "tool_version",
+        "command_line"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "started_utc": { "type": "string", "minLength": 1 },
+        "ended_utc": { "type": "string", "minLength": 1 },
+        "tool_version": { "type": "string", "minLength": 1 },
+        "command_line": { "type": "string", "minLength": 1 },
+        "cooked_root": {
+          "description": "Absent when no job and no --cooked-root names one.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "jobs_total",
+        "jobs_succeeded",
+        "jobs_failed",
+        "jobs_skipped",
+        "jobs_cancelled",
+        "time_ms_total",
+        "time_ms_io",
+        "time_ms_cpu"
+      ],
+      "properties": {
+        "jobs_total": { "$ref": "#/definitions/count" },
+        "jobs_succeeded": { "$ref": "#/definitions/count" },
+        "jobs_failed": { "$ref": "#/definitions/count" },
+        "jobs_skipped": { "$ref": "#/definitions/count" },
+        "jobs_cancelled": { "$ref": "#/definitions/count" },
+        "validation_errors": {
+          "description": "Batch only: the jobs refused while the batch was prepared.",
+          "$ref": "#/definitions/count"
+        },
+        "time_ms_total": { "$ref": "#/definitions/millis" },
+        "time_ms_io": { "$ref": "#/definitions/millis" },
+        "time_ms_cpu": { "$ref": "#/definitions/millis" }
+      }
+    },
+    "diagnostics": {
+      "description": "Batch only: what is about no single job, such as a refused manifest.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/diagnostic" }
+    },
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "index",
+          "type",
+          "work_items",
+          "status",
+          "outputs",
+          "products",
+          "stats",
+          "diagnostics"
+        ],
+        "properties": {
+          "index": { "type": "integer", "minimum": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "importer": {
+            "description": "The importer that cooks the job; a job no importer handles has none.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "revision"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "revision": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "work_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "name"],
+              "properties": {
+                "type": { "type": "string" },
+                "name": { "type": "string" },
+                "started_ms": { "$ref": "#/definitions/optionalMillis" },
+                "finished_ms": { "$ref": "#/definitions/optionalMillis" },
+                "collected_ms": { "$ref": "#/definitions/optionalMillis" }
+              }
+            }
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "failed",
+              "skipped",
+              "cancelled",
+              "not_submitted"
+            ]
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "size_bytes"],
+              "properties": {
+                "path": { "type": "string", "minLength": 1 },
+                "size_bytes": { "$ref": "#/definitions/count" }
+              }
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "virtual_path", "descriptor_relative_path"],
+              "properties": {
+                "kind": { "enum": ["asset", "texture"] },
+                "virtual_path": { "type": "string", "minLength": 1 },
+                "descriptor_relative_path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "asset_key": { "type": "string", "minLength": 1 },
+                "asset_type": { "type": "integer", "minimum": 1 }
+              },
+              "if": { "properties": { "kind": { "const": "asset" } } },
+              "then": { "required": ["asset_key", "asset_type"] },
+              "else": {
+                "not": {
+                  "anyOf": [
+                    { "required": ["asset_key"] },
+                    { "required": ["asset_type"] }
+                  ]
+                }
+              }
+            }
+          },
+          "cooked_root": {
+            "description": "Single-job commands: the root the job wrote.",
+            "type": "string",
+            "minLength": 1
+          },
+          "model_record_path": {
+            "description": "Single-job commands: the model import record the job published.",
+            "type": "string",
+            "minLength": 1
+          },
+          "previous_cooked_root": {
+            "description": "Single-job commands: the root a re-import cooked into before.",
+            "type": "string",
+            "minLength": 1
+          },
+          "model_import": {
+            "description": "The update to the job's model import record, whose schema is oxygen.model-import.schema.json.",
+            "type": "object"
+          },
+          "stats": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "time_ms_total",
+              "time_ms_io",
+              "time_ms_source_load",
+              "time_ms_decode",
+              "time_ms_load",
+              "time_ms_cook",
+              "time_ms_emit",
+              "time_ms_finalize"
+            ],
+            "properties": {
+              "time_ms_total": { "$ref": "#/definitions/millis" },
+              "time_ms_io": { "$ref": "#/definitions/millis" },
+              "time_ms_source_load": { "$ref": "#/definitions/millis" },
+              "time_ms_decode": { "$ref": "#/definitions/millis" },
+              "time_ms_load": { "$ref": "#/definitions/millis" },
+              "time_ms_cook": { "$ref": "#/definitions/millis" },
+              "time_ms_emit": { "$ref": "#/definitions/millis" },
+              "time_ms_finalize": { "$ref": "#/definitions/millis" }
+            }
+          },
+          "diagnostics": {
+            "type": "array",
+            "items": { "$ref": "#/definitions/diagnostic" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "count": { "type": "integer", "minimum": 0 },
+    "millis": { "type": "number", "minimum": 0 },
+    "optionalMillis": { "type": ["number", "null"], "minimum": 0 },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "error"] },
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string" },
+        "source_path": { "type": "string", "minLength": 1 },
+        "object_path": { "type": "string", "minLength": 1 },
+        "json_pointer": { "type": "string", "minLength": 1 },
+        "object_name": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

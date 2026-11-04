@@ -30,6 +30,11 @@ public sealed class CookedGeometryReport
             throw new InvalidDataException("The native geometry report does not match its schema.");
         }
 
+        if (!document.RootElement.GetProperty("complete").GetBoolean())
+        {
+            throw new InvalidDataException("The native geometry report has a geometry it could not read.");
+        }
+
         var inventories = ImmutableDictionary.CreateBuilder<Guid, Inventory>();
         foreach (var row in document.RootElement.GetProperty("geometries").EnumerateArray())
         {

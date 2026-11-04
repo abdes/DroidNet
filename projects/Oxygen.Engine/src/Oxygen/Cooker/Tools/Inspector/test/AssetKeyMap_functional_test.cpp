@@ -78,6 +78,8 @@ NOLINT_TEST_F(
                   "Import/Schemas/oxygen.asset-key-map.schema.json"),
                 report),
     ::testing::IsEmpty());
+  EXPECT_EQ(
+    report.at("schema"), oxygen::content::inspection::kAssetKeyMapSchema);
   ASSERT_EQ(report.at("assets").size(), paths.size());
   for (size_t index = 0; index < paths.size(); ++index) {
     const auto path = paths.at(index).get<std::string>();

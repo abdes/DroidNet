@@ -4,9 +4,10 @@
   "title": "Oxygen Cooked Geometry Surfaces",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "geometries"],
+  "required": ["schema_version", "complete", "geometries"],
   "properties": {
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
+    "complete": { "type": "boolean" },
     "geometries": {
       "type": "array",
       "items": {
@@ -14,12 +15,22 @@
         "additionalProperties": false,
         "required": [
           "geometry_asset_key",
-          "layout_revision",
-          "lod_policy",
+          "virtual_path",
+          "complete",
           "surfaces"
         ],
+        "if": { "properties": { "complete": { "const": true } } },
+        "then": { "required": ["layout_revision", "lod_policy"] },
+        "else": { "required": ["diagnostic"] },
         "properties": {
           "geometry_asset_key": { "$ref": "#/definitions/nonNilKey" },
+          "virtual_path": {
+            "description": "Empty when a pak's browse index does not list the asset.",
+            "type": "string",
+            "pattern": "^(/.*)?$"
+          },
+          "complete": { "type": "boolean" },
+          "diagnostic": { "type": "string", "minLength": 1 },
           "layout_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
           "lod_policy": {
             "$ref": "oxygen.lod-policy.schema.json#/definitions/lod_policy"

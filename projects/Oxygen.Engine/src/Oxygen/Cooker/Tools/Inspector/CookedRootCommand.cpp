@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <expected>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -14,6 +15,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/CookedRootCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 
 namespace oxygen::content::inspection {
 
@@ -38,6 +40,9 @@ auto CookedRootCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 auto CookedRootCommand::Run(toolkit::ToolContext& context)
   -> toolkit::ToolResult
 {
+  if (const auto root = ResolveCookedRoot(cooked_root_); !root) {
+    return std::unexpected(root.error());
+  }
   return spec_.dump(context.Out(), cooked_root_);
 }
 

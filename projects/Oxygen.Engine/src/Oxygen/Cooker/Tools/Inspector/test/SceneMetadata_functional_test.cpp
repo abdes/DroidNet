@@ -372,6 +372,8 @@ protected:
       "Tools/Inspector/Schemas/oxygen.cooked-scenes.schema.json");
     EXPECT_THAT(
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
+    EXPECT_EQ(
+      report.at("schema"), oxygen::content::inspection::kSceneMetadataSchema);
     return report;
   }
 

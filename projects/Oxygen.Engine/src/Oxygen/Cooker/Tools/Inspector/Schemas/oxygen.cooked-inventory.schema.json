@@ -15,11 +15,11 @@
   ],
   "properties": {
     "schema_version": {
-      "const": 1
+      "const": 2
     },
     "source_key": {
       "type": "string",
-      "format": "uuid"
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
     },
     "index_size": {
       "type": "integer",
@@ -132,6 +132,8 @@
               "malformed_table",
               "resource_out_of_bounds",
               "resource_digest_mismatch",
+              "uncommitted",
+              "uncommitted_tail",
               "format_version"
             ]
           },

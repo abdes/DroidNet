@@ -206,7 +206,6 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
     }
     key.append(item->item_name);
     auto& trace_item = trace.items[key];
-    trace_item.phase = nostd::to_string(progress.header.phase);
     trace_item.kind = item->item_kind;
     trace_item.name = item->item_name;
     if (progress.header.kind == ProgressEventKind::kItemStarted) {
@@ -428,75 +427,6 @@ auto JobStatusFromReport(const ImportReport& report) -> std::string_view
     return "cancelled";
   }
   return "failed";
-}
-
-auto BuildProgressJson(const JobProgressTrace& trace,
-  std::chrono::steady_clock::time_point fallback_start) -> ordered_json
-{
-  const auto base = trace.started.value_or(fallback_start);
-  ordered_json phases = ordered_json::array();
-  for (size_t index = 0; index < trace.phases.size(); ++index) {
-    const auto& timing = trace.phases[index];
-    if (!timing.started.has_value() && !timing.finished.has_value()) {
-      continue;
-    }
-
-    const auto started_ms = ToRelativeMillis(base, timing.started);
-    const auto finished_ms = ToRelativeMillis(base, timing.finished);
-    ordered_json duration_ms = nullptr;
-    if (timing.started.has_value() && timing.finished.has_value()) {
-      duration_ms = std::chrono::duration<double, std::milli>(
-        *timing.finished - *timing.started)
-                      .count();
-    }
-    phases.push_back({
-      { "phase", nostd::to_string(static_cast<ImportPhase>(index)) },
-      { "started_ms", started_ms },
-      { "finished_ms", finished_ms },
-      { "duration_ms", duration_ms },
-      { "items_completed", timing.items_completed },
-      { "items_total", timing.items_total },
-    });
-  }
-
-  ordered_json items = ordered_json::array();
-  for (const auto& [key, item] : trace.items) {
-    const auto started_ms = ToRelativeMillis(base, item.started);
-    const auto finished_ms = ToRelativeMillis(base, item.finished);
-    const auto collected_ms = ToRelativeMillis(base, item.collected);
-    ordered_json duration_ms = nullptr;
-    if (item.started.has_value() && item.finished.has_value()) {
-      duration_ms = std::chrono::duration<double, std::milli>(
-        *item.finished - *item.started)
-                      .count();
-    }
-    items.push_back({
-      { "phase", item.phase },
-      { "kind", item.kind },
-      { "name", item.name },
-      { "started_ms", started_ms },
-      { "finished_ms", finished_ms },
-      { "collected_ms", collected_ms },
-      { "duration_ms", duration_ms },
-    });
-  }
-
-  ordered_json job = ordered_json::object();
-  job["started_ms"] = ToRelativeMillis(base, trace.started);
-  job["finished_ms"] = ToRelativeMillis(base, trace.finished);
-  ordered_json job_duration = nullptr;
-  if (trace.started.has_value() && trace.finished.has_value()) {
-    job_duration = std::chrono::duration<double, std::milli>(
-      *trace.finished - *trace.started)
-                     .count();
-  }
-  job["duration_ms"] = job_duration;
-
-  ordered_json progress = ordered_json::object();
-  progress["job"] = std::move(job);
-  progress["phases"] = std::move(phases);
-  progress["items"] = std::move(items);
-  return progress;
 }
 
 } // namespace oxygen::content::import::tool

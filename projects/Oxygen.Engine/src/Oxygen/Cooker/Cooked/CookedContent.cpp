@@ -665,13 +665,17 @@ auto CookedContent::Impl::LoadLooseAssets(const LooseCookedIndex& index) -> void
       }
       digest = *computed;
     }
+    auto references = index.FindAssetReferences(key);
+    if (!references) {
+      throw Corrupt(
+        CookedDefect::kMissingPart, root, "an asset has no reference record");
+    }
     assets.push_back({
       .key = key,
       .type
       = static_cast<data::AssetType>(index.FindAssetType(key).value_or(0U)),
       .virtual_path = std::string(index.FindVirtualPath(key).value_or("")),
-      .references
-      = index.FindAssetReferences(key).value_or(data::AssetReferences {}),
+      .references = std::move(*references),
       .descriptor_size = serio::ByteCount { size },
       .descriptor_sha256 = digest,
       .source_path = std::string(index.FindSourcePath(key).value_or("")),

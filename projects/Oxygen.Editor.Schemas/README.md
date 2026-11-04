@@ -19,12 +19,13 @@ copy of their constraints.
 [EditorSchemaOverlay](src/EditorSchemaOverlay.cs) extracts annotations, lints
 the annotation namespace, and checks coverage of engine authoring paths.
 The [project file](src/Oxygen.Editor.Schemas.csproj) copies schemas from the
-engine source tree into the editor output instead of duplicating them in
-source control. Cooked binary serialization remains owned by the engine cooker.
+installed engine SDK into the editor output instead of duplicating them in
+source control, and the overlays in [src/Schemas](src/Schemas) beside them.
+Cooked binary serialization remains owned by the engine cooker.
 
 [EditorSchemaOverlayTests](tests/EditorSchemaOverlayTests.cs) checks repository
-overlays for permitted keywords, sibling schema references, authoring coverage,
-and exclusion from the cooker's embedded schema blocks. Material validation
+overlays for permitted keywords, sibling schema references and authoring
+coverage. Material validation
 also checks agreement between engine and merged schemas. These checks protect
 the engine's validation authority while allowing editor-specific presentation.
 

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Nodes;
-using System.Text.RegularExpressions;
 using AwesomeAssertions;
 
 namespace Oxygen.Editor.Schemas.Tests;
@@ -175,38 +174,6 @@ public sealed class EditorSchemaOverlayTests
             hiddenPaths: ["/$schema"]);
 
         _ = missing.Should().BeEmpty();
-    }
-
-    /// <summary>
-    /// Verifies editor overlay files are not embedded into cooker or PakTool schema resources.
-    /// </summary>
-    [TestMethod]
-    public void CookerEmbeddedSchemasDoNotIncludeEditorOverlays()
-    {
-        var repoRoot = FindRepoRoot();
-        var cmakeFiles = new[]
-        {
-            Path.Combine(repoRoot, "projects", "Oxygen.Engine", "src", "Oxygen", "Cooker", "CMakeLists.txt"),
-            Path.Combine(repoRoot, "projects", "Oxygen.Engine", "src", "Oxygen", "Cooker", "Tools", "PakTool", "CMakeLists.txt"),
-        };
-
-        foreach (var cmakeFile in cmakeFiles)
-        {
-            var contents = File.ReadAllText(cmakeFile);
-            var embeddedSchemaBlocks = new Regex(
-                @"oxygen_embed_json_schemas\s*\((?<body>.*?)\)",
-                RegexOptions.Singleline,
-                TimeSpan.FromSeconds(1)).Matches(
-                contents,
-                0);
-
-            foreach (Match match in embeddedSchemaBlocks)
-            {
-                _ = match.Groups["body"].Value.Should().NotContain(
-                    ".editor.schema.json",
-                    $"editor overlays must not be embedded by {cmakeFile}");
-            }
-        }
     }
 
     /// <summary>
@@ -389,31 +356,5 @@ public sealed class EditorSchemaOverlayTests
             _ => [],
         };
 
-    private static string FindSchemaRoot()
-        => Path.Combine(
-            FindRepoRoot(),
-            "projects",
-            "Oxygen.Engine",
-            "src",
-            "Oxygen",
-            "Cooker",
-            "Import",
-            "Schemas");
-
-    private static string FindRepoRoot()
-    {
-        var current = new DirectoryInfo(AppContext.BaseDirectory);
-        while (current is not null)
-        {
-            if (File.Exists(Path.Combine(current.FullName, "Directory.build.props"))
-                && Directory.Exists(Path.Combine(current.FullName, "projects", "Oxygen.Engine")))
-            {
-                return current.FullName;
-            }
-
-            current = current.Parent;
-        }
-
-        throw new DirectoryNotFoundException("Could not locate the DroidNet repository root.");
-    }
+    private static string FindSchemaRoot() => Path.Combine(AppContext.BaseDirectory, "Schemas");
 }

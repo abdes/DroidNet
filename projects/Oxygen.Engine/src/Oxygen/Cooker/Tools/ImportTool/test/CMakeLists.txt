@@ -24,6 +24,7 @@ oxygen_cooker_test(
     "CapturingWriter.h"
     "ConsoleMessageWriter_functional_test.cpp"
     "ImportRefusal_functional_test.cpp"
+    "ImportReportSchema.h"
     "StopSignal_functional_test.cpp"
 )
 

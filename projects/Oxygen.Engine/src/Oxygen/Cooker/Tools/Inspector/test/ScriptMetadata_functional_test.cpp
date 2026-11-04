@@ -123,6 +123,8 @@ protected:
       "Tools/Inspector/Schemas/oxygen.cooked-scripts.schema.json");
     EXPECT_THAT(
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
+    EXPECT_EQ(report.at("schema_version"),
+      oxygen::content::inspection::kScriptMetadataSchemaVersion);
     return report;
   }
 
@@ -162,11 +164,29 @@ NOLINT_TEST_F(InspectorScriptMetadataTest, FiltersByNativeVirtualPath)
   EXPECT_EQ(ReadReport().at("scripts").size(), 1U);
 }
 
-NOLINT_TEST_F(InspectorScriptMetadataTest, RejectsRetiredScriptVersion)
+//! A script that cannot be read fails the run, and its row says why while the
+//! other rows stay usable.
+NOLINT_TEST_F(InspectorScriptMetadataTest, ReportsARetiredScriptAsAFailedRow)
 {
-  WriteRoot(static_cast<uint8_t>(scripting::kScriptAssetVersion - 1U));
+  auto library = LooseCookedRoot { "Content" };
+  library.Add(
+    ScriptAsset(static_cast<uint8_t>(scripting::kScriptAssetVersion - 1U)));
+  auto other = ScriptAsset();
+  other.leaf = "Scripts/Other.oscript";
+  library.Add(std::move(other));
+  Materialize(library.Files(), TempDir());
+
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(ReportPath("scripts.json")));
+
+  const auto report = ReadReport();
+  EXPECT_EQ(report.at("complete"), false);
+  ASSERT_EQ(report.at("scripts").size(), 2U);
+  for (const auto& row : report.at("scripts")) {
+    const auto retired = row.at("virtual_path") == kScriptPath;
+    EXPECT_EQ(row.at("complete"), !retired);
+    EXPECT_EQ(row.contains("diagnostic"), retired);
+    EXPECT_EQ(row.at("parameters").empty(), retired);
+  }
 }
 
 } // namespace

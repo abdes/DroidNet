@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/test/CapturingWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/test/ImportReportSchema.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -53,6 +54,7 @@ using oxygen::content::import::tool::BatchCommand;
 using oxygen::content::import::tool::GlobalOptions;
 using oxygen::content::import::tool::IMessageWriter;
 using oxygen::content::import::tool::test::CapturingWriter;
+using oxygen::content::import::tool::test::ExpectValidReport;
 using oxygen::cooker::test::WriteText;
 namespace report_codes = oxygen::content::toolkit::report_codes;
 
@@ -286,6 +288,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsARefusedJobAtItsPosition)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_EQ(report.at("summary").at("jobs_total"), 2);
   EXPECT_EQ(report.at("summary").at("jobs_failed"), 1);
   EXPECT_EQ(report.at("summary").at("jobs_succeeded"), 1);
@@ -325,6 +328,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenWhenEveryJobIsRefused)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_FALSE(
     report.at("session").at("cooked_root").get<std::string>().empty());
   EXPECT_EQ(report.at("summary").at("validation_errors"), 1);
@@ -351,6 +355,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   const auto& job = report.at("jobs").at(0);
   EXPECT_EQ(job.at("status"), "failed");
   EXPECT_EQ(job.at("stats").at("time_ms_io"), 0.0);
@@ -389,6 +394,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_EQ(report.at("schema_version"),
     oxygen::content::import::tool::kReportSchemaVersion);
   const auto& jobs = report.at("jobs");
@@ -455,6 +461,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, InputSourcesInOneFolderKeepTheirKeys)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   auto keys = std::vector<std::string> {};
   auto paths = std::vector<std::string> {};
   for (const auto& job : report.at("jobs")) {
@@ -731,6 +738,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << messages;
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   const auto in_entry = std::ranges::any_of(
     report.at("jobs"), [](const nlohmann::json& job) -> bool {
       const auto& diagnostics = job.at("diagnostics");
@@ -979,6 +987,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenForARefusedManifest)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_FALSE(
     report.at("session").at("cooked_root").get<std::string>().empty());
   EXPECT_TRUE(report.at("jobs").empty());
@@ -1077,6 +1086,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, EmptyBatchWritesItsReport)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_TRUE(report.at("jobs").empty());
   EXPECT_EQ(report.at("summary").at("jobs_total"), 0);
   EXPECT_EQ(report.at("summary").at("validation_errors"), 0);
@@ -1119,6 +1129,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportSpellsARelativeManifestAbsolute)
   auto stream = std::ifstream(root / "reports" / "report.json");
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   ASSERT_FALSE(report.at("diagnostics").empty());
   const auto source_path = std::filesystem::path {
     report.at("diagnostics").at(0).at("source_path").get<std::string>(),
@@ -1308,6 +1319,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, TwoManifestsRunAsOneBatch)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_EQ(report.at("jobs").size(), 2U);
   EXPECT_TRUE(authored::HasCookedFile(root / ".cooked", "Wood.omat"));
   EXPECT_TRUE(authored::HasCookedFile(root / ".cooked", "Stone.omat"));
@@ -1390,6 +1402,7 @@ NOLINT_TEST_F(
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   const auto& jobs = report.at("jobs");
   ASSERT_EQ(jobs.size(), 4U);
   EXPECT_EQ(jobs.at(0).at("status"), "failed");
@@ -1439,6 +1452,7 @@ NOLINT_TEST_F(
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   const auto& jobs = report.at("jobs");
   ASSERT_EQ(jobs.size(), 2U);
   EXPECT_EQ(jobs.at(0).at("status"), "not_submitted");
@@ -1477,6 +1491,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, FailFastStartsNoJobAfterAFailure)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_EQ(report.at("summary").at("validation_errors"), 0);
   EXPECT_EQ(report.at("summary").at("jobs_failed"), 1);
   EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 1);
@@ -1519,6 +1534,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, AStoppedBatchReportsItsJobsCancelled)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open()) << Messages();
   const auto report = nlohmann::json::parse(stream);
+  ExpectValidReport(report);
   EXPECT_EQ(report.at("summary").at("jobs_cancelled"), 2);
   EXPECT_EQ(report.at("summary").at("jobs_failed"), 0);
   for (const auto& job : report.at("jobs")) {

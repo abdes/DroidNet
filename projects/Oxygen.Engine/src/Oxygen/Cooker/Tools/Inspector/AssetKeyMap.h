@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Identifier of the `oxygen.asset-key-map` report.
+inline constexpr auto kAssetKeyMapSchema = "oxygen.asset-key-map.v1";
+
 struct AssetKeyMapOptions {
   std::string input;
   std::string output;

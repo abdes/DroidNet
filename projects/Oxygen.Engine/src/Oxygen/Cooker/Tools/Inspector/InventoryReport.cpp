@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <expected>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -20,7 +21,6 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -32,6 +32,7 @@
 #include <Oxygen/Cooker/Cooked/Validate.h>
 #include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
@@ -131,14 +132,14 @@ auto RunInventoryReport(const InventoryReportOptions& options)
   -> toolkit::ToolResult
 {
   using nlohmann::json;
-  const auto root
-    = std::filesystem::canonical(base::ToNativePath(options.cooked_root));
-  const auto output = toolkit::ResolveReportPath(options.output);
-  if (auto safe = toolkit::CheckToolReportDestination(
-        output, { .inputs = {}, .cooked_roots = { root } });
-    !safe) {
-    return safe;
+  const auto target = PrepareReport({
+    .cooked_root = options.cooked_root,
+    .output = options.output,
+  });
+  if (!target) {
+    return std::unexpected(target.error());
   }
+  const auto& root = target->root;
   const auto index_path = root / oxygen::data::loose_cooked::kIndexFileName;
   const auto index_digest = FileDigest(index_path);
   const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
@@ -179,6 +180,10 @@ auto RunInventoryReport(const InventoryReportOptions& options)
         return "resource_out_of_bounds";
       case lc::IntegrityFailure::kResourceDigestMismatch:
         return "resource_digest_mismatch";
+      case lc::IntegrityFailure::kUncommitted:
+        return "uncommitted";
+      case lc::IntegrityFailure::kUncommittedTail:
+        return "uncommitted_tail";
       }
       throw std::logic_error("Unknown inventory failure");
     }();
@@ -244,14 +249,16 @@ auto RunInventoryReport(const InventoryReportOptions& options)
     throw std::runtime_error("Loose cooked index changed during verification");
   }
   const auto report = json {
-      { "schema_version", 1 }, { "source_key", nostd::to_string(index.Guid()) },
-      { "index_size", std::filesystem::file_size(index_path) },
-      { "index_sha256", hex(index_digest) },
-      { "files", std::move(files) }, { "assets", std::move(assets) },
-      { "resources", std::move(resources) },
-      { "issues", std::move(issues) },
-    }.dump();
-  return toolkit::PublishToolReport(output, report);
+    { "schema_version", kInventoryReportSchemaVersion },
+    { "source_key", nostd::to_string(index.Guid()) },
+    { "index_size", std::filesystem::file_size(index_path) },
+    { "index_sha256", hex(index_digest) },
+    { "files", std::move(files) },
+    { "assets", std::move(assets) },
+    { "resources", std::move(resources) },
+    { "issues", std::move(issues) },
+  };
+  return toolkit::PublishToolReport(target->output, report.dump(2) + '\n');
 }
 
 } // namespace oxygen::content::inspection

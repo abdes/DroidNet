@@ -345,7 +345,7 @@ auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
 {
   return ordered_json {
     { "$schema", std::string(kBuildReportSchemaRef) },
-    { "schema_version", 5 },
+    { "schema_version", kBuildReportSchemaVersion },
     { "tool_name", std::string(kToolName) },
     { "tool_version", input.tool_version },
     { "command", input.command },

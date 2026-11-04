@@ -49,7 +49,7 @@ public sealed class ScriptMetadataTests
 
     [TestMethod]
     public void AnEmptyReportHasNoDeclarations()
-        => _ = CookedScriptReport.Parse("""{ "schema_version": 1, "scripts": [] }""").SingleOrDefault(Script).Should().BeNull();
+        => _ = CookedScriptReport.Parse("""{ "schema_version": 2, "complete": true, "scripts": [] }""").SingleOrDefault(Script).Should().BeNull();
 
     [TestMethod]
     public void AReportOutsideTheSchemaOrRepeatingAParameterIsRefused()
@@ -68,8 +68,8 @@ public sealed class ScriptMetadataTests
 
     private static string Report(string parameters)
         => $$"""
-            { "schema_version": 1, "scripts": [
-              { "virtual_path": "/Content/Scripts/rotate.oscript", "asset_key": "{{Key}}", "parameters": [ {{parameters}} ] }
+            { "schema_version": 2, "complete": true, "scripts": [
+              { "virtual_path": "/Content/Scripts/rotate.oscript", "asset_key": "{{Key}}", "complete": true, "parameters": [ {{parameters}} ] }
             ] }
             """;
 }

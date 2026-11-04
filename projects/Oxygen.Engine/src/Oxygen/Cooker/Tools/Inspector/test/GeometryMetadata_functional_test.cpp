@@ -264,7 +264,21 @@ protected:
       "Tools/Inspector/Schemas/oxygen.cooked-geometries.schema.json");
     EXPECT_THAT(
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
+    EXPECT_EQ(report.at("schema_version"),
+      oxygen::content::inspection::kGeometryMetadataSchemaVersion);
     return report;
+  }
+
+  //! The report holds the root's one geometry, which could not be read.
+  auto ExpectFailedRow() -> void
+  {
+    const auto report = ReadReport();
+    EXPECT_EQ(report.at("complete"), false);
+    ASSERT_EQ(report.at("geometries").size(), 1U);
+    const auto& row = report.at("geometries").at(0);
+    EXPECT_EQ(row.at("complete"), false);
+    EXPECT_FALSE(row.at("diagnostic").get<std::string>().empty());
+    EXPECT_TRUE(row.at("surfaces").empty());
   }
 
 private:
@@ -319,7 +333,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsRetiredGeometryVersion)
   WriteGeometryRoot(TempDir(), { .version = 1 });
   EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(ReportPath("geometries.json")));
+  ExpectFailedRow();
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
@@ -339,7 +353,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsNilSurfaceIdentity)
   WriteGeometryRoot(TempDir(), { .first_surface = {} });
   EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(ReportPath("geometries.json")));
+  ExpectFailedRow();
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)

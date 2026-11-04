@@ -95,7 +95,7 @@ internal static class CookedDependencyCache
     }
 
     private static string CachePath(string projectRoot, string fingerprint)
-        => ProjectOutputFolders.BuildPath(projectRoot, "cache", "cooked-dependencies-v3", fingerprint + ".json");
+        => ProjectOutputFolders.BuildPath(projectRoot, "cache", "cooked-dependencies-v4", fingerprint + ".json");
 
     private sealed record CachedReport(string Fingerprint, string Digest, string Report);
 }

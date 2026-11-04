@@ -125,6 +125,18 @@ public sealed class NativeImportReportReaderTests
         _ = read.Should().Throw<InvalidDataException>();
     }
 
+    /// <summary>A run with no cooked root in its report cannot be this operation's.</summary>
+    [TestMethod]
+    public void RejectsAReportWithNoCookedRoot()
+    {
+        var (execution, report) = CreateReport();
+        _ = report["session"]!.AsObject().Remove("cooked_root");
+
+        Action read = () => _ = NativeImportReportReader.Read(report.ToJsonString(), execution, 1);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
     /// <summary>A batch that stopped lists the jobs it reached, and its refusal is reported by code.</summary>
     [TestMethod]
     public void ReadsTheRefusalOfABatchThatStopped()
@@ -169,8 +181,9 @@ public sealed class NativeImportReportReaderTests
             MountsFile = ContentImportMountsFile.Empty,
         };
         var report = JsonNode.Parse("""
-            {"schema_version":6,"session":{"cooked_root":""},"jobs":[
-              {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
+            {"schema_version":6,"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
+             "summary":{"jobs_total":1,"jobs_succeeded":1,"jobs_failed":0,"jobs_skipped":0,"jobs_cancelled":0,"time_ms_total":0,"time_ms_io":0,"time_ms_cpu":0},"jobs":[
+              {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"work_items":[],"stats":{"time_ms_total":0,"time_ms_io":0,"time_ms_source_load":0,"time_ms_decode":0,"time_ms_load":0,"time_ms_cook":0,"time_ms_emit":0,"time_ms_finalize":0},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
                "products":[
                  {"kind":"asset","virtual_path":"/Content/Models/Model/Geometry/Triangle.ogeo","descriptor_relative_path":"Models/Model/Geometry/Triangle.ogeo","asset_key":"00000000-0000-0000-0000-000000000001","asset_type":2},
                  {"kind":"texture","virtual_path":"/Content/Models/Model/Textures/Albedo.otex","descriptor_relative_path":"Models/Model/Textures/Albedo.otex"}],
@@ -202,8 +215,9 @@ public sealed class NativeImportReportReaderTests
 
         // The engine reports a model job as the gltf or fbx job its record runs.
         var report = JsonNode.Parse("""
-            {"schema_version":6,"session":{"cooked_root":""},"jobs":[
-              {"index":1,"type":"gltf","status":"succeeded","outputs":[],"products":[],"diagnostics":[]
+            {"schema_version":6,"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
+             "summary":{"jobs_total":1,"jobs_succeeded":1,"jobs_failed":0,"jobs_skipped":0,"jobs_cancelled":0,"time_ms_total":0,"time_ms_io":0,"time_ms_cpu":0},"jobs":[
+              {"index":1,"type":"gltf","work_items":[],"stats":{"time_ms_total":0,"time_ms_io":0,"time_ms_source_load":0,"time_ms_decode":0,"time_ms_load":0,"time_ms_cook":0,"time_ms_emit":0,"time_ms_finalize":0},"status":"succeeded","outputs":[],"products":[],"diagnostics":[]
             """ + update + "}]}")!;
         report["session"]!["cooked_root"] = output;
         return (execution, report);

@@ -108,11 +108,32 @@ public sealed class GeometryMetadataTests
         api.VerifyNoOtherCalls();
     }
 
+    /// <summary>A report that holds a geometry it could not read is refused, though its schema is met.</summary>
+    [TestMethod]
+    public void RejectsAReportWithAFailedRow()
+    {
+        var source = JsonNode.Parse(SurfaceReport())!;
+        source["complete"] = false;
+        var row = source["geometries"]![0]!.AsObject();
+        row["complete"] = false;
+        row["diagnostic"] = "The geometry is retired.";
+        _ = row.Remove("layout_revision");
+        _ = row.Remove("lod_policy");
+        row["surfaces"] = new JsonArray();
+
+        Action read = () => CookedGeometryReport.Parse(source.ToJsonString());
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*could not read*");
+    }
+
     private static string SurfaceReport() => """
         {
-          "schema_version": 1,
+          "schema_version": 2,
+          "complete": true,
           "geometries": [{
             "geometry_asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",
+            "virtual_path": "/Content/Geometry/Test.ogeo",
+            "complete": true,
             "layout_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "lod_policy": {"lod_index": 0, "type": "fixed"},
             "surfaces": [{

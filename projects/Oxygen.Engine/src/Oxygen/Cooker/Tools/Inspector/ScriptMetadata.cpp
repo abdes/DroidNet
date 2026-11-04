@@ -6,13 +6,14 @@
 
 #include <cstdint>
 #include <exception>
-#include <filesystem>
+#include <expected>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "ScriptMetadata.h"
 #include <nlohmann/json.hpp>
@@ -26,8 +27,8 @@
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
-#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
+#include <Oxygen/Cooker/Tools/Inspector/InspectorReport.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -37,9 +38,6 @@
 namespace oxygen::content::inspection {
 
 namespace {
-
-  //! Version of the `oxygen.cooked-scripts` report.
-  constexpr int kScriptMetadataSchemaVersion = 1;
 
   //! One declared parameter: its name, type, and the default or asset kind
   //! the cooked declaration carries. Node parameters have neither.
@@ -120,17 +118,17 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
   -> toolkit::ToolResult
 {
   using nlohmann::json;
-  const auto root
-    = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path = toolkit::ResolveReportPath(options.output);
-  if (auto safe = toolkit::CheckToolReportDestination(
-        output_path, { .inputs = {}, .cooked_roots = { root } });
-    !safe) {
-    return safe;
+  const auto target = PrepareReport({
+    .cooked_root = options.cooked_root,
+    .output = options.output,
+  });
+  if (!target) {
+    return std::unexpected(target.error());
   }
   const auto content
-    = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
+    = cooked::CookedContent::Open(cooked::RealCookerStorage(), target->root);
   auto scripts = json::array();
+  auto failures = std::vector<std::string> {};
   for (const auto& entry : content.Assets()) {
     if (entry.type != data::AssetType::kScript) {
       continue;
@@ -139,6 +137,12 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
       && entry.virtual_path != options.virtual_path) {
       continue;
     }
+    auto row = json {
+      { "virtual_path", entry.virtual_path },
+      { "asset_key", nostd::to_string(entry.key) },
+      { "complete", false },
+      { "parameters", json::array() },
+    };
     try {
       const auto bytes = content.Descriptor(entry.key);
       if (bytes.size() != entry.descriptor_size.get()) {
@@ -158,21 +162,20 @@ auto RunScriptMetadataReport(const ScriptMetadataOptions& options)
       for (const auto& parameter : script->Parameters()) {
         parameters.push_back(ToJson(parameter));
       }
-      scripts.push_back({
-        { "virtual_path", entry.virtual_path },
-        { "asset_key", nostd::to_string(entry.key) },
-        { "parameters", std::move(parameters) },
-      });
+      row.at("parameters") = std::move(parameters);
+      row.at("complete") = true;
     } catch (const std::exception& error) {
-      throw std::runtime_error("invalid script '" + entry.virtual_path + "' ("
-        + nostd::to_string(entry.key) + "): " + error.what());
+      row["diagnostic"] = error.what();
+      failures.push_back(RowFailure("script", entry, error));
     }
+    scripts.push_back(std::move(row));
   }
   const auto report = json {
     { "schema_version", kScriptMetadataSchemaVersion },
+    { "complete", failures.empty() },
     { "scripts", std::move(scripts) },
   };
-  return toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
+  return PublishRowReport(target->output, report, failures);
 }
 
 } // namespace oxygen::content::inspection

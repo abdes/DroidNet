@@ -94,10 +94,10 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
     });
   }
   const nlohmann::json report = {
-    { "schema", "oxygen.asset-key-map.v1" },
+    { "schema", kAssetKeyMapSchema },
     { "assets", std::move(assets) },
   };
-  return toolkit::PublishToolReport(output_path, report.dump(2));
+  return toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
 }
 
 } // namespace oxygen::content::inspection

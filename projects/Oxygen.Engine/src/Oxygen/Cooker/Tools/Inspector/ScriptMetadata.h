@@ -17,6 +17,9 @@ class Command;
 
 namespace oxygen::content::inspection {
 
+//! Version of the `oxygen.cooked-scripts` report.
+inline constexpr int kScriptMetadataSchemaVersion = 2;
+
 struct ScriptMetadataOptions {
   std::string cooked_root;
   std::string output;
