@@ -14,7 +14,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/SurfaceInventory.h>
@@ -25,13 +24,13 @@ namespace oxygen::content::import {
 /*!
  A geometry is found by its anchor, its name inside its model (`Hull`), so its
  surface ids survive moving or renaming the model. The inventory's geometry key
- is the one of the cook that recorded it.
+ is the one of the cook that recorded it. Each surface is found by its
+ declaration key (`AllocateSurfaces`).
 */
 struct SurfaceGeometryProvenance final {
   std::string source_geometry_anchor;
-  base::Sha256Digest source_layout_witness {};
   data::SurfaceInventory inventory {};
-  std::map<uint32_t, data::SurfaceId> allocations;
+  std::map<std::string, data::SurfaceId> allocations;
 };
 
 //! Immutable, validated identity provenance shared by all meshes in an import.
@@ -40,7 +39,7 @@ struct SurfaceGeometryProvenance final {
 class SurfaceProvenance final {
 public:
   //! The `schema_version` of the serialized form.
-  static constexpr uint32_t kSchemaVersion = 2;
+  static constexpr uint32_t kSchemaVersion = 3;
 
   //! An empty geometry list establishes a first-import source namespace.
   //! Throws std::invalid_argument for inconsistent identity/inventory data.

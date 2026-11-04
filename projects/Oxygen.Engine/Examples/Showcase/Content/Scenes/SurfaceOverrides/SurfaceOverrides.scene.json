@@ -454,8 +454,8 @@
         "parts": [
           {
             "kind": "surface",
-            "id": "914071b0-c22f-f08b-ea6d-33dd2cec5584",
-            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
+            "id": "900483fa-f8e9-ef27-31f8-10f65dc21aec",
+            "layout_revision": "4a0847e6fd624ea556af59b755981797956405882974ebf7345aa677f37bfa99",
             "values": {
               "/material": "SoShadeRed.omat"
             }
@@ -482,16 +482,16 @@
         "parts": [
           {
             "kind": "surface",
-            "id": "15f61e58-02db-1303-d223-663d1e95110e",
-            "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
+            "id": "149b275e-a889-4a9a-9ece-ec33c8ddcfa1",
+            "layout_revision": "ae20f5c9cec7cfdadc6f40ebc6b3b7cb5c4c225aee6777bd7213016880877425",
             "values": {
               "/material": "SoPotTeal.omat"
             }
           },
           {
             "kind": "surface",
-            "id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1",
-            "layout_revision": "5936ed2604c9b4f26f4a706a257b45e1be9766b2d1152aefd88d7991adb7f0a8",
+            "id": "0e0b5e11-2d40-8258-4ed6-28d4b68ebae6",
+            "layout_revision": "ae20f5c9cec7cfdadc6f40ebc6b3b7cb5c4c225aee6777bd7213016880877425",
             "values": {
               "/material": "SoPotGold.omat"
             }
@@ -550,8 +550,8 @@
         "parts": [
           {
             "kind": "surface",
-            "id": "914071b0-c22f-f08b-ea6d-33dd2cec5584",
-            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
+            "id": "900483fa-f8e9-ef27-31f8-10f65dc21aec",
+            "layout_revision": "4a0847e6fd624ea556af59b755981797956405882974ebf7345aa677f37bfa99",
             "values": {
               "/visible": false
             }
@@ -566,8 +566,8 @@
         "parts": [
           {
             "kind": "surface",
-            "id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8",
-            "layout_revision": "e3c225623d3dc9c308622770e45e068174145d4525914fc02f9cb41efab0db82",
+            "id": "fa69c0e7-0d49-bbe0-c326-2eefeb753eb2",
+            "layout_revision": "4a0847e6fd624ea556af59b755981797956405882974ebf7345aa677f37bfa99",
             "values": {
               "/casts_shadows": false
             }

@@ -30,7 +30,7 @@ add_library(
   "ModelImportTestBase.h"
   "PipelineHarness.h"
   "SceneDescriptorTestData.h"
-  "SourceLayoutTestSupport.h"
+  "SurfaceTestSupport.h"
   "TestImages.cpp"
   "TestImages.h"
   "TestImportJob.cpp"

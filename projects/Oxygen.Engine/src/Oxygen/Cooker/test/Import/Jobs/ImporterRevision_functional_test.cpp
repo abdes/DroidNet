@@ -69,13 +69,13 @@ namespace {
       .importer = Importer::kGltf,
       .revision = 9,
       .digest
-      = "a4c1f9873d2af776d16d5316db493e45c5eb8fc11e3974b90f1604f19561698e",
+      = "92ab1078d93d153dafdaf0aa5a43fcef19af8daa8c593e7627c0b0659b29f9bf",
     },
     {
       .importer = Importer::kFbx,
       .revision = 9,
       .digest
-      = "87b9f57f2cf062f89353da5a948f20202531b175cb36d8b540ef1f22b926af13",
+      = "a9b32f1b8808aeb4458a188a7d57cb25638eb34919df30f44542aa0def2d720a",
     },
     {
       .importer = Importer::kTexture,

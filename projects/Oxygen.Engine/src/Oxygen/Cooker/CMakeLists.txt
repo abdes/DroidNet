@@ -286,7 +286,6 @@ set(
   "Import/Internal/SceneNodeImportDefaults.h"
   "Import/Internal/SceneImportRequestBuilder.h"
   "Import/Internal/SidecarSceneResolver.h"
-  "Import/Internal/SourceLayoutHash.h"
   "Import/Internal/stb/stb_image.h"
   "Import/Internal/TextureCooker.h"
   "Import/Internal/TextureImportRequestBuilder.h"

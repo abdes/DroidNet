@@ -10,30 +10,29 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "d5e599de-51ab-da3f-d236-34d230ed4b5b"
+            "declaration_key": "#unnamed[1]",
+            "surface_id": "f48cb1ef-66a3-8575-63be-f4fd6417a5d2"
           }
         ],
-        "geometry_asset_key": "91b8a394-6c84-877f-b7b4-47982c5e6944",
-        "layout_revision": "f5006a7fe0affd3d736368af533f29e8e9dc483d49411e2ee86421c670fa14bd",
+        "geometry_asset_key": "8f0be745-bd38-052c-4977-c45df313602c",
+        "layout_revision": "5dc55b7d97811c63ff06a345c16ba7695005adfab5f4faf8d56a0e6ea8c82c6b",
         "source_geometry_anchor": "geometry_0",
-        "source_layout_witness": "84ffadfb3dbef3d0163ed1eb186ddd49a8844dd712d237313c3e3d146bb5ca71",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "013bcfd4-069c-32e4-4a26-786194a08fc5",
+                "default_material_key": "18189e78-3ac4-dbeb-02a4-0c5bfb0adbf1",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Material",
-            "surface_id": "d5e599de-51ab-da3f-d236-34d230ed4b5b"
+            "surface_id": "f48cb1ef-66a3-8575-63be-f4fd6417a5d2"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
@@ -49,8 +48,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 5222476,
+    "files": [],
     "sha256": "653a385628908f805a904aacc1daf7b3f94c23ebc8883f56461a3c0175fe4957",
-    "files": []
+    "size": 5222476
   }
 }

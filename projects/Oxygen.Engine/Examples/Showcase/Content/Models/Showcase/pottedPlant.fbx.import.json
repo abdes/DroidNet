@@ -10,77 +10,71 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "15f61e58-02db-1303-d223-663d1e95110e"
+            "declaration_key": "wood",
+            "surface_id": "149b275e-a889-4a9a-9ece-ec33c8ddcfa1"
           },
           {
-            "declaration_key": 1,
-            "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1"
+            "declaration_key": "woodDark",
+            "surface_id": "0e0b5e11-2d40-8258-4ed6-28d4b68ebae6"
           }
         ],
-        "geometry_asset_key": "cb8091d2-b3e7-f606-baae-a804ef69c5ed",
-        "layout_revision": "327f64cc307659f50254f24b3f8dd2e89b8f87642442d86fcb8db655d2718181",
+        "geometry_asset_key": "17716ffd-7f25-46f1-7291-5e0270d60d20",
+        "layout_revision": "ae20f5c9cec7cfdadc6f40ebc6b3b7cb5c4c225aee6777bd7213016880877425",
         "source_geometry_anchor": "Mesh_0",
-        "source_layout_witness": "210ff5b41e1a6579bad25cca406f4884f88b796ef92b079092969c494126ea58",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "3f8196f9-9957-f6d1-ba98-fc99a287d262",
+                "default_material_key": "79652a00-13ce-76c3-7109-2fa4b907f210",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "wood",
-            "surface_id": "15f61e58-02db-1303-d223-663d1e95110e"
+            "surface_id": "149b275e-a889-4a9a-9ece-ec33c8ddcfa1"
           },
           {
             "bindings": [
               {
-                "default_material_key": "65e7d563-9424-dcbe-b7bc-852d34f7fc0e",
+                "default_material_key": "cb0ce313-3fae-a4fa-23c3-bbda8cda80f3",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "woodDark",
-            "surface_id": "5aac8d25-d9b8-dafb-0dfb-da32cd6051c1"
+            "surface_id": "0e0b5e11-2d40-8258-4ed6-28d4b68ebae6"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "ab43fee2-a160-b9a1-0527-7ada751c27ee"
+            "declaration_key": "plant",
+            "surface_id": "560f57ec-ad2a-326b-6bc8-766626fde89d"
           }
         ],
-        "geometry_asset_key": "3744900d-53e5-5f82-ab55-7c4853f2d1e1",
-        "layout_revision": "69dacea00202d05c9edabfa2e5ce0c8d4ad3efd2ea9028c60422c96b7ca2929e",
+        "geometry_asset_key": "2cae66e0-9988-30aa-cf61-5ec0a1476970",
+        "layout_revision": "974d7454b1c3821868193e5c5d5f6dc88a2144b1a1129d19ede92b4437631563",
         "source_geometry_anchor": "Mesh_1",
-        "source_layout_witness": "c076e8a4dd403e463e0c9b8d79407e3779dba5d4d58b93b246dbc4b1641a81d7",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "84ce48d8-4fcd-78bd-328b-bcc008b7d11c",
+                "default_material_key": "ab8f177e-63bf-46db-2eb9-449f01a6072b",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "plant",
-            "surface_id": "ab43fee2-a160-b9a1-0527-7ada751c27ee"
+            "surface_id": "560f57ec-ad2a-326b-6bc8-766626fde89d"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
-    {
-      "anchor": "#root",
-      "node_id": "c226fefb-c93a-0514-c0c0-cfec4dbe031b"
-    },
     {
       "anchor": "pottedPlant",
       "node_id": "eea332bf-904b-c9db-a731-65a8aa50a951"
@@ -93,8 +87,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 23744,
+    "files": [],
     "sha256": "61e963d81fbf4e0772b5b8d542a44dbb0c794affa9994b6d5715f425d71fc97d",
-    "files": []
+    "size": 23744
   }
 }

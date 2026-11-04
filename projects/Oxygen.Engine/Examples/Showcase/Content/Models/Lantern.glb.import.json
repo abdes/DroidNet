@@ -10,80 +10,77 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "9f2bc66a-4f4a-5ae4-c7d9-40e635fe20fe"
+            "declaration_key": "LanternPost_Mat",
+            "surface_id": "1eb0447c-f69d-2b05-7ffe-bc287fa85848"
           }
         ],
-        "geometry_asset_key": "6dae7343-1ac4-4265-a577-ca9ba400a33a",
-        "layout_revision": "82111dfe72ad44365c87720de4e11ce07eb2715d4989a6978373c05c6483b3f0",
+        "geometry_asset_key": "0a55d2e0-7b1e-a377-7fbe-7764872e01d0",
+        "layout_revision": "2aabebb5f10ce68ba7e0311bc4e1c7fbd1ae9fd60dad1bca919f7d2f23069710",
         "source_geometry_anchor": "LanternPole_Body",
-        "source_layout_witness": "c10856668814e8e204df32172a2676fe3b9ab65a609c026539026b0600b256ed",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "3fcc6785-ef2f-4692-5262-5a6eac7552f7",
+                "default_material_key": "afcbec00-aa07-c315-1c97-5b83e7930414",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "LanternPost_Mat",
-            "surface_id": "9f2bc66a-4f4a-5ae4-c7d9-40e635fe20fe"
+            "surface_id": "1eb0447c-f69d-2b05-7ffe-bc287fa85848"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "15b1c068-65f0-f52b-be4d-e11438e24df1"
+            "declaration_key": "LanternPost_Mat",
+            "surface_id": "c94609a2-01a2-ef46-1561-23c20b4df384"
           }
         ],
-        "geometry_asset_key": "31b85163-61cb-bc3f-0e89-f18a85f3174d",
-        "layout_revision": "3df95f46eaa48dd43742f3e6f0d2d260df287a14f3e988a161e091d8dd8752bf",
+        "geometry_asset_key": "3efeb03c-5d1e-d638-1e54-1708a6a6fb46",
+        "layout_revision": "64482c81ae20070e5798ccfc4e60a71e06d98f3fe52b510312f241e8bdf366dd",
         "source_geometry_anchor": "LanternPole_Chain",
-        "source_layout_witness": "f4504470dab45e0be117d7b05a9783787a69b3ec858079b90022c4df7d159acb",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "3fcc6785-ef2f-4692-5262-5a6eac7552f7",
+                "default_material_key": "afcbec00-aa07-c315-1c97-5b83e7930414",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "LanternPost_Mat",
-            "surface_id": "15b1c068-65f0-f52b-be4d-e11438e24df1"
+            "surface_id": "c94609a2-01a2-ef46-1561-23c20b4df384"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "49e41f7d-86c0-8353-82ea-e7f927ac5a39"
+            "declaration_key": "LanternPost_Mat",
+            "surface_id": "dccb022e-4b35-fe48-820e-eefa66c9f1ef"
           }
         ],
-        "geometry_asset_key": "377f21c7-03d6-ccdf-1168-b2b5b384f970",
-        "layout_revision": "9b9a2e1b293322e7244194589c66b214bde7c394e9d1f698c82c982a739e2dda",
+        "geometry_asset_key": "fefb184a-f89d-c621-94d4-5f3d60136fc5",
+        "layout_revision": "11926044919b767d96cce1f0f1fa7aa684e51f0c827ca58550688091f8ec7d8f",
         "source_geometry_anchor": "LanternPole_Lantern",
-        "source_layout_witness": "752c303c00db59495fae76a73d9d56f68e0eada4739968a5aacae809815e94a4",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "3fcc6785-ef2f-4692-5262-5a6eac7552f7",
+                "default_material_key": "afcbec00-aa07-c315-1c97-5b83e7930414",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "LanternPost_Mat",
-            "surface_id": "49e41f7d-86c0-8353-82ea-e7f927ac5a39"
+            "surface_id": "dccb022e-4b35-fe48-820e-eefa66c9f1ef"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
@@ -107,8 +104,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 9564264,
+    "files": [],
     "sha256": "a79458c4b02d695187a952f23a63b8bf278e7bc3d316a3c2a314f2d6974181f1",
-    "files": []
+    "size": 9564264
   }
 }

@@ -28,22 +28,21 @@
 
 namespace oxygen::content::import::internal {
 
-namespace {
-  //! `name` with the anchor's separators escaped.
-  auto EscapeName(const std::string_view name) -> std::string
-  {
-    auto escaped = std::string {};
-    escaped.reserve(name.size());
-    for (const auto character : name) {
-      if (character == '/' || character == '[' || character == '#'
-        || character == '\\') {
-        escaped.push_back('\\');
-      }
-      escaped.push_back(character);
+auto EscapeAnchorName(const std::string_view name) -> std::string
+{
+  auto escaped = std::string {};
+  escaped.reserve(name.size());
+  for (const auto character : name) {
+    if (character == '/' || character == '[' || character == '#'
+      || character == '\\') {
+      escaped.push_back('\\');
     }
-    return escaped;
+    escaped.push_back(character);
   }
+  return escaped;
+}
 
+namespace {
   //! Where the role of an added node's anchor starts (its unescaped `#`), or
   //! none for a source node's anchor.
   auto AddedRoleStart(const std::string_view anchor) -> std::optional<size_t>
@@ -105,7 +104,7 @@ auto ModelNodeIdentity::ForRequest(const ImportRequest& request,
 
 auto ModelNodeIdentity::SourceAnchor(const SourceNode& node) -> std::string
 {
-  const auto escaped = EscapeName(node.name);
+  const auto escaped = EscapeAnchorName(node.name);
   const auto parent = std::string(node.parent_anchor);
   auto& count = sibling_counts_[{ parent, escaped }];
   ++count;

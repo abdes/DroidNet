@@ -78,6 +78,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kSourceIdentityMissing = "import.source_identity_missing";
   inline constexpr std::string_view kSourceInspectionFailed = "import.source.inspection_failed";
   inline constexpr std::string_view kSourceKeyConflict = "import.source_key_conflict";
+  inline constexpr std::string_view kSurfacesChanged = "import.surfaces_changed";
   inline constexpr std::string_view kSourceNonlocalDependency = "import.source.nonlocal_dependency";
   inline constexpr std::string_view kSourceRebound = "import.source_rebound";
   inline constexpr std::string_view kSourceRelocated = "import.source_relocated";
@@ -260,8 +261,6 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMeshSkinningBuffers = "mesh.skinning_buffers";
   inline constexpr std::string_view kMeshSkinningBuffersMismatch = "mesh.skinning_buffers_mismatch";
   inline constexpr std::string_view kMeshSkinningMismatch = "mesh.skinning.mismatch";
-  inline constexpr std::string_view kMeshSourceLayoutInvalid = "mesh.source_layout_invalid";
-  inline constexpr std::string_view kMeshSourceLayoutUnavailable = "mesh.source_layout_unavailable";
   inline constexpr std::string_view kMeshSurfaceInventoryInvalid = "mesh.surface_inventory_invalid";
   inline constexpr std::string_view kMeshSurfaceOob = "mesh.surface_oob";
   inline constexpr std::string_view kMeshSurfaceProvenanceInvalid = "mesh.surface_provenance_invalid";

@@ -10,52 +10,47 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8"
+            "declaration_key": "lamp",
+            "surface_id": "900483fa-f8e9-ef27-31f8-10f65dc21aec"
           },
           {
-            "declaration_key": 1,
-            "surface_id": "914071b0-c22f-f08b-ea6d-33dd2cec5584"
+            "declaration_key": "metal",
+            "surface_id": "fa69c0e7-0d49-bbe0-c326-2eefeb753eb2"
           }
         ],
-        "geometry_asset_key": "f2115f12-640f-0442-edd8-546191ecbf22",
-        "layout_revision": "0c8fb875a90c8fc4890015f41f6d77c82a3f8e9526444729dde97e920c3a3d84",
+        "geometry_asset_key": "f70a897c-1123-dabd-b5ef-e6e99e73348e",
+        "layout_revision": "4a0847e6fd624ea556af59b755981797956405882974ebf7345aa677f37bfa99",
         "source_geometry_anchor": "Mesh_0",
-        "source_layout_witness": "2508857ac48251cc9d83ac0a182733b5c52e98b761e01ff36909d4bae534d799",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "dc207f26-65f0-1671-3434-4f4b9d088aab",
+                "default_material_key": "b09d9960-b861-18c5-d6de-42ab18b3091c",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "metal",
-            "surface_id": "d7f5a78e-b92f-4d10-b287-5ca6ba9428b8"
+            "surface_id": "fa69c0e7-0d49-bbe0-c326-2eefeb753eb2"
           },
           {
             "bindings": [
               {
-                "default_material_key": "cc82d3bc-bc41-4bc3-278c-72768810a6cd",
+                "default_material_key": "28ae4445-45d7-9217-9869-ab548ada2189",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "lamp",
-            "surface_id": "914071b0-c22f-f08b-ea6d-33dd2cec5584"
+            "surface_id": "900483fa-f8e9-ef27-31f8-10f65dc21aec"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
-    {
-      "anchor": "#root",
-      "node_id": "d78330f1-b39d-e2e6-6736-fc56d43a403d"
-    },
     {
       "anchor": "lampRoundTable",
       "node_id": "85faae49-2d79-ead8-bade-9ad82e85fb3b"
@@ -64,8 +59,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 21261,
+    "files": [],
     "sha256": "5bbe92f7b42614d166ba6070fbca5cd2dfaacbf9ae96d3dd97a50df3d08bf65c",
-    "files": []
+    "size": 21261
   }
 }

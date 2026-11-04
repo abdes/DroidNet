@@ -6,7 +6,7 @@
   "additionalProperties": false,
   "required": ["schema_version", "geometries"],
   "properties": {
-    "schema_version": { "const": 2 },
+    "schema_version": { "const": 3 },
     "geometries": {
       "type": "array",
       "items": {
@@ -15,7 +15,6 @@
         "required": [
           "geometry_asset_key",
           "source_geometry_anchor",
-          "source_layout_witness",
           "layout_revision",
           "surfaces",
           "allocations"
@@ -23,7 +22,6 @@
         "properties": {
           "geometry_asset_key": { "$ref": "#/definitions/key" },
           "source_geometry_anchor": { "type": "string", "minLength": 1 },
-          "source_layout_witness": { "$ref": "#/definitions/digest" },
           "layout_revision": { "$ref": "#/definitions/digest" },
           "surfaces": {
             "type": "array",
@@ -70,11 +68,7 @@
               "additionalProperties": false,
               "required": ["declaration_key", "surface_id"],
               "properties": {
-                "declaration_key": {
-                  "type": "integer",
-                  "minimum": 0,
-                  "maximum": 4294967295
-                },
+                "declaration_key": { "type": "string", "minLength": 1 },
                 "surface_id": { "$ref": "#/definitions/key" }
               }
             }

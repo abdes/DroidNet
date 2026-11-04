@@ -45,8 +45,8 @@
                 "parts": [
                   {
                     "kind": "surface",
-                    "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
-                    "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
+                    "id": "a41f92dc-7a48-1206-7ab6-fc273df158f0",
+                    "layout_revision": "a671e31eacdd40d42c218a009d5b82c9060f37cae652c6a845d6e0fc269b9046",
                     "values": {
                       "/material": "SkinSurvivor.omat"
                     }
@@ -80,8 +80,8 @@
                 "parts": [
                   {
                     "kind": "surface",
-                    "id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5",
-                    "layout_revision": "15463d3e34e0718658ccf7baf56574aef72d0477990c3ce617bf12259c82495d",
+                    "id": "a41f92dc-7a48-1206-7ab6-fc273df158f0",
+                    "layout_revision": "a671e31eacdd40d42c218a009d5b82c9060f37cae652c6a845d6e0fc269b9046",
                     "values": {
                       "/material": "SkinZombie.omat"
                     }

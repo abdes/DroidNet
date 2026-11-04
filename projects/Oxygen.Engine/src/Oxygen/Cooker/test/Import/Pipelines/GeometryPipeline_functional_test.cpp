@@ -42,7 +42,7 @@
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
-#include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
+#include <Oxygen/Cooker/test/Support/SurfaceTestSupport.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -229,7 +229,7 @@ namespace {
         .source_owner = std::move(buffers),
       },
     };
-    item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
+    oxygen::content::import::test::DeclareFixtureSurfaces(item);
     return item;
   }
 
@@ -254,7 +254,7 @@ namespace {
         .source_owner = std::move(buffers),
       },
     };
-    item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
+    oxygen::content::import::test::DeclareFixtureSurfaces(item);
     return item;
   }
 
@@ -279,7 +279,7 @@ namespace {
         .source_owner = std::move(buffers),
       },
     };
-    item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
+    oxygen::content::import::test::DeclareFixtureSurfaces(item);
     return item;
   }
 
@@ -300,7 +300,7 @@ namespace {
       });
     }
 
-    item.source_layout_witness = test::FixtureSourceLayoutWitness(item.lods);
+    oxygen::content::import::test::DeclareFixtureSurfaces(item);
     return item;
   }
 

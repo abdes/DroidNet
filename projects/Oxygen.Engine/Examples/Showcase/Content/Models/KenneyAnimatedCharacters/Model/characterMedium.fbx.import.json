@@ -46,37 +46,32 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5"
+            "declaration_key": "skin",
+            "surface_id": "a41f92dc-7a48-1206-7ab6-fc273df158f0"
           }
         ],
-        "geometry_asset_key": "ecfcc5d4-b0ce-a745-006b-c6d2e59a9ef7",
-        "layout_revision": "6edd1f64f6181656392da57d1d6563dcfe5c354bbb93e6b2989525467970b666",
+        "geometry_asset_key": "b843812f-0a0d-615c-1fae-f38a2041c454",
+        "layout_revision": "a671e31eacdd40d42c218a009d5b82c9060f37cae652c6a845d6e0fc269b9046",
         "source_geometry_anchor": "characterMedium",
-        "source_layout_witness": "a605c822122ffb8b02355f2f82593c2afd50c7f03c75256f11ccc9e9bd5b81d7",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "a63c8174-b106-f377-b443-a87ddfd55111",
+                "default_material_key": "76b2affb-a9fb-1aef-190c-6de6d20e7f24",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "skin",
-            "surface_id": "6c5b50db-f4b2-2f69-42fc-76dd31b868c5"
+            "surface_id": "a41f92dc-7a48-1206-7ab6-fc273df158f0"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
-    {
-      "anchor": "#root",
-      "node_id": "b6701710-525e-3360-761b-4ba66f97b590"
-    },
     {
       "anchor": "Root",
       "node_id": "efc6897e-df5e-e98c-d8d3-258d9533bab8"
@@ -321,8 +316,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 167212,
+    "files": [],
     "sha256": "18835fef534eede635b081ee7fe647d01a885550a591d2e6bf071010906167d8",
-    "files": []
+    "size": 167212
   }
 }

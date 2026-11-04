@@ -116,17 +116,18 @@ if (-not $sceneName) {
     exit 1
 }
 $virtualPath = "/Showcase/Scenes/$($entry.name)/$sceneName.oscene"
-if (-not (Test-Path -LiteralPath (Join-Path $ExamplesCookedRoot "Scenes/$($entry.name)/$sceneName.oscene") -PathType Leaf)) {
+# A cooked descriptor's file name carries its content hash: <scene>.<hash>.oscene.
+if (-not (Test-Path -Path (Join-Path $ExamplesCookedRoot "Scenes/$($entry.name)/$sceneName.*.oscene") -PathType Leaf)) {
     Write-Error "$virtualPath is not cooked; run Tools/cook $($entry.name)."
     exit 1
 }
 
 $launch = [ordered]@{
-    version       = 3
-    mounts        = @($ExamplesCookedRoot)
-    scene         = $virtualPath
-    source_mounts = Get-ExamplesSourceMounts
-    window        = [ordered]@{ title = "Oxygen Player - $($entry.name)/$sceneName" }
+    schema_version = 4
+    mounts         = @($ExamplesCookedRoot)
+    scene          = $virtualPath
+    source_mounts  = Get-ExamplesSourceMounts
+    window         = [ordered]@{ title = "Oxygen Player - $($entry.name)/$sceneName" }
 }
 $launchDir = Join-Path ([IO.Path]::GetTempPath()) 'oxygen-player'
 New-Item -ItemType Directory -Force -Path $launchDir | Out-Null

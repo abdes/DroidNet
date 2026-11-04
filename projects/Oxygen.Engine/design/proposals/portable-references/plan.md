@@ -501,12 +501,13 @@ reports and refuses. Each item below belongs to the slice named.
 | Omitted light range | `gltf_omitted_light_range_m` is `omitted_light_range_m`, for both formats; the old key is refused                                                                     | The settings catalog, its test and the panel's view model follow the new key, unbuilt. S7's first build compiles them and passes their lanes                                                                                                                                                                                                    | S7    |
 | Continuity circles  | Entries that continue each other in a circle are an error that blocks the model. A node renamed back has its first anchor's ID, so it needs no entry                  | `ModelImportSettings.WithContinuity` adds the reverse of an entry, reachable from the Continue command and `ReassignKeptChange`: with `B` continuing `A`, `A` continuing `B` blocks the model. An entry that would close a circle replaces the one it closes: walk from `continues`, and remove the entry on that chain that continues `anchor` | S9    |
 | Continued nodes     | `new_nodes` holds nodes whose ID the previous publication did not emit, so after the next import a renamed node that continues its anchor is neither new nor vanished | `NodeContinuityGroup` says each new anchor names the one it continues. That holds only between adding the entry and reimporting: check the panel's wording, and that `Entries` alone shows a continued node afterwards                                                                                                                          | S9    |
+| Surface provenance  | Provenance schema 3: `declaration_key` is a string, the source material's name, and `source_layout_witness` is gone; version 2 is refused                             | `ModelImportSettings.EmptyProvenance` and the `ModelEditorSettingsTests` and `ProducedSourceMetadataTests` fixtures follow, unbuilt. S7's first build compiles them and passes their lanes                                                                                                                                                      | S7    |
 
 ### S7. Editor formats
 
 Requires the S3 and R16 SDK installs, and does the first three rows of
 [what R16 leaves for the editor](#what-r16-leaves-for-the-editor) and the
-omitted light range row of
+omitted light range and surface provenance rows of
 [what R11 leaves for the editor](#what-r11-leaves-for-the-editor). Deletes: `IdentityField`, `TextureSource.VirtualPath`,
 `TextureSourceCodes.VirtualPathInvalid`, `Path.IsPathRooted` image resolution,
 `InputActionReference.IsPath`. Adds: identity parameters on every reader and

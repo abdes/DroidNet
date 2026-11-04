@@ -48,7 +48,6 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
@@ -77,7 +76,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
-#include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfDocumentChecks.h>
@@ -1409,53 +1407,28 @@ namespace {
       nodes, emit_mesh, policy.bake_transforms_into_meshes);
   }
 
-  auto GltfSourceLayoutWitness(const cgltf_mesh& mesh,
-    const std::unordered_map<const cgltf_material*, uint32_t>& material_index)
-    -> std::optional<base::Sha256Digest>
+  //! Whether cgltf can read the positions of every primitive of `mesh`: it
+  //! reads no accessor wider than a position, and no view without data.
+  auto CanReadPositions(const cgltf_mesh& mesh) -> bool
   {
-    SourceLayoutHash hash("oxygen.gltf-source-layout/v1");
-    hash.AddCount(mesh.primitives_count);
     for (const auto& primitive :
       std::span(mesh.primitives, mesh.primitives_count)) {
-      hash.Add(static_cast<uint32_t>(primitive.type));
-      const auto material = material_index.find(primitive.material);
-      hash.Add(material == material_index.end()
-          ? std::numeric_limits<uint32_t>::max()
-          : material->second);
-      const cgltf_accessor* positions = nullptr;
       for (const auto& attribute :
         std::span(primitive.attributes, primitive.attributes_count)) {
-        if (attribute.type == cgltf_attribute_type_position
-          && attribute.index == 0) {
-          positions = attribute.data;
-          break;
+        if (attribute.type != cgltf_attribute_type_position
+          || attribute.index != 0 || attribute.data->count == 0) {
+          continue;
         }
-      }
-      hash.AddCount(positions != nullptr ? positions->count : 0);
-      if (positions != nullptr) {
-        for (cgltf_size index = 0; index < positions->count; ++index) {
-          std::array<cgltf_float, 3> position {};
-          if (cgltf_accessor_read_float(
-                positions, index, position.data(), position.size())
-            == 0) {
-            return std::nullopt;
-          }
-          for (const auto component : position) {
-            hash.AddFloat(component);
-          }
+        auto position = std::array<cgltf_float, 3> {};
+        if (cgltf_accessor_read_float(
+              attribute.data, 0, position.data(), position.size())
+          == 0) {
+          return false;
         }
-      }
-      hash.Add(primitive.indices != nullptr ? 1U : 0U);
-      hash.AddCount(
-        primitive.indices != nullptr ? primitive.indices->count : 0);
-      if (primitive.indices != nullptr) {
-        for (cgltf_size index = 0; index < primitive.indices->count; ++index) {
-          hash.Add(static_cast<uint64_t>(
-            cgltf_accessor_read_index(primitive.indices, index)));
-        }
+        break;
       }
     }
-    return hash.Finish();
+    return true;
   }
 
   auto PrepareGeometryNames(const cgltf_data& data, const AdapterInput& input)
@@ -1546,9 +1519,6 @@ namespace {
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
 
-    std::vector<std::optional<base::Sha256Digest>> source_witnesses(
-      data.meshes_count);
-
     struct PrimitiveInfo {
       const cgltf_primitive* prim = nullptr;
       const cgltf_accessor* positions = nullptr;
@@ -1576,7 +1546,6 @@ namespace {
     }
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
-      const auto mesh_i = variant.mesh_index;
       const auto* mesh = &base::CheckedAt(
         std::span(data.meshes, data.meshes_count), variant.mesh_index);
       const auto& mesh_name = source.name;
@@ -1886,19 +1855,13 @@ namespace {
       }
 
       MeshBuildPipeline::WorkItem item;
-      auto& witness = source_witnesses.at(mesh_i);
-      if (!witness.has_value()) {
-        witness = GltfSourceLayoutWitness(*mesh, material_index);
-      }
-      if (!witness.has_value()) {
-        result.diagnostics.push_back(MakeWarningDiagnostic(
-          std::string(import_codes::kMeshSourceLayoutInvalid),
-          "Could not read the source-native glTF positions; the mesh is "
-          "dropped",
-          input.source_id_prefix, mesh_name));
+      if (!CanReadPositions(*mesh)) {
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+            "Could not read the glTF mesh's positions; the mesh is dropped",
+            input.source_id_prefix, mesh_name));
         continue;
       }
-      item.source_layout_witness = *witness;
       item.source_id = source.source_id;
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
@@ -2295,6 +2258,11 @@ namespace {
             item.surface_names.emplace(
               authored ? i : std::numeric_limits<uint32_t>::max(),
               label != nullptr ? label : fallback);
+            item.surface_materials.emplace(
+              authored ? i : std::numeric_limits<uint32_t>::max(),
+              authored
+                ? std::optional(std::string(label != nullptr ? label : ""))
+                : std::nullopt);
           }
         }
       }

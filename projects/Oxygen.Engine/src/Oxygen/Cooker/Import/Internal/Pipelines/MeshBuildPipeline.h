@@ -23,7 +23,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -163,9 +162,10 @@ public:
 
     std::vector<MeshLod> lods;
 
-    //! Adapter-owned raw positions/topology/declarations before coordinate
-    //! conversion.
-    base::Sha256Digest source_layout_witness {};
+    //! The source material of each source slot of the ranges: its authored
+    //! name, empty if it has none, or no value for a slot with no material. The
+    //! surface IDs follow it (`AllocateSurfaces`).
+    std::map<uint32_t, std::optional<std::string>> surface_materials;
 
     //! Eligible static node-local transform, applied before bounds are
     //! computed.

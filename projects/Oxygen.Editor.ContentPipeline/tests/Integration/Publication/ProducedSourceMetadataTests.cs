@@ -247,13 +247,13 @@ public sealed class ProducedSourceMetadataTests
         {
             surface_provenance = new
             {
-                schema_version = 2,
+                schema_version = 3,
                 geometries = new[]
                 {
                     new
                     {
                         geometry_asset_key = "10000000-0000-0000-0000-000000000001", source_geometry_anchor = "mesh0",
-                        source_layout_witness = new string('a', 64), layout_revision = new string('b', 64),
+                        layout_revision = new string('b', 64),
                         surfaces = new[]
                         {
                             new
@@ -263,7 +263,7 @@ public sealed class ProducedSourceMetadataTests
                                 bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001", triangle_count = 12 } },
                             },
                         },
-                        allocations = new[] { new { declaration_key = 0, surface_id = "20000000-0000-0000-0000-000000000001" } },
+                        allocations = new[] { new { declaration_key = "Surface", surface_id = "20000000-0000-0000-0000-000000000001" } },
                     },
                 },
             },

@@ -276,6 +276,11 @@ are known by their place (`Body/Mirror`, `Body/Mirror[2]`, `Body/[1]`): such a
 change hands their IDs to each other, and every import of them warns
 (`import.node_names_ambiguous`), so give them unique names in the source.
 
+A surface's ID follows the name of its source material within its geometry, so
+it survives editing the mesh, reordering slots and renaming one material at a
+time (`import.surfaces_changed` reports each change). Two materials renamed in
+one import, or a renamed mesh, get new IDs.
+
 `node_continuity` keeps a renamed or moved node's ID: each entry says the node
 at `anchor` continues the one at `continues`, and chains are followed to their
 first anchor. Same-named siblings renamed in the source continue their old

@@ -70,8 +70,6 @@ auto Owned(const std::string_view pointer) -> const json&
 
 constexpr auto kBinding = "/properties/geometries/items/properties/surfaces/"
                           "items/properties/bindings/items/properties/";
-constexpr auto kAllocation = "/properties/geometries/items/properties/"
-                             "allocations/items/properties/";
 
 auto Maximum(const std::string& path) -> std::int64_t
 {
@@ -103,7 +101,7 @@ auto Surface() -> json
 auto Allocation() -> json
 {
   return json {
-    { "declaration_key", 7 },
+    { "declaration_key", "Paint" },
     { "surface_id", kKey },
   };
 }
@@ -113,7 +111,6 @@ auto Geometry() -> json
   return json {
     { "geometry_asset_key", kOtherKey },
     { "source_geometry_anchor", "Root/Body" },
-    { "source_layout_witness", std::string(64, 'a') },
     { "layout_revision", std::string(64, 'b') },
     { "surfaces", json::array({ Surface() }) },
     { "allocations", json::array({ Allocation() }) },
@@ -147,12 +144,10 @@ INSTANTIATE_TEST_SUITE_P(Cases, SurfaceProvenanceSchemaTest,
     Accepts("AcceptsEmptyDisplayName",
       With(Valid(), "/geometries/0/surfaces/0/display_name", "")),
     Accepts("AcceptsMaximumIndices",
-      With(With(With(Valid(), "/geometries/0/surfaces/0/bindings/0/lod_index",
-                  Maximum(std::string { kBinding } + "lod_index")),
-             "/geometries/0/surfaces/0/bindings/0/submesh_index",
-             Maximum(std::string { kBinding } + "submesh_index")),
-        "/geometries/0/allocations/0/declaration_key",
-        Maximum(std::string { kAllocation } + "declaration_key"))),
+      With(With(Valid(), "/geometries/0/surfaces/0/bindings/0/lod_index",
+             Maximum(std::string { kBinding } + "lod_index")),
+        "/geometries/0/surfaces/0/bindings/0/submesh_index",
+        Maximum(std::string { kBinding } + "submesh_index"))),
     Accepts("AcceptsMaterialKeyOfZeros",
       With(Valid(), "/geometries/0/surfaces/0/bindings/0/default_material_key",
         kNilKey)),
@@ -167,9 +162,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, SurfaceProvenanceSchemaTest,
     Rejects("RejectsMissingAnchor",
       Without(Valid(), "/geometries/0/source_geometry_anchor"),
       "'source_geometry_anchor'"),
-    Rejects("RejectsMissingLayoutWitness",
-      Without(Valid(), "/geometries/0/source_layout_witness"),
-      "'source_layout_witness'"),
     Rejects("RejectsMissingLayoutRevision",
       Without(Valid(), "/geometries/0/layout_revision"), "'layout_revision'"),
     Rejects("RejectsMissingSurfaces",
@@ -230,9 +222,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, SurfaceProvenanceSchemaTest,
     Rejects("RejectsNonStringAnchor",
       With(Valid(), "/geometries/0/source_geometry_anchor", 7),
       "/geometries/0/source_geometry_anchor: "),
-    Rejects("RejectsShortLayoutWitness",
-      With(Valid(), "/geometries/0/source_layout_witness", "abc"),
-      "/geometries/0/source_layout_witness: "),
     Rejects("RejectsUppercaseLayoutRevision",
       With(Valid(), "/geometries/0/layout_revision", std::string(64, 'B')),
       "/geometries/0/layout_revision: "),
@@ -272,12 +261,11 @@ INSTANTIATE_TEST_SUITE_P(Cases, SurfaceProvenanceSchemaTest,
       With(Valid(), "/geometries/0/surfaces/0/bindings/0/default_material_key",
         "x"),
       "/geometries/0/surfaces/0/bindings/0/default_material_key: "),
-    Rejects("RejectsNegativeDeclarationKey",
-      With(Valid(), "/geometries/0/allocations/0/declaration_key", -1),
+    Rejects("RejectsNonStringDeclarationKey",
+      With(Valid(), "/geometries/0/allocations/0/declaration_key", 7),
       "/geometries/0/allocations/0/declaration_key: "),
-    Rejects("RejectsDeclarationKeyAboveMaximum",
-      With(Valid(), "/geometries/0/allocations/0/declaration_key",
-        Maximum(std::string { kAllocation } + "declaration_key") + 1),
+    Rejects("RejectsEmptyDeclarationKey",
+      With(Valid(), "/geometries/0/allocations/0/declaration_key", ""),
       "/geometries/0/allocations/0/declaration_key: "),
     Rejects("RejectsMalformedAllocationSurfaceId",
       With(Valid(), "/geometries/0/allocations/0/surface_id", "x"),

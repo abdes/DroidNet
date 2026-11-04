@@ -205,7 +205,7 @@ oxygen_cooker_test(
     "Import/SceneDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/SceneImportRequestBuilder_functional_test.cpp"
     "Import/SceneSourceInspection_functional_test.cpp"
-    "Import/SourceLayoutHash_functional_test.cpp"
+    "Import/SurfaceIdentity_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/TextureDescriptorImportRequestBuilder_preparation_functional_test.cpp"
     "Import/SourceLimit_functional_test.cpp"

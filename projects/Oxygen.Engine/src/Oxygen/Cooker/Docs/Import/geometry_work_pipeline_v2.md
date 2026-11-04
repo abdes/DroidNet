@@ -25,36 +25,38 @@ their payloads match. Unassigned primitives use a separate default declaration.
 FBX retains its mesh-local declarations before resolving global material
 references.
 
-The native importer allocates opaque SurfaceIds from a versioned recorded geometry
-namespace and durable declaration identity, or the complete source-layout
-witness when durable identity is unavailable. Witnesses cover source surface
-ownership, positions and connectivity before optimization; material parameters,
-textures, normals and generated attributes do not participate. Exact witness
-matches retain IDs; unproven structural changes require explicit repair.
+A surface is known by its declaration key, which `AllocateSurfaces` derives from
+the source material of its slot: the material's name (`Paint`), a name that
+repeats in one mesh numbered in slot order (`Paint[2]`), `#unnamed[n]` for a
+material without a name, by its place among those, and `#unassigned` for no
+material. It is the source's own name, never the cooked one. Geometry and
+material contents take no part in it, so editing vertices or polygons, changing
+a material's parameters and reordering slots or materials keep every SurfaceId.
 
-Adapters compute `source_layout_witness` before coordinate conversion or mesh
-optimization and carry the digest in the work item. glTF hashes decoded source
-POSITION accessors, original index connectivity and index presence, primitive
-modes and source material declarations. FBX hashes source control points,
-polygon boundaries/connectivity and mesh-local declaration ownership. Its
-existing handedness probe runs with no target axes or units; the adapter
-captures digests from that probe before releasing it and loading the converted
-scene. No additional parse or retained DOM is introduced. Retained storage is 32
-bytes per FBX mesh; hashing scans the source geometry once. The glTF cache
-similarly hashes each source mesh once even when it produces several bake
-variants.
+- A key the recorded provenance holds for the geometry keeps its ID.
+- If exactly one key vanished and exactly one appeared in the geometry, the new
+  one is a rename and keeps the ID, as a DCC's cleanup of `Material.001` to
+  `Paint` needs.
+- Any other new key derives its ID from the source identity, the geometry's
+  anchor and the key, so a removed name that returns has the ID it had. If a
+  surface of the geometry holds that ID, because it was renamed from that name,
+  the new one derives another.
 
-Producer unit conversion, attribute generation and transform baking do not enter
-the raw witness. Identity still includes the geometry key and source anchor:
-changing bake or material-binding policy can split/rename output variants and
-therefore change their geometry identities and SurfaceIds. Equal raw witnesses do
-not alias distinct output geometry. Unassigned surfaces use a dedicated
-declaration sentinel, independent of the number of imported material payloads.
+Each change is reported as `import.surfaces_changed` (info). A key that vanished
+also warns where something still names its surface:
+`import.setting_target_missing` for `geometry_defaults` and
+`scene.descriptor.surface_invalid` for a scene descriptor.
+
+Limits: two slots renamed in one import get new IDs, since nothing says which is
+which. A surface renamed from a name that later returns keeps the ID, so that
+name gets another. A renamed mesh is another geometry anchor, and an unnamed mesh
+`mesh_<ordinal>` follows file order, so either gets new IDs. Two materials of one
+name swap IDs when their order in the mesh swaps.
 
 The model import record owns provenance. Cooking returns candidate provenance to
 the publication owner and never overwrites source settings itself. The owner
 commits provenance and compatible geometry/scene outputs together. Runtime
-geometry stores SurfaceIds and bindings, not source witnesses.
+geometry stores SurfaceIds and bindings, not declaration keys.
 
 The built-in catalog's surface inventory describes its authored `asset_uri` and the
 exact native runtime geometry. Its separate `virtual_path` and descriptor

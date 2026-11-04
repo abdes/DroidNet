@@ -400,5 +400,5 @@ public sealed record ModelImportSettings
             && path[1..].Split('/').All(static segment => segment is not ("" or "." or ".."));
 
     private static JsonElement EmptyProvenance()
-        => JsonSerializer.SerializeToElement(new { schema_version = 2, geometries = Array.Empty<object>() });
+        => JsonSerializer.SerializeToElement(new { schema_version = 3, geometries = Array.Empty<object>() });
 }

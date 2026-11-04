@@ -24,6 +24,9 @@
 
 namespace oxygen::content::import::internal {
 
+//! `name` with the separators of an anchor (`/`, `[`, `#` and `\`) escaped.
+OXGN_COOK_NDAPI auto EscapeAnchorName(std::string_view name) -> std::string;
+
 //! The anchors and IDs of a model's nodes.
 /*!
  A node's anchor is the path of names in the source file's own hierarchy, from

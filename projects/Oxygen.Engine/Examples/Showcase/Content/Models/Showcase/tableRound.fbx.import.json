@@ -10,37 +10,32 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "1e907460-519d-7091-1164-a8b690900d6c"
+            "declaration_key": "wood",
+            "surface_id": "dd05b08f-417f-5041-e88b-676ceed9b867"
           }
         ],
-        "geometry_asset_key": "9e3de9b8-79ad-26ac-41df-d9dc304e3532",
-        "layout_revision": "8819b59f0ce8a566955757eb88592cd5fb0663380406c9c6fe795258d99059dd",
+        "geometry_asset_key": "9013e868-a1e3-cae7-0ab4-1b29643bc920",
+        "layout_revision": "ac01e5b8037fd516f2c7856c493de26828059ef5e4d73069fc70937386d12bd3",
         "source_geometry_anchor": "Mesh_0",
-        "source_layout_witness": "61a20e8f1e4d8bdbee31895281ef19cc00f05b49c77505a6295f9effea1a6797",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "301be8c7-3cd9-6135-b5de-a256d0288c45",
+                "default_material_key": "5b442616-6039-a611-9b7b-1bbb963f41d1",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "wood",
-            "surface_id": "1e907460-519d-7091-1164-a8b690900d6c"
+            "surface_id": "dd05b08f-417f-5041-e88b-676ceed9b867"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
-    {
-      "anchor": "#root",
-      "node_id": "b2ecd9bb-4e10-ce4c-7b67-e6b68333e4fd"
-    },
     {
       "anchor": "tableRound",
       "node_id": "c390412a-6bf4-77cd-6fd3-366b9d6484f7"
@@ -49,8 +44,8 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 19706,
+    "files": [],
     "sha256": "2e024db523150e4661a58012ca063c22a73724e004d1805ad2ed2fc88cd03563",
-    "files": []
+    "size": 19706
   }
 }

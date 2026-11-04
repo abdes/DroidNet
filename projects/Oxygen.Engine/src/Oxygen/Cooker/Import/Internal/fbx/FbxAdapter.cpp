@@ -39,7 +39,6 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -66,7 +65,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
-#include <Oxygen/Cooker/Import/Internal/SourceLayoutHash.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
@@ -93,7 +91,6 @@ namespace {
 
   struct FbxSceneSource final {
     std::shared_ptr<const ufbx_scene> scene;
-    std::vector<base::Sha256Digest> source_layout_witnesses;
   };
 
 } // namespace
@@ -1560,55 +1557,6 @@ namespace {
     return diagnostic;
   }
 
-  auto FbxSourceLayoutWitness(const ufbx_mesh& mesh) -> base::Sha256Digest
-  {
-    SourceLayoutHash hash("oxygen.fbx-source-layout/v1");
-    hash.AddCount(mesh.vertices.count);
-    for (const auto& position :
-      std::span(mesh.vertices.data, mesh.vertices.count)) {
-      hash.AddFloat(position.x);
-      hash.AddFloat(position.y);
-      hash.AddFloat(position.z);
-    }
-    hash.AddCount(mesh.vertex_indices.count);
-    for (const auto index :
-      std::span(mesh.vertex_indices.data, mesh.vertex_indices.count)) {
-      hash.Add(index);
-    }
-    hash.AddCount(mesh.faces.count);
-    for (const auto& face : std::span(mesh.faces.data, mesh.faces.count)) {
-      hash.Add(face.index_begin);
-      hash.Add(face.num_indices);
-    }
-    hash.AddCount(mesh.face_material.count);
-    for (const auto declaration :
-      std::span(mesh.face_material.data, mesh.face_material.count)) {
-      hash.Add(declaration);
-    }
-    hash.AddCount(mesh.material_parts.count);
-    for (const auto& part :
-      std::span(mesh.material_parts.data, mesh.material_parts.count)) {
-      hash.Add(part.index);
-      hash.AddCount(part.face_indices.count);
-      for (const auto face :
-        std::span(part.face_indices.data, part.face_indices.count)) {
-        hash.Add(face);
-      }
-    }
-    return hash.Finish();
-  }
-
-  auto CaptureFbxSourceLayouts(const ufbx_scene& scene)
-    -> std::vector<base::Sha256Digest>
-  {
-    std::vector<base::Sha256Digest> witnesses;
-    witnesses.reserve(scene.meshes.count);
-    for (const auto* mesh : std::span(scene.meshes.data, scene.meshes.count)) {
-      witnesses.push_back(FbxSourceLayoutWitness(*mesh));
-    }
-    return witnesses;
-  }
-
   //! The options every FBX import loads its scene with.
   /*!
    A file Blender exported is read with ufbx's Blender material model, which
@@ -1672,26 +1620,6 @@ namespace {
     return opts;
   }
 
-  //! The options of the load that reads the file's own geometry layouts,
-  //! before ufbx converts units and axes.
-  [[nodiscard]] auto MakeProbeOptions(ufbx_load_opts opts) -> ufbx_load_opts
-  {
-    opts.target_axes = kUnknownAxes;
-    opts.target_camera_axes = kUnknownAxes;
-    opts.target_light_axes = kUnknownAxes;
-    opts.target_unit_meters = 0.0;
-    opts.generate_missing_normals = false;
-    opts.handedness_conversion_axis = UFBX_MIRROR_AXIS_NONE;
-    opts.handedness_conversion_retain_winding = false;
-    opts.reverse_winding = false;
-    // The layouts need geometry only.
-    opts.ignore_animation = true;
-    opts.ignore_embedded = true;
-    opts.skip_skin_vertices = true;
-    return opts;
-  }
-
-  //! Warns of a file whose axes are incomplete, read as FBX's default.
   //! Whether a file's complete axes form a left-handed frame.
   [[nodiscard]] auto IsLeftHanded(const ufbx_coordinate_axes& axes) -> bool
   {
@@ -1733,8 +1661,8 @@ namespace {
   }
 
   [[nodiscard]] auto LoadSceneFromFile(const std::filesystem::path& path,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
-    const ModelParseMode mode = ModelParseMode::kGeometry) -> FbxSceneSource
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
+    -> FbxSceneSource
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(
@@ -1775,19 +1703,6 @@ namespace {
     auto opts = MakeLoadOptions(
       cancel_ctx, coordinate_policy, size_error ? size_t { 0 } : size);
 
-    // Surface identity hashes the source layout before conversion, which only
-    // a second load sees; a metadata parse needs none.
-    if (mode == ModelParseMode::kGeometry) {
-      const auto probe_opts = MakeProbeOptions(opts);
-      ufbx_error probe_error {};
-      std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
-        ufbx_load_file(path.string().c_str(), &probe_opts, &probe_error),
-        &ufbx_free_scene);
-      if (probe_scene != nullptr) {
-        loaded.source_layout_witnesses = CaptureFbxSourceLayouts(*probe_scene);
-      }
-    }
-
     ufbx_scene* scene = ufbx_load_file(path.string().c_str(), &opts, &error);
     if (scene == nullptr) {
       if (error.type == UFBX_ERROR_CANCELLED
@@ -1805,20 +1720,12 @@ namespace {
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
     ReportAxes(*scene, input, diagnostics);
-    if (mode == ModelParseMode::kGeometry
-      && loaded.source_layout_witnesses.size() != scene->meshes.count) {
-      diagnostics.push_back(MakeErrorDiagnostic(
-        std::string(import_codes::kMeshSourceLayoutUnavailable),
-        "FBX source layout could not be captured before coordinate conversion",
-        input.source_id_prefix, input.object_path_prefix));
-      return {};
-    }
     return loaded;
   }
 
   [[nodiscard]] auto LoadSceneFromMemory(const std::span<const std::byte> bytes,
-    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics,
-    const ModelParseMode mode = ModelParseMode::kGeometry) -> FbxSceneSource
+    const AdapterInput& input, std::vector<ImportDiagnostic>& diagnostics)
+    -> FbxSceneSource
   {
     if (input.stop_token.stop_requested()) {
       DLOG_F(WARNING, "FBX load canceled (memory): source_id='{}'",
@@ -1845,19 +1752,6 @@ namespace {
     UfbxCancelContext cancel_ctx { .stop_token = input.stop_token };
     auto opts = MakeLoadOptions(cancel_ctx, coordinate_policy, bytes.size());
 
-    // Surface identity hashes the source layout before conversion, which only
-    // a second load sees; a metadata parse needs none.
-    if (mode == ModelParseMode::kGeometry) {
-      const auto probe_opts = MakeProbeOptions(opts);
-      ufbx_error probe_error {};
-      std::unique_ptr<ufbx_scene, decltype(&ufbx_free_scene)> probe_scene(
-        ufbx_load_memory(bytes.data(), bytes.size(), &probe_opts, &probe_error),
-        &ufbx_free_scene);
-      if (probe_scene != nullptr) {
-        loaded.source_layout_witnesses = CaptureFbxSourceLayouts(*probe_scene);
-      }
-    }
-
     const void* data = bytes.data();
     const auto size = bytes.size();
     ufbx_scene* scene = ufbx_load_memory(data, size, &opts, &error);
@@ -1878,14 +1772,6 @@ namespace {
     loaded.scene = std::shared_ptr<const ufbx_scene>(
       scene, [](ufbx_scene* value) -> void { ufbx_free_scene(value); });
     ReportAxes(*scene, input, diagnostics);
-    if (mode == ModelParseMode::kGeometry
-      && loaded.source_layout_witnesses.size() != scene->meshes.count) {
-      diagnostics.push_back(MakeErrorDiagnostic(
-        std::string(import_codes::kMeshSourceLayoutUnavailable),
-        "FBX source layout could not be captured before coordinate conversion",
-        input.source_id_prefix, input.object_path_prefix));
-      return {};
-    }
     return loaded;
   }
 
@@ -2371,32 +2257,6 @@ namespace {
     std::ranges::stable_sort(ranges, {}, &TriangleRange::source_slot);
   }
 
-  /*!
-   The layout witness of a LOD group's geometry: its levels' mesh witnesses
-   and transforms, in LOD order, so a change to any level changes it.
-  */
-  [[nodiscard]] auto LodGroupWitness(const FbxLodGroup& group,
-    const std::unordered_map<const ufbx_mesh*, size_t>& mesh_indices,
-    const std::span<const base::Sha256Digest> source_witnesses)
-    -> base::Sha256Digest
-  {
-    SourceLayoutHash hash("oxygen.fbx-lod-group-layout/v1");
-    hash.AddCount(group.levels.size());
-    for (const auto& level : group.levels) {
-      const auto& witness = oxygen::base::CheckedAt(
-        source_witnesses, mesh_indices.at(level.mesh_node->mesh));
-      for (const auto byte : witness) {
-        hash.Add(static_cast<uint32_t>(byte));
-      }
-      for (int column = 0; column < 4; ++column) {
-        for (int row = 0; row < 4; ++row) {
-          hash.AddFloat(level.transform[column][row]);
-        }
-      }
-    }
-    return hash.Finish();
-  }
-
   auto PrepareGeometryNames(const ufbx_scene& scene, const AdapterInput& input)
     -> ModelGeometryPreparation
   {
@@ -2470,7 +2330,6 @@ namespace {
   //! cannot be built is dropped with a warning; `emitted_variants` receives
   //! the variant index of each item, in emission order.
   [[nodiscard]] auto StreamWorkItemsFromScene(const ufbx_scene& scene,
-    const std::span<const base::Sha256Digest> source_witnesses,
     const AdapterInput& input, GeometryWorkItemSink& sink,
     std::vector<size_t>& emitted_variants) -> WorkItemStreamResult
   {
@@ -2507,14 +2366,8 @@ namespace {
     const auto bake = BuildFbxBakePlan(scene, input.request.options.coordinate);
     const auto basis
       = OxygenBasis(scene, input.request.options.coordinate.up_axis);
-    std::unordered_map<const ufbx_mesh*, size_t> mesh_indices;
-    mesh_indices.reserve(scene.meshes.count);
-    for (size_t index = 0; index < scene.meshes.count; ++index) {
-      mesh_indices.emplace(ItemAt(scene.meshes, index), index);
-    }
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
-      const auto mesh_i = variant.mesh_index;
       const auto* mesh = ItemAt(scene.meshes, variant.mesh_index);
       const auto& mesh_name = source.name;
       if (input.stop_token.stop_requested()) {
@@ -2554,9 +2407,6 @@ namespace {
       }
 
       MeshBuildPipeline::WorkItem item;
-      item.source_layout_witness = group != nullptr && group->levels.size() > 1
-        ? LodGroupWitness(*group, mesh_indices, source_witnesses)
-        : oxygen::base::CheckedAt(source_witnesses, mesh_i);
       item.source_id = source.source_id;
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
@@ -2623,12 +2473,17 @@ namespace {
           item.surface_names.try_emplace(range.source_slot,
             material != nullptr ? std::string(ToStringView(material->name))
                                 : "Default");
+          item.surface_materials.try_emplace(range.source_slot,
+            material != nullptr
+              ? std::optional(std::string(ToStringView(material->name)))
+              : std::nullopt);
           surfaces_used.insert(range.surface);
         }
 
         DLOG_F(2,
           "FBX mesh[{}] LOD{} skin_deformer_found={} joints={} weights={}",
-          mesh_i, lod_index, FindSkinDeformer(*lod_input.mesh) != nullptr,
+          variant.mesh_index, lod_index,
+          FindSkinDeformer(*lod_input.mesh) != nullptr,
           buffers->joint_indices.size(), buffers->joint_weights.size());
 
         const bool is_skinned = !buffers->joint_indices.empty()
@@ -2767,8 +2622,7 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   auto adapter = FbxAdapter {};
   result.format = "fbx";
   adapter.impl_->source = {};
-  auto loaded = LoadSceneFromFile(
-    source_path, input, result.diagnostics, ModelParseMode::kMetadata);
+  auto loaded = LoadSceneFromFile(source_path, input, result.diagnostics);
   const auto& scene = loaded.scene;
   if (!scene) {
     return result;
@@ -2807,10 +2661,10 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
 }
 
 auto FbxAdapter::Parse(const std::filesystem::path& source_path,
-  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
+  const AdapterInput& input, const ModelParseMode /*mode*/) -> ParseResult
 {
   ParseResult result;
-  auto loaded = LoadSceneFromFile(source_path, input, result.diagnostics, mode);
+  auto loaded = LoadSceneFromFile(source_path, input, result.diagnostics);
   const auto& scene = loaded.scene;
   if (!scene) {
     DLOG_F(ERROR, "FBX parse failed: path='{}' diagnostics={}",
@@ -2833,11 +2687,10 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
 }
 
 auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
-  const AdapterInput& input, const ModelParseMode mode) -> ParseResult
+  const AdapterInput& input, const ModelParseMode /*mode*/) -> ParseResult
 {
   ParseResult result;
-  auto loaded
-    = LoadSceneFromMemory(source_bytes, input, result.diagnostics, mode);
+  auto loaded = LoadSceneFromMemory(source_bytes, input, result.diagnostics);
   const auto& scene = loaded.scene;
   if (!scene) {
     DLOG_F(ERROR, "FBX parse failed (memory): diagnostics={}",
@@ -2887,20 +2740,8 @@ auto FbxAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
     return result;
   }
 
-  if (impl_->source.source_layout_witnesses.size()
-    != impl_->source.scene->meshes.count) {
-    auto result = WorkItemStreamResult {};
-    result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic(
-      std::string(import_codes::kMeshSourceLayoutUnavailable),
-      "Geometry production requires a geometry-mode parse",
-      input.source_id_prefix, input.object_path_prefix));
-    return result;
-  }
-
-  return StreamWorkItemsFromScene(*impl_->source.scene,
-    impl_->source.source_layout_witnesses, input, sink,
-    impl_->emitted_variants);
+  return StreamWorkItemsFromScene(
+    *impl_->source.scene, input, sink, impl_->emitted_variants);
 }
 
 auto FbxAdapter::PrepareMaterials(const AdapterInput& input)

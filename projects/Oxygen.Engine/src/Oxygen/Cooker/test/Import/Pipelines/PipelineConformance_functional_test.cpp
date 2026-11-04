@@ -44,7 +44,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
-#include <Oxygen/Cooker/test/Support/SourceLayoutTestSupport.h>
+#include <Oxygen/Cooker/test/Support/SurfaceTestSupport.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -219,8 +219,7 @@ namespace {
       = std::make_shared<const SurfaceProvenance>(oxygen::Uuid::Generate());
     item.request.surface_provenance = provenance;
     item.stop_token = {};
-    item.source_layout_witness
-      = oxygen::content::import::test::FixtureSourceLayoutWitness(item.lods);
+    oxygen::content::import::test::DeclareFixtureSurfaces(item);
     return item;
   }
 

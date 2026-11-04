@@ -52,7 +52,6 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SurfaceAllocation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -935,7 +934,7 @@ namespace {
 
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
-    const SurfaceGeometryProvenance& allocation,
+    const AllocatedSurfaces& allocation,
     const std::map<uint32_t, std::string>& surface_names,
     std::vector<data::pak::geometry::SubMeshDesc>& submeshes,
     std::vector<std::string>& submesh_names,
@@ -988,7 +987,7 @@ namespace {
 
       SubMeshDesc submesh {};
       submesh.material_asset_key = bucket.material_key;
-      submesh.surface_id = allocation.allocations.at(bucket.source_slot);
+      submesh.surface_id = allocation.ids_by_slot.at(bucket.source_slot);
       submesh.mesh_view_count
         = static_cast<uint32_t>(view_triangle_counts.size());
       std::ranges::copy(
@@ -1469,8 +1468,7 @@ namespace {
     std::string lod_name,
     const std::span<const internal::IndexedSurface> surfaces,
     const std::optional<Bounds3>& authored_bounds, const WorkItem& item,
-    const SurfaceGeometryProvenance& allocation,
-    const uint64_t max_data_blob_bytes,
+    const AllocatedSurfaces& allocation, const uint64_t max_data_blob_bytes,
     std::vector<ImportDiagnostic>& diagnostics) -> std::optional<LodBuildData>
   {
     LodBuildData lod;
@@ -1812,7 +1810,7 @@ namespace {
    import was canceled.
   */
   [[nodiscard]] auto AppendGeneratedLods(const PreparedLod& lod0,
-    const WorkItem& item, const SurfaceGeometryProvenance& allocation,
+    const WorkItem& item, const AllocatedSurfaces& allocation,
     const uint64_t max_data_blob_bytes, std::vector<LodBuildData>& lods,
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<std::vector<float>>
@@ -1912,9 +1910,9 @@ namespace {
     auto lods = std::vector<LodBuildData> {};
     lods.reserve(item.lods.size());
 
-    SurfaceGeometryProvenance allocation;
+    AllocatedSurfaces allocation;
     try {
-      allocation = AllocateSurfaces(item);
+      allocation = AllocateSurfaces(item, out.diagnostics);
     } catch (const std::exception& error) {
       out.diagnostics.push_back(MakeErrorDiagnostic(
         std::string(import_codes::kMeshSurfaceProvenanceInvalid), error.what(),
@@ -1993,7 +1991,7 @@ namespace {
     }
 
     out.cooked = std::move(*cooked_payload);
-    out.cooked->surface_provenance = std::move(allocation);
+    out.cooked->surface_provenance = std::move(allocation.provenance);
     out.success = true;
     return out;
   }

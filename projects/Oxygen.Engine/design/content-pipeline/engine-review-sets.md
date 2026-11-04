@@ -407,8 +407,7 @@ eviction and mount replacement, which Live Preview exercises constantly.
 `Cooker/CookedVersions.*`, `Cooker/Import/Internal/LooseCooked*`
 (`LooseCookedWriter`, `LooseCookedLayout`, `LooseCookedIndexRegistry`),
 `Cooker/Import/Internal/ResourceTable*`, `Cooker/Import/Internal/Emitters/*`,
-`Cooker/Import/Internal/FileSourceReader.*`,
-`Cooker/Import/Internal/SourceLayoutHash.h`, and the content checks of
+`Cooker/Import/Internal/FileSourceReader.*`, and the content checks of
 `Content/LooseCookedIndex.*` (`CheckContent`, `ValidateContent`);
 `design/proposals/cooked-sources/`.
 
@@ -633,8 +632,9 @@ same engine model for the same scene.
 - `material_remap`: a target is relative to the folder of the model's identity,
   or absolute in another mount, and survives reimport; a refused, unmounted or
   missing target has its own code.
-- `SurfaceProvenance`: surface IDs are found by geometry anchor and source
-  layout witness, and survive reimport and moving the model.
+- `SurfaceProvenance`: surface IDs are found by geometry anchor and declaration
+  key, the name of the source material, and survive reimport, moving the model,
+  editing its vertices, reordering slots and renaming one material.
 - glTF and FBX parity: units, handedness, up axis (`CoordTransform.h`),
   pivots, negative scales and light units agree; a shared scenario test
   compares them.

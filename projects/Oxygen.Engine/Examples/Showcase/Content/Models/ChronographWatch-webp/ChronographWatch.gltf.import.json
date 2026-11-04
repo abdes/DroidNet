@@ -46,420 +46,407 @@
       {
         "allocations": [
           {
-            "declaration_key": 0,
-            "surface_id": "3e59c742-23ae-3a04-3be7-e19b2a3bf6cb"
+            "declaration_key": "Backplate Khronos",
+            "surface_id": "43f34120-f13f-1f5a-3663-271f63a23210"
           }
         ],
-        "geometry_asset_key": "7ba863dc-37c7-1572-ebba-132ab1321fd4",
-        "layout_revision": "b8037efb2747c587a49c11ce330a353c47e69eab93c316b453f5e0e67a6752e3",
+        "geometry_asset_key": "142f56c3-66d0-0c76-6959-a7ca0ba443eb",
+        "layout_revision": "e9da18f84655b89a3122d90c974cd81b43efb16b3c2bb4733236e72b23c122cb",
         "source_geometry_anchor": "Backplate Khronos",
-        "source_layout_witness": "6239b1ce1a6b806ea459a2287f1323d4ecf8ecdfaaddce5968839f1af67d6835",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "0c12df60-d138-dba4-7500-97bd2e0a6306",
+                "default_material_key": "e81749a6-63f6-e07d-4097-97da773cfa87",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Backplate Khronos",
-            "surface_id": "3e59c742-23ae-3a04-3be7-e19b2a3bf6cb"
+            "surface_id": "43f34120-f13f-1f5a-3663-271f63a23210"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 12,
-            "surface_id": "b2472b18-cef1-624e-46ea-589330f6ec85"
+            "declaration_key": "Band Carbon Fiber Gold",
+            "surface_id": "a6804ef3-0624-d3e5-fcc6-91108e24108c"
           }
         ],
-        "geometry_asset_key": "1d053caf-0220-cf67-93d3-fa0d84bbf5b4",
-        "layout_revision": "ad2d0a75d8e5fa602a5077bd5e86126626347281f56ae40e1c93cb05b08c52f7",
+        "geometry_asset_key": "8c2d8efe-e34e-eb4e-0a16-145aaee3c2ed",
+        "layout_revision": "a87023fd5d183cc3b0c387a42f1253e61addb393419584a9fc9431da6d26ffb8",
         "source_geometry_anchor": "Band Carbon Fiber",
-        "source_layout_witness": "d05eed660090425e8506a49f097ee13502d0bf8726003019aef80a651b14464f",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "b80b48ba-b448-62f6-17c4-cdd38e5eb9dc",
+                "default_material_key": "80361ee1-4fc9-8653-6a54-f18a9c2f05a3",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Band Carbon Fiber Gold",
-            "surface_id": "b2472b18-cef1-624e-46ea-589330f6ec85"
+            "surface_id": "a6804ef3-0624-d3e5-fcc6-91108e24108c"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 13,
-            "surface_id": "c4b49f0a-ea36-d85e-7518-a3e4b482f7bc"
+            "declaration_key": "Band Plastic Gold",
+            "surface_id": "8f45c269-cdfb-4548-8aff-8528130b1902"
           }
         ],
-        "geometry_asset_key": "aa85161d-e261-2e39-009a-ecf03ea6ba23",
-        "layout_revision": "e22216531de81bfa674c8886eeb32a4d6cfec4163911010b28f610c371bad814",
+        "geometry_asset_key": "b0ef106d-4ad7-7eab-0670-5174da8cf9ac",
+        "layout_revision": "39da68a6103878d70f29e0afeb2ea053f007608409f29506c11b06ded000ec71",
         "source_geometry_anchor": "Band Plastic",
-        "source_layout_witness": "4e1ce2e4089463c7badc1ff44e2b62c2f8e53bfbf50f3911949c5161daec9009",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "153167ea-fa38-a42c-d357-8319d5768bbf",
+                "default_material_key": "5c011446-3e2b-b523-8ebd-2c8970b3dba9",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Band Plastic Gold",
-            "surface_id": "c4b49f0a-ea36-d85e-7518-a3e4b482f7bc"
+            "surface_id": "8f45c269-cdfb-4548-8aff-8528130b1902"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 14,
-            "surface_id": "623a6f24-62a7-84bd-66a2-84bd6baf71ea"
+            "declaration_key": "Bezel Frame Gold",
+            "surface_id": "f216f545-af5e-a0ad-2b10-4fcfcddf431e"
           }
         ],
-        "geometry_asset_key": "cf7cdabe-1863-3133-6dcd-9242ef119602",
-        "layout_revision": "9d1a52392ed748386f00c02e390862f30b246e3e914339af249629b79e6a318d",
+        "geometry_asset_key": "ab32b0c5-572d-fde7-91b2-ecc55b3faf8e",
+        "layout_revision": "5fbb4e22737329227474aca777f9738200f8786fd8c0cd14b3abef175335ff1f",
         "source_geometry_anchor": "Bezel Frame",
-        "source_layout_witness": "57daa51753c5b65580675a8b756d610f73d119e7e72e0be5ce4575be771d454d",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "fd391bc9-6ce8-af1f-766f-69c04e422c4a",
+                "default_material_key": "8a65142d-4316-82a7-b6da-c234c632a7a3",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Bezel Frame Gold",
-            "surface_id": "623a6f24-62a7-84bd-66a2-84bd6baf71ea"
+            "surface_id": "f216f545-af5e-a0ad-2b10-4fcfcddf431e"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 4,
-            "surface_id": "fa852f6a-441a-2ef0-74a7-31da73bd74d4"
+            "declaration_key": "Button Metal",
+            "surface_id": "05a462c2-08dc-ef62-f016-68bca8b62716"
           }
         ],
-        "geometry_asset_key": "9173a942-e525-51a7-3c76-c757b37e7809",
-        "layout_revision": "640fde939b2a2d1ab789afd5ae87c5e512937db64e04164e492553a7a956e19e",
+        "geometry_asset_key": "415d86f1-1beb-d71b-bb4d-a65a969b5e4c",
+        "layout_revision": "1532c34b0244ca30c82e4f9caf5be5b85157b5b87745c7cefe00141ffdf31be9",
         "source_geometry_anchor": "Button Metal",
-        "source_layout_witness": "27fe942cb6006a41ac0c52b8a791481f61640ddcccd87977f46a41be3aff11c9",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "7bbf6b4d-7985-0dd1-8550-ce808b832ae0",
+                "default_material_key": "b585a13d-3624-724d-e53f-a606242e6073",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Button Metal",
-            "surface_id": "fa852f6a-441a-2ef0-74a7-31da73bd74d4"
+            "surface_id": "05a462c2-08dc-ef62-f016-68bca8b62716"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 15,
-            "surface_id": "a9bd5851-d51d-4883-c249-ec91b369c42e"
+            "declaration_key": "Button Plastic Gold",
+            "surface_id": "b5f82f53-8525-d9fa-9070-2c0c44ba5c0b"
           }
         ],
-        "geometry_asset_key": "2f304270-9fe6-3632-3173-0d57237798a9",
-        "layout_revision": "abad653d4d419be252b44f1e3a766354dbaf5318fa7351fe6e160bc55d8de184",
+        "geometry_asset_key": "0fb5507d-fd8c-6494-229f-687701b06a99",
+        "layout_revision": "09470ae825a5f6b32412faa9741fd0ff23e55ab2881fd5745ca735acbf9e2280",
         "source_geometry_anchor": "Button Plastic",
-        "source_layout_witness": "b5cf595f27e3b562576be3ec32e8342c786873ba951e0cbdb2cb9c7fc2f7a9b9",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "d8effc26-d8c5-ba72-0809-8006a40c17c6",
+                "default_material_key": "deefc29a-4c83-e38c-a25d-edb622595996",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Button Plastic Gold",
-            "surface_id": "a9bd5851-d51d-4883-c249-ec91b369c42e"
+            "surface_id": "b5f82f53-8525-d9fa-9070-2c0c44ba5c0b"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 6,
-            "surface_id": "6b11e781-e5e2-7983-c89b-14046d6845f3"
+            "declaration_key": "Clasp DGG",
+            "surface_id": "8a004ede-fe6b-2187-1485-4a6c6840875d"
           }
         ],
-        "geometry_asset_key": "741fb0ca-eb2e-2fb4-c631-003e9cadbc66",
-        "layout_revision": "61fb0ef6a1de4535a953309c1f15dc7f4007fe7389200713709e583d2dc6301b",
+        "geometry_asset_key": "5d4a8eeb-45de-626b-f829-105e081b29df",
+        "layout_revision": "b5ef93d9f9ebfe37aacd08be2f18d10585642f052ac222fa38c8f22860a6a075",
         "source_geometry_anchor": "Clasp DGG",
-        "source_layout_witness": "839199176bc80dd9863bdbb04799176524b2c11c758ea1cc694e38bd591f617f",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "fb71da81-b482-f9ae-58d2-aa2d15fae6c4",
+                "default_material_key": "731d4847-6f45-1e02-64f5-1755953d8573",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Clasp DGG",
-            "surface_id": "6b11e781-e5e2-7983-c89b-14046d6845f3"
+            "surface_id": "8a004ede-fe6b-2187-1485-4a6c6840875d"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 7,
-            "surface_id": "3c42e925-d8d2-d516-3876-de2d0b487529"
+            "declaration_key": "Glass Face",
+            "surface_id": "afa3e96d-0700-9fd1-3eb6-770a4d3a7c54"
           }
         ],
-        "geometry_asset_key": "62dce700-d478-8bc8-7464-8bc5e70ac9a6",
-        "layout_revision": "2125c827e63ee9d1fb2fd12431aca45a1dd79f9ad2b5478e62f58876ef4cf195",
+        "geometry_asset_key": "b62ffb6e-c726-3e65-f15d-40a3c40276ba",
+        "layout_revision": "64f71364a8c100a27c576fd9f2c6bd5f2632bfa3c211c2701ab420ee433d4ced",
         "source_geometry_anchor": "Glass Face",
-        "source_layout_witness": "231322b0c72814e499ca0cc8f878bd1c6f8775ae4b7802dc6fc49ab4179bec19",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "570f425b-418b-3888-d733-32772dcad5ca",
+                "default_material_key": "42a4e121-5c40-d4e5-28f5-c87b792d2e30",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Glass Face",
-            "surface_id": "3c42e925-d8d2-d516-3876-de2d0b487529"
+            "surface_id": "afa3e96d-0700-9fd1-3eb6-770a4d3a7c54"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 8,
-            "surface_id": "ab0badb0-4e30-d183-fe40-0c423a6889bc"
+            "declaration_key": "Hand Color Gold",
+            "surface_id": "e45ca6e7-7a29-11c7-a0bd-ea5c2c3ef746"
           },
           {
-            "declaration_key": 9,
-            "surface_id": "ed6e3894-e9a8-b64e-b7c6-823f9d41bfe3"
+            "declaration_key": "Hand Metal",
+            "surface_id": "156dfa6c-c650-04ad-0149-1454108f48a2"
           },
           {
-            "declaration_key": 16,
-            "surface_id": "96d78d71-8e4f-5141-b1ca-809f62fcaebd"
+            "declaration_key": "Hand Plastic",
+            "surface_id": "b162c4aa-da58-6172-cc9a-82fa2365dae4"
           }
         ],
-        "geometry_asset_key": "884aa4ac-afec-b54a-a5ff-78cbb83531c1",
-        "layout_revision": "4553e023a6824963d8008fb769c972ff2eb0f8c7ad2057539610ca549d5cedea",
+        "geometry_asset_key": "065cda25-b928-1229-db9b-bf9a459a17a9",
+        "layout_revision": "04b1eacd89b76bd775ec9a930dec930ba09125344b6828bb549e5f497ccdc10a",
         "source_geometry_anchor": "Hand Hours",
-        "source_layout_witness": "6049893b24627dbecf85408dd3c24c06c7eb9cf38ba6328db831b065d613b0fe",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "a908a21a-d1fb-77ec-882a-3f146761e423",
+                "default_material_key": "ca919a9b-e9bb-d5d4-ae78-143ae0b5114f",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Hand Plastic",
-            "surface_id": "ab0badb0-4e30-d183-fe40-0c423a6889bc"
+            "surface_id": "b162c4aa-da58-6172-cc9a-82fa2365dae4"
           },
           {
             "bindings": [
               {
-                "default_material_key": "b3985d14-eff0-5e54-9427-853bde479392",
+                "default_material_key": "5696639e-164f-559f-a94b-2cf6c8f04804",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "Hand Metal",
-            "surface_id": "ed6e3894-e9a8-b64e-b7c6-823f9d41bfe3"
+            "surface_id": "156dfa6c-c650-04ad-0149-1454108f48a2"
           },
           {
             "bindings": [
               {
-                "default_material_key": "d953ae2d-0bc1-5202-42c9-2362d503888d",
+                "default_material_key": "7effa452-164e-df57-1a09-4222ebcdcfac",
                 "lod_index": 0,
                 "submesh_index": 2
               }
             ],
             "display_name": "Hand Color Gold",
-            "surface_id": "96d78d71-8e4f-5141-b1ca-809f62fcaebd"
+            "surface_id": "e45ca6e7-7a29-11c7-a0bd-ea5c2c3ef746"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 8,
-            "surface_id": "835ef19d-516e-b273-799e-54c58f32dca1"
+            "declaration_key": "Hand Color Gold",
+            "surface_id": "8d1b12c2-fde3-8a10-2c7b-5f870d635b4e"
           },
           {
-            "declaration_key": 9,
-            "surface_id": "1aa088e5-b818-cc7b-69f3-9792720298b9"
+            "declaration_key": "Hand Metal",
+            "surface_id": "653d59ea-d3f9-77cb-a5f3-df97bf30132f"
           },
           {
-            "declaration_key": 16,
-            "surface_id": "2a974406-30ce-0133-cbf6-3e5f4da83bb4"
+            "declaration_key": "Hand Plastic",
+            "surface_id": "c01102ee-06a1-b9ec-e683-639cd4c894de"
           }
         ],
-        "geometry_asset_key": "f202542b-319f-602f-17d9-3b66a58cc845",
-        "layout_revision": "55ea3ec291d96271d99fa4f3427fab1c5a5c99fd1e167d3c75e4ce5108e00a61",
+        "geometry_asset_key": "1c8aab48-2dc5-3737-c1a7-74ce3ff1378e",
+        "layout_revision": "9e5c2a0de09cfd6f1160975786af1e52966c63e66772b7780fe40f5d4b844f9a",
         "source_geometry_anchor": "Hand Minutes",
-        "source_layout_witness": "bcea5f4eea7422fc1c995de295b27d41352202511da6cf19a99ab31a591c019a",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "a908a21a-d1fb-77ec-882a-3f146761e423",
+                "default_material_key": "ca919a9b-e9bb-d5d4-ae78-143ae0b5114f",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Hand Plastic",
-            "surface_id": "835ef19d-516e-b273-799e-54c58f32dca1"
+            "surface_id": "c01102ee-06a1-b9ec-e683-639cd4c894de"
           },
           {
             "bindings": [
               {
-                "default_material_key": "b3985d14-eff0-5e54-9427-853bde479392",
+                "default_material_key": "5696639e-164f-559f-a94b-2cf6c8f04804",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "Hand Metal",
-            "surface_id": "1aa088e5-b818-cc7b-69f3-9792720298b9"
+            "surface_id": "653d59ea-d3f9-77cb-a5f3-df97bf30132f"
           },
           {
             "bindings": [
               {
-                "default_material_key": "d953ae2d-0bc1-5202-42c9-2362d503888d",
+                "default_material_key": "7effa452-164e-df57-1a09-4222ebcdcfac",
                 "lod_index": 0,
                 "submesh_index": 2
               }
             ],
             "display_name": "Hand Color Gold",
-            "surface_id": "2a974406-30ce-0133-cbf6-3e5f4da83bb4"
+            "surface_id": "8d1b12c2-fde3-8a10-2c7b-5f870d635b4e"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 8,
-            "surface_id": "bc10f785-f016-70fa-5103-28d87a46f045"
+            "declaration_key": "Hand Metal",
+            "surface_id": "7b281737-8ca6-893b-26df-44c6ec012225"
           },
           {
-            "declaration_key": 9,
-            "surface_id": "85c81249-215e-c0ff-4776-7351b5fdcedf"
+            "declaration_key": "Hand Plastic",
+            "surface_id": "7cbc09f0-bd0c-f696-8a52-426a1178a0a6"
           }
         ],
-        "geometry_asset_key": "f42ee814-aadf-70e7-bc2c-da9b47fb939f",
-        "layout_revision": "bd54691b3ec9c4654de99311a1b1462b9310b9bb38889f0d13ef75e368d715a2",
+        "geometry_asset_key": "a3dfea0b-a434-4bfe-98c2-ab483439303b",
+        "layout_revision": "52b56b36b2c51fa199b980c200adebca2e3f008bb11477d97aea90d91c0988b9",
         "source_geometry_anchor": "Hand Seconds",
-        "source_layout_witness": "fbce293f62572172cab4b8f01348007eace2e1e6b535e7f4d1b14160c369b9b3",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "a908a21a-d1fb-77ec-882a-3f146761e423",
+                "default_material_key": "ca919a9b-e9bb-d5d4-ae78-143ae0b5114f",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Hand Plastic",
-            "surface_id": "bc10f785-f016-70fa-5103-28d87a46f045"
+            "surface_id": "7cbc09f0-bd0c-f696-8a52-426a1178a0a6"
           },
           {
             "bindings": [
               {
-                "default_material_key": "b3985d14-eff0-5e54-9427-853bde479392",
+                "default_material_key": "5696639e-164f-559f-a94b-2cf6c8f04804",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "Hand Metal",
-            "surface_id": "85c81249-215e-c0ff-4776-7351b5fdcedf"
+            "surface_id": "7b281737-8ca6-893b-26df-44c6ec012225"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 8,
-            "surface_id": "f768bbec-9067-147c-3bb3-68126626f2ca"
+            "declaration_key": "Hand Metal",
+            "surface_id": "69803c71-13e9-1145-ae1e-575003764de3"
           },
           {
-            "declaration_key": 9,
-            "surface_id": "2f780d2b-b9ff-f831-17fa-75f5b13842ec"
+            "declaration_key": "Hand Plastic",
+            "surface_id": "0e3725d3-238a-a576-bc5c-06d248e34459"
           }
         ],
-        "geometry_asset_key": "d1c3b755-1d20-aa23-684a-d61dd551ebe7",
-        "layout_revision": "1160402fe089f3217e9ccf90a993317ce771464772d53c014b00119fca077559",
+        "geometry_asset_key": "2a15fc5d-edc2-7964-d946-f239d89acd2e",
+        "layout_revision": "2b4f7c2f0e31a62aaa9a827a1d967c63dad6d4eef39b924de5371a293bbf3031",
         "source_geometry_anchor": "Hand Setting",
-        "source_layout_witness": "4d0f19eb420b126b9887ead6ddcd29fa8ed1a54384f87baaee81c97c05cca15d",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "a908a21a-d1fb-77ec-882a-3f146761e423",
+                "default_material_key": "ca919a9b-e9bb-d5d4-ae78-143ae0b5114f",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Hand Plastic",
-            "surface_id": "f768bbec-9067-147c-3bb3-68126626f2ca"
+            "surface_id": "0e3725d3-238a-a576-bc5c-06d248e34459"
           },
           {
             "bindings": [
               {
-                "default_material_key": "b3985d14-eff0-5e54-9427-853bde479392",
+                "default_material_key": "5696639e-164f-559f-a94b-2cf6c8f04804",
                 "lod_index": 0,
                 "submesh_index": 1
               }
             ],
             "display_name": "Hand Metal",
-            "surface_id": "2f780d2b-b9ff-f831-17fa-75f5b13842ec"
+            "surface_id": "69803c71-13e9-1145-ae1e-575003764de3"
           }
         ]
       },
       {
         "allocations": [
           {
-            "declaration_key": 11,
-            "surface_id": "07cd9a5c-cc43-870e-a58f-e5a3b4c36b2b"
+            "declaration_key": "Watch Face",
+            "surface_id": "5fc1cd00-f67e-8c09-98ed-7f9655fa1acb"
           }
         ],
-        "geometry_asset_key": "917e633f-1865-38e9-f163-e401c75de2a3",
-        "layout_revision": "8f1d80b3c178a8c4b672c22567c375c0d0e690a2c6c507616324c6328277a9d4",
+        "geometry_asset_key": "9882d81c-67c0-064e-ea38-f785ee2f7192",
+        "layout_revision": "a764673aeba3ba5506edba3d717d47e02da66a990c804f10e41f1278cfede118",
         "source_geometry_anchor": "Watch Face",
-        "source_layout_witness": "0efaed8f506dfcb53bb1291b9d8a8715ebfda8de4822e4b0a8aed4ed3c39ec90",
         "surfaces": [
           {
             "bindings": [
               {
-                "default_material_key": "052d7e7c-ef41-7346-8879-b778073a79fb",
+                "default_material_key": "c253a445-c781-8ffb-0206-c5aee4d07ef9",
                 "lod_index": 0,
                 "submesh_index": 0
               }
             ],
             "display_name": "Watch Face",
-            "surface_id": "07cd9a5c-cc43-870e-a58f-e5a3b4c36b2b"
+            "surface_id": "5fc1cd00-f67e-8c09-98ed-7f9655fa1acb"
           }
         ]
       }
     ],
-    "schema_version": 2
+    "schema_version": 3
   },
   "node_continuity": [],
   "published_nodes": [
@@ -523,54 +510,54 @@
   "new_nodes": [],
   "vanished_nodes": [],
   "source_fingerprint": {
-    "size": 50050,
-    "sha256": "e696fcd00c8c6ee27dfaf32c5ec7721f613144761a280613736e64c3715fd16d",
     "files": [
       {
         "path": "ChronographWatch.data.bin",
-        "size": 4114564,
-        "sha256": "518a3ad15cfc08df386bfb75ae6d496a5fd158c49ebcac139c1347e94af5706d"
+        "sha256": "518a3ad15cfc08df386bfb75ae6d496a5fd158c49ebcac139c1347e94af5706d",
+        "size": 4114564
       },
       {
         "path": "band_occlusion.webp",
-        "size": 340176,
-        "sha256": "dff489cedbcf7ef0c169149df4e321861f588513a4476051c7286dbdbbf5d323"
+        "sha256": "dff489cedbcf7ef0c169149df4e321861f588513a4476051c7286dbdbbf5d323",
+        "size": 340176
       },
       {
         "path": "carbonfiber_normal.webp",
-        "size": 80266,
-        "sha256": "ddbba4b6c94c8c2cfd0e6383dfbc935adc1128ce005d625ae09ce3a59397371d"
+        "sha256": "ddbba4b6c94c8c2cfd0e6383dfbc935adc1128ce005d625ae09ce3a59397371d",
+        "size": 80266
       },
       {
         "path": "dgg_basecolor.webp",
-        "size": 7364,
-        "sha256": "a0a5fe4a9ced1e257ef159d4c5915e330ceb9677cb3118da2e9b6d62448d541e"
+        "sha256": "a0a5fe4a9ced1e257ef159d4c5915e330ceb9677cb3118da2e9b6d62448d541e",
+        "size": 7364
       },
       {
         "path": "dgg_rm.webp",
-        "size": 7210,
-        "sha256": "78fbd8cbe28840b3976b558ccc1dbea653660dcd0c5a3e7f6741286c0ad0112a"
+        "sha256": "78fbd8cbe28840b3976b558ccc1dbea653660dcd0c5a3e7f6741286c0ad0112a",
+        "size": 7210
       },
       {
         "path": "khronos_basecolor.webp",
-        "size": 8518,
-        "sha256": "ea7a05820d03d9ebd0f64e7b2a3efd3c9de25ed3f6f821d674c45659792d890d"
+        "sha256": "ea7a05820d03d9ebd0f64e7b2a3efd3c9de25ed3f6f821d674c45659792d890d",
+        "size": 8518
       },
       {
         "path": "khronos_rm.webp",
-        "size": 8546,
-        "sha256": "4dfe26c09d96677b0ea9b00a449b8656e52594810ff5371b9edf9493e3e57d18"
+        "sha256": "4dfe26c09d96677b0ea9b00a449b8656e52594810ff5371b9edf9493e3e57d18",
+        "size": 8546
       },
       {
         "path": "watchface_basecolor.webp",
-        "size": 235830,
-        "sha256": "9d89c385fb677a94374d0b51a07315f0cc3aecbbbaf77c126831d4c5f347d51a"
+        "sha256": "9d89c385fb677a94374d0b51a07315f0cc3aecbbbaf77c126831d4c5f347d51a",
+        "size": 235830
       },
       {
         "path": "watchface_orm.webp",
-        "size": 543794,
-        "sha256": "eacfc0ae21ef2ea2e68cb06e2af286176f1e69e8ec21decc945254087af67e76"
+        "sha256": "eacfc0ae21ef2ea2e68cb06e2af286176f1e69e8ec21decc945254087af67e76",
+        "size": 543794
       }
-    ]
+    ],
+    "sha256": "e696fcd00c8c6ee27dfaf32c5ec7721f613144761a280613736e64c3715fd16d",
+    "size": 50050
   }
 }

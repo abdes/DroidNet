@@ -46,8 +46,6 @@ namespace {
     auto result = SurfaceGeometryProvenance {};
     result.source_geometry_anchor
       = record.at("source_geometry_anchor").get<std::string>();
-    result.source_layout_witness
-      = ReadDigest(record.at("source_layout_witness").get<std::string>());
     result.inventory.geometry_asset_key = data::AssetKey::FromString(
       record.at("geometry_asset_key").get<std::string>())
                                             .value();
@@ -58,7 +56,7 @@ namespace {
         allocation.at("surface_id").get<std::string>())
                         .value();
       if (!result.allocations
-            .emplace(allocation.at("declaration_key").get<uint32_t>(), id)
+            .emplace(allocation.at("declaration_key").get<std::string>(), id)
             .second) {
         throw std::invalid_argument("Duplicate surface declaration");
       }
@@ -125,10 +123,6 @@ namespace {
       },
       { "source_geometry_anchor", geometry.source_geometry_anchor },
       {
-        "source_layout_witness",
-        base::ToHexString(geometry.source_layout_witness),
-      },
-      {
         "layout_revision",
         base::ToHexString(geometry.inventory.layout_revision),
       },
@@ -156,16 +150,15 @@ SurfaceProvenance::SurfaceProvenance(
     if (inventory.geometry_asset_key.IsNil()
       || geometry.source_geometry_anchor.empty()
       || (previous != nullptr
-        && previous->source_geometry_anchor == geometry.source_geometry_anchor)
-      || base::IsAllZero(geometry.source_layout_witness)) {
+        && previous->source_geometry_anchor
+          == geometry.source_geometry_anchor)) {
       throw std::invalid_argument(
         "Invalid or duplicate geometry surface provenance");
     }
     previous = &geometry;
     std::set<data::SurfaceId> allocated;
     for (const auto& [declaration, id] : geometry.allocations) {
-      static_cast<void>(declaration);
-      if (id.IsNil() || !allocated.insert(id).second) {
+      if (declaration.empty() || id.IsNil() || !allocated.insert(id).second) {
         throw std::invalid_argument("Invalid or duplicate surface allocation");
       }
     }

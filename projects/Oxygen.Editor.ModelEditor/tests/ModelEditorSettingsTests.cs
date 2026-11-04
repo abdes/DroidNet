@@ -359,14 +359,13 @@ public sealed class ModelEditorSettingsTests : IDisposable
     private static JsonElement Provenance()
         => JsonSerializer.SerializeToElement(new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["schema_version"] = 2,
+            ["schema_version"] = 3,
             ["geometries"] = new[]
             {
                 new Dictionary<string, object>(StringComparer.Ordinal)
                 {
                     ["geometry_asset_key"] = GeometryKey.ToString("D"),
                     ["source_geometry_anchor"] = "meshes/Body",
-                    ["source_layout_witness"] = new string('a', 64),
                     ["layout_revision"] = new string('b', 64),
                     ["surfaces"] = Array.Empty<object>(),
                     ["allocations"] = Array.Empty<object>(),
