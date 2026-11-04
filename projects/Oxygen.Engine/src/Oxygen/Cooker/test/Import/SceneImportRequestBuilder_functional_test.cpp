@@ -10,7 +10,6 @@
 #include <fstream>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -31,6 +30,7 @@
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SceneIds.h>
@@ -39,6 +39,10 @@
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::Uuid;
@@ -130,13 +134,13 @@ private:
 //! run, and no node history.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, WithoutARecordTheIdentityIsFresh)
 {
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto first = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
   const auto second
     = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
 
-  ASSERT_HAS_VALUE(first) << errors.str();
-  ASSERT_HAS_VALUE(second) << errors.str();
+  ASSERT_HAS_VALUE(first) << DiagnosticSummary(errors);
+  ASSERT_HAS_VALUE(second) << DiagnosticSummary(errors);
   ASSERT_NE(first->surface_provenance, nullptr);
   ASSERT_NE(second->surface_provenance, nullptr);
   EXPECT_TRUE(first->surface_provenance->SourceIdentity().IsValidV7());
@@ -175,22 +179,22 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceIsRecordedAsItsMountPath)
     ASSERT_TRUE(output.good());
   }
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   const auto request = manifest->jobs.at(0).BuildRequest(errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->source_mount_path, "/Content/Materials/Red.omat.json");
 }
 
 //! A model request carries the model's identity, which names its scene.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
 {
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request
     = BuildSceneRequest(Settings(), ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->asset_virtual_path, "/Cooked/model.gltf");
   EXPECT_EQ(request->GetSceneName(), "model");
   EXPECT_EQ(request->ModelProductVirtualPath(
@@ -199,11 +203,10 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
 
   auto settings = Settings();
   settings.virtual_path.clear();
-  std::ostringstream refused;
+  std::vector<ImportDiagnostic> refused;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, refused).has_value());
-  EXPECT_THAT(
-    refused.str(), testing::HasSubstr("import.asset_virtual_path_missing"));
+  EXPECT_THAT(refused, HasDiagnostic("import.asset_virtual_path_missing"));
 }
 
 //! The record supplies the identity, the provenance and what node continuity
@@ -229,10 +232,10 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheRecordSuppliesTheModelsHistory)
   auto settings = Settings();
   settings.model_record = record;
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->surface_provenance, record->surface_provenance);
   const auto& model_import = request->model_import;
   ASSERT_HAS_VALUE(model_import);
@@ -245,9 +248,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, PreparesWithoutDestinationOrFileIo)
 {
   auto settings = Settings();
   settings.cooked_root.clear();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request = settings.Prepare(ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_FALSE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
 }
@@ -291,18 +294,18 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, AModelJobRunsItsRecord)
     ASSERT_TRUE(output.good());
   }
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
 
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs[0].job_type, "gltf");
   EXPECT_EQ(manifest->jobs[1].job_type, "fbx");
   EXPECT_EQ(manifest->jobs[1].id, "the-fbx");
   const auto first = manifest->jobs[0].BuildRequest(errors);
   const auto second = manifest->jobs[1].BuildRequest(errors);
-  ASSERT_HAS_VALUE(first) << errors.str();
-  ASSERT_HAS_VALUE(second) << errors.str();
+  ASSERT_HAS_VALUE(first) << DiagnosticSummary(errors);
+  ASSERT_HAS_VALUE(second) << DiagnosticSummary(errors);
   EXPECT_EQ(first->asset_virtual_path, "/Content/model.gltf");
   EXPECT_EQ(first->job_name, "the_gltf");
   EXPECT_EQ(first->options.gltf_scene, "Interior");
@@ -323,9 +326,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheChosenGltfSceneIsASetting)
   EXPECT_EQ(json::parse(ModelImportRecord::MakeSettings(settings))
               .value("gltf_scene", std::string {}),
     "#2");
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request = settings.Prepare(ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->options.gltf_scene, "#2");
   EXPECT_EQ(
     SceneImportSettings::FromOptions(request->options).gltf_scene, "#2");
@@ -337,16 +340,17 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, TheChosenGltfSceneIsASetting)
 NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
 {
   static_cast<void>(SaveRecord("/Content/model.gltf"));
-  const auto refused = [this](const json& job) -> std::string {
+  const auto refused
+    = [this](const json& job) -> std::vector<ImportDiagnostic> {
     const auto document = ProjectFields({
       { "version", 1 },
       { "jobs", json::array({ job }) },
     });
-    std::ostringstream errors;
+    std::vector<ImportDiagnostic> errors;
     EXPECT_FALSE(
       ImportManifest::Parse(document.dump(), TempDir(), {}, errors).has_value())
       << job.dump();
-    return errors.str();
+    return errors;
   };
 
   static_cast<void>(refused({
@@ -364,7 +368,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
                 { "type", "model" },
                 { "virtual_path", "/Content/missing.gltf" },
               }),
-    testing::HasSubstr("import.model_record_unreadable"));
+    HasDiagnostic("import.model_record_unreadable"));
 }
 
 //! The model import settings a record holds reach the import: up axis,
@@ -433,11 +437,11 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
     ASSERT_TRUE(output.good());
   }
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   const auto request = manifest->jobs.at(0).BuildRequest(errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
 
   const auto& options = request->options;
   EXPECT_EQ(options.coordinate.up_axis, SourceUpAxis::kZ);
@@ -487,9 +491,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsReachTheImport)
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ModelImportSettingsDefaults)
 {
   using oxygen::content::import::SourceUpAxis;
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request = Settings().Prepare(ImportFormat::kGltf, errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->options.coordinate.up_axis, SourceUpAxis::kFromFile);
   EXPECT_FLOAT_EQ(request->options.normals_smoothing_angle_deg, 60.0F);
   const auto lods = LodGenerationOptions {};
@@ -529,7 +533,7 @@ NOLINT_TEST_F(
   full_reduction.lod_reduction_percent = 100.0F;
   for (const auto& settings :
     { angle, axis, no_levels, too_many_levels, no_reduction, full_reduction }) {
-    std::ostringstream errors;
+    std::vector<ImportDiagnostic> errors;
     EXPECT_FALSE(settings.Prepare(ImportFormat::kGltf, errors).has_value());
   }
 
@@ -553,7 +557,7 @@ NOLINT_TEST_F(
                               })
                   .dump();
     }
-    std::ostringstream errors;
+    std::vector<ImportDiagnostic> errors;
     return !ImportManifest::Load(path, {}, errors).has_value();
   };
   EXPECT_TRUE(refused({ { "Body",

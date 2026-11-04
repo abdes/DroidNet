@@ -17,7 +17,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -63,6 +62,7 @@
 #include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
@@ -484,9 +484,16 @@ namespace {
   auto PrepareInputJob(const ImportManifestJob& job, AnalysisContext& context)
     -> co::Co<bool>
   {
+    auto& report = *context.report;
+    const auto first_refusal = report.diagnostics.size();
+    if (!internal::CheckInputSourceName(
+          job.input.source_path, report.diagnostics)) {
+      job.LocateSettingsDiagnostics(
+        std::span(report.diagnostics).subspan(first_refusal));
+      co_return false;
+    }
     const auto text
       = co_await ReadSourceText(context, job.input.source_path, {});
-    auto& report = *context.report;
     const auto document = PrepareInputDocument(
       text, report.source_path, job.virtual_path, report.diagnostics);
     if (!document.has_value()) {
@@ -584,9 +591,17 @@ namespace {
   }
 
   //! A sidecar's target scene: the anchor of its references, which the scene
-  //! cook produces first.
-  auto TargetScene(AnalysisContext& context, const std::string& scene) -> void
+  //! cook produces first. False when the job's settings refuse it.
+  auto TargetScene(const ImportManifestJob& job, AnalysisContext& context,
+    const std::string& scene) -> bool
   {
+    auto& diagnostics = context.report->diagnostics;
+    const auto first_refusal = diagnostics.size();
+    if (!internal::CheckTargetScene(scene, diagnostics)) {
+      job.LocateSettingsDiagnostics(
+        std::span(diagnostics).subspan(first_refusal));
+      return false;
+    }
     context.anchor = scene;
     context.report->references.push_back({
       .written = scene,
@@ -595,6 +610,7 @@ namespace {
       .json_pointer = {},
       .required = true,
     });
+    return true;
   }
 
   //! Analyzes a physics sidecar: it references its target scene and the
@@ -614,7 +630,9 @@ namespace {
     // The prepared document is valid JSON.
     const auto document = std::optional { nlohmann::json::parse(text) };
     const auto& scene = settings.target_scene_virtual_path;
-    TargetScene(context, scene);
+    if (!TargetScene(job, context, scene)) {
+      co_return false;
+    }
     constexpr auto kSceneSuffix = data::kSceneDescriptorExtension;
     const auto stem = scene.ends_with(kSceneSuffix)
       ? scene.substr(0, scene.size() - kSceneSuffix.size())
@@ -643,7 +661,9 @@ namespace {
           .has_value()) {
       co_return false;
     }
-    TargetScene(context, settings.target_scene_virtual_path);
+    if (!TargetScene(job, context, settings.target_scene_virtual_path)) {
+      co_return false;
+    }
     // The prepared document lists its rows, or is the array of rows itself.
     const auto document = std::optional { nlohmann::json::parse(text) };
     const auto rows
@@ -865,10 +885,12 @@ namespace {
         }
         settings = *effective;
       }
-      auto errors = std::ostringstream {};
-      auto request = settings.Prepare(errors);
+      const auto first_refusal = report.diagnostics.size();
+      auto request = settings.Prepare(report.diagnostics);
       if (!request) {
-        throw std::invalid_argument(errors.str());
+        job.LocateSettingsDiagnostics(
+          std::span(report.diagnostics).subspan(first_refusal));
+        co_return false;
       }
       // Refuses an identity in no mount, as the cook would.
       static_cast<void>(request->GetTextureDescriptorRelPath());
@@ -898,12 +920,14 @@ namespace {
     if (job.job_type == "gltf" || job.job_type == "fbx") {
       const auto& settings = job.job_type == "gltf" ? job.gltf : job.fbx;
       report.source_path = settings.source_path;
-      auto errors = std::ostringstream {};
+      const auto first_refusal = report.diagnostics.size();
       auto request = settings.Prepare(
         job.job_type == "gltf" ? ImportFormat::kGltf : ImportFormat::kFbx,
-        errors);
+        report.diagnostics);
       if (!request) {
-        throw std::invalid_argument(errors.str());
+        job.LocateSettingsDiagnostics(
+          std::span(report.diagnostics).subspan(first_refusal));
+        co_return false;
       }
       auto bytes = serio::ByteBuffer {};
       auto glb = false;

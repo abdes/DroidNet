@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -100,8 +100,17 @@ namespace manifest_codes {
     = "input.manifest.job_id_missing";
 } // namespace manifest_codes
 
+//! Where a job of a loaded manifest or batch was declared.
+struct ImportManifestJobOrigin final {
+  //! The manifest file; empty for text without one.
+  std::string source_path;
+  //! The job's index in that file's `jobs`.
+  std::size_t index = 0;
+};
+
 struct ImportManifestJob {
   std::string job_type;
+  ImportManifestJobOrigin origin;
   std::optional<data::SourceKey> source_key;
   TextureImportSettings texture;
   SceneImportSettings fbx;
@@ -138,9 +147,16 @@ struct ImportManifestJob {
   //! unsupported.
   OXGN_COOK_NDAPI auto SourcePath() const -> std::filesystem::path;
 
-  OXGN_COOK_NDAPI auto BuildRequest(std::ostream& error_stream,
+  //! Builds the job's request; a refusal goes to `diagnostics`, located in the
+  //! manifest when it is about the job's settings (see `request_codes`).
+  OXGN_COOK_NDAPI auto BuildRequest(std::vector<ImportDiagnostic>& diagnostics,
     std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> std::optional<ImportRequest>;
+
+  //! Locates in the job's manifest each of `diagnostics` that is about the
+  //! job's settings: one with no `source_path`.
+  OXGN_COOK_API auto LocateSettingsDiagnostics(
+    std::span<ImportDiagnostic> diagnostics) const -> void;
 
   //! Cooks the job into `cooked_root`, replacing the root it names.
   OXGN_COOK_API auto SetCookedRoot(const std::string& cooked_root) -> void;
@@ -212,7 +228,8 @@ struct ImportManifest {
   OXGN_COOK_API auto AddBaseCookedContextRoots(
     std::span<const std::filesystem::path> roots) -> void;
 
-  OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream,
+  //! Builds the request of every job the settings of which it accepts.
+  OXGN_COOK_NDAPI auto BuildRequests(std::vector<ImportDiagnostic>& diagnostics,
     const std::shared_ptr<const CapturedInputSet>& captured_inputs = {}) const
     -> std::vector<ImportRequest>;
 
@@ -244,12 +261,6 @@ struct ImportManifest {
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<ImportManifest>;
 
-  //! Loads a manifest and writes its diagnostics to `error_stream`, one line
-  //! each.
-  OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& manifest_path,
-    const ImportManifestLoadOptions& options = {},
-    std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
-
   //! Loads several manifests as one batch with one mount table.
   /*!
    Every manifest is loaded with `options`. Their mount tables may declare the
@@ -269,12 +280,6 @@ struct ImportManifest {
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<ImportManifest>;
 
-  //! Loads a batch and writes its diagnostics to `error_stream`.
-  OXGN_COOK_NDAPI static auto LoadBatch(
-    std::span<const std::filesystem::path> manifest_paths,
-    const ImportManifestLoadOptions& options = {},
-    std::ostream& error_stream = std::cerr) -> std::optional<ImportManifest>;
-
   //! Parses the same native manifest schema with an explicit path base.
   /*!
    The diagnostics have no `source_path`: the text has no file.
@@ -283,12 +288,6 @@ struct ImportManifest {
     const std::filesystem::path& manifest_directory,
     const ImportManifestLoadOptions& options,
     std::vector<ImportDiagnostic>& diagnostics)
-    -> std::optional<ImportManifest>;
-
-  //! Parses the text and writes its diagnostics to `error_stream`.
-  OXGN_COOK_NDAPI static auto Parse(std::string_view text,
-    const std::filesystem::path& manifest_directory,
-    const ImportManifestLoadOptions& options, std::ostream& error_stream)
     -> std::optional<ImportManifest>;
 };
 

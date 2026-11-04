@@ -4,7 +4,7 @@
   "required": ["report_version", "session", "jobs"],
   "properties": {
     "report_version": {
-      "const": "4"
+      "const": "5"
     },
     "session": {
       "type": "object",
@@ -16,9 +16,14 @@
         }
       }
     },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/properties/jobs/items/properties/diagnostics/items"
+      }
+    },
     "jobs": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "required": [

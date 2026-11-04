@@ -6,38 +6,31 @@
 
 #include <filesystem>
 #include <optional>
-#include <ostream>
-#include <string>
-#include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
 namespace oxygen::content::import {
 
-auto TextureImportSettings::Prepare(std::ostream& error_stream) const
+auto TextureImportSettings::Prepare(
+  std::vector<ImportDiagnostic>& diagnostics) const
   -> std::optional<ImportRequest>
 {
   const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
   request.asset_virtual_path = settings.virtual_path;
-
-  if (!settings.job_name.empty()) {
-    request.job_name = settings.job_name;
-  } else {
-    const auto stem = request.source_path.stem().string();
-    if (!stem.empty()) {
-      request.job_name = stem;
-    }
-  }
+  internal::ApplyJobName(settings.job_name, request);
 
   auto& tuning = request.options.texture_tuning;
 
-  if (!internal::MapSettingsToTuning(settings, tuning, error_stream)) {
+  if (!internal::MapSettingsToTuning(settings, tuning, diagnostics)) {
     return std::nullopt;
   }
 
@@ -64,20 +57,12 @@ auto TextureImportSettings::Prepare(std::ostream& error_stream) const
 
 namespace internal {
   auto BuildTextureRequest(const TextureImportSettings& settings,
-    std::ostream& error_stream) -> std::optional<ImportRequest>
+    std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportRequest>
   {
-    if (settings.cooked_root.empty()) {
-      error_stream << "ERROR: --output or --cooked-root is required\n";
+    auto request = settings.Prepare(diagnostics);
+    if (!request.has_value()
+      || !RequireCookedRoot(settings.cooked_root, *request, diagnostics)) {
       return std::nullopt;
-    }
-    auto root = std::filesystem::path(settings.cooked_root);
-    if (!root.is_absolute()) {
-      error_stream << "ERROR: cooked root must be an absolute path\n";
-      return std::nullopt;
-    }
-    auto request = settings.Prepare(error_stream);
-    if (request.has_value()) {
-      request->cooked_root = std::move(root);
     }
     return request;
   }

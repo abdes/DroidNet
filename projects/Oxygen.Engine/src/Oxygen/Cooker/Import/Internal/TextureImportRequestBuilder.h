@@ -7,7 +7,9 @@
 #pragma once
 
 #include <optional>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -15,7 +17,7 @@
 namespace oxygen::content::import::internal {
 
 [[nodiscard]] OXGN_COOK_API auto BuildTextureRequest(
-  const TextureImportSettings& settings, std::ostream& error_stream)
-  -> std::optional<ImportRequest>;
+  const TextureImportSettings& settings,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

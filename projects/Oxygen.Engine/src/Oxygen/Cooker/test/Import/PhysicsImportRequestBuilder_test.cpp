@@ -7,14 +7,22 @@
 // Covers: Import/Internal/PhysicsImportRequestBuilder.cpp
 
 #include <filesystem>
-#include <sstream>
 #include <string>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::content::import::PhysicsSidecarImportSettings;
 using oxygen::content::import::internal::BuildPhysicsSidecarRequest;
@@ -49,12 +57,12 @@ NOLINT_TEST(
   PhysicsImportRequestBuilderTest, BuildPhysicsSidecarRequestValidSourceInput)
 {
   const auto settings = MakeValidSourceSettings();
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->physics);
   EXPECT_EQ(request->physics->target_scene_virtual_path,
     settings.target_scene_virtual_path);
@@ -69,11 +77,11 @@ NOLINT_TEST(
 {
   auto settings = MakeValidSourceSettings();
   settings.target_scene_virtual_path = "/Game/Scenes/TestScene.oscene";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->OutputIdentity(), "/Game/Scenes/TestScene.oscene");
   EXPECT_EQ(request->OutputMountRoot(), "/Game");
 }
@@ -82,12 +90,12 @@ NOLINT_TEST(
   PhysicsImportRequestBuilderTest, BuildPhysicsSidecarRequestValidInlineInput)
 {
   const auto settings = MakeValidInlineSettings();
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->physics);
   EXPECT_EQ(request->physics->target_scene_virtual_path,
     settings.target_scene_virtual_path);
@@ -102,13 +110,13 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   settings.source_path.clear();
   settings.inline_bindings_json
     = R"({"rigid_bodies":[{"node_index":0,"shape_ref":"/Cooked/Physics/Shapes/test_shape.ocshape","material_ref":"/Cooked/Physics/Materials/default.opmat"}]})";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("[physics.sidecar.schema_validation_failed]"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("physics.sidecar.schema_validation_failed"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -116,14 +124,12 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
 {
   auto settings = MakeValidInlineSettings();
   settings.source_path = "physics/scene_physics_sidecar.json";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("exactly one of source_path or "
-                         "inline_bindings_json must be provided"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kSourceConflict));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -132,14 +138,12 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json.clear();
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("exactly one of source_path or "
-                         "inline_bindings_json must be provided"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kSourceConflict));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -148,13 +152,12 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   auto settings = MakeValidSourceSettings();
   settings.source_path.clear();
   settings.inline_bindings_json = "{ invalid }";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("[physics.sidecar.payload_parse_failed]"));
+  EXPECT_THAT(errors, HasDiagnostic("physics.sidecar.payload_parse_failed"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -162,13 +165,12 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
 {
   auto settings = MakeValidSourceSettings();
   settings.target_scene_virtual_path.clear();
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("target_scene_virtual_path is required"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kTargetSceneMissing));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -176,12 +178,12 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
 {
   auto settings = MakeValidSourceSettings();
   settings.target_scene_virtual_path = "/Cooked/Scenes/./TestScene.oscene";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(), ::testing::HasSubstr("canonical virtual path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kTargetSceneNotCanonical));
 }
 
 } // namespace

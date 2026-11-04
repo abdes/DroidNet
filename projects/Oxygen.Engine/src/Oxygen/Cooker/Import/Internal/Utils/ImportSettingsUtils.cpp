@@ -6,11 +6,14 @@
 
 #include <cstdint>
 #include <optional>
-#include <ostream>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
@@ -301,13 +304,14 @@ auto DefaultFormatForIntent(const TextureIntent intent) -> Format
 }
 
 auto MapSettingsToTuning(const TextureImportSettings& settings,
-  ImportOptions::TextureTuning& tuning, std::ostream& error_stream) -> bool
+  ImportOptions::TextureTuning& tuning,
+  std::vector<ImportDiagnostic>& diagnostics) -> bool
 {
   bool preset_applied = false;
   if (!settings.preset.empty()) {
-    const auto spec = ResolvePresetSpec(settings.preset);
+    const auto spec
+      = ParseOption("preset", settings.preset, ResolvePresetSpec, diagnostics);
     if (!spec.has_value()) {
-      error_stream << "ERROR: unknown preset: " << settings.preset << "\n";
       return false;
     }
 
@@ -349,9 +353,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.intent.empty()) {
-    auto parsed = ParseIntent(settings.intent);
+    const auto parsed
+      = ParseOption("intent", settings.intent, ParseIntent, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid intent: " << settings.intent << "\n";
       return false;
     }
     tuning.intent = *parsed;
@@ -361,10 +365,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.color_space.empty()) {
-    auto parsed = ParseColorSpace(settings.color_space);
+    const auto parsed = ParseOption(
+      "color_space", settings.color_space, ParseColorSpace, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid color_space: " << settings.color_space
-                   << "\n";
       return false;
     }
     tuning.source_color_space = *parsed;
@@ -373,10 +376,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.output_format.empty()) {
-    auto parsed = ParseFormat(settings.output_format);
+    const auto parsed = ParseOption(
+      "output_format", settings.output_format, ParseFormat, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid output_format: " << settings.output_format
-                   << "\n";
       return false;
     }
     tuning.color_output_format = *parsed;
@@ -390,30 +392,27 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.data_format.empty()) {
-    auto parsed = ParseFormat(settings.data_format);
+    const auto parsed = ParseOption(
+      "data_format", settings.data_format, ParseFormat, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid data_format: " << settings.data_format
-                   << "\n";
       return false;
     }
     tuning.data_output_format = *parsed;
   }
 
   if (!settings.mip_policy.empty()) {
-    auto parsed = ParseMipPolicy(settings.mip_policy);
+    const auto parsed = ParseOption(
+      "mip_policy", settings.mip_policy, ParseMipPolicy, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid mip_policy: " << settings.mip_policy
-                   << "\n";
       return false;
     }
     tuning.mip_policy = *parsed;
   }
 
   if (!settings.mip_filter.empty()) {
-    auto parsed = ParseMipFilter(settings.mip_filter);
+    const auto parsed = ParseOption(
+      "mip_filter", settings.mip_filter, ParseMipFilter, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid mip_filter: " << settings.mip_filter
-                   << "\n";
       return false;
     }
     tuning.mip_filter = *parsed;
@@ -421,10 +420,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
 
   const bool bc7_quality_set = !settings.bc7_quality.empty();
   if (bc7_quality_set) {
-    auto parsed = ParseBc7Quality(settings.bc7_quality);
+    const auto parsed = ParseOption(
+      "bc7_quality", settings.bc7_quality, ParseBc7Quality, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid bc7_quality: " << settings.bc7_quality
-                   << "\n";
       return false;
     }
     tuning.bc7_quality = *parsed;
@@ -438,8 +436,8 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   if (bc7_quality_set && tuning.bc7_quality != Bc7Quality::kNone
     && !IsBc7Format(tuning.color_output_format)
     && !IsBc7Format(tuning.data_output_format)) {
-    error_stream << "ERROR: bc7_quality requires BC7 output_format or "
-                    "data_format\n";
+    RefuseSetting(diagnostics, request_codes::kBc7QualityNeedsBc7Format,
+      "bc7_quality requires BC7 output_format or data_format", "/bc7_quality");
     return false;
   }
 
@@ -448,10 +446,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.hdr_handling.empty()) {
-    auto parsed = ParseHdrHandling(settings.hdr_handling);
+    const auto parsed = ParseOption(
+      "hdr_handling", settings.hdr_handling, ParseHdrHandling, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid hdr_handling: " << settings.hdr_handling
-                   << "\n";
       return false;
     }
     tuning.hdr_handling = *parsed;
@@ -477,10 +474,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
   }
 
   if (!settings.cube_layout.empty()) {
-    auto parsed = ParseCubeLayout(settings.cube_layout);
+    const auto parsed = ParseOption(
+      "cube_layout", settings.cube_layout, ParseCubeLayout, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid cube_layout: " << settings.cube_layout
-                   << "\n";
       return false;
     }
     tuning.cubemap_layout = *parsed;

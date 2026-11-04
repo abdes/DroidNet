@@ -8,18 +8,24 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
@@ -65,14 +71,14 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
     })";
   WriteText(manifest_path, manifest_json);
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
@@ -125,17 +131,17 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "physics.material.ground");
   ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
   EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "buffers.shared");
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "physics.material.ground");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
@@ -161,11 +167,10 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
@@ -197,16 +202,16 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(request_errors.str(),
-    ::testing::HasSubstr("physics.material.schema_validation_failed"));
+  EXPECT_THAT(
+    request_errors, HasDiagnostic("physics.material.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
@@ -227,11 +232,10 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 } // namespace

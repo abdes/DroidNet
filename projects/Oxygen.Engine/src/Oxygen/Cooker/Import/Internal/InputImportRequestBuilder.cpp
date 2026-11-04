@@ -4,65 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <filesystem>
 #include <optional>
-#include <ostream>
-#include <string>
-#include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 
 namespace oxygen::content::import::internal {
 
-namespace {
-
-  auto TrimInPlace(std::string& value) -> void
-  {
-    const auto not_space = [](const unsigned char ch) -> bool {
-      return ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r';
-    };
-
-    const auto is_text = [&](const char ch) -> bool {
-      return not_space(static_cast<unsigned char>(ch));
-    };
-    const auto first = std::ranges::find_if(value, is_text);
-    const auto last
-      = std::ranges::find_if(value.rbegin(), value.rend(), is_text);
-
-    if (first == value.end()) {
-      value.clear();
-      return;
-    }
-    value = std::string(first, last.base());
-  }
-
-  auto IsLikelyInputSourcePath(const std::filesystem::path& path) -> bool
-  {
-    const auto ext = path.extension().string();
-    if (ext != ".json") {
-      return false;
-    }
-    return path.stem().string().ends_with(".input");
-  }
-
-} // namespace
-
 auto BuildInputImportRequest(const InputImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>
-{
-  return BuildInputImportRequest(settings, {}, {}, error_stream);
-}
-
-auto BuildInputImportRequest(const InputImportSettings& settings,
-  std::string job_id, std::vector<std::string> depends_on,
-  std::ostream& error_stream) -> std::optional<ImportRequest>
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportRequest>
 {
   if (settings.source_path.empty()) {
-    error_stream << "ERROR: source_path is required\n";
+    RefuseSetting(diagnostics, request_codes::kSourceMissing,
+      "source_path is required", "/source");
     return std::nullopt;
   }
 
@@ -71,46 +30,12 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
   request.asset_virtual_path = settings.virtual_path;
   request.input = ImportRequest::InputPayload {};
 
-  if (!settings.cooked_root.empty()) {
-    auto cooked_root = std::filesystem::path(settings.cooked_root);
-    if (!cooked_root.is_absolute()) {
-      error_stream << "ERROR: cooked root must be an absolute path\n";
-      return std::nullopt;
-    }
-    request.cooked_root = std::move(cooked_root);
-  }
-
-  for (const auto& root : settings.cooked_context_roots) {
-    const auto path = std::filesystem::path(root);
-    if (!path.is_absolute()) {
-      error_stream << "ERROR: cooked context roots must be absolute paths\n";
-      return std::nullopt;
-    }
-    request.cooked_context_roots.push_back(path.lexically_normal());
-  }
-
-  TrimInPlace(job_id);
-  for (auto& dep : depends_on) {
-    TrimInPlace(dep);
-  }
-  std::erase_if(
-    depends_on, [](const std::string& dep) -> bool { return dep.empty(); });
-
-  if (!job_id.empty()) {
-    request.orchestration = ImportRequest::OrchestrationMetadata {
-      .job_id = std::move(job_id),
-      .depends_on = std::move(depends_on),
-    };
-  } else if (!depends_on.empty()) {
-    error_stream << "ERROR: depends_on requires a non-empty job_id\n";
+  if (!ApplyCookedRoot(settings.cooked_root, request, diagnostics)
+    || !ApplyCookedContextRoots(
+      settings.cooked_context_roots, request, diagnostics)
+    || !CheckInputSourceName(request.source_path, diagnostics)) {
     return std::nullopt;
   }
-
-  if (!IsLikelyInputSourcePath(request.source_path)) {
-    error_stream << "ERROR: input source must be '*.input.json'\n";
-    return std::nullopt;
-  }
-
   return request;
 }
 

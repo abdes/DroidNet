@@ -18,7 +18,6 @@
 #include <memory>
 #include <optional>
 #include <span>
-#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -50,6 +49,7 @@
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/OxCo/Co.h>
@@ -63,6 +63,9 @@
 
 namespace oxygen::content::import::test {
 namespace {
+
+  using oxygen::content::import::ImportDiagnostic;
+  using oxygen::cooker::test::DiagnosticSummary;
   class CancelVerificationReader final : public IAsyncFileReader {
   public:
     std::stop_source cancellation;
@@ -719,9 +722,9 @@ namespace {
     auto file = std::ifstream(source, std::ios::binary);
     const auto text = std::string(std::istreambuf_iterator<char>(file), {});
     ASSERT_EQ(text.size(), std::filesystem::file_size(source));
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
     auto request = job.gltf.Prepare(ImportFormat::kGltf, errors);
-    ASSERT_HAS_VALUE(request) << errors.str();
+    ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
     const auto source_id = request->source_path.string();
     auto naming = NamingService {};
     auto input = adapters::AdapterInput {};

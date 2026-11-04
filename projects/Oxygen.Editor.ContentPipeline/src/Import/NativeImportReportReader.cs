@@ -37,7 +37,9 @@ internal static class NativeImportReportReader
         }
 
         var jobs = root.GetProperty("jobs").EnumerateArray().ToArray();
-        if (jobs.Length != execution.Manifest.Jobs.Count)
+
+        // A batch that stopped lists only the jobs it reached, and it fails.
+        if (jobs.Length != execution.Manifest.Jobs.Count && exitCode == 0)
         {
             throw new InvalidDataException("The native import report has an incomplete job set.");
         }
@@ -79,6 +81,7 @@ internal static class NativeImportReportReader
             AddJobDiagnostics(job, execution, requested, diagnostics);
         }
 
+        AddBatchDiagnostics(root, execution, diagnostics);
         AddIncompleteDiagnostic(execution, succeeded, diagnostics);
         return new(succeeded, diagnostics)
         {
@@ -129,23 +132,42 @@ internal static class NativeImportReportReader
 
     private static void AddJobDiagnostics(JsonElement job, ContentImportExecution execution, ContentImportJob requested, List<DiagnosticRecord> diagnostics)
     {
+        var affectedPath = execution.MountsFile.Resolve(execution.InputRoot, requested.AttributedSource);
         foreach (var issue in job.GetProperty("diagnostics").EnumerateArray())
         {
-            diagnostics.Add(new()
-            {
-                OperationId = execution.OperationId,
-                Domain = FailureDomain.AssetImport,
-                Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
-                Code = issue.GetProperty("code").GetString()!,
-                Message = issue.GetProperty("message").GetString()!,
-                AffectedPath = execution.MountsFile.Resolve(execution.InputRoot, requested.AttributedSource),
-                TechnicalMessage = issue.TryGetProperty("json_pointer", out var pointer)
-                    ? pointer.GetString()
-                    : issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
-                AffectedEntity = NativeSourceObject.Read(issue),
-            });
+            diagnostics.Add(ReadDiagnostic(issue, execution, affectedPath));
         }
     }
+
+    // What the batch refused that is about no single job, such as a refused manifest, names its own file.
+    private static void AddBatchDiagnostics(JsonElement root, ContentImportExecution execution, List<DiagnosticRecord> diagnostics)
+    {
+        if (!root.TryGetProperty("diagnostics", out var issues))
+        {
+            return;
+        }
+
+        foreach (var issue in issues.EnumerateArray())
+        {
+            var affectedPath = issue.TryGetProperty("source_path", out var source) ? source.GetString() : null;
+            diagnostics.Add(ReadDiagnostic(issue, execution, affectedPath));
+        }
+    }
+
+    private static DiagnosticRecord ReadDiagnostic(JsonElement issue, ContentImportExecution execution, string? affectedPath)
+        => new()
+        {
+            OperationId = execution.OperationId,
+            Domain = FailureDomain.AssetImport,
+            Severity = issue.GetProperty("severity").GetString() switch { "info" => DiagnosticSeverity.Info, "warning" => DiagnosticSeverity.Warning, _ => DiagnosticSeverity.Error },
+            Code = issue.GetProperty("code").GetString()!,
+            Message = issue.GetProperty("message").GetString()!,
+            AffectedPath = affectedPath,
+            TechnicalMessage = issue.TryGetProperty("json_pointer", out var pointer)
+                ? pointer.GetString()
+                : issue.TryGetProperty("object_path", out var location) ? location.GetString() : null,
+            AffectedEntity = NativeSourceObject.Read(issue),
+        };
 
     // A run that failed without reporting any error still reports that it did not complete.
     private static void AddIncompleteDiagnostic(ContentImportExecution execution, bool succeeded, List<DiagnosticRecord> diagnostics)

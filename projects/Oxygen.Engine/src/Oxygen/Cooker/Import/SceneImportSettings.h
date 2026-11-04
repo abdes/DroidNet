@@ -9,10 +9,11 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
@@ -30,7 +31,8 @@ struct SceneImportSettings {
   //! Interpret the settings without file I/O. The resulting request has no
   //! cooked destination; execution attaches it.
   OXGN_COOK_NDAPI auto Prepare(ImportFormat expected_format,
-    std::ostream& error_stream) const -> std::optional<ImportRequest>;
+    std::vector<ImportDiagnostic>& diagnostics) const
+    -> std::optional<ImportRequest>;
 
   std::string source_path;
   //! The model's identity, the virtual path of its source file

@@ -199,6 +199,7 @@ oxygen_cooker_test(
     "Import/RecordedSource_functional_test.cpp"
     "Import/ResourceTableRegistry_functional_test.cpp"
     "Import/ModelImportRecord_functional_test.cpp"
+    "Import/RequestRefusals_functional_test.cpp"
     "Import/SceneDescriptorImportRequestBuilder_functional_test.cpp"
     "Import/SceneImportRequestBuilder_functional_test.cpp"
     "Import/SceneSourceInspection_functional_test.cpp"

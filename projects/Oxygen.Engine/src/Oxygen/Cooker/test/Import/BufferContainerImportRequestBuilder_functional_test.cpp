@@ -8,23 +8,31 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::BufferContainerImportSettings;
@@ -70,14 +78,14 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
@@ -105,15 +113,15 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
   WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsInvalidJson)
@@ -123,15 +131,14 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsInvalidJson)
   WriteText(descriptor_path, "{ \"buffers\": [ ");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("buffer.container.request_invalid_json"));
+  EXPECT_THAT(errors, HasDiagnostic("buffer.container.request_invalid_json"));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsMissingFile)
@@ -139,15 +146,14 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsMissingFile)
   const ScopedTempDir temp;
   const auto descriptor_path = temp.Path() / "Buffers" / "missing.buffers.json";
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("failed to open buffer-container descriptor"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kDocumentReadFailed));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsRelativeCookedRoot)
@@ -160,15 +166,14 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsRelativeCookedRoot)
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.cooked_root = "relative/output";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("cooked root must be an absolute path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kCookedRootNotAbsolute));
 }
 
 NOLINT_TEST(
@@ -182,15 +187,15 @@ NOLINT_TEST(
   WriteText(descriptor_path, container.Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
 }
 
 NOLINT_TEST(
@@ -216,14 +221,14 @@ NOLINT_TEST(
       .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
@@ -250,15 +255,15 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
@@ -287,15 +292,15 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
       .Text());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto mounts = ContentMountTable(temp.Path());
 
   const auto request
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
 }
 
 } // namespace

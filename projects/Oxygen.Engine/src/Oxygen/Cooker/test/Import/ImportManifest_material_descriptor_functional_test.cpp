@@ -8,19 +8,24 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
@@ -66,14 +71,14 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     })";
   WriteText(manifest_path, manifest_json);
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
@@ -122,17 +127,17 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "wood.material");
   ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
   EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "wood.color");
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "wood.material");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
@@ -158,11 +163,10 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
@@ -198,16 +202,16 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(request_errors.str(),
-    ::testing::HasSubstr("material.descriptor.schema_validation_failed"));
+  EXPECT_THAT(request_errors,
+    HasDiagnostic("material.descriptor.schema_validation_failed"));
 }
 
 //! The cooked layout is fixed: a manifest that still sets `layout`, at the top,
@@ -243,16 +247,15 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsLayoutField)
 
   for (const auto& document : { top, defaults, per_job }) {
     WriteText(path, document.dump());
-    std::ostringstream errors;
+    std::vector<ImportDiagnostic> errors;
 
     // Act
     const auto manifest = ImportManifest::Load(path, {}, errors);
 
     // Assert
     EXPECT_FALSE(manifest.has_value()) << document.dump();
-    EXPECT_THAT(
-      errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
-    EXPECT_THAT(errors.str(), ::testing::HasSubstr("layout"));
+    EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+    EXPECT_THAT(DiagnosticSummary(errors), ::testing::HasSubstr("layout"));
   }
 }
 
@@ -280,9 +283,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
         }
       ]
     })");
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   const auto engine = temp.Path() / "engine.pak";
 
   // Act
@@ -290,7 +293,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
   const auto request = manifest->jobs.at(0).BuildRequest(errors);
 
   // Assert
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->cooked_context_roots,
     (std::vector<std::filesystem::path> {
       engine, root / "Libraries/Textures" }));
@@ -316,11 +319,10 @@ NOLINT_TEST(
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
+  EXPECT_THAT(errors, HasDiagnostic("import.manifest.virtual_path_missing"));
 }
 
 //! A model job is a container: it names the model's identity, under which its
@@ -345,12 +347,12 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
         { "jobs", json::array({ job }) },
       }
         .dump());
-    auto refused_errors = std::ostringstream {};
+    auto refused_errors = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       ImportManifest::Load(manifest_path, {}, refused_errors).has_value())
       << type;
-    EXPECT_THAT(refused_errors.str(),
-      ::testing::HasSubstr("import.manifest.virtual_path_missing"))
+    EXPECT_THAT(
+      refused_errors, HasDiagnostic("import.manifest.virtual_path_missing"))
       << type;
 
     job["virtual_path"] = "/Cooked/Vehicles/Ship.src";
@@ -364,9 +366,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
         { "jobs", json::array({ job }) },
       }
         .dump());
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
     const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-    ASSERT_HAS_VALUE(manifest) << type << errors.str();
+    ASSERT_HAS_VALUE(manifest) << type << DiagnosticSummary(errors);
     EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/Cooked/Vehicles/Ship.src");
   }
 }

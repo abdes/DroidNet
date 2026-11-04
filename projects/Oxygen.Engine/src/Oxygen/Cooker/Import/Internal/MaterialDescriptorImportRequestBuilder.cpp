@@ -7,80 +7,57 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <ostream>
-#include <string>
-#include <string_view>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
 auto BuildMaterialDescriptorRequest(
-  const MaterialDescriptorImportSettings& settings, std::ostream& error_stream,
+  const MaterialDescriptorImportSettings& settings,
+  std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs)
   -> std::optional<ImportRequest>
 {
-  if (settings.descriptor_path.empty()) {
-    error_stream << "ERROR: descriptor_path is required\n";
-    return std::nullopt;
-  }
-
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
   auto document = ImportSourceDocument::Load(
-    descriptor_path, "material", error_stream, captured_inputs.get());
+    descriptor_path, "material", diagnostics, captured_inputs.get());
   if (!document.has_value()) {
     return std::nullopt;
   }
 
-  auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto prepared = MaterialSource::FromDescriptor(
     document->text, descriptor_path, settings.job_name, diagnostics);
-  WriteDiagnostics(diagnostics, error_stream);
   if (!prepared) {
     return std::nullopt;
   }
 
-  auto request = ImportRequest {};
-  request.source_path = descriptor_path;
-  request.captured_inputs = std::move(captured_inputs);
-  request.preparation_inputs.push_back(document->Observation());
-
-  if (settings.cooked_root.empty()) {
-    error_stream << "ERROR: --output or --cooked-root is required\n";
+  auto request = StartDescriptorRequest(
+    {
+      .descriptor_path = make_observer(&descriptor_path),
+      .document = make_observer(&*document),
+      .cooked_root = settings.cooked_root,
+      .cooked_context_roots = settings.cooked_context_roots,
+      .captured_inputs = std::move(captured_inputs),
+    },
+    diagnostics);
+  if (!request.has_value()) {
     return std::nullopt;
   }
 
-  auto cooked_root = std::filesystem::path(settings.cooked_root);
-  if (!cooked_root.is_absolute()) {
-    error_stream << "ERROR: cooked root must be an absolute path\n";
-    return std::nullopt;
-  }
-  request.cooked_root = std::move(cooked_root);
-
-  for (const auto& root : settings.cooked_context_roots) {
-    const auto path = std::filesystem::path(root);
-    if (!path.is_absolute()) {
-      error_stream << "ERROR: cooked context roots must be absolute paths\n";
-      return std::nullopt;
-    }
-    request.cooked_context_roots.push_back(path.lexically_normal());
-  }
-
-  request.job_name = prepared->name;
-
-  request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
+  request->job_name = prepared->name;
+  request->material_descriptor = ImportRequest::MaterialDescriptorPayload {
     .descriptor_json = std::move(document->text),
   };
-
   return request;
 }
 

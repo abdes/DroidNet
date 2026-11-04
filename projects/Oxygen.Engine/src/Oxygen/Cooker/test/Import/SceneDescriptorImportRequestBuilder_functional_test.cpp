@@ -8,21 +8,29 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/SceneDescriptorImportSettings.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::SceneDescriptorImportSettings;
@@ -62,13 +70,13 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
       .dump());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+    << "Expected request to contain a value" << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_TRUE(request->cooked_root->is_absolute());
@@ -94,13 +102,13 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
       .dump());
   auto settings = MakeBaseSettings(descriptor);
   settings.cooked_context_roots = { "relative/root" };
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   EXPECT_FALSE(BuildSceneDescriptorRequest(settings, errors).has_value());
   const auto library = dir / "library";
   settings.cooked_context_roots = { library.string(), settings.cooked_root };
   const auto request = BuildSceneDescriptorRequest(settings, errors);
   ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << errors.str();
+    << "Expected request to contain a value" << DiagnosticSummary(errors);
   const auto roots
     = oxygen::content::import::internal::BuildUniqueMountedCookedRoots(
       *request);
@@ -125,13 +133,13 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
       .dump());
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("scene.descriptor.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("scene.descriptor.schema_validation_failed"));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsMissingFile)
@@ -140,13 +148,12 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsMissingFile)
   const auto dir = temp.Path() / "missing_file";
   const auto descriptor_path = dir / "Scenes" / "missing.scene.json";
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("failed to open scene descriptor"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kDocumentReadFailed));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
@@ -163,13 +170,12 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsRelativeCookedRoot)
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.cooked_root = "relative/output";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("cooked root must be an absolute path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kCookedRootNotAbsolute));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
@@ -186,14 +192,13 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("scene.descriptor.recook_required"))
-    << errors.str();
+  EXPECT_THAT(errors, HasDiagnostic("scene.descriptor.recook_required"))
+    << DiagnosticSummary(errors);
 }
 
 } // namespace

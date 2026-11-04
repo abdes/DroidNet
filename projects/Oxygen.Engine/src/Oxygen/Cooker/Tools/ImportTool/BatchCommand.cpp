@@ -20,6 +20,7 @@
 #include <optional>
 #include <ostream>
 #include <ratio>
+#include <span>
 #include <sstream>
 #include <stop_token>
 #include <string>
@@ -54,8 +55,10 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
@@ -81,10 +84,14 @@ namespace {
   // Helper structs for logic (kept for now, or moved to ViewModel later)
   struct PreparedJob {
     ImportRequest request;
+    //! The job's position in the manifest, which the report numbers it by.
+    size_t manifest_index = 0;
     std::string job_type;
     std::string source_path;
     std::string job_id;
     std::vector<std::string> depends_on;
+    //! What the batch refused about the job while ordering it.
+    std::vector<ImportDiagnostic> validation_diagnostics;
   };
 
   struct PhysicsDependencyRef final {
@@ -152,11 +159,11 @@ namespace {
     const std::string_view context, nlohmann::json& doc, std::string& error)
     -> bool
   {
-    auto errors = std::ostringstream {};
+    auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source = ImportSourceDocument::Load(
-      request.source_path, context, errors, request.captured_inputs.get());
+      request.source_path, context, diagnostics, request.captured_inputs.get());
     if (!source.has_value()) {
-      error = errors.str();
+      error = internal::FormatDiagnostics(diagnostics);
       return false;
     }
     request.preparation_inputs.push_back(source->Observation());
@@ -324,7 +331,24 @@ namespace {
     return true;
   }
 
-  auto BuildProducedVirtualPathIndex(const std::vector<PreparedJob>& jobs,
+  //! Reports a validation error about `job`, on the console and in its entry
+  //! of the report.
+  auto AddJobValidationError(PreparedJob& job, const std::string_view code,
+    std::string message, const oxygen::observer_ptr<IMessageWriter>& writer,
+    int& validation_failures) -> void
+  {
+    auto diagnostic = ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = std::string { code },
+      .message = std::move(message),
+      .source_path = job.source_path,
+    };
+    writer->Error(internal::FormatDiagnostics(std::span { &diagnostic, 1U }));
+    job.validation_diagnostics.push_back(std::move(diagnostic));
+    ++validation_failures;
+  }
+
+  auto BuildProducedVirtualPathIndex(std::vector<PreparedJob>& jobs,
     std::unordered_map<std::string, std::vector<size_t>>& producers_by_path,
     const oxygen::observer_ptr<IMessageWriter>& writer,
     int& validation_failures) -> void
@@ -335,11 +359,11 @@ namespace {
       auto error = std::string {};
       if (!CollectProducedVirtualPathByJob(
             jobs.at(job_index), produced_virtual_path, error)) {
-        writer->Error(fmt::format(
-          "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
-          "output inference failed: {}",
-          JobLabel(jobs.at(job_index), job_index), error));
-        ++validation_failures;
+        AddJobValidationError(jobs.at(job_index),
+          "physics.manifest.dependency_inference_failed",
+          fmt::format("job '{}' output inference failed: {}",
+            JobLabel(jobs.at(job_index), job_index), error),
+          writer, validation_failures);
         continue;
       }
 
@@ -373,11 +397,11 @@ namespace {
       auto refs = std::vector<PhysicsDependencyRef> {};
       auto error = std::string {};
       if (!CollectPhysicsDependencyRefs(jobs.at(job_index), refs, error)) {
-        writer->Error(fmt::format(
-          "ERROR [physics.manifest.dependency_inference_failed]: job '{}' "
-          "reference collection failed: {}",
-          JobLabel(jobs.at(job_index), job_index), error));
-        ++validation_failures;
+        AddJobValidationError(jobs.at(job_index),
+          "physics.manifest.dependency_inference_failed",
+          fmt::format("job '{}' reference collection failed: {}",
+            JobLabel(jobs.at(job_index), job_index), error),
+          writer, validation_failures);
         continue;
       }
 
@@ -410,12 +434,13 @@ namespace {
             }
             producer_list_text.append(producer_list.at(i));
           }
-          writer->Error(fmt::format(
-            "ERROR [physics.manifest.dependency_ambiguous]: job '{}' "
-            "reference '{}' at '{}' matches multiple producer jobs: {}",
-            JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
-            ref.location, producer_list_text));
-          ++validation_failures;
+          AddJobValidationError(jobs.at(job_index),
+            "physics.manifest.dependency_ambiguous",
+            fmt::format("job '{}' reference '{}' at '{}' matches multiple "
+                        "producer jobs: {}",
+              JobLabel(jobs.at(job_index), job_index), ref.virtual_path,
+              ref.location, producer_list_text),
+            writer, validation_failures);
           continue;
         }
 
@@ -575,8 +600,9 @@ namespace {
     return std::nullopt;
   }
 
-  auto ResolveCookedRootForReport(const std::vector<PreparedJob>& jobs,
-    const std::vector<std::optional<ImportReport>>& reports)
+  auto ResolveCookedRootForReport(const std::span<const PreparedJob> jobs,
+    const std::span<const std::optional<ImportReport>> reports,
+    const std::string_view command_line_root)
     -> std::optional<std::filesystem::path>
   {
     for (const auto& report : reports) {
@@ -591,6 +617,11 @@ namespace {
       if (job.request.cooked_root.has_value()) {
         return *job.request.cooked_root;
       }
+    }
+    // Every job was refused, so only the command line can name the root.
+    if (!command_line_root.empty()) {
+      return base::ToLogicalPath(std::filesystem::weakly_canonical(
+        base::ToNativePath(std::filesystem::absolute(command_line_root))));
     }
     return std::nullopt;
   }
@@ -683,7 +714,7 @@ namespace {
   };
 
   auto BuildBatchSummary(
-    const std::vector<std::optional<ImportReport>>& reports,
+    const std::span<const std::optional<ImportReport>> reports,
     const size_t total_jobs) -> BatchSummaryCounts
   {
     BatchSummaryCounts counts {};
@@ -745,6 +776,176 @@ namespace {
       .object_path = {},
     });
     return report;
+  }
+
+  //! A job whose request could not be built, and why.
+  struct RefusedJob {
+    size_t manifest_index = 0;
+    std::string job_type;
+    std::vector<ImportDiagnostic> diagnostics;
+  };
+
+  //! What one run's report holds.
+  struct BatchReportInputs {
+    std::string_view report_path;
+    std::string_view command_line;
+    std::string_view command_line_root;
+    std::span<const PreparedJob> jobs;
+    std::span<const RefusedJob> refused;
+    std::span<const std::optional<ImportReport>> reports;
+    std::span<const JobProgressTrace> progress_traces;
+    //! What the batch refused that is about no single job.
+    std::span<const ImportDiagnostic> diagnostics;
+    int validation_failures = 0;
+    std::chrono::system_clock::time_point session_started;
+    double elapsed_ms = 0.0;
+  };
+
+  //! Where a report went; `failed` when it could not be written.
+  struct BatchReportOutcome {
+    std::optional<std::filesystem::path> path;
+    bool failed = false;
+  };
+
+  //! Writes the run's report, one entry per job the run reached, in manifest
+  //! order: a refused job is a failed entry that holds its typed refusal.
+  auto WriteBatchReport(const BatchReportInputs& inputs,
+    const observer_ptr<IMessageWriter>& writer) -> BatchReportOutcome
+  {
+    const auto cooked_root = ResolveCookedRootForReport(
+      inputs.jobs, inputs.reports, inputs.command_line_root);
+    auto report_path_errors = std::ostringstream {};
+    const auto resolved_path
+      = ResolveReportPath(inputs.report_path, cooked_root, report_path_errors);
+    if (!report_path_errors.view().empty()) {
+      writer->Error(report_path_errors.str());
+    }
+    if (!resolved_path.has_value()) {
+      return {};
+    }
+    CHECK_F(!inputs.command_line.empty(),
+      "Command line is required in report output");
+
+    const auto session_ended = std::chrono::system_clock::now();
+    const auto counts = BuildBatchSummary(inputs.reports, inputs.jobs.size());
+    double total_io_ms = 0.0;
+    double total_cpu_ms = 0.0;
+    ordered_json jobs_json = ordered_json::array();
+
+    for (size_t index = 0; index < inputs.jobs.size(); ++index) {
+      const auto& job = inputs.jobs[index];
+      const auto& report = inputs.reports[index];
+
+      const auto job_type = job.job_type.empty()
+        ? ResolveReportJobType(job.request)
+        : job.job_type;
+
+      ordered_json job_json = ordered_json::object();
+      job_json.update({
+        { "index", DisplayJobNumber(job.manifest_index) },
+        { "type", job_type },
+        {
+          "work_items",
+          BuildWorkItemsJson(inputs.progress_traces[index], job_type,
+            job.request.source_path.string()),
+        },
+      });
+      if (auto importer = BuildImporterJson(job.request);
+        importer.has_value()) {
+        job_json.update({ { "importer", std::move(*importer) } });
+      }
+      if (report.has_value()) {
+        const auto& report_value = *report;
+        total_io_ms += ComputeIoMillis(report_value.telemetry);
+        total_cpu_ms += ComputeCpuMillis(report_value.telemetry);
+        job_json.update(
+          { { "status", std::string(JobStatusFromReport(report_value)) } });
+        job_json.update(
+          { { "outputs", BuildOutputsJson(report_value.outputs) } });
+        job_json.update(
+          { { "products", BuildProductsJson(report_value.products) } });
+        if (const auto update
+          = ModelImportRecord::SerializeImportUpdate(job.request, report_value);
+          !update.empty()) {
+          job_json.update({ { "model_import", ordered_json::parse(update) } });
+        }
+        job_json.update(
+          { { "stats", BuildStatsJson(report_value.telemetry) } });
+        auto diagnostics = report_value.diagnostics;
+        diagnostics.insert(diagnostics.end(),
+          job.validation_diagnostics.begin(), job.validation_diagnostics.end());
+        job_json.update(
+          { { "diagnostics", BuildDiagnosticsJson(diagnostics) } });
+      } else {
+        job_json.update({
+          { "status", "not_submitted" },
+          { "outputs", ordered_json::array() },
+          { "products", ordered_json::array() },
+          { "stats", BuildEmptyStatsJson() },
+          { "diagnostics", BuildDiagnosticsJson(job.validation_diagnostics) },
+        });
+      }
+      jobs_json.push_back(std::move(job_json));
+    }
+
+    for (const auto& refused : inputs.refused) {
+      ordered_json job_json = ordered_json::object();
+      job_json.update({
+        { "index", DisplayJobNumber(refused.manifest_index) },
+        { "type", refused.job_type },
+        { "work_items", ordered_json::array() },
+        { "status", "failed" },
+        { "outputs", ordered_json::array() },
+        { "products", ordered_json::array() },
+        { "stats", BuildEmptyStatsJson() },
+        { "diagnostics", BuildDiagnosticsJson(refused.diagnostics) },
+      });
+      jobs_json.push_back(std::move(job_json));
+    }
+    std::ranges::sort(jobs_json.get_ref<ordered_json::array_t&>(),
+      [](const ordered_json& a, const ordered_json& b) -> bool {
+        return a.at("index").get<size_t>() < b.at("index").get<size_t>();
+      });
+
+    ordered_json session = ordered_json::object();
+    session.update({
+      { "id", MakeSessionId(inputs.session_started) },
+      { "started_utc", FormatUtcTimestamp(inputs.session_started) },
+      { "ended_utc", FormatUtcTimestamp(session_ended) },
+      { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
+      { "command_line", std::string(inputs.command_line) },
+    });
+    if (cooked_root.has_value()) {
+      session.update({ { "cooked_root", cooked_root->string() } });
+    }
+
+    ordered_json payload = ordered_json::object();
+    payload.update({
+      { "report_version", std::string(kReportVersion) },
+      { "session", std::move(session) },
+      {
+        "summary",
+        {
+          { "jobs_total", inputs.jobs.size() + inputs.refused.size() },
+          { "jobs_succeeded", counts.succeeded },
+          { "jobs_failed", counts.failed + inputs.refused.size() },
+          { "jobs_skipped", counts.skipped },
+          { "validation_errors", inputs.validation_failures },
+          { "time_ms_total", inputs.elapsed_ms },
+          { "time_ms_io", total_io_ms },
+          { "time_ms_cpu", total_cpu_ms },
+        },
+      },
+      { "jobs", std::move(jobs_json) },
+      { "diagnostics", BuildDiagnosticsJson(inputs.diagnostics) },
+    });
+
+    auto write_errors = std::ostringstream {};
+    const auto written = WriteJsonReport(payload, *resolved_path, write_errors);
+    if (!write_errors.view().empty()) {
+      writer->Error(write_errors.str());
+    }
+    return { .path = *resolved_path, .failed = !written };
   }
 
 } // namespace
@@ -869,15 +1070,36 @@ auto BatchCommand::LoadManifests() const -> std::optional<ImportManifest>
   if (!options_.mounts_path.empty()) {
     options.mounts_file = std::filesystem::path(options_.mounts_path);
   }
-  std::ostringstream err;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
   auto manifest
-    = ImportManifest::LoadBatch(options_.manifest_paths, options, err);
-  if (const auto msg = err.str(); !msg.empty()) {
+    = ImportManifest::LoadBatch(options_.manifest_paths, options, diagnostics);
+  if (!diagnostics.empty()) {
+    const auto message = internal::FormatDiagnostics(diagnostics);
     if (manifest.has_value()) {
-      global_options_->writer->Warning(msg);
+      global_options_->writer->Warning(message);
     } else {
-      global_options_->writer->Error(msg);
+      global_options_->writer->Error(message);
     }
+  }
+  // A refused manifest has no jobs, and the report still says why.
+  if (!manifest.has_value() && !options_.dry_run
+    && !options_.report_path.empty()) {
+    static_cast<void>(WriteBatchReport(
+      BatchReportInputs {
+        .report_path = options_.report_path,
+        .command_line = global_options_->command_line,
+        .command_line_root = global_options_->cooked_root,
+        .jobs = {},
+        .refused = {},
+        .reports = {},
+        .progress_traces = {},
+        .diagnostics = diagnostics,
+        .validation_failures = static_cast<int>(std::ranges::count(
+          diagnostics, ImportSeverity::kError, &ImportDiagnostic::severity)),
+        .session_started = std::chrono::system_clock::now(),
+        .elapsed_ms = 0.0,
+      },
+      global_options_->writer));
   }
   return manifest;
 }
@@ -965,27 +1187,66 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   }
   const auto worker_totals = BuildWorkerTotals(*manifest);
   int validation_failures = 0;
-  bool unsupported_seen = false;
   std::vector<PreparedJob> jobs;
   jobs.reserve(manifest->jobs.size());
+  std::vector<RefusedJob> refused_jobs;
+  std::vector<ImportDiagnostic> batch_diagnostics;
   std::unordered_map<std::string, data::SourceKey> source_keys;
+  const auto command_line_root = global_options_ != nullptr
+    ? std::string_view { global_options_->cooked_root }
+    : std::string_view {};
+
+  // Nothing more runs, so what stopped the batch is all the report can say.
+  const auto stop_batch = [&] -> std::error_code {
+    if (!options_.dry_run && !options_.report_path.empty()) {
+      const auto not_run
+        = std::vector<std::optional<ImportReport>>(jobs.size());
+      const auto no_traces = std::vector<JobProgressTrace>(jobs.size());
+      const auto outcome = WriteBatchReport(
+        BatchReportInputs {
+          .report_path = options_.report_path,
+          .command_line = global_options_->command_line,
+          .command_line_root = command_line_root,
+          .jobs = jobs,
+          .refused = refused_jobs,
+          .reports = not_run,
+          .progress_traces = no_traces,
+          .diagnostics = batch_diagnostics,
+          .validation_failures = validation_failures,
+          .session_started = session_started,
+          .elapsed_ms = 0.0,
+        },
+        writer);
+      if (outcome.failed) {
+        return std::make_error_code(std::errc::io_error);
+      }
+    }
+    return std::make_error_code(std::errc::invalid_argument);
+  };
 
   auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
   if (!options_.captured_inputs_path.empty()) {
     try {
-      auto errors = std::ostringstream {};
+      auto diagnostics = std::vector<ImportDiagnostic> {};
       const auto document = ImportSourceDocument::Load(
-        options_.captured_inputs_path, "capture map", errors);
+        options_.captured_inputs_path, "capture map", diagnostics);
       if (!document.has_value()) {
-        writer->Error(errors.str());
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
+        writer->Error(internal::FormatDiagnostics(diagnostics));
+        batch_diagnostics = std::move(diagnostics);
+        ++validation_failures;
+        return std::unexpected(stop_batch());
       }
       captured_inputs = CapturedInputSet::Parse(document->text);
     } catch (const std::exception& error) {
-      writer->Error(
-        fmt::format("ERROR: invalid captured inputs: {}", error.what()));
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+      batch_diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { request_codes::kCapturedInputsInvalid },
+        .message = fmt::format("invalid captured inputs: {}", error.what()),
+        .source_path = options_.captured_inputs_path,
+      });
+      writer->Error(internal::FormatDiagnostics(batch_diagnostics));
+      ++validation_failures;
+      return std::unexpected(stop_batch());
     }
   }
 
@@ -999,41 +1260,23 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     }
   }
 
-  for (const auto& job : manifest->jobs) {
-    if (job.job_type != "texture" && job.job_type != "texture-descriptor"
-      && job.job_type != "material-descriptor"
-      && job.job_type != "physics-material-descriptor"
-      && job.job_type != "collision-shape-descriptor"
-      && job.job_type != "buffer-container"
-      && job.job_type != "geometry-descriptor" && job.job_type != "fbx"
-      && job.job_type != "scene-descriptor" && job.job_type != "gltf"
-      && job.job_type != "script" && job.job_type != "script-sidecar"
-      && job.job_type != "physics-sidecar" && job.job_type != "input") {
-      writer->Error(
-        fmt::format("ERROR: unsupported job type: {}", job.job_type));
-      unsupported_seen = true;
+  for (size_t manifest_index = 0; manifest_index < manifest->jobs.size();
+    ++manifest_index) {
+    const auto& job = manifest->jobs[manifest_index];
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto request = job.BuildRequest(diagnostics, captured_inputs);
+    if (!request.has_value()) {
+      writer->Error(internal::FormatDiagnostics(diagnostics));
+      refused_jobs.push_back(RefusedJob {
+        .manifest_index = manifest_index,
+        .job_type = job.job_type,
+        .diagnostics = std::move(diagnostics),
+      });
       ++validation_failures;
       if (fail_fast) {
-        return std::unexpected(std::make_error_code(std::errc::not_supported));
+        break;
       }
       continue;
-    }
-
-    std::optional<ImportRequest> request;
-    {
-      std::ostringstream err;
-      request = job.BuildRequest(err, captured_inputs);
-      if (!request.has_value()) {
-        const auto msg = err.str();
-        if (!msg.empty()) {
-          writer->Error(msg);
-        }
-        ++validation_failures;
-        if (fail_fast) {
-          break;
-        }
-        continue;
-      }
     }
 
     request->cooked_root
@@ -1044,11 +1287,24 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
       const auto [found, inserted]
         = source_keys.try_emplace(root, request->source_key.value());
       if (!inserted && found->second != request->source_key.value()) {
-        writer->Error(fmt::format("ERROR [import.source_key_conflict]: jobs "
-                                  "writing '{}' must use the same source_key",
-          root));
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
+        auto conflict = ImportDiagnostic {
+          .severity = ImportSeverity::kError,
+          .code = "import.source_key_conflict",
+          .message
+          = fmt::format("jobs writing '{}' must use the same source_key", root),
+          .source_path = job.origin.source_path,
+          .json_pointer = (nlohmann::json::json_pointer {} / "jobs"
+            / job.origin.index / "source_key")
+            .to_string(),
+        };
+        writer->Error(internal::FormatDiagnostics(std::span { &conflict, 1U }));
+        refused_jobs.push_back(RefusedJob {
+          .manifest_index = manifest_index,
+          .job_type = job.job_type,
+          .diagnostics = { std::move(conflict) },
+        });
+        ++validation_failures;
+        return std::unexpected(stop_batch());
       }
     }
     if (options_.dry_run) {
@@ -1059,15 +1315,12 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
     auto prepared = PreparedJob {
       .request = *request,
+      .manifest_index = manifest_index,
       .job_type = job.job_type,
       .source_path = request->source_path.string(),
       .job_id = job.id,
       .depends_on = job.depends_on,
     };
-    if (prepared.job_id.empty() && request->orchestration.has_value()) {
-      prepared.job_id = request->orchestration->job_id;
-      prepared.depends_on = request->orchestration->depends_on;
-    }
     jobs.push_back(std::move(prepared));
   }
 
@@ -1141,28 +1394,22 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     if (visited != jobs.size()) {
       // The manifest refused cycles of its own edges; the edges the batch
       // infers from references can still close one.
-      writer->Error(
-        "ERROR [manifest.dependency_cycle]: the jobs' references form a "
-        "dependency cycle");
+      batch_diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { manifest_codes::kDependencyCycle },
+        .message = "the jobs' references form a dependency cycle",
+      });
+      writer->Error(internal::FormatDiagnostics(batch_diagnostics));
       ++validation_failures;
     }
   }
 
-  if (options_.dry_run || jobs.empty()) {
-    if (validation_failures == 0) {
-      return {};
-    }
-    if (unsupported_seen) {
-      return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  const auto nothing_to_cook = options_.dry_run || jobs.empty();
+  if (validation_failures == 0 && nothing_to_cook) {
+    return {};
   }
-
-  if (validation_failures > 0 && fail_fast) {
-    if (unsupported_seen) {
-      return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  if (validation_failures > 0 && (nothing_to_cook || fail_fast)) {
+    return std::unexpected(stop_batch());
   }
 
   // 4. Execution Logic (Worker)
@@ -1731,128 +1978,27 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   std::optional<std::filesystem::path> final_report_path;
   const auto counts = BuildBatchSummary(common_context->reports, jobs.size());
   if (!options_.report_path.empty()) {
-    const auto cooked_root
-      = ResolveCookedRootForReport(jobs, common_context->reports);
-    auto report_path_errors = std::ostringstream {};
-    const auto resolved_path = ResolveReportPath(
-      options_.report_path, cooked_root, report_path_errors);
-    if (!report_path_errors.view().empty()) {
-      writer->Error(report_path_errors.str());
+    const auto outcome = WriteBatchReport(
+      BatchReportInputs {
+        .report_path = options_.report_path,
+        .command_line = global_options_->command_line,
+        .command_line_root = command_line_root,
+        .jobs = jobs,
+        .refused = refused_jobs,
+        .reports = common_context->reports,
+        .progress_traces = progress_traces,
+        .diagnostics = batch_diagnostics,
+        .validation_failures = validation_failures,
+        .session_started = session_started,
+        .elapsed_ms = std::chrono::duration<double, std::milli>(
+          common_context->state.elapsed)
+          .count(),
+      },
+      writer);
+    if (outcome.failed) {
+      deferred_error = std::make_error_code(std::errc::io_error);
     }
-
-    if (resolved_path.has_value()) {
-      const auto session_ended = std::chrono::system_clock::now();
-      const auto elapsed_ms = std::chrono::duration<double, std::milli>(
-        common_context->state.elapsed)
-                                .count();
-      CHECK_F(cooked_root.has_value() && !cooked_root->empty(),
-        "Cooked root is required in report output");
-      CHECK_F(!global_options_->command_line.empty(),
-        "Command line is required in report output");
-
-      double total_io_ms = 0.0;
-      double total_cpu_ms = 0.0;
-      ordered_json jobs_json = ordered_json::array();
-
-      for (size_t index = 0; index < jobs.size(); ++index) {
-        const auto& job = jobs.at(index);
-        const auto& report = common_context->reports.at(index);
-
-        const auto job_type = job.job_type.empty()
-          ? ResolveReportJobType(job.request)
-          : job.job_type;
-
-        ordered_json job_json = ordered_json::object();
-        job_json.update({
-          { "index", DisplayJobNumber(index) },
-          { "type", job_type },
-          {
-            "work_items",
-            BuildWorkItemsJson(progress_traces.at(index), job_type,
-              job.request.source_path.string()),
-          },
-        });
-        if (auto importer = BuildImporterJson(job.request);
-          importer.has_value()) {
-          job_json.update({ { "importer", std::move(*importer) } });
-        }
-        if (report.has_value()) {
-          const auto& report_value = *report;
-          total_io_ms += ComputeIoMillis(report_value.telemetry);
-          total_cpu_ms += ComputeCpuMillis(report_value.telemetry);
-          job_json.update(
-            { { "status", std::string(JobStatusFromReport(report_value)) } });
-          job_json.update(
-            { { "outputs", BuildOutputsJson(report_value.outputs) } });
-          job_json.update(
-            { { "products", BuildProductsJson(report_value.products) } });
-          if (const auto update = ModelImportRecord::SerializeImportUpdate(
-                job.request, report_value);
-            !update.empty()) {
-            job_json.update(
-              { { "model_import", ordered_json::parse(update) } });
-          }
-          job_json.update(
-            { { "stats", BuildStatsJson(report_value.telemetry) } });
-          job_json.update({
-            {
-              "diagnostics",
-              BuildDiagnosticsJson(report_value.diagnostics),
-            },
-          });
-        } else {
-          job_json.update({
-            { "status", "not_submitted" },
-            { "outputs", ordered_json::array() },
-            { "products", ordered_json::array() },
-            { "stats", BuildEmptyStatsJson() },
-            { "diagnostics", ordered_json::array() },
-          });
-        }
-        jobs_json.push_back(std::move(job_json));
-      }
-
-      ordered_json payload = ordered_json::object();
-      payload.update({
-        { "report_version", std::string(kReportVersion) },
-        {
-          "session",
-          {
-            { "id", MakeSessionId(session_started) },
-            { "started_utc", FormatUtcTimestamp(session_started) },
-            { "ended_utc", FormatUtcTimestamp(session_ended) },
-            { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
-            { "command_line", std::string(global_options_->command_line) },
-            { "cooked_root", cooked_root->string() },
-          },
-        },
-        {
-          "summary",
-          {
-            { "jobs_total", jobs.size() },
-            { "jobs_succeeded", counts.succeeded },
-            { "jobs_failed", counts.failed },
-            { "jobs_skipped", counts.skipped },
-            { "validation_errors", validation_failures },
-            { "time_ms_total", elapsed_ms },
-            { "time_ms_io", total_io_ms },
-            { "time_ms_cpu", total_cpu_ms },
-          },
-        },
-        { "jobs", std::move(jobs_json) },
-      });
-
-      auto write_errors = std::ostringstream {};
-      const auto written
-        = WriteJsonReport(payload, *resolved_path, write_errors);
-      if (!write_errors.view().empty()) {
-        writer->Error(write_errors.str());
-      }
-      if (!written) {
-        deferred_error = std::make_error_code(std::errc::io_error);
-      }
-      final_report_path = *resolved_path;
-    }
+    final_report_path = outcome.path;
   }
 
   if (quiet) {
@@ -1926,9 +2072,7 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   }
 
   if (validation_failures > 0) {
-    return std::unexpected(
-      std::make_error_code(unsupported_seen ? std::errc::not_supported
-                                            : std::errc::invalid_argument));
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 
   if (common_context->exit_code != 0) {

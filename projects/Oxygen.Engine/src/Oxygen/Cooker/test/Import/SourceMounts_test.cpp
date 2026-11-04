@@ -13,7 +13,6 @@
 #include <optional>
 #include <ranges>
 #include <set>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -43,6 +42,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
 
 namespace fs = std::filesystem;
 namespace codes = oxygen::content::import::mount_codes;
@@ -509,17 +510,16 @@ NOLINT_TEST(SourceMountKindTest, ParsesTheTwoKinds)
 //! A manifest mount of another kind is `mount.kind_unknown`, at its field.
 NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
 {
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto manifest = ImportManifest::Parse(
     R"({"jobs":[],"mounts":[{"name":"Props","kind":"Pak","path":"a.pak"}]})",
     fs::current_path().root_path() / "OxygenSourceMounts", {}, errors);
 
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_NE(errors.str().find("[mount.kind_unknown]"), std::string::npos)
-    << errors.str();
-  EXPECT_NE(errors.str().find("/mounts/0/kind"), std::string::npos)
-    << errors.str();
+  ASSERT_EQ(errors.size(), 1U) << DiagnosticSummary(errors);
+  EXPECT_EQ(errors.front().code, "mount.kind_unknown");
+  EXPECT_EQ(errors.front().json_pointer, "/mounts/0/kind");
 }
 
 //! A declaration whose kind is neither `Source` nor `Cooked` is

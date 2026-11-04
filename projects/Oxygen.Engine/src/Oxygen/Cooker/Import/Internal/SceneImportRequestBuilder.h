@@ -8,7 +8,9 @@
 
 #include <memory>
 #include <optional>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -19,11 +21,11 @@ namespace oxygen::content::import::internal {
  * @brief Builds an ImportRequest from SceneImportSettings.
  * @param settings The settings to build from.
  * @param expected_format The expected format of the source file.
- * @param error_stream Stream to write errors to.
+ * @param diagnostics Receives the refusals.
  * @return The build request, or nullopt if settings are invalid.
  */
 OXGN_COOK_API auto BuildSceneRequest(const SceneImportSettings& settings,
-  ImportFormat expected_format, std::ostream& error_stream,
+  ImportFormat expected_format, std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 

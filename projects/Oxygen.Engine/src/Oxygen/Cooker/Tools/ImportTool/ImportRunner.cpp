@@ -16,7 +16,6 @@
 #include <mutex>
 #include <optional>
 #include <ratio>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -40,6 +39,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
@@ -554,10 +554,10 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         settings.report_path, globals.command_line, !globals.no_tui,
         globals.import_service, publication);
     }
-    std::ostringstream errors;
-    auto request = internal::BuildSceneRequest(settings, format, errors);
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto request = internal::BuildSceneRequest(settings, format, diagnostics);
     if (!request) {
-      globals.writer->Error(errors.str());
+      globals.writer->Error(internal::FormatDiagnostics(diagnostics));
       return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
     if (!LocateRequestSource(*request, *mounts, globals.writer)) {

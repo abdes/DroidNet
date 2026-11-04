@@ -15,7 +15,6 @@
 #include <optional>
 #include <set>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <stop_token>
 #include <string>
@@ -45,6 +44,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportRecordError.h>
@@ -335,7 +335,7 @@ namespace {
       { "version", 1 },
       { "jobs", json::array({ MakeJobJson(record, content, identity) }) },
     };
-    std::ostringstream errors;
+    auto errors = std::vector<ImportDiagnostic> {};
     const auto parsed
       = ImportManifest::Parse(manifest.dump(), content.source.parent_path(),
         {
@@ -347,7 +347,8 @@ namespace {
         errors);
     if (!parsed || parsed->jobs.size() != 1U) {
       Refuse(codes::kInvalid, record, "/settings",
-        "Invalid model import settings: " + errors.str());
+        "Invalid model import settings: "
+          + internal::FormatDiagnostics(errors));
     }
   }
 
@@ -1203,7 +1204,7 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
         + key + "'; worker budgets are execution options");
     }
   }
-  std::ostringstream errors;
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Parse(recipe.dump(), path.parent_path(),
     {
       .project_root = {},
@@ -1215,7 +1216,8 @@ auto ModelImportRecord::SaveRecipeFile(const ModelImportRecordSave& save,
   if (!manifest || manifest->jobs.size() != 1U
     || !manifest->jobs.front().depends_on.empty()) {
     throw std::invalid_argument(
-      "A recipe is one self-contained gltf or fbx job: " + errors.str());
+      "A recipe is one self-contained gltf or fbx job: "
+      + internal::FormatDiagnostics(errors));
   }
   const auto& parsed = manifest->jobs.front();
   const auto format
@@ -1312,7 +1314,7 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
       }),
     },
   };
-  std::ostringstream errors;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
   auto parsed
     = ImportManifest::Parse(manifest.dump(), state->record_path.parent_path(),
       {
@@ -1321,16 +1323,18 @@ auto ModelImportRecord::Prepare(const std::filesystem::path& record_path,
         .owner = MountTableOwner::kProject,
         .mount_table = make_observer(&mounts),
       },
-      errors);
+      diagnostics);
   if (!parsed || parsed->jobs.size() != 1U) {
-    Refuse(codes::kInvalid, state->record_path, "/settings", errors.str());
+    Refuse(codes::kInvalid, state->record_path, "/settings",
+      internal::FormatDiagnostics(diagnostics));
   }
   auto& job = parsed->jobs.front();
   auto& settings = job.job_type == "fbx" ? job.fbx : job.gltf;
   settings.cooked_root = root.string();
-  auto request = job.BuildRequest(errors);
+  auto request = job.BuildRequest(diagnostics);
   if (!request) {
-    Refuse(codes::kInvalid, state->record_path, "/settings", errors.str());
+    Refuse(codes::kInvalid, state->record_path, "/settings",
+      internal::FormatDiagnostics(diagnostics));
   }
   state->request = std::move(*request);
   state->request.source_key = data::SourceKey { state->generation };

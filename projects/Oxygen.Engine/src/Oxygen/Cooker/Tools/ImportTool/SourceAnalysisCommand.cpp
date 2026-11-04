@@ -12,7 +12,6 @@
 #include <ios>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -147,9 +146,7 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
     = ImportManifest::Load(manifest_path, options, manifest_diagnostics);
   if (!manifest.has_value()) {
     // A refused manifest is reported too, with its errors and no jobs.
-    auto errors = std::ostringstream {};
-    internal::WriteDiagnostics(manifest_diagnostics, errors);
-    report_error(errors.view());
+    report_error(internal::FormatDiagnostics(manifest_diagnostics));
     const auto written = write_report(ImportSourceAnalysis {
       .producer_version = std::string { oxygen::version::Version() },
       .jobs = {},
@@ -163,12 +160,12 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
   }
   auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
   if (!captured_inputs_path_.empty()) {
-    auto errors = std::ostringstream {};
     try {
+      auto diagnostics = std::vector<ImportDiagnostic> {};
       const auto document = ImportSourceDocument::Load(
-        captured_inputs_path_, "capture map", errors);
+        captured_inputs_path_, "capture map", diagnostics);
       if (!document.has_value()) {
-        report_error(errors.view());
+        report_error(internal::FormatDiagnostics(diagnostics));
         return std::unexpected(
           std::make_error_code(std::errc::invalid_argument));
       }

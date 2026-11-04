@@ -10,17 +10,24 @@
 #include <cstddef>
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::cooker::test::HasDiagnostic;
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
 
 using oxygen::content::import::ImportManifest;
 using oxygen::content::import::ScriptingImportKind;
@@ -53,17 +60,17 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
   EXPECT_TRUE(manifest->jobs.at(0).scripting_sidecar.source_path.empty());
   EXPECT_FALSE(
     manifest->jobs.at(0).scripting_sidecar.inline_bindings_json.empty());
 
-  std::ostringstream request_errors;
+  std::vector<ImportDiagnostic> request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_FALSE(request->options.scripting.inline_bindings_json.empty());
@@ -102,12 +109,12 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, ForwardsInlineInstanceBindings)
   WriteText(inline_path, job(R"("bindings": [])"));
   WriteText(source_path, job(R"("source": "Scenes/TestScene.sidecar.json")"));
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(inline_path, {}, errors);
-  std::ostringstream refused_errors;
+  std::vector<ImportDiagnostic> refused_errors;
   const auto refused = ImportManifest::Load(source_path, {}, refused_errors);
 
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
   const auto& sidecar
     = manifest->jobs.at(0).scripting_sidecar.inline_bindings_json;
@@ -145,13 +152,13 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
-  std::ostringstream request_errors;
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
+  std::vector<ImportDiagnostic> request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
 
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   EXPECT_THAT(request->cooked_context_roots,
     ::testing::ElementsAre(
       (manifest_path.parent_path() / "published").lexically_normal()));
@@ -192,18 +199,18 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         }
       ]
     })");
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   const auto expected = std::array {
     std::string_view { "/Authoring/main.lua" },
     std::string_view { "/Other/main.lua" },
   };
   for (std::size_t i = 0; i < expected.size(); ++i) {
-    std::ostringstream request_errors;
+    std::vector<ImportDiagnostic> request_errors;
     const auto request = manifest->jobs[i].BuildRequest(request_errors);
-    ASSERT_HAS_VALUE(request) << request_errors.str();
+    ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
     EXPECT_EQ(request->source_mount_path, expected[i]);
   }
 }
@@ -236,10 +243,10 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_FALSE(errors.str().empty());
+  EXPECT_FALSE(errors.empty());
 }
 
 NOLINT_TEST(
@@ -270,12 +277,10 @@ NOLINT_TEST(
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("job.bindings is only valid for type "
-                         "'script-sidecar'"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.bindings_not_allowed"));
 }
 
 NOLINT_TEST(ImportManifestScriptSidecarTest,
@@ -312,22 +317,22 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
-  std::ostringstream request_errors_0;
+  std::vector<ImportDiagnostic> request_errors_0;
   const auto request_0 = manifest->jobs.at(0).BuildRequest(request_errors_0);
-  ASSERT_HAS_VALUE(request_0) << request_errors_0.str();
+  ASSERT_HAS_VALUE(request_0) << DiagnosticSummary(request_errors_0);
   ASSERT_HAS_VALUE(request_0->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(
     request_0->cooked_root->lexically_normal(), cooked_root.lexically_normal());
 
-  std::ostringstream request_errors_1;
+  std::vector<ImportDiagnostic> request_errors_1;
   const auto request_1 = manifest->jobs.at(1).BuildRequest(request_errors_1);
-  ASSERT_HAS_VALUE(request_1) << request_errors_1.str();
+  ASSERT_HAS_VALUE(request_1) << DiagnosticSummary(request_errors_1);
   ASSERT_HAS_VALUE(request_1->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(
@@ -368,14 +373,14 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  std::ostringstream request_errors;
+  std::vector<ImportDiagnostic> request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(request->cooked_root->lexically_normal(),
@@ -417,14 +422,14 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  std::ostringstream request_errors;
+  std::vector<ImportDiagnostic> request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(

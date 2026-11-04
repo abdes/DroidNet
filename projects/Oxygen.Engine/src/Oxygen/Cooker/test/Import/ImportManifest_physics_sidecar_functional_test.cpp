@@ -8,16 +8,22 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::WriteText;
@@ -52,18 +58,18 @@ NOLINT_TEST(
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   EXPECT_TRUE(manifest->jobs.at(0).physics_sidecar.source_path.empty());
   EXPECT_FALSE(
     manifest->jobs.at(0).physics_sidecar.inline_bindings_json.empty());
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->physics);
   EXPECT_FALSE(request->physics->inline_bindings_json.empty());
 }
@@ -96,9 +102,9 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest, ReadsThePhysicsBackend)
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
   using oxygen::core::meta::physics::PhysicsBackend;
@@ -106,9 +112,9 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest, ReadsThePhysicsBackend)
     PhysicsBackend::kPhysX);
   EXPECT_EQ(manifest->jobs.at(1).physics_sidecar.physics_backend,
     PhysicsBackend::kNone);
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   EXPECT_EQ(request->options.physics.backend, PhysicsBackend::kPhysX);
 }
 
@@ -136,11 +142,10 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(
@@ -164,11 +169,10 @@ NOLINT_TEST(
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestPhysicsSidecarTest,
@@ -199,14 +203,14 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "physics.main");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
@@ -241,14 +245,14 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(),
     defaults_output.lexically_normal());

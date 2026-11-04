@@ -8,19 +8,27 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::MaterialDescriptorImportSettings;
@@ -64,12 +72,12 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildMaterialDescriptorRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
@@ -105,13 +113,13 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildMaterialDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("material.descriptor.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("material.descriptor.schema_validation_failed"));
 }
 
 NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest, RejectsMissingFile)
@@ -120,13 +128,12 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest, RejectsMissingFile)
   const auto dir = temp.Path() / "missing_file";
   const auto descriptor_path = dir / "Materials" / "missing.material.json";
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildMaterialDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("failed to open material descriptor"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kDocumentReadFailed));
 }
 
 NOLINT_TEST(
@@ -139,13 +146,12 @@ NOLINT_TEST(
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.cooked_root = "relative/output";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildMaterialDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("cooked root must be an absolute path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kCookedRootNotAbsolute));
 }
 
 } // namespace

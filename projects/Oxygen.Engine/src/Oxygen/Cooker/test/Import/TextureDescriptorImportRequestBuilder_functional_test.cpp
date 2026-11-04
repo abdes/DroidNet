@@ -9,10 +9,10 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -24,6 +24,11 @@
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::ColorSpace;
 using oxygen::content::import::TextureDescriptorImportSettings;
@@ -100,12 +105,12 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.texture.virtual_path = "/Content/Textures/brick.otex";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   EXPECT_EQ(request.value().asset_virtual_path, "/Content/Textures/brick.otex");
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
@@ -135,13 +140,13 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("texture.descriptor.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("texture.descriptor.schema_validation_failed"));
 }
 
 NOLINT_TEST(
@@ -151,13 +156,12 @@ NOLINT_TEST(
   const auto dir = temp.Path() / "missing_file";
   const auto descriptor_path = dir / "Textures" / "missing.texture.json";
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("failed to open texture descriptor"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kDocumentReadFailed));
 }
 
 NOLINT_TEST(
@@ -290,9 +294,9 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   settings.job_name = "Layered";
   settings.sources
     = { { .file = "layer.png", .layer = 1, .mip = 0, .slice = 0 } };
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto request = settings.Prepare(errors);
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_FALSE(request->cooked_root.has_value());
   ASSERT_EQ(request->additional_sources.size(), 1U);
   EXPECT_EQ(request->additional_sources.front().path,

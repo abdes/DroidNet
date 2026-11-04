@@ -656,7 +656,14 @@ Runs manifest jobs.
 
 Validation errors always fail the batch, even when valid jobs continue without
 `--fail-fast`. Human and JSON summaries include `validation_errors` separately
-from the execution results of prepared jobs.
+from the execution results of prepared jobs. A job whose settings or descriptor
+are refused is a `failed` entry of the report's `jobs`, at its manifest position,
+with its typed refusal in `diagnostics`, and an error the batch finds while
+ordering a job is in that job's `diagnostics`. What is about no single job, such
+as a refused manifest or a dependency cycle between jobs, is in the report's
+top-level `diagnostics`. The report is written even when nothing runs, so a
+stopped batch lists only the jobs it reached, and a refused manifest lists none.
+`session.cooked_root` is absent when no job and no `--cooked-root` names one.
 
 Required:
 

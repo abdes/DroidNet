@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -24,7 +25,7 @@ namespace oxygen::content::import::tool {
 
 using nlohmann::ordered_json;
 
-inline constexpr std::string_view kReportVersion = "4";
+inline constexpr std::string_view kReportVersion = "5";
 
 constexpr auto PhaseCount() -> size_t
 {
@@ -73,7 +74,7 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
 [[nodiscard]] auto ComputeCpuMillis(const ImportTelemetry& telemetry) -> double;
 
 [[nodiscard]] auto BuildDiagnosticsJson(
-  const std::vector<ImportDiagnostic>& diagnostics) -> ordered_json;
+  std::span<const ImportDiagnostic> diagnostics) -> ordered_json;
 
 //! The importer that cooks `request` and its revision, as `name` and
 //! `revision`, or nullopt when no importer handles the request.

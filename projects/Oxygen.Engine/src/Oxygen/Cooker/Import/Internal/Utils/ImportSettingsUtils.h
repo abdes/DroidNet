@@ -8,7 +8,9 @@
 
 #include <optional>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 
@@ -25,6 +27,7 @@ auto ParseCubeLayout(std::string_view value)
   -> std::optional<CubeMapImageLayout>;
 
 auto MapSettingsToTuning(const TextureImportSettings& settings,
-  ImportOptions::TextureTuning& tuning, std::ostream& error_stream) -> bool;
+  ImportOptions::TextureTuning& tuning,
+  std::vector<ImportDiagnostic>& diagnostics) -> bool;
 
 } // namespace oxygen::content::import::internal

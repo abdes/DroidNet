@@ -12,6 +12,7 @@
 #include <optional>
 #include <ranges>
 #include <ratio>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -211,7 +212,7 @@ auto ComputeCpuMillis(const ImportTelemetry& telemetry) -> double
     + DurationToMillis(telemetry.finalize_duration, "finalize");
 }
 
-auto BuildDiagnosticsJson(const std::vector<ImportDiagnostic>& diagnostics)
+auto BuildDiagnosticsJson(const std::span<const ImportDiagnostic> diagnostics)
   -> ordered_json
 {
   ordered_json entries = ordered_json::array();

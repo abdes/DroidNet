@@ -5,20 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
-#include <filesystem>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
+
+#include <fmt/format.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
@@ -131,15 +136,19 @@ namespace {
 } // namespace
 
 auto SceneImportSettings::Prepare(const ImportFormat expected_format,
-  std::ostream& error_stream) const -> std::optional<ImportRequest>
+  std::vector<ImportDiagnostic>& diagnostics) const
+  -> std::optional<ImportRequest>
 {
+  using internal::ParseOption;
+  using internal::RefuseSetting;
+
   const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
   if (settings.virtual_path.empty()) {
-    error_stream << "ERROR [import.asset_virtual_path_missing]: a model import "
-                    "requires 'virtual_path', the identity of its source "
-                    "file\n";
+    RefuseSetting(diagnostics, request_codes::kVirtualPathMissing,
+      "a model import requires 'virtual_path', the identity of its source file",
+      "/virtual_path");
     return std::nullopt;
   }
   request.asset_virtual_path = settings.virtual_path;
@@ -154,29 +163,22 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     request.surface_provenance
       = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
   }
+  internal::ApplyJobName(settings.job_name, request);
 
-  if (!settings.job_name.empty()) {
-    request.job_name = settings.job_name;
-  } else {
-    const auto stem = request.source_path.stem().string();
-    if (!stem.empty()) {
-      request.job_name = stem;
-    }
-  }
-
-  if (expected_format != ImportFormat::kUnknown) {
-    const auto actual_format = request.GetFormat();
-    if (actual_format != expected_format) {
-      error_stream << "ERROR: source file is not a "
-                   << FormatName(expected_format) << " asset\n";
-      return std::nullopt;
-    }
+  if (expected_format != ImportFormat::kUnknown
+    && request.GetFormat() != expected_format) {
+    RefuseSetting(diagnostics, request_codes::kSourceFormatMismatch,
+      fmt::format("source file is not a {} asset", FormatName(expected_format)),
+      "/source");
+    return std::nullopt;
   }
 
   if (!std::isfinite(settings.gltf_omitted_light_range_m)
     || settings.gltf_omitted_light_range_m <= 0.0F
     || !std::isfinite(1.0F / settings.gltf_omitted_light_range_m)) {
-    error_stream << "ERROR: omitted light range must be finite and positive\n";
+    RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
+      "omitted light range must be finite and positive",
+      "/gltf_omitted_light_range_m");
     return std::nullopt;
   }
   auto options = request.options;
@@ -199,9 +201,9 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   options.coordinate.bake_transforms_into_meshes = settings.bake_transforms;
 
   if (!settings.unit_policy.empty()) {
-    const auto parsed = ParseUnitPolicy(settings.unit_policy);
+    const auto parsed = ParseOption(
+      "unit_policy", settings.unit_policy, ParseUnitPolicy, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid --unit-policy value\n";
       return std::nullopt;
     }
     options.coordinate.unit_normalization = *parsed;
@@ -210,16 +212,17 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   if (settings.unit_scale_set) {
     if (options.coordinate.unit_normalization
       != UnitNormalizationPolicy::kApplyCustomFactor) {
-      error_stream << "ERROR: --unit-scale requires --unit-policy=custom\n";
+      RefuseSetting(diagnostics, request_codes::kUnitScaleNeedsCustomPolicy,
+        "unit_scale requires unit_policy 'custom'", "/unit_scale");
       return std::nullopt;
     }
     options.coordinate.unit_scale = settings.unit_scale;
   }
 
   if (!settings.up_axis.empty()) {
-    const auto parsed = ParseUpAxis(settings.up_axis);
+    const auto parsed
+      = ParseOption("up_axis", settings.up_axis, ParseUpAxis, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid --up-axis value\n";
       return std::nullopt;
     }
     options.coordinate.up_axis = *parsed;
@@ -227,24 +230,27 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
 
   if (!std::isfinite(settings.light_intensity_scale)
     || settings.light_intensity_scale < 0.0F) {
-    error_stream
-      << "ERROR: light intensity scale must be finite and not negative\n";
+    RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
+      "light intensity scale must be finite and not negative",
+      "/light_intensity_scale");
     return std::nullopt;
   }
 
   if (!std::isfinite(settings.normals_smoothing_angle_deg)
     || settings.normals_smoothing_angle_deg < 0.0F
     || settings.normals_smoothing_angle_deg > 180.0F) {
-    error_stream << "ERROR: normals smoothing angle must be from 0 to 180 "
-                    "degrees\n";
+    RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
+      "normals smoothing angle must be from 0 to 180 degrees",
+      "/normals_smoothing_angle_deg");
     return std::nullopt;
   }
 
   if (settings.lod_levels < LodGenerationOptions::kMinLevels
     || settings.lod_levels > LodGenerationOptions::kMaxLevels) {
-    error_stream << "ERROR: LOD levels must be from "
-                 << LodGenerationOptions::kMinLevels << " to "
-                 << LodGenerationOptions::kMaxLevels << "\n";
+    RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
+      fmt::format("LOD levels must be from {} to {}",
+        LodGenerationOptions::kMinLevels, LodGenerationOptions::kMaxLevels),
+      "/lod_levels");
     return std::nullopt;
   }
 
@@ -253,34 +259,36 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
       < LodGenerationOptions::kMinReductionPercent
     || settings.lod_reduction_percent
       > LodGenerationOptions::kMaxReductionPercent) {
-    error_stream << "ERROR: LOD reduction must be from "
-                 << LodGenerationOptions::kMinReductionPercent << " to "
-                 << LodGenerationOptions::kMaxReductionPercent << " percent\n";
+    RefuseSetting(diagnostics, request_codes::kOptionOutOfRange,
+      fmt::format("LOD reduction must be from {} to {} percent",
+        LodGenerationOptions::kMinReductionPercent,
+        LodGenerationOptions::kMaxReductionPercent),
+      "/lod_reduction_percent");
     return std::nullopt;
   }
 
   if (!settings.normals_policy.empty()) {
-    const auto parsed = ParseGeometryPolicy(settings.normals_policy);
+    const auto parsed = ParseOption("normals_policy", settings.normals_policy,
+      ParseGeometryPolicy, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid --normals value\n";
       return std::nullopt;
     }
     options.normal_policy = *parsed;
   }
 
   if (!settings.tangents_policy.empty()) {
-    const auto parsed = ParseGeometryPolicy(settings.tangents_policy);
+    const auto parsed = ParseOption("tangents_policy", settings.tangents_policy,
+      ParseGeometryPolicy, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid --tangents value\n";
       return std::nullopt;
     }
     options.tangent_policy = *parsed;
   }
 
   if (!settings.node_pruning.empty()) {
-    const auto parsed = ParseNodePruning(settings.node_pruning);
+    const auto parsed = ParseOption(
+      "node_pruning", settings.node_pruning, ParseNodePruning, diagnostics);
     if (!parsed.has_value()) {
-      error_stream << "ERROR: invalid --prune-nodes value\n";
       return std::nullopt;
     }
     options.node_pruning = *parsed;
@@ -288,13 +296,20 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
 
   // Handle texture tuning overrides for the scene
   if (!internal::MapSettingsToTuning(
-        settings.texture_defaults, options.texture_tuning, error_stream)) {
+        settings.texture_defaults, options.texture_tuning, diagnostics)) {
     return std::nullopt;
   }
 
   for (const auto& [name, tex_settings] : settings.texture_overrides) {
     ImportOptions::TextureTuning tuning = options.texture_tuning;
-    if (!internal::MapSettingsToTuning(tex_settings, tuning, error_stream)) {
+    const auto first_refusal = diagnostics.size();
+    if (!internal::MapSettingsToTuning(tex_settings, tuning, diagnostics)) {
+      const auto override_pointer
+        = (nlohmann::json::json_pointer {} / "texture_overrides" / name)
+            .to_string();
+      for (auto index = first_refusal; index < diagnostics.size(); ++index) {
+        diagnostics[index].json_pointer.insert(0, override_pointer);
+      }
       return std::nullopt;
     }
     options.texture_overrides[name] = std::move(tuning);
@@ -306,24 +321,16 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
 
 namespace internal {
   auto BuildSceneRequest(const SceneImportSettings& settings,
-    const ImportFormat expected_format, std::ostream& error_stream,
+    const ImportFormat expected_format,
+    std::vector<ImportDiagnostic>& diagnostics,
     std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> std::optional<ImportRequest>
   {
-    if (settings.cooked_root.empty()) {
-      error_stream << "ERROR: --output or --cooked-root is required\n";
+    auto request = settings.Prepare(expected_format, diagnostics);
+    if (!request.has_value()
+      || !RequireCookedRoot(settings.cooked_root, *request, diagnostics)) {
       return std::nullopt;
     }
-    auto request = settings.Prepare(expected_format, error_stream);
-    if (!request.has_value()) {
-      return std::nullopt;
-    }
-    auto root = std::filesystem::path(settings.cooked_root);
-    if (!root.is_absolute()) {
-      error_stream << "ERROR: cooked root must be an absolute path\n";
-      return std::nullopt;
-    }
-    request->cooked_root = std::move(root);
     request->captured_inputs = std::move(captured_inputs);
     return request;
   }

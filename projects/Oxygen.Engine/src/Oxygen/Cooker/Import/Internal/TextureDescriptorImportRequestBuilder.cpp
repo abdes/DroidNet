@@ -9,8 +9,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <ostream>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -24,10 +22,10 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -255,15 +253,18 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
   // The same destination-free option interpretation used by request
   // construction.
   auto tuning = ImportOptions::TextureTuning {};
-  auto errors = std::ostringstream {};
-  if (!internal::MapSettingsToTuning(effective, tuning, errors)) {
-    diagnostics.push_back(ImportDiagnostic {
-      .severity = ImportSeverity::kError,
-      .code = "texture.descriptor.recipe_invalid",
-      .message = errors.str(),
-      .source_path = path.string(),
-      .object_path = {},
-    });
+  const auto first_refusal = diagnostics.size();
+  if (!internal::MapSettingsToTuning(effective, tuning, diagnostics)) {
+    // The schema validated what the descriptor states, which leaves its one
+    // rule across fields; another refusal is about the job's own settings.
+    for (auto index = first_refusal; index < diagnostics.size(); ++index) {
+      auto& refusal = diagnostics[index];
+      refusal.source_path = path.string();
+      refusal.json_pointer
+        = refusal.code == request_codes::kBc7QualityNeedsBc7Format
+        ? "/output/bc7_quality"
+        : "";
+    }
     return std::nullopt;
   }
   return effective;
@@ -272,28 +273,23 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
 namespace internal {
 
   auto BuildTextureDescriptorRequest(
-    const TextureDescriptorImportSettings& settings, std::ostream& error_stream,
+    const TextureDescriptorImportSettings& settings,
+    std::vector<ImportDiagnostic>& diagnostics,
     std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> std::optional<ImportRequest>
   {
-    if (settings.descriptor_path.empty()) {
-      error_stream << "ERROR: descriptor_path is required\n";
-      return std::nullopt;
-    }
     const auto path
       = std::filesystem::path(settings.descriptor_path).lexically_normal();
     auto document = ImportSourceDocument::Load(
-      path, "texture", error_stream, captured_inputs.get());
+      path, "texture", diagnostics, captured_inputs.get());
     if (!document.has_value()) {
       return std::nullopt;
     }
-    auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto effective = settings.Prepare(document->text, diagnostics);
-    WriteDiagnostics(diagnostics, error_stream);
     if (!effective.has_value()) {
       return std::nullopt;
     }
-    auto request = BuildTextureRequest(*effective, error_stream);
+    auto request = BuildTextureRequest(*effective, diagnostics);
     if (request.has_value()) {
       request->captured_inputs = std::move(captured_inputs);
       request->preparation_inputs.push_back(document->Observation());

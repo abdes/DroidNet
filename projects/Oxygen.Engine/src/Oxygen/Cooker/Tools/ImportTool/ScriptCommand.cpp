@@ -6,11 +6,11 @@
 
 #include <expected>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include "SourceMountOptions.h"
 
@@ -19,6 +19,8 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -127,13 +129,10 @@ auto ScriptCommand::Execute() -> std::expected<void, std::error_code>
   if (!mounts.has_value()) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
-  std::ostringstream err;
-  auto request = internal::BuildScriptAssetRequest(settings, err);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto request = internal::BuildScriptAssetRequest(settings, diagnostics);
   if (!request.has_value()) {
-    const auto msg = err.str();
-    if (!msg.empty()) {
-      writer->Error(msg);
-    }
+    writer->Error(internal::FormatDiagnostics(diagnostics));
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   if (!LocateRequestSource(*request, *mounts, writer)) {

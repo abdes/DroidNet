@@ -10,8 +10,6 @@
 #include <array>
 #include <filesystem>
 #include <optional>
-#include <ostream>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -32,12 +31,14 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  using oxygen::content::import::ImportDiagnostic;
+  using oxygen::cooker::test::DiagnosticSummary;
+  using oxygen::cooker::test::HasDiagnostic;
+
   using nlohmann::json;
   using oxygen::cooker::test::HasDiagnosticCode;
   using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::WriteText;
-  using ::testing::HasSubstr;
-  using ::testing::Not;
 
   constexpr auto kGroundIdentity = std::string_view { "/Content/Ground.omat" };
 
@@ -84,7 +85,7 @@ namespace {
       };
     }
 
-    auto Load(const json& manifest, std::ostream& errors,
+    auto Load(const json& manifest, std::vector<ImportDiagnostic>& errors,
       const std::string_view name = "import-manifest.json") const
       -> std::optional<ImportManifest>
     {
@@ -96,14 +97,14 @@ namespace {
     //! Cooks the manifest's only job.
     auto Cook(const json& manifest) -> std::optional<ImportReport>
     {
-      auto errors = std::ostringstream {};
+      auto errors = std::vector<ImportDiagnostic> {};
       const auto loaded = Load(manifest, errors);
-      EXPECT_TRUE(loaded.has_value()) << errors.str();
+      EXPECT_TRUE(loaded.has_value()) << DiagnosticSummary(errors);
       if (!loaded.has_value()) {
         return std::nullopt;
       }
       auto requests = loaded->BuildRequests(errors);
-      EXPECT_EQ(requests.size(), 1U) << errors.str();
+      EXPECT_EQ(requests.size(), 1U) << DiagnosticSummary(errors);
       if (requests.size() != 1U) {
         return std::nullopt;
       }
@@ -176,12 +177,12 @@ namespace {
   {
     // Arrange
     WriteMaterial("Materials/ground.omat.json");
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
     const auto loaded = Load(
       MaterialManifest(
         json::array({ MaterialJob("Content/Materials/ground.omat.json") })),
       errors);
-    ASSERT_HAS_VALUE(loaded) << errors.str();
+    ASSERT_HAS_VALUE(loaded) << DiagnosticSummary(errors);
     auto requests = loaded->BuildRequests(errors);
     ASSERT_EQ(requests.size(), 1U);
     requests.front().source_mount_path.clear();
@@ -231,13 +232,13 @@ namespace {
         }
           .dump());
       WriteText(machine / "import-manifest.json", placeholder.dump());
-      auto errors = std::ostringstream {};
+      auto errors = std::vector<ImportDiagnostic> {};
 
       // Act
       const auto loaded
         = ImportManifest::Load(machine / "import-manifest.json", {}, errors);
 
-      ASSERT_HAS_VALUE(loaded) << errors.str();
+      ASSERT_HAS_VALUE(loaded) << DiagnosticSummary(errors);
       ASSERT_EQ(loaded->jobs.size(), 1U);
       sources.push_back(loaded->jobs.front().source_mount_path);
     }
@@ -282,14 +283,14 @@ namespace {
         }() },
     };
     for (const auto& [field, manifest] : cases) {
-      auto errors = std::ostringstream {};
+      auto errors = std::vector<ImportDiagnostic> {};
 
       const auto loaded = Load(manifest, errors);
 
       EXPECT_FALSE(loaded.has_value()) << field;
-      EXPECT_THAT(errors.str(), HasSubstr("[path.absolute_committed]"))
-        << field;
-      EXPECT_THAT(errors.str(), HasSubstr(field)) << errors.str();
+      EXPECT_THAT(errors, HasDiagnostic("path.absolute_committed")) << field;
+      ASSERT_EQ(errors.size(), 1U) << DiagnosticSummary(errors);
+      EXPECT_EQ(errors.front().json_pointer, field);
     }
   }
 
@@ -312,13 +313,12 @@ namespace {
       std::pair { std::string_view { "import.mount_unbound" }, unbound },
     };
     for (const auto& [code, manifest] : cases) {
-      auto errors = std::ostringstream {};
+      auto errors = std::vector<ImportDiagnostic> {};
 
       const auto loaded = Load(manifest, errors);
 
       EXPECT_FALSE(loaded.has_value()) << code;
-      EXPECT_THAT(errors.str(), HasSubstr("[" + std::string(code) + "]"))
-        << errors.str();
+      EXPECT_THAT(errors, HasDiagnostic(code));
     }
   }
 
@@ -340,14 +340,14 @@ namespace {
     WriteText(ProjectRoot() / "b.json", other.dump());
     const auto paths
       = std::array { ProjectRoot() / "a.json", ProjectRoot() / "b.json" };
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
 
     // Act
     const auto batch = ImportManifest::LoadBatch(paths, {}, errors);
 
     // Assert
     EXPECT_FALSE(batch.has_value());
-    EXPECT_THAT(errors.str(), HasSubstr("[mount.name_conflict]"));
+    EXPECT_THAT(errors, HasDiagnostic("mount.name_conflict"));
   }
 
   //! A source two manifests of one batch cook to one identity is cooked once,
@@ -370,18 +370,18 @@ namespace {
       MaterialManifest(json::array({ shared, dependent })).dump());
     const auto paths
       = std::array { ProjectRoot() / "a.json", ProjectRoot() / "b.json" };
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
 
     // Act
     const auto batch = ImportManifest::LoadBatch(paths, {}, errors);
 
     // Assert
-    ASSERT_HAS_VALUE(batch) << errors.str();
+    ASSERT_HAS_VALUE(batch) << DiagnosticSummary(errors);
     ASSERT_EQ(batch->jobs.size(), 2U);
     EXPECT_EQ(batch->jobs.at(0).id, "ground-a");
     EXPECT_EQ(
       batch->jobs.at(1).depends_on, std::vector<std::string> { "ground-a" });
-    EXPECT_THAT(errors.str(), Not(HasSubstr("ERROR")));
+    EXPECT_THAT(errors, oxygen::cooker::test::HasNoErrors());
   }
 
   //! Two different jobs of one batch with one id are refused by code.
@@ -401,14 +401,14 @@ namespace {
       MaterialManifest(json::array({ second })).dump());
     const auto paths
       = std::array { ProjectRoot() / "a.json", ProjectRoot() / "b.json" };
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
 
     // Act
     const auto batch = ImportManifest::LoadBatch(paths, {}, errors);
 
     // Assert
     EXPECT_FALSE(batch.has_value());
-    EXPECT_THAT(errors.str(), HasSubstr("[manifest.job_id_duplicate]"));
+    EXPECT_THAT(errors, HasDiagnostic("manifest.job_id_duplicate"));
   }
 
   //! A derived file in an output folder records the authored source it
@@ -465,13 +465,12 @@ namespace {
           { MaterialJob(".pipeline/Materials/ground.omat.json") })) },
     };
     for (const auto& [code, manifest] : cases) {
-      auto errors = std::ostringstream {};
+      auto errors = std::vector<ImportDiagnostic> {};
 
       const auto loaded = Load(manifest, errors);
 
       EXPECT_FALSE(loaded.has_value()) << code;
-      EXPECT_THAT(errors.str(), HasSubstr("[" + std::string(code) + "]"))
-        << errors.str();
+      EXPECT_THAT(errors, HasDiagnostic(code));
     }
   }
 

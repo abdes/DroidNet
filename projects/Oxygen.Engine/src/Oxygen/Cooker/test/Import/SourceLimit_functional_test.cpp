@@ -11,7 +11,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -44,7 +43,9 @@
 
 namespace oxygen::content::import::test {
 namespace {
+
   using nlohmann::json;
+  using oxygen::content::import::ImportDiagnostic;
   using oxygen::cooker::test::DiagnosticSummary;
   using oxygen::cooker::test::HasDiagnosticCode;
   using oxygen::cooker::test::ImportServiceTest;
@@ -196,12 +197,12 @@ namespace {
       large, R"({"version":1,"jobs":[],"max_source_bytes":5000000000})");
     WriteText(zero, R"({"version":1,"jobs":[],"max_source_bytes":0})");
 
-    auto large_errors = std::ostringstream {};
+    auto large_errors = std::vector<ImportDiagnostic> {};
     const auto loaded = ImportManifest::Load(large, {}, large_errors);
-    auto zero_errors = std::ostringstream {};
+    auto zero_errors = std::vector<ImportDiagnostic> {};
     const auto refused = ImportManifest::Load(zero, {}, zero_errors);
 
-    ASSERT_HAS_VALUE(loaded) << large_errors.str();
+    ASSERT_HAS_VALUE(loaded) << DiagnosticSummary(large_errors);
     ASSERT_HAS_VALUE(loaded->max_source_bytes);
     EXPECT_EQ(*loaded->max_source_bytes, serio::ByteCount { 5'000'000'000U });
     EXPECT_FALSE(refused.has_value());

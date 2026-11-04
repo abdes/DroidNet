@@ -7,18 +7,26 @@
 // Covers: Import/Internal/ScriptImportRequestBuilder.cpp
 
 #include <filesystem>
-#include <sstream>
 #include <string>
 #include <type_traits>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/ScriptImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ScriptImportSettings.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::content::import::ScriptAssetImportSettings;
 using oxygen::content::import::ScriptingImportKind;
@@ -93,11 +101,11 @@ NOLINT_TEST(
 {
   auto settings = MakeValidSidecarSettings();
   settings.target_scene_virtual_path = "/Game/Scenes/TestScene.oscene";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_EQ(request->OutputIdentity(), "/Game/Scenes/TestScene.oscene");
   EXPECT_EQ(request->OutputMountRoot(), "/Game");
 }
@@ -105,12 +113,12 @@ NOLINT_TEST(
 NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
 {
   auto settings = MakeValidScriptAssetSettings();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
   ASSERT_HAS_VALUE(request) << "Expected request to be present";
-  EXPECT_TRUE(errors.str().empty());
+  EXPECT_TRUE(errors.empty());
   EXPECT_EQ(
     request->options.scripting.import_kind, ScriptingImportKind::kScriptAsset);
   EXPECT_TRUE(request->options.scripting.compile_scripts);
@@ -132,11 +140,11 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto authoring_root
     = std::filesystem::temp_directory_path() / "script_authoring";
   settings.source_path = (authoring_root / "scripts" / "main.lua").string();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  ASSERT_HAS_VALUE(request) << errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(errors);
   EXPECT_TRUE(request->options.scripting.compile_scripts);
   EXPECT_EQ(
     request->options.scripting.script_storage, ScriptStorageMode::kExternal);
@@ -147,13 +155,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 {
   auto settings = MakeValidScriptAssetSettings();
   settings.compile_mode = "shipping";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("invalid script compile mode"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kOptionInvalid));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -161,13 +168,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 {
   auto settings = MakeValidSidecarSettings();
   settings.target_scene_virtual_path.clear();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("target_scene_virtual_path is required"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kTargetSceneMissing));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -175,24 +181,24 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 {
   auto settings = MakeValidSidecarSettings();
   settings.target_scene_virtual_path = "/Cooked/Scenes/./TestScene.oscene";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(), ::testing::HasSubstr("canonical virtual path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kTargetSceneNotCanonical));
 }
 
 NOLINT_TEST(
   ScriptImportRequestBuilderTest, BuildScriptingSidecarRequestValidInput)
 {
   auto settings = MakeValidSidecarSettings();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   ASSERT_HAS_VALUE(request) << "Expected request to be present";
-  EXPECT_TRUE(errors.str().empty());
+  EXPECT_TRUE(errors.empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
@@ -206,12 +212,12 @@ NOLINT_TEST(
   ScriptImportRequestBuilderTest, BuildScriptingSidecarRequestValidInlineInput)
 {
   auto settings = MakeInlineSidecarSettings();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   ASSERT_HAS_VALUE(request) << "Expected request to be present";
-  EXPECT_TRUE(errors.str().empty());
+  EXPECT_TRUE(errors.empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
@@ -232,12 +238,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   settings.source_path.clear();
   settings.inline_bindings_json
     = R"([{"node_index":0,"slot_id":"00000000-0000-4000-8000-00000000000a","script_virtual_path":"/Scripts/test.oscript"}])";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   ASSERT_HAS_VALUE(request) << "Expected request to be present";
-  EXPECT_TRUE(errors.str().empty());
+  EXPECT_TRUE(errors.empty());
   EXPECT_THAT(request->options.scripting.inline_bindings_json,
     ::testing::HasSubstr("\"bindings\""));
 }
@@ -247,14 +253,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 {
   auto settings = MakeInlineSidecarSettings();
   settings.source_path = "scripts/scene_scripting_sidecar.yaml";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("exactly one of source_path or "
-                         "inline_bindings_json must be provided"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kSourceConflict));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -263,14 +267,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   auto settings = MakeValidSidecarSettings();
   settings.source_path.clear();
   settings.inline_bindings_json.clear();
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("exactly one of source_path or "
-                         "inline_bindings_json must be provided"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kSourceConflict));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -279,13 +281,12 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   auto settings = MakeValidSidecarSettings();
   settings.source_path.clear();
   settings.inline_bindings_json = "{ invalid }";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("[script.sidecar.parse_failed]"));
+  EXPECT_THAT(errors, HasDiagnostic("script.sidecar.parse_failed"));
 }
 
 //! The builder refuses a payload the import would refuse, at the same place.
@@ -296,14 +297,14 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   settings.source_path.clear();
   settings.inline_bindings_json
     = R"([{"node_index":0,"slot_id":"nil","script_virtual_path":"/Scripts/test.oscript"}])";
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("[script.sidecar.slot_id_invalid]"));
-  EXPECT_THAT(errors.str(), ::testing::HasSubstr("(at '/bindings/0/slot_id')"));
+  EXPECT_THAT(errors, HasDiagnostic("script.sidecar.slot_id_invalid"));
+  ASSERT_EQ(errors.size(), 1U);
+  EXPECT_EQ(errors.front().json_pointer, "/bindings/0/slot_id");
 }
 
 } // namespace

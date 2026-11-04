@@ -6,11 +6,11 @@
 
 #include <expected>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include "SourceMountOptions.h"
 
@@ -19,8 +19,10 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/InputCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -105,13 +107,10 @@ auto InputCommand::Execute() -> std::expected<void, std::error_code>
     .cooked_root = effective_cooked_root,
   };
 
-  std::ostringstream err;
-  auto request = internal::BuildInputImportRequest(settings, err);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto request = internal::BuildInputImportRequest(settings, diagnostics);
   if (!request.has_value()) {
-    const auto msg = err.str();
-    if (!msg.empty()) {
-      writer->Error(msg);
-    }
+    writer->Error(internal::FormatDiagnostics(diagnostics));
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
 

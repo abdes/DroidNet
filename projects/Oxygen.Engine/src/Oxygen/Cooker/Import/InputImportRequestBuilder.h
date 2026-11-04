@@ -7,10 +7,9 @@
 #pragma once
 
 #include <optional>
-#include <ostream>
-#include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -20,16 +19,10 @@ namespace oxygen::content::import::internal {
 //! Build a normalized `ImportRequest` for input import.
 /*!
  The builder is orchestration-only: it validates source presence, carries the
- source's identity, marks input routing in `ImportRequest`, and optionally
- carries batch dependency metadata. It does not inspect source JSON structure;
- the pipeline checks the identity.
+ source's identity and marks input routing in `ImportRequest`. It does not
+ inspect source JSON structure; the pipeline checks the identity.
 */
 OXGN_COOK_API auto BuildInputImportRequest(const InputImportSettings& settings,
-  std::ostream& error_stream) -> std::optional<ImportRequest>;
-
-//! Build a normalized `ImportRequest` for input import with manifest metadata.
-OXGN_COOK_API auto BuildInputImportRequest(const InputImportSettings& settings,
-  std::string job_id, std::vector<std::string> depends_on,
-  std::ostream& error_stream) -> std::optional<ImportRequest>;
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

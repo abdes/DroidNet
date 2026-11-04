@@ -7,7 +7,6 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,75 +15,57 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/RequestPreparation.h>
 
 namespace oxygen::content::import::internal {
 
 auto BuildCollisionShapeDescriptorRequest(
   const CollisionShapeDescriptorImportSettings& settings,
-  std::ostream& error_stream,
+  std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs)
   -> std::optional<ImportRequest>
 {
-  if (settings.descriptor_path.empty()) {
-    error_stream << "ERROR: descriptor_path is required\n";
-    return std::nullopt;
-  }
-
   const auto descriptor_path
     = std::filesystem::path(settings.descriptor_path).lexically_normal();
   auto document = ImportSourceDocument::Load(descriptor_path,
-    "collision shape descriptor", error_stream, captured_inputs.get());
+    "collision shape descriptor", diagnostics, captured_inputs.get());
   if (!document.has_value()) {
     return std::nullopt;
   }
-  auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto descriptor_doc = PrepareCollisionShapeDescriptor(
     document->text, descriptor_path, diagnostics);
-  WriteDiagnostics(diagnostics, error_stream);
   if (!descriptor_doc.has_value()) {
     return std::nullopt;
   }
 
-  auto request = ImportRequest {};
-  request.source_path = descriptor_path;
-  request.captured_inputs = std::move(captured_inputs);
-  request.preparation_inputs.push_back(document->Observation());
-
-  if (settings.cooked_root.empty()) {
-    error_stream << "ERROR: --output or --cooked-root is required\n";
+  auto request = StartDescriptorRequest(
+    {
+      .descriptor_path = make_observer(&descriptor_path),
+      .document = make_observer(&*document),
+      .cooked_root = settings.cooked_root,
+      .cooked_context_roots = {},
+      .captured_inputs = std::move(captured_inputs),
+    },
+    diagnostics);
+  if (!request.has_value()) {
     return std::nullopt;
   }
 
-  auto cooked_root = std::filesystem::path(settings.cooked_root);
-  if (!cooked_root.is_absolute()) {
-    error_stream << "ERROR: cooked root must be an absolute path\n";
-    return std::nullopt;
-  }
-  request.cooked_root = std::move(cooked_root);
-
-  if (!settings.job_name.empty()) {
-    request.job_name = settings.job_name;
-  } else if (descriptor_doc->contains("name")) {
-    request.job_name = descriptor_doc->at("name").get<std::string>();
-  } else {
-    const auto stem = descriptor_path.stem().string();
-    if (!stem.empty()) {
-      request.job_name = stem;
-    }
-  }
-
-  request.collision_shape_descriptor
+  ApplyJobName(settings.job_name.empty()
+      ? descriptor_doc->value("name", std::string {})
+      : settings.job_name,
+    *request);
+  request->collision_shape_descriptor
     = ImportRequest::CollisionShapeDescriptorPayload {
         .descriptor_json = std::move(document->text),
       };
-
   return request;
 }
 

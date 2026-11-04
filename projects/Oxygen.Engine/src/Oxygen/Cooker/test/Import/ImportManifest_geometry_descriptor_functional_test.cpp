@@ -8,18 +8,24 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
@@ -74,16 +80,16 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     })";
   WriteText(manifest_path, manifest_json);
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << request_errors.str();
+  ASSERT_HAS_VALUE(request) << "Expected request to contain a value"
+                            << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
@@ -147,19 +153,19 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "proc.cube");
   ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
   EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "shared.buffers");
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << request_errors.str();
+  ASSERT_HAS_VALUE(request) << "Expected request to contain a value"
+                            << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->orchestration)
     << "Expected request->orchestration to contain a value";
   EXPECT_EQ(request->orchestration->job_id, "proc.cube");
@@ -186,11 +192,10 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 } // namespace

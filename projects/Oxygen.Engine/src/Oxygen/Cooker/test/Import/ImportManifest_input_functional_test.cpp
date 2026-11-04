@@ -8,15 +8,21 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::content::import::ImportManifest;
 using oxygen::cooker::test::WriteText;
@@ -49,14 +55,14 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(1).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   EXPECT_TRUE(request->input.has_value());
   ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "vehicle.contexts");
@@ -85,11 +91,10 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
@@ -121,14 +126,14 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, job_input);
 }
@@ -162,14 +167,14 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, default_input);
 }
@@ -197,14 +202,14 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, top_level);
 }
@@ -234,13 +239,13 @@ NOLINT_TEST(
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
 }
@@ -275,13 +280,13 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
 }
@@ -307,13 +312,13 @@ NOLINT_TEST(ImportManifestInputTest, CarriesInputSourceIdentity)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   EXPECT_EQ(request->asset_virtual_path, "/Content/Gameplay/Player.input");
 }
 
@@ -342,13 +347,13 @@ NOLINT_TEST(ImportManifestInputTest, CarriesCookedContextRoots)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
 
-  std::ostringstream req_errors;
+  std::vector<ImportDiagnostic> req_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
-  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(req_errors);
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
   EXPECT_EQ(request->cooked_context_roots.front(), library);
 }
@@ -373,11 +378,10 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
+  EXPECT_THAT(errors, HasDiagnostic("import.manifest.virtual_path_missing"));
 }
 
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
@@ -399,11 +403,10 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
       ]
     })");
 
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 } // namespace

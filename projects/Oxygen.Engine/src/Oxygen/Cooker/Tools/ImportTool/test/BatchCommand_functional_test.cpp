@@ -6,6 +6,7 @@
 
 // Covers: Tools/ImportTool/BatchCommand.cpp
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <expected>
@@ -285,6 +286,85 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_THAT(Messages(), ::testing::HasSubstr("validation_errors=1"));
 }
 
+//! A refused job holds its place in the report, with its typed refusal.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsARefusedJobAtItsPosition)
+{
+  const auto root = MakeScenarioDir("report_refused_job");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Invalid.geometry.json",
+    authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
+      .Remove("/lods")
+      .Text());
+  WriteText(root / "Valid.material.json",
+    authored::MaterialDescriptor { "/Cooked/Materials/Valid.omat" }.Text());
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"type":"geometry-descriptor","source":"Invalid.geometry.json",
+       "virtual_path":"/Cooked/Geometry/Invalid.ogeo"},
+      {"type":"material-descriptor","source":"Valid.material.json",
+       "virtual_path":"/Cooked/Materials/Valid.omat"}
+    ]
+  })");
+
+  ContinueAfterValidationErrors();
+  EXPECT_FALSE(RunBatch(manifest_path, std::nullopt, report_path).has_value());
+
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("summary").at("jobs_total"), 2);
+  EXPECT_EQ(report.at("summary").at("jobs_failed"), 1);
+  EXPECT_EQ(report.at("summary").at("jobs_succeeded"), 1);
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 2U);
+  EXPECT_EQ(jobs.at(0).at("index"), 1);
+  EXPECT_EQ(jobs.at(0).at("type"), "geometry-descriptor");
+  EXPECT_EQ(jobs.at(0).at("status"), "failed");
+  EXPECT_EQ(jobs.at(0).at("diagnostics").at(0).at("code"),
+    "geometry.descriptor.schema_validation_failed");
+  EXPECT_EQ(jobs.at(1).at("index"), 2);
+  EXPECT_EQ(jobs.at(1).at("status"), "succeeded");
+}
+
+//! When every job is refused nothing runs, and the report still says why.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenWhenEveryJobIsRefused)
+{
+  const auto root = MakeScenarioDir("report_all_refused");
+  const auto cooked_root = root / ".cooked";
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(root / "Invalid.geometry.json",
+    authored::GeometryDescriptor { "/Cooked/Geometry/Invalid.ogeo" }
+      .Remove("/lods")
+      .Text());
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"type":"geometry-descriptor","source":"Invalid.geometry.json",
+       "virtual_path":"/Cooked/Geometry/Invalid.ogeo"}
+    ]
+  })");
+
+  EXPECT_FALSE(RunBatch(manifest_path, cooked_root, report_path).has_value());
+
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_FALSE(
+    report.at("session").at("cooked_root").get<std::string>().empty());
+  EXPECT_EQ(report.at("summary").at("validation_errors"), 1);
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 1U);
+  EXPECT_EQ(jobs.at(0).at("status"), "failed");
+  EXPECT_EQ(jobs.at(0).at("diagnostics").at(0).at("code"),
+    "geometry.descriptor.schema_validation_failed");
+}
+
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   InvalidTexturePathWritesFailedReportWithoutAborting)
 {
@@ -339,7 +419,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
   auto stream = std::ifstream(report_path);
   ASSERT_TRUE(stream.is_open());
   const auto report = nlohmann::json::parse(stream);
-  EXPECT_EQ(report.at("report_version"), "4");
+  EXPECT_EQ(report.at("report_version"), "5");
   const auto& jobs = report.at("jobs");
   ASSERT_EQ(jobs.size(), 2U);
   // Each job names the importer that cooked it, at its revision.
@@ -668,12 +748,28 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       ]
     })");
 
-  const auto result = RunBatch(manifest_path);
+  const auto report_path = root / "report.json";
+  const auto result = RunBatch(manifest_path, std::nullopt, report_path);
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
   EXPECT_THAT(
     messages, ::testing::HasSubstr("physics.manifest.dependency_ambiguous"));
+
+  // The job's report entry holds the error too.
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << messages;
+  const auto report = nlohmann::json::parse(stream);
+  const auto in_entry = std::ranges::any_of(
+    report.at("jobs"), [](const nlohmann::json& job) -> bool {
+      const auto& diagnostics = job.at("diagnostics");
+      return std::ranges::any_of(
+        diagnostics, [](const nlohmann::json& diagnostic) -> bool {
+          return diagnostic.at("code")
+            == "physics.manifest.dependency_ambiguous";
+        });
+    });
+  EXPECT_TRUE(in_entry) << report.dump(2);
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -896,6 +992,29 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_THAT(messages,
     ::testing::HasSubstr("physics.manifest.dependency_inference_failed"));
   EXPECT_THAT(messages, ::testing::HasSubstr("top-level 'bindings'"));
+}
+
+//! A refused manifest has no jobs; the report still says why, by code.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenForARefusedManifest)
+{
+  const auto root = MakeScenarioDir("report_refused_manifest");
+  const auto report_path = root / "report.json";
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(manifest_path, R"({"version":1,"jobs":[{"type":"unknown"}]})");
+
+  EXPECT_FALSE(
+    RunBatch(manifest_path, root / ".cooked", report_path).has_value());
+
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_FALSE(
+    report.at("session").at("cooked_root").get<std::string>().empty());
+  EXPECT_TRUE(report.at("jobs").empty());
+  EXPECT_GE(report.at("summary").at("validation_errors"), 1);
+  ASSERT_FALSE(report.at("diagnostics").empty());
+  EXPECT_EQ(report.at("diagnostics").at(0).at("code"),
+    "manifest.schema_validation_failed");
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)

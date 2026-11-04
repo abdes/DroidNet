@@ -125,6 +125,37 @@ public sealed class NativeImportReportReaderTests
         _ = read.Should().Throw<InvalidDataException>();
     }
 
+    /// <summary>A batch that stopped lists the jobs it reached, and its refusal is reported by code.</summary>
+    [TestMethod]
+    public void ReadsTheRefusalOfABatchThatStopped()
+    {
+        var (execution, report) = CreateReport();
+        report["jobs"] = new JsonArray();
+        report["diagnostics"] = JsonNode.Parse("""
+            [{"severity":"error","code":"manifest.schema_validation_failed","message":"Refused.","source_path":"manifest.json","json_pointer":"/jobs/0"}]
+            """);
+
+        var result = NativeImportReportReader.Read(report.ToJsonString(), execution, 1);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(issue => issue.Code == "manifest.schema_validation_failed"
+            && issue.Severity == DiagnosticSeverity.Error
+            && issue.AffectedPath == "manifest.json"
+            && issue.TechnicalMessage == "/jobs/0");
+    }
+
+    /// <summary>A run that succeeded must report every job it was asked for.</summary>
+    [TestMethod]
+    public void RejectsASuccessfulRunWithMissingJobs()
+    {
+        var (execution, report) = CreateReport();
+        report["jobs"] = new JsonArray();
+
+        Action read = () => _ = NativeImportReportReader.Read(report.ToJsonString(), execution, 0);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
     private static (ContentImportExecution Execution, JsonNode Report) CreateReport()
     {
         var root = Path.Combine(Path.GetTempPath(), "NativeReport", Guid.NewGuid().ToString("N"));
@@ -138,7 +169,7 @@ public sealed class NativeImportReportReaderTests
             MountsFile = ContentImportMountsFile.Empty,
         };
         var report = JsonNode.Parse("""
-            {"report_version":"4","session":{"cooked_root":""},"jobs":[
+            {"report_version":"5","session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
                "products":[
                  {"kind":"asset","virtual_path":"/Content/Models/Model/Geometry/Triangle.ogeo","descriptor_relative_path":"Models/Model/Geometry/Triangle.ogeo","asset_key":"00000000-0000-0000-0000-000000000001","asset_type":2},
@@ -171,7 +202,7 @@ public sealed class NativeImportReportReaderTests
 
         // The engine reports a model job as the gltf or fbx job its record runs.
         var report = JsonNode.Parse("""
-            {"report_version":"4","session":{"cooked_root":""},"jobs":[
+            {"report_version":"5","session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","status":"succeeded","outputs":[],"products":[],"diagnostics":[]
             """ + update + "}]}")!;
         report["session"]!["cooked_root"] = output;

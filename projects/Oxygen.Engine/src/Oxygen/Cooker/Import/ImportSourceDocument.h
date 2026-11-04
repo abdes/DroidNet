@@ -8,11 +8,12 @@
 
 #include <filesystem>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportSourceObservation.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -26,8 +27,9 @@ struct ImportSourceDocument final {
   std::string text;
   base::Sha256Digest digest {};
 
+  //! Reads the document; a refusal has a `request_codes` `kDocument*` code.
   OXGN_COOK_NDAPI static auto Load(const std::filesystem::path& path,
-    std::string_view kind, std::ostream& errors,
+    std::string_view kind, std::vector<ImportDiagnostic>& diagnostics,
     const CapturedInputSet* captured_inputs = nullptr)
     -> std::optional<ImportSourceDocument>;
 

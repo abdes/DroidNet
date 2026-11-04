@@ -58,6 +58,7 @@
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -701,7 +702,9 @@ auto AsyncImportService::SubmitManifest(const ImportManifest& manifest,
   const ProgressEventCallback& on_progress) const -> std::vector<ImportJobId>
 {
   std::vector<ImportJobId> job_ids;
-  auto requests = manifest.BuildRequests(std::cerr);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto requests = manifest.BuildRequests(diagnostics);
+  internal::WriteDiagnostics(diagnostics, std::cerr);
   job_ids.reserve(requests.size());
 
   for (auto& request : requests) {

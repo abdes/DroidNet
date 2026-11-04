@@ -8,20 +8,28 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+namespace request_codes = oxygen::content::import::request_codes;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::GeometryDescriptorImportSettings;
@@ -67,15 +75,15 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto mounts = ContentMountTable(temp.Path());
   const auto request = BuildGeometryDescriptorRequest(
     settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << errors.str();
-  EXPECT_TRUE(errors.str().empty());
+    << "Expected request to contain a value" << DiagnosticSummary(errors);
+  EXPECT_TRUE(errors.empty());
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_TRUE(request->cooked_root->is_absolute());
@@ -116,15 +124,15 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     })");
 
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto mounts = ContentMountTable(temp.Path());
   const auto request = BuildGeometryDescriptorRequest(
     settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors.str(),
-    ::testing::HasSubstr("geometry.descriptor.schema_validation_failed"));
+  EXPECT_THAT(
+    errors, HasDiagnostic("geometry.descriptor.schema_validation_failed"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest, RejectsMissingFile)
@@ -133,15 +141,14 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest, RejectsMissingFile)
   const auto dir = temp.Path() / "missing_file";
   const auto descriptor_path = dir / "Geometry" / "missing.geometry.json";
   const auto settings = MakeBaseSettings(descriptor_path);
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto mounts = ContentMountTable(temp.Path());
   const auto request = BuildGeometryDescriptorRequest(
     settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("failed to open geometry descriptor"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kDocumentReadFailed));
 }
 
 NOLINT_TEST(
@@ -171,15 +178,14 @@ NOLINT_TEST(
 
   auto settings = MakeBaseSettings(descriptor_path);
   settings.cooked_root = "relative/output";
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
 
   const auto mounts = ContentMountTable(temp.Path());
   const auto request = BuildGeometryDescriptorRequest(
     settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("cooked root must be an absolute path"));
+  EXPECT_THAT(errors, HasDiagnostic(request_codes::kCookedRootNotAbsolute));
 }
 
 } // namespace

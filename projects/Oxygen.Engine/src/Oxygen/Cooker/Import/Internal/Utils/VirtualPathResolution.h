@@ -19,6 +19,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 
 namespace oxygen::content::import::internal {
@@ -227,8 +228,9 @@ inline auto PlaceAsset(
     };
   };
   if (virtual_path.empty()) {
-    return std::unexpected(refuse("import.asset_virtual_path_missing",
-      "The job names no virtual_path for the asset it cooks"));
+    return std::unexpected(
+      refuse(std::string { request_codes::kVirtualPathMissing },
+        "The job names no virtual_path for the asset it cooks"));
   }
   if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path)) {
     return std::unexpected(refuse(oxygen::content::to_string(*error),

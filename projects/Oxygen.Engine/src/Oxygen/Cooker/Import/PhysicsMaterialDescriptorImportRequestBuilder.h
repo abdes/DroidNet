@@ -8,8 +8,9 @@
 
 #include <memory>
 #include <optional>
-#include <ostream>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -19,7 +20,7 @@ namespace oxygen::content::import::internal {
 //! Build a normalized `ImportRequest` for physics material descriptors.
 OXGN_COOK_API auto BuildPhysicsMaterialDescriptorRequest(
   const PhysicsMaterialDescriptorImportSettings& settings,
-  std::ostream& error_stream,
+  std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 

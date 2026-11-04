@@ -8,14 +8,16 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -23,6 +25,10 @@
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using oxygen::ColorSpace;
 using oxygen::content::import::ImportManifest;
@@ -67,12 +73,12 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       }),
     },
   };
-  std::ostringstream errors;
+  std::vector<ImportDiagnostic> errors;
   const auto manifest
     = ImportManifest::Parse(manifest_json.dump(), root, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   const auto requests = manifest->BuildRequests(errors);
-  ASSERT_EQ(requests.size(), 2U) << errors.str();
+  ASSERT_EQ(requests.size(), 2U) << DiagnosticSummary(errors);
   EXPECT_EQ(requests.at(0).source_key, oxygen::data::SourceKey { defaults });
   EXPECT_EQ(requests.at(1).source_key, oxygen::data::SourceKey { job_key });
 }
@@ -122,14 +128,14 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
     })";
   WriteText(manifest_path, manifest_json);
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path,
     (root / "Textures" / "images" / "brick_nrm.png").lexically_normal());
@@ -165,11 +171,10 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 NOLINT_TEST(ImportManifestTextureDescriptorTest,
@@ -201,16 +206,16 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
-  ASSERT_HAS_VALUE(manifest) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(request_errors.str(),
-    ::testing::HasSubstr("texture.descriptor.schema_validation_failed"));
+  EXPECT_THAT(request_errors,
+    HasDiagnostic("texture.descriptor.schema_validation_failed"));
 }
 
 } // namespace

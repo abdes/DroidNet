@@ -13,7 +13,6 @@
 #include <limits>
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <ranges>
 #include <span>
 #include <string>
@@ -49,7 +48,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportSettings.h>
@@ -1164,6 +1162,10 @@ namespace {
     const auto& job = model_record ? model_job : entry;
 
     auto manifest_job = MakeJobFromDefaults(manifest);
+    manifest_job.origin = ImportManifestJobOrigin {
+      .source_path = findings.source_path,
+      .index = index,
+    };
     if (!ReadSourceKey(job, job_ptr, manifest_job.source_key, findings)) {
       return std::nullopt;
     }
@@ -1184,24 +1186,6 @@ namespace {
     manifest_job.gltf.model_record = std::move(model_record);
     ResolveCookedRootsRelativeToManifest(manifest_dir, manifest_job);
     return manifest_job;
-  }
-
-  //! Where a job of a loaded manifest or batch was declared.
-  struct JobOrigin final {
-    std::string source_path;
-    std::size_t index = 0;
-  };
-
-  auto MakeOrigins(const std::string& source_path, const std::size_t count)
-    -> std::vector<JobOrigin>
-  {
-    auto origins = std::vector<JobOrigin> {};
-    origins.reserve(count);
-    for (std::size_t index = 0; index < count; ++index) {
-      origins.push_back(
-        JobOrigin { .source_path = source_path, .index = index });
-    }
-    return origins;
   }
 
   //! The jobs of each cycle in `edges`, a job's dependencies by job index: one
@@ -1281,12 +1265,9 @@ namespace {
   //! other in a cycle.
   /*!
    @param jobs The jobs, in order.
-   @param origins Where each job was declared, as `jobs` is ordered: the
-     manifest file and the job's index in its `jobs`.
    @param diagnostics Receives the errors, each at its job's manifest file.
   */
   auto CheckJobGraph(const std::span<const ImportManifestJob> jobs,
-    const std::span<const JobOrigin> origins,
     std::vector<ImportDiagnostic>& diagnostics) -> void
   {
     const auto report
@@ -1296,7 +1277,7 @@ namespace {
         .severity = ImportSeverity::kError,
         .code = std::string { code },
         .message = std::move(message),
-        .source_path = origins[job].source_path,
+        .source_path = jobs[job].origin.source_path,
         .json_pointer = pointer.to_string(),
       });
     };
@@ -1310,15 +1291,15 @@ namespace {
       if (inserted) {
         continue;
       }
-      const auto& other = origins[first->second];
+      const auto& other = jobs[first->second].origin;
       auto where = JobPointer(other.index).to_string();
-      if (other.source_path != origins[job].source_path) {
+      if (other.source_path != jobs[job].origin.source_path) {
         where += " of '" + other.source_path + "'";
       }
       report(job, manifest_codes::kJobIdDuplicate,
         fmt::format(
           "job id '{}' is also the id of the job at {}", jobs[job].id, where),
-        JobPointer(origins[job].index) / "id");
+        JobPointer(jobs[job].origin.index) / "id");
     }
 
     auto edges = std::vector<std::vector<std::size_t>>(jobs.size());
@@ -1327,7 +1308,7 @@ namespace {
       for (std::size_t index = 0; index < depends_on.size(); ++index) {
         const auto& dependency = depends_on[index];
         const auto pointer
-          = JobPointer(origins[job].index) / "depends_on" / index;
+          = JobPointer(jobs[job].origin.index) / "depends_on" / index;
         if (dependency == jobs[job].id) {
           report(job, manifest_codes::kDependencySelf,
             fmt::format("job '{}' depends on itself", dependency), pointer);
@@ -1352,7 +1333,7 @@ namespace {
       }
       report(cycle.front(), manifest_codes::kDependencyCycle,
         fmt::format("jobs form a dependency cycle: {}", ids),
-        JobPointer(origins[cycle.front()].index));
+        JobPointer(jobs[cycle.front()].origin.index));
     }
   }
 
@@ -1496,21 +1477,10 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   if (!manifest.has_value()) {
     return std::nullopt;
   }
-  CheckJobGraph(manifest->jobs, MakeOrigins(source_path, manifest->jobs.size()),
-    diagnostics);
+  CheckJobGraph(manifest->jobs, diagnostics);
   if (HasErrorSince(diagnostics, first_finding)) {
     return std::nullopt;
   }
-  return manifest;
-}
-
-auto ImportManifest::Load(const std::filesystem::path& manifest_path,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  auto diagnostics = std::vector<ImportDiagnostic> {};
-  auto manifest = Load(manifest_path, options, diagnostics);
-  internal::WriteDiagnostics(diagnostics, error_stream);
   return manifest;
 }
 
@@ -1559,8 +1529,6 @@ auto ImportManifest::LoadBatch(
   }
 
   auto batch = std::move(manifests.front());
-  auto origins
-    = MakeOrigins(manifest_paths.front().string(), batch.jobs.size());
   const auto same_job
     = [](const ImportManifestJob& a, const ImportManifestJob& b) -> bool {
     return a.job_type == b.job_type && !a.source_mount_path.empty()
@@ -1570,7 +1538,6 @@ auto ImportManifest::LoadBatch(
   };
   for (std::size_t position = 1; position < manifests.size(); ++position) {
     auto& manifest = manifests[position];
-    const auto source_path = manifest_paths[position].string();
     auto aliases = std::unordered_map<std::string, std::string> {};
     auto added = std::vector<std::size_t> {};
     for (std::size_t index = 0; index < manifest.jobs.size(); ++index) {
@@ -1592,26 +1559,13 @@ auto ImportManifest::LoadBatch(
         }
       }
       batch.jobs.push_back(std::move(job));
-      origins.push_back(
-        JobOrigin { .source_path = source_path, .index = index });
     }
   }
 
-  CheckJobGraph(batch.jobs, origins, diagnostics);
+  CheckJobGraph(batch.jobs, diagnostics);
   if (HasErrorSince(diagnostics, first_finding)) {
     return std::nullopt;
   }
-  return batch;
-}
-
-auto ImportManifest::LoadBatch(
-  const std::span<const std::filesystem::path> manifest_paths,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  auto diagnostics = std::vector<ImportDiagnostic> {};
-  auto batch = LoadBatch(manifest_paths, options, diagnostics);
-  internal::WriteDiagnostics(diagnostics, error_stream);
   return batch;
 }
 
@@ -1631,22 +1585,10 @@ auto ImportManifest::Parse(const std::string_view text,
   if (!manifest.has_value()) {
     return std::nullopt;
   }
-  CheckJobGraph(manifest->jobs, MakeOrigins(source_path, manifest->jobs.size()),
-    diagnostics);
+  CheckJobGraph(manifest->jobs, diagnostics);
   if (HasErrorSince(diagnostics, first_finding)) {
     return std::nullopt;
   }
-  return manifest;
-}
-
-auto ImportManifest::Parse(const std::string_view text,
-  const std::filesystem::path& manifest_directory,
-  const ImportManifestLoadOptions& options, std::ostream& error_stream)
-  -> std::optional<ImportManifest>
-{
-  auto diagnostics = std::vector<ImportDiagnostic> {};
-  auto manifest = Parse(text, manifest_directory, options, diagnostics);
-  internal::WriteDiagnostics(diagnostics, error_stream);
   return manifest;
 }
 
@@ -1714,97 +1656,115 @@ auto ImportManifestJob::SourcePath() const -> std::filesystem::path
   return {};
 }
 
-auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
+namespace {
+
+  //! The request of the job's type, before what every job adds to it.
+  auto BuildRequestOfType(const ImportManifestJob& job,
+    std::vector<ImportDiagnostic>& diagnostics,
+    const std::shared_ptr<const CapturedInputSet>& captured_inputs)
+    -> std::optional<ImportRequest>
+  {
+    const auto& type = job.job_type;
+    if (type == "texture") {
+      return internal::BuildTextureRequest(job.texture, diagnostics);
+    }
+    if (type == "texture-descriptor") {
+      return internal::BuildTextureDescriptorRequest(
+        TextureDescriptorImportSettings {
+          .descriptor_path = job.texture.source_path,
+          .texture = job.texture,
+          .mounts = job.mounts,
+        },
+        diagnostics, captured_inputs);
+    }
+    if (type == "material-descriptor") {
+      return internal::BuildMaterialDescriptorRequest(
+        job.material_descriptor, diagnostics, captured_inputs);
+    }
+    if (type == "physics-material-descriptor") {
+      return internal::BuildPhysicsMaterialDescriptorRequest(
+        job.physics_material_descriptor, diagnostics, captured_inputs);
+    }
+    if (type == "collision-shape-descriptor") {
+      return internal::BuildCollisionShapeDescriptorRequest(
+        job.collision_shape_descriptor, diagnostics, captured_inputs);
+    }
+    if (type == "buffer-container") {
+      CHECK_NOTNULL_F(
+        job.mounts.get(), "A manifest job carries its mount table");
+      return internal::BuildBufferContainerRequest(job.buffer_container,
+        BufferContainerIdentity(job.virtual_path, job.source_mount_path),
+        *job.mounts, diagnostics, captured_inputs);
+    }
+    if (type == "geometry-descriptor") {
+      CHECK_NOTNULL_F(
+        job.mounts.get(), "A manifest job carries its mount table");
+      return internal::BuildGeometryDescriptorRequest(job.geometry_descriptor,
+        job.virtual_path, *job.mounts, diagnostics, captured_inputs);
+    }
+    if (type == "scene-descriptor") {
+      return internal::BuildSceneDescriptorRequest(
+        job.scene_descriptor, diagnostics, captured_inputs);
+    }
+    if (type == "fbx") {
+      return internal::BuildSceneRequest(
+        job.fbx, ImportFormat::kFbx, diagnostics, captured_inputs);
+    }
+    if (type == "gltf") {
+      return internal::BuildSceneRequest(
+        job.gltf, ImportFormat::kGltf, diagnostics, captured_inputs);
+    }
+    if (type == "script") {
+      return internal::BuildScriptAssetRequest(job.script, diagnostics);
+    }
+    if (type == "script-sidecar") {
+      return internal::BuildScriptingSidecarRequest(
+        job.scripting_sidecar, diagnostics);
+    }
+    if (type == "physics-sidecar") {
+      return internal::BuildPhysicsSidecarRequest(
+        job.physics_sidecar, diagnostics);
+    }
+    // The manifest schema states the job types.
+    CHECK_F(type == "input", "Unknown job type '{}'", type);
+    return internal::BuildInputImportRequest(job.input, diagnostics);
+  }
+
+} // namespace
+
+auto ImportManifestJob::BuildRequest(std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs) const
   -> std::optional<ImportRequest>
 {
-  const auto AttachOrchestration =
-    [&](std::optional<ImportRequest> request) -> std::optional<ImportRequest> {
-    if (!request.has_value()) {
-      return std::nullopt;
-    }
-    request->asset_virtual_path = virtual_path;
-    request->captured_inputs = captured_inputs;
-    request->source_key = source_key;
-    request->source_mount_path = source_mount_path;
-    request->source_mounts = mounts;
-    if (!id.empty()) {
-      request->orchestration = ImportRequest::OrchestrationMetadata {
-        .job_id = id,
-        .depends_on = depends_on,
-      };
-    }
-    return request;
-  };
+  const auto first_refusal = diagnostics.size();
+  auto request = BuildRequestOfType(*this, diagnostics, captured_inputs);
+  if (!request.has_value()) {
+    LocateSettingsDiagnostics(std::span(diagnostics).subspan(first_refusal));
+    return std::nullopt;
+  }
+  request->asset_virtual_path = virtual_path;
+  request->captured_inputs = std::move(captured_inputs);
+  request->source_key = source_key;
+  request->source_mount_path = source_mount_path;
+  request->source_mounts = mounts;
+  if (!id.empty()) {
+    request->orchestration = ImportRequest::OrchestrationMetadata {
+      .job_id = id,
+      .depends_on = depends_on,
+    };
+  }
+  return request;
+}
 
-  if (job_type == "texture") {
-    return AttachOrchestration(
-      internal::BuildTextureRequest(texture, error_stream));
+auto ImportManifestJob::LocateSettingsDiagnostics(
+  const std::span<ImportDiagnostic> diagnostics) const -> void
+{
+  for (auto& diagnostic : diagnostics) {
+    if (diagnostic.source_path.empty()) {
+      diagnostic.source_path = origin.source_path;
+      diagnostic.json_pointer.insert(0, JobPointer(origin.index).to_string());
+    }
   }
-  if (job_type == "texture-descriptor") {
-    return AttachOrchestration(internal::BuildTextureDescriptorRequest(
-      TextureDescriptorImportSettings {
-        .descriptor_path = texture.source_path,
-        .texture = texture,
-        .mounts = mounts,
-      },
-      error_stream, captured_inputs));
-  }
-  if (job_type == "material-descriptor") {
-    return AttachOrchestration(internal::BuildMaterialDescriptorRequest(
-      material_descriptor, error_stream, captured_inputs));
-  }
-  if (job_type == "physics-material-descriptor") {
-    return AttachOrchestration(internal::BuildPhysicsMaterialDescriptorRequest(
-      physics_material_descriptor, error_stream, captured_inputs));
-  }
-  if (job_type == "collision-shape-descriptor") {
-    return AttachOrchestration(internal::BuildCollisionShapeDescriptorRequest(
-      collision_shape_descriptor, error_stream, captured_inputs));
-  }
-  if (job_type == "buffer-container") {
-    CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");
-    return AttachOrchestration(
-      internal::BuildBufferContainerRequest(buffer_container,
-        BufferContainerIdentity(virtual_path, source_mount_path), *mounts,
-        error_stream, captured_inputs));
-  }
-  if (job_type == "geometry-descriptor") {
-    CHECK_NOTNULL_F(mounts.get(), "A manifest job carries its mount table");
-    return AttachOrchestration(
-      internal::BuildGeometryDescriptorRequest(geometry_descriptor,
-        virtual_path, *mounts, error_stream, captured_inputs));
-  }
-  if (job_type == "scene-descriptor") {
-    return AttachOrchestration(internal::BuildSceneDescriptorRequest(
-      scene_descriptor, error_stream, captured_inputs));
-  }
-  if (job_type == "fbx") {
-    return AttachOrchestration(internal::BuildSceneRequest(
-      fbx, ImportFormat::kFbx, error_stream, captured_inputs));
-  }
-  if (job_type == "gltf") {
-    return AttachOrchestration(internal::BuildSceneRequest(
-      gltf, ImportFormat::kGltf, error_stream, captured_inputs));
-  }
-  if (job_type == "script") {
-    return AttachOrchestration(
-      internal::BuildScriptAssetRequest(script, error_stream));
-  }
-  if (job_type == "script-sidecar") {
-    return AttachOrchestration(
-      internal::BuildScriptingSidecarRequest(scripting_sidecar, error_stream));
-  }
-  if (job_type == "physics-sidecar") {
-    return AttachOrchestration(
-      internal::BuildPhysicsSidecarRequest(physics_sidecar, error_stream));
-  }
-  if (job_type == "input") {
-    return AttachOrchestration(
-      internal::BuildInputImportRequest(input, id, depends_on, error_stream));
-  }
-  error_stream << "ERROR: unknown job_type: " << job_type << "\n";
-  return std::nullopt;
 }
 
 auto ImportManifest::AddBaseCookedContextRoots(
@@ -1827,14 +1787,14 @@ auto ImportManifest::AddBaseCookedContextRoots(
   }
 }
 
-auto ImportManifest::BuildRequests(std::ostream& error_stream,
+auto ImportManifest::BuildRequests(std::vector<ImportDiagnostic>& diagnostics,
   const std::shared_ptr<const CapturedInputSet>& captured_inputs) const
   -> std::vector<ImportRequest>
 {
   std::vector<ImportRequest> requests;
   requests.reserve(jobs.size());
   for (const auto& job : jobs) {
-    if (auto request = job.BuildRequest(error_stream, captured_inputs)) {
+    if (auto request = job.BuildRequest(diagnostics, captured_inputs)) {
       requests.push_back(std::move(*request));
     }
   }

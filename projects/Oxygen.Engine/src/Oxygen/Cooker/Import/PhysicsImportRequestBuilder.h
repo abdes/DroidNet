@@ -7,8 +7,9 @@
 #pragma once
 
 #include <optional>
-#include <ostream>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -17,7 +18,7 @@ namespace oxygen::content::import::internal {
 
 //! Build a normalized `ImportRequest` for scene physics sidecar import.
 OXGN_COOK_API auto BuildPhysicsSidecarRequest(
-  const PhysicsSidecarImportSettings& settings, std::ostream& error_stream)
-  -> std::optional<ImportRequest>;
+  const PhysicsSidecarImportSettings& settings,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportRequest>;
 
 } // namespace oxygen::content::import::internal

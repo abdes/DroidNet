@@ -9,7 +9,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <filesystem>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -18,8 +17,10 @@
 
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/EngineContent.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -28,6 +29,10 @@
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::GetEngineShapes;
@@ -154,19 +159,19 @@ NOLINT_TEST_F(EngineContentTest, ManifestsLoadOnlyAsTheEngineContentBuild)
   const auto mounts_file = LoadJson(TempDir() / ".mounts.json");
 
   // Act
-  auto engine_errors = std::ostringstream {};
+  auto engine_errors = std::vector<ImportDiagnostic> {};
   const auto engine = ImportManifest::Load(manifests.geometry,
     ImportManifestLoadOptions { .owner = MountTableOwner::kEngineContent },
     engine_errors);
-  auto project_errors = std::ostringstream {};
+  auto project_errors = std::vector<ImportDiagnostic> {};
   const auto project
     = ImportManifest::Load(manifests.geometry, {}, project_errors);
 
   // Assert
   EXPECT_EQ(mounts_file, (json { { "version", 1 }, { "root", true } }));
-  EXPECT_TRUE(engine.has_value()) << engine_errors.str();
+  EXPECT_TRUE(engine.has_value()) << DiagnosticSummary(engine_errors);
   EXPECT_FALSE(project.has_value());
-  EXPECT_THAT(project_errors.str(), testing::HasSubstr("mount.name_invalid"));
+  EXPECT_THAT(project_errors, HasDiagnostic("mount.name_invalid"));
 }
 
 } // namespace

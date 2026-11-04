@@ -8,20 +8,25 @@
 
 #include <filesystem>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/SceneDescriptorTestData.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
 
 namespace {
+
+using oxygen::content::import::ImportDiagnostic;
+using oxygen::cooker::test::DiagnosticSummary;
+using oxygen::cooker::test::HasDiagnostic;
 
 using nlohmann::json;
 using oxygen::content::import::ImportManifest;
@@ -50,16 +55,16 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
        "virtual_path":"/Cooked/Scenes/High.oscene",
        "cooked_context_roots":["Libraries/High","out"]}
     ]})");
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   const auto inherited = manifest->jobs.at(0).BuildRequest(errors);
   const auto overridden = manifest->jobs.at(1).BuildRequest(errors);
   ASSERT_HAS_VALUE(inherited)
-    << "Expected inherited to contain a value" << errors.str();
+    << "Expected inherited to contain a value" << DiagnosticSummary(errors);
   ASSERT_HAS_VALUE(overridden)
-    << "Expected overridden to contain a value" << errors.str();
+    << "Expected overridden to contain a value" << DiagnosticSummary(errors);
   ASSERT_EQ(inherited->cooked_context_roots.size(), 1U);
   EXPECT_EQ(inherited->cooked_context_roots.at(0), root / "Libraries/Low");
   ASSERT_EQ(overridden->cooked_context_roots.size(), 2U);
@@ -88,10 +93,10 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
        "virtual_path":"/Cooked/Scenes/Named.oscene",
        "cooked_context_roots":["Libraries/High"]}
     ]})");
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   auto manifest = ImportManifest::Load(path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   const auto engine = temp.Path() / "engine.pak";
 
   // Act
@@ -101,9 +106,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
   const auto plain = manifest->jobs.at(0).BuildRequest(errors);
   const auto named = manifest->jobs.at(1).BuildRequest(errors);
   ASSERT_HAS_VALUE(plain) << "Expected plain to contain a value"
-                          << errors.str();
+                          << DiagnosticSummary(errors);
   ASSERT_HAS_VALUE(named) << "Expected named to contain a value"
-                          << errors.str();
+                          << DiagnosticSummary(errors);
   EXPECT_EQ(
     plain->cooked_context_roots, std::vector<std::filesystem::path> { engine });
   EXPECT_EQ(named->cooked_context_roots,
@@ -133,9 +138,9 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
       },
     };
     WriteText(path, document.dump());
-    auto errors = std::ostringstream {};
+    auto errors = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(ImportManifest::Load(path, {}, errors).has_value());
-    EXPECT_FALSE(errors.str().empty());
+    EXPECT_FALSE(errors.empty());
   }
 }
 
@@ -180,16 +185,16 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
     })";
   WriteText(manifest_path, manifest_json);
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << request_errors.str();
+  ASSERT_HAS_VALUE(request) << "Expected request to contain a value"
+                            << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
@@ -240,19 +245,19 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   ASSERT_HAS_VALUE(manifest)
-    << "Expected manifest to contain a value" << errors.str();
+    << "Expected manifest to contain a value" << DiagnosticSummary(errors);
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "scene.demo");
   ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
   EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "geo.cube");
 
-  auto request_errors = std::ostringstream {};
+  auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_HAS_VALUE(request)
-    << "Expected request to contain a value" << request_errors.str();
+  ASSERT_HAS_VALUE(request) << "Expected request to contain a value"
+                            << DiagnosticSummary(request_errors);
   ASSERT_HAS_VALUE(request->orchestration)
     << "Expected request->orchestration to contain a value";
   EXPECT_EQ(request->orchestration->job_id, "scene.demo");
@@ -279,11 +284,10 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
       ]
     })");
 
-  auto errors = std::ostringstream {};
+  auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(
-    errors.str(), ::testing::HasSubstr("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
 }
 
 } // namespace

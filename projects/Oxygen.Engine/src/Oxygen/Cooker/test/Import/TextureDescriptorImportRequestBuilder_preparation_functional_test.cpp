@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Testing/GTest.h>
@@ -62,8 +63,28 @@ NOLINT_TEST(TextureDescriptorPreparationTest,
   std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
   EXPECT_FALSE(settings.Prepare(R"({"source":"image.png"})", diagnostics));
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.recipe_invalid");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::request_codes::kOptionInvalid);
+  EXPECT_EQ(diagnostics.front().source_path, "texture.json");
   EXPECT_THAT(diagnostics.front().message, ::testing::HasSubstr("preset"));
+}
+
+//! The one rule across fields a descriptor can break is located in it.
+NOLINT_TEST(TextureDescriptorImportSettingsPreparationTest,
+  LocatesTheBc7RuleInTheDescriptor)
+{
+  const ScopedTempDir temp;
+  TextureDescriptorImportSettings settings;
+  settings.descriptor_path = "texture.json";
+  settings.mounts = ContentMountTable(temp.Path());
+  std::vector<oxygen::content::import::ImportDiagnostic> diagnostics;
+  EXPECT_FALSE(settings.Prepare(
+    R"({"source":"image.png","output":{"format":"rgba8","bc7_quality":"high"}})",
+    diagnostics));
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::request_codes::kBc7QualityNeedsBc7Format);
+  EXPECT_EQ(diagnostics.front().json_pointer, "/output/bc7_quality");
 }
 
 } // namespace

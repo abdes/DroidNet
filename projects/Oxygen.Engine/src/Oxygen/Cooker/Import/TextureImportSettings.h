@@ -8,10 +8,10 @@
 
 #include <cstdint>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/api_export.h>
 
@@ -27,7 +27,7 @@ struct TextureSourceMapping {
 struct TextureImportSettings {
   //! Interpret source mappings and texture options without a cooked
   //! destination.
-  OXGN_COOK_NDAPI auto Prepare(std::ostream& error_stream) const
+  OXGN_COOK_NDAPI auto Prepare(std::vector<ImportDiagnostic>& diagnostics) const
     -> std::optional<ImportRequest>;
 
   std::string source_path;

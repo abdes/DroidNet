@@ -8,10 +8,11 @@
 
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -25,7 +26,7 @@ namespace oxygen::content::import::internal {
 */
 OXGN_COOK_API auto BuildGeometryDescriptorRequest(
   const GeometryDescriptorImportSettings& settings, std::string_view identity,
-  const MountTable& mounts, std::ostream& error_stream,
+  const MountTable& mounts, std::vector<ImportDiagnostic>& diagnostics,
   std::shared_ptr<const CapturedInputSet> captured_inputs = {})
   -> std::optional<ImportRequest>;
 

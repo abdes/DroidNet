@@ -9,7 +9,6 @@
 #include <expected>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -23,7 +22,9 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -326,13 +327,10 @@ auto TextureCommand::Execute() -> std::expected<void, std::error_code>
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
 
-  std::ostringstream err;
-  auto request = internal::BuildTextureRequest(settings, err);
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  auto request = internal::BuildTextureRequest(settings, diagnostics);
   if (!request.has_value()) {
-    const auto msg = err.str();
-    if (!msg.empty()) {
-      writer->Error(msg);
-    }
+    writer->Error(internal::FormatDiagnostics(diagnostics));
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   const auto mounts = ResolveSourceMounts(mount_options_, writer);

@@ -8,13 +8,15 @@
 
 #include <ostream>
 #include <span>
+#include <sstream>
+#include <string>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 
 namespace oxygen::content::import::internal {
 
 //! Writes each diagnostic as one `SEVERITY [code]: message (at 'pointer')`
-//! line, the form request builders and manifest loading report on a stream.
+//! line, the form a command line reports typed diagnostics in.
 inline auto WriteDiagnostics(
   const std::span<const ImportDiagnostic> diagnostics, std::ostream& errors)
   -> void
@@ -37,6 +39,15 @@ inline auto WriteDiagnostics(
     }
     errors << "\n";
   }
+}
+
+//! The text `WriteDiagnostics` writes, for a caller that reports a message.
+inline auto FormatDiagnostics(
+  const std::span<const ImportDiagnostic> diagnostics) -> std::string
+{
+  auto text = std::ostringstream {};
+  WriteDiagnostics(diagnostics, text);
+  return text.str();
 }
 
 } // namespace oxygen::content::import::internal
