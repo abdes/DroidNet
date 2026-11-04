@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-03
+Last updated: 2026-11-04
 
 This plan implements the [proposal](README.md) as specified by the
 [design](design.md). It orders the work into slices, says what each slice
@@ -15,6 +15,7 @@ ledger: every old form found in the code, with the slice that removes it.
 - [Rules for every slice](#rules-for-every-slice)
 - [Order](#order)
 - [Slices](#slices)
+- [What R16 leaves for the editor](#what-r16-leaves-for-the-editor)
 - [Debt ledger](#debt-ledger)
 - [Test impact](#test-impact)
 - [Commits](#commits)
@@ -128,9 +129,11 @@ work. They change no editor code; editor work they require is a task of the
 editor slice named in their rows. The engine slice S2 of review set R6,
 [loose root publication](../cooked-sources/root-publication.md), lands and is
 installed before S7: its loose index version 9 is the one the editor slices
-consume. S6f takes the engine share of S19 to S21, so
-from S7 on every slice is editor or interop work and touches the engine only
-incidentally.
+consume. Review set R16, the tool command lines and SDK contracts, lands and is
+installed before S7 too: it changed the reports the editor reads and left the
+work in [what R16 leaves for the editor](#what-r16-leaves-for-the-editor). S6f
+takes the engine share of S19 to S21, so from S7 on every slice is editor or
+interop work and touches the engine only incidentally.
 
 ## Slices
 
@@ -466,9 +469,30 @@ of its own, and the sweep finds no old form in the engine tree. Tests: the
 `test_showcase.py` and preset tooling tests, the moved descriptor tests, the
 builders' hardening tests.
 
+### What R16 leaves for the editor
+
+R16 keeps the editor's readers, schemas and fixtures in step with each engine
+contract it changes, but engine slices do not wait for editor tests, so none of
+those edits has been built or run. Each item below belongs to the slice named.
+
+| Item                  | What the engine now does                                                                                                                                                                            | What the editor still does                                                                                                                                                                                                                                                            | Slice |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| First build           | Import report 6, dependency report 4, geometry and script reports 2, inventory report 2; `oxygen.import-report.schema.json` installed; editor overlays moved to `Oxygen.Editor.Schemas/src/Schemas` | Build `ContentPipeline` and `Schemas` against the R16 SDK and pass their lanes: the embedded import report schema, the overlay `Content` items, `EditorSchemaOverlayTests` reading the output's `Schemas` folder, and the updated readers and fixtures                                | S7    |
+| Version keys          | R16 S4 gives every versioned format one required integer `schema_version`, and refuses the old key with a typed code                                                                                | R16 S4 migrates the editor's writers, readers and fixtures with the engine, unbuilt. S7 builds them with the rest; S19's tool writes the new key                                                                                                                                      | S7    |
+| Inventory reasons     | A writer's file no commit lists is the issue `uncommitted`, and bytes past a data file's committed length are `uncommitted_tail`. A mount accepts both; a root to publish holds neither             | `NativeInventoryFixture` can report both. `CookRootRepair` and `CookProvenance` count them as shared damage that no repair covers, so a crash's leftovers would block the root. Delete them as the next writer does, and refuse them only when publishing                             | S10   |
+| Job status            | A job is `succeeded`, `failed`, `skipped`, `cancelled` or `not_submitted`; the process exits 0 ok, 1 refused, 2 failed, 3 stopped, 4 tool defect                                                    | `NativeImportReportReader` folds every status but `succeeded` into failure, and `NativeImportResult` has only `Succeeded`, so a stopped run reads as a failed one with no error. Carry the outcome, and show a tool defect (4) as a defect, not a content problem                     | S10   |
+| Failed report rows    | `geometries` and `scripts` write a row with a `diagnostic` for an asset they cannot read, keep the other rows, and exit 2                                                                           | `RunInspectorAsync` drops the report on any non-zero exit, and `CookedGeometryReport` and `CookedScriptReport` refuse a report with `complete` false, so one bad asset fails the whole query with the tool's stderr. Read the rows, and report the failure against the asset it names | S10   |
+| Inspector refusals    | A cooked root that does not exist exits 1; one that exists and does not read exits 2. The dependency report has no per-asset failure: a corrupt root fails the command                              | `CookedLibraryReadSet` lost `asset_cook.library_inspection_failed` with the row fields. Check that a library that is missing and one that is corrupt each reach the consumer as a located diagnostic, not an escaping `InvalidDataException`                                          | S10   |
+| Old dependency caches | The report is version 4, so the cache folder is `cooked-dependencies-v4`                                                                                                                            | `.build/cache/cooked-dependencies-v3` stays orphaned in existing projects. S19's tool deletes it                                                                                                                                                                                      | S19   |
+
+The editor's own cancel stays a hard kill (`TerminateJobObject`): it writes no
+report, and the root stays at its last commit, so the items above are about runs
+that end by themselves or by a signal from outside.
+
 ### S7. Editor formats
 
-Requires the S3 SDK install. Deletes: `IdentityField`, `TextureSource.VirtualPath`,
+Requires the S3 and R16 SDK installs, and does the first two rows of
+[what R16 leaves for the editor](#what-r16-leaves-for-the-editor). Deletes: `IdentityField`, `TextureSource.VirtualPath`,
 `TextureSourceCodes.VirtualPathInvalid`, `Path.IsPathRooted` image resolution,
 `InputActionReference.IsPath`. Adds: identity parameters on every reader and
 writer, `IFileReferenceLocator`, the record suffix in `AssetFileTypes`
@@ -480,7 +504,7 @@ and accepts only a zero digest for resource data files; it, `CookedIndexSnapshot
 `.leases` as reserved, and retired files as listed;
 `TextureDescriptorFile` reads version 2 with the 63-byte row, and
 `NativeInventoryFixture` lists data files without a digest and reports the
-`resource_*` reasons.
+`resource_*` and `uncommitted*` reasons.
 
 The 10 production reader call sites and `AuthoredReferenceFormat`'s identity
 field use are changed in this slice so it compiles; their behaviour change is
@@ -530,8 +554,14 @@ shortcut in `ReferenceCheck`, `.build/references.json` version 1. Adds: model
 cook input from the record, manifests with `Cooked` mounts, analysis
 diagnostics with written, resolved and looked-up forms, library-aware
 reference check, `reference.into_project_mount`, `references.json` version 2.
+Also does the inventory reasons, job status, failed report rows and Inspector
+refusals rows of [what R16 leaves for the editor](#what-r16-leaves-for-the-editor).
 
-Unit and functional tests: `CookPathsTests`, `ContentCookAssetKindsTests`,
+Unit and functional tests: the import report reader for each status and exit
+code, the inventory report and repair decision for a root with uncommitted
+files, the geometry and script report readers for a failed row, a missing and a
+corrupt library through `CookedLibraryReadSet`, `CookPathsTests`,
+`ContentCookAssetKindsTests`,
 `ReferenceCheck` over a fake library catalog, `CookSourceAnalyzer` texture
 diagnostics with a fake project, `SceneDescriptorGenerator` spelling as a pure
 function over a scene model, `CookIncrementalPlanner` reuse of an unchanged
@@ -607,7 +637,9 @@ each raises, for the owner's decision. Added to `design.md`.
 ### S19. Migration and studio example
 
 Writes `tooling/migrations/portable_references/` with unit tests over in-memory
-project trees for every rule of the design's migration table. Runs it on
+project trees for every rule of the design's migration table, plus R16's: the
+`schema_version` key in every authored file it rewrites, and the orphaned
+`.build/cache/cooked-dependencies-v3` folder deleted. Runs it on
 every project in `Oxygen Projects`, libraries first; reviews each report;
 fixes F1's two `.cooked` references by hand. Makes Showcase, whose mount S6f
 renamed, a library project with project schema version 3. Adds
@@ -715,6 +747,10 @@ done only when its rows are gone from the code.
 | `LocalLibrary`/`PakLibrary` split, binary unavailable state                   | `ContentMountKind`, `UnavailableMountTreeItemAdapter`, `PakMountTreeItemAdapter`                                                                                   | S14          |
 | Library roots named by the declared mount, unchecked                          | `CookedLibraryReadSet.cs:440`                                                                                                                                      | S8           |
 | Project schema version 2                                                      | `ProjectInfo`                                                                                                                                                      | S8, S19      |
+| Every job status but `succeeded` read as failure; exit codes unread           | `NativeImportReportReader`, `NativeImportResult`, `ImportToolContentPipelineApi`                                                                                   | S10          |
+| A writer's leftovers treated as damage no repair covers                       | `CookRootRepair`, `CookProvenance`, `CookedInventoryReport.IsValid`                                                                                                | S10          |
+| A report with one failed row dropped whole                                    | `RunInspectorAsync`, `CookedGeometryReport`, `CookedScriptReport`                                                                                                  | S10          |
+| Orphaned dependency cache folder                                              | `.build/cache/cooked-dependencies-v3` in existing projects                                                                                                         | S19          |
 | ~20 "Unit" test classes on temp disk or processes                             | ContentPipeline `tests/Unit`                                                                                                                                       | S1           |
 | Three model record test writers, 16 hand-rolled record sites                  | ContentPipeline, Assets, ContentExplorer, ModelEditor, Scenes tests                                                                                                | S1, S20      |
 
