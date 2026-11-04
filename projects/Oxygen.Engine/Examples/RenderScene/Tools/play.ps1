@@ -8,6 +8,8 @@ Writes a launch file that mounts the cooked examples (RenderScene's
 .cooked/Showcase) and binds the examples project's source mounts, so editing a scene's script reloads it
 while playing, then runs Oxygen.Player with it. The scene is
 /Showcase/Scenes/<Example>/<Scene>.oscene; cook the example first (Tools/cook).
+The player has no physics, so a scene's physics sidecar does not run: load such
+a scene in RenderScene.
 
 Player options follow the example and the scene, after `--` or directly (a
 PowerShell prompt consumes `--` itself): the first argument that is not a

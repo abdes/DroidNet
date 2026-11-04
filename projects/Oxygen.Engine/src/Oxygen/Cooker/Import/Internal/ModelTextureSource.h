@@ -134,8 +134,11 @@ struct ModelTexturePreparation final {
  source key, so analysis and production assign the same names: `a/diffuse.png`
  and `b/diffuse.png` become `diffuse` and `diffuse_1`, and one image used as
  base color and as normal map gives `Paint.base_color` and `Paint.normal`.
+ Images that take another's name warn (`import.name_collision`).
 */
-inline auto NameModelTextures(std::span<ModelTextureSource> sources) -> void
+inline auto NameModelTextures(std::span<ModelTextureSource> sources,
+  const std::string_view source_id, std::vector<ImportDiagnostic>& diagnostics)
+  -> void
 {
   auto naming = NamingService {};
   auto names = std::map<std::string, std::string, std::less<>> {};
@@ -150,12 +153,17 @@ inline auto NameModelTextures(std::span<ModelTextureSource> sources) -> void
     }
     source.name = it->second + "." + source.usage;
   }
+  for (auto& warning : naming.CollisionWarnings(source_id)) {
+    diagnostics.push_back(std::move(warning));
+  }
 }
 
 //! Applies the import's texture settings to named textures.
 /*!
  A texture takes the override its name keys in `texture_overrides`, else the
- job's settings. The maximum size and the green flip of normal maps apply
+ job's settings. What a material's use of the texture implies, its intent and
+ color space, holds unless the settings state another. The maximum size, the
+ green flip of normal maps, the HDR settings and normal renormalization apply
  whether or not the settings enable the other cooking choices; color textures
  (albedo and emissive) take the color output format, the others the data one.
  A normal map is flipped to the engine's green-down convention when its source
@@ -171,7 +179,17 @@ inline auto TuneModelTextures(
       ? it->second
       : options.texture_tuning;
     auto& desc = source.desc;
+    if (tuning.intent_stated) {
+      desc.intent = tuning.intent;
+    }
+    if (tuning.source_color_space_stated) {
+      desc.source_color_space = tuning.source_color_space;
+    }
     desc.max_size = tuning.max_size;
+    desc.renormalize_normals_in_mips = tuning.renormalize_normals_in_mips;
+    desc.hdr_handling = tuning.hdr_handling;
+    desc.exposure_ev = tuning.exposure_ev;
+    desc.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
     if (desc.intent == TextureIntent::kNormalTS) {
       desc.flip_normal_green
         = source.normal_maps_green_up != tuning.flip_normal_green;

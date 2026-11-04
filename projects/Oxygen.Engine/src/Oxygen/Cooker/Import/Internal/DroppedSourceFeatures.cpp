@@ -20,6 +20,7 @@
 
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
@@ -91,6 +92,11 @@ namespace {
     return property != nullptr
       && (static_cast<uint32_t>(property->flags) & kNotAuthored) == 0U;
   }
+
+  //! What a skinned mesh's import keeps and what it lacks.
+  constexpr auto kNoSkeleton
+    = "Skin weights import with the geometry, but a model scene holds no "
+      "skeleton to drive them; skinned geometry shows its bind pose.";
 
   //! Extensions the glTF adapter reads.
   constexpr auto kReadExtensions = std::to_array<std::string_view>({
@@ -168,17 +174,24 @@ namespace {
       Drop(present, std::move(message), source_path, object_path, diagnostics,
         name);
     };
-    const auto core_textures = std::array {
+    // Every texture the material format holds.
+    const auto imported_textures = std::array {
       &material.pbr_metallic_roughness.base_color_texture,
       &material.pbr_metallic_roughness.metallic_roughness_texture,
       &material.normal_texture,
       &material.occlusion_texture,
       &material.emissive_texture,
+      &material.specular.specular_texture,
+      &material.sheen.sheen_color_texture,
+      &material.clearcoat.clearcoat_texture,
+      &material.clearcoat.clearcoat_normal_texture,
+      &material.transmission.transmission_texture,
+      &material.volume.thickness_texture,
     };
     auto coordinates = std::optional<TextureCoordinates> {};
     auto conflicting = false;
     auto custom_sampling = false;
-    for (const auto* view : core_textures) {
+    for (const auto* view : imported_textures) {
       if (view->texture == nullptr) {
         continue;
       }
@@ -274,9 +287,8 @@ auto ReportDroppedSourceFeatures(const cgltf_data& source,
   Drop(source.animations_count != 0U,
     "Animations are not imported; the model imports in its rest pose.",
     source_path, "/animations", diagnostics);
-  Drop(source.skins_count != 0U,
-    "Skins are not imported; skinned geometry imports in its bind pose.",
-    source_path, "/skins", diagnostics);
+  Drop(
+    source.skins_count != 0U, kNoSkeleton, source_path, "/skins", diagnostics);
   Drop(source.variants_count != 0U,
     "Material variants are not imported; every mesh keeps its default "
     "material.",
@@ -294,6 +306,32 @@ auto ReportDroppedSourceFeatures(const cgltf_data& source,
         diagnostics, NameOf(mesh.name));
     }
   }
+  for (const auto& [mesh_index, mesh] :
+    std::views::enumerate(std::span(source.meshes, source.meshes_count))) {
+    auto extra_joints = false;
+    auto extra_colors = false;
+    for (const auto& primitive :
+      std::span(mesh.primitives, mesh.primitives_count)) {
+      for (const auto& attribute :
+        std::span(primitive.attributes, primitive.attributes_count)) {
+        extra_joints = extra_joints
+          || (attribute.type == cgltf_attribute_type_joints
+            && attribute.index > 0);
+        extra_colors = extra_colors
+          || (attribute.type == cgltf_attribute_type_color
+            && attribute.index > 0);
+      }
+    }
+    const auto path = "/meshes/" + std::to_string(mesh_index);
+    Drop(extra_joints,
+      "Joint sets past the first are not imported; a vertex keeps its first "
+      "four joints.",
+      source_path, path, diagnostics, NameOf(mesh.name));
+    Drop(extra_colors,
+      "Vertex color sets past the first are not imported; the mesh keeps its "
+      "first.",
+      source_path, path, diagnostics, NameOf(mesh.name));
+  }
   for (const auto& [index, material] : std::views::enumerate(
          std::span(source.materials, source.materials_count))) {
     ReportGltfMaterial(material, "/materials/" + std::to_string(index),
@@ -301,29 +339,35 @@ auto ReportDroppedSourceFeatures(const cgltf_data& source,
   }
 }
 
-auto ReportDroppedSourceFeatures(const ufbx_scene& source,
-  const std::string_view source_path,
+auto ReportFbxUnits(const ufbx_scene& source,
+  const UnitNormalizationPolicy policy, const std::string_view source_path,
   std::vector<ImportDiagnostic>& diagnostics) -> void
 {
+  // Only normalizing to meters reads the file's unit.
   const auto& settings = source.settings;
-  if (!std::isfinite(settings.unit_meters) || settings.unit_meters <= 0.0
-    || !HasAuthoredProperty(settings.props, "UnitScaleFactor")) {
+  if (policy == UnitNormalizationPolicy::kNormalizeToMeters
+    && (!std::isfinite(settings.unit_meters) || settings.unit_meters <= 0.0
+      || !HasAuthoredProperty(settings.props, "UnitScaleFactor"))) {
     diagnostics.push_back({
       .severity = ImportSeverity::kWarning,
       .code = std::string(import_codes::kFbxUnitsUnknown),
-      .message = "The FBX file states no unit scale; import assumes "
-                 "centimetres.",
+      .message = "The FBX file states no unit scale; normalizing to meters "
+                 "assumes centimetres.",
       .source_path = std::string(source_path),
       .object_path = "/GlobalSettings",
     });
   }
+}
 
+auto ReportDroppedSourceFeatures(const ufbx_scene& source,
+  const std::string_view source_path,
+  std::vector<ImportDiagnostic>& diagnostics) -> void
+{
   Drop(source.anim_curves.count != 0U,
     "Animations are not imported; the model imports in its rest pose.",
     source_path, "/AnimationCurves", diagnostics);
   Drop(source.skin_deformers.count != 0U || source.bones.count != 0U,
-    "Skins are not imported; skinned geometry imports in its bind pose.",
-    source_path, "/Deformers/Skin", diagnostics);
+    kNoSkeleton, source_path, "/Deformers/Skin", diagnostics);
   Drop(source.blend_deformers.count != 0U || source.blend_shapes.count != 0U,
     "Morph targets are not imported; meshes import in their base shape.",
     source_path, "/Deformers/BlendShape", diagnostics);
@@ -348,23 +392,45 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
     "Curves, NURBS and procedural geometry are not imported; only polygon "
     "meshes import.",
     source_path, "/Geometry", diagnostics);
+  for (const auto* skin :
+    std::span(source.skin_deformers.data, source.skin_deformers.count)) {
+    Drop(skin->max_weights_per_vertex > 4U,
+      "Up to " + std::to_string(skin->max_weights_per_vertex)
+        + " joints weigh a vertex, but only four import; the vertex keeps "
+          "its first four.",
+      source_path, "/Deformers/Skin", diagnostics, NameOf(skin->name));
+  }
+  for (const auto* mesh : std::span(source.meshes.data, source.meshes.count)) {
+    Drop(mesh->uv_sets.count > 1U,
+      "UV sets past the first are not imported; the mesh keeps its first.",
+      source_path, "/Geometry", diagnostics, NameOf(mesh->name));
+    Drop(mesh->color_sets.count > 1U,
+      "Vertex color sets past the first are not imported; the mesh keeps its "
+      "first.",
+      source_path, "/Geometry", diagnostics, NameOf(mesh->name));
+  }
   for (const auto& [index, material] : std::views::enumerate(
          std::span(source.materials.data, source.materials.count))) {
     const auto path = "/Materials/" + std::to_string(index);
     const auto material_name = NameOf(material->name);
     const auto& pbr = material->pbr;
     const auto mapped = adapters::FbxMaterialTextures::From(*material);
-    // A file binds one texture to several channels, such as a legacy FBX
-    // channel and the PBR channel ufbx derives from it. A texture a slot
-    // imports is carried; any other is reported once, at its first channel.
+    // ufbx derives a PBR channel from a legacy FBX one, so a legacy channel
+    // whose texture a slot imports loses nothing. A PBR channel no slot reads
+    // loses its use of the texture even if a slot imports that texture for
+    // another: each is reported, and a texture no channel carries once.
     auto reported = std::set<const ufbx_texture*> {};
     const auto report_maps
       = [&](const auto& maps, const std::string_view group) -> auto {
       for (const auto& [slot_index, map] :
         std::views::enumerate(std::span(maps))) {
-        if (!adapters::FbxTextureSlot::Active(map)
-          || mapped.Carries(*map.texture)
-          || !reported.insert(map.texture).second) {
+        if (!adapters::FbxTextureSlot::Active(map) || mapped.Reads(map)) {
+          continue;
+        }
+        const auto is_derived_alias = group == "fbx"
+          && (mapped.Carries(*map.texture) || reported.contains(map.texture));
+        reported.insert(map.texture);
+        if (is_derived_alias) {
           continue;
         }
         const auto name

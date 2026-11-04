@@ -122,7 +122,8 @@ physics authoring is scheduled.
 ## 3. `Oxygen.Player`
 
 An SDK executable (`bin/Oxygen.Player.exe`) with a window, Vortex, input and
-scripting. It is built on `Oxygen.Host`, and its debug UI (console, command
+scripting, and no physics: it reads no physics sidecar. It is built on
+`Oxygen.Host`, and its debug UI (console, command
 palette, viewport toolbar, Play/Pause/Stop) and its pause and stop behaviour are
 specified in [runtime host and debug UI](runtime-host.md).
 

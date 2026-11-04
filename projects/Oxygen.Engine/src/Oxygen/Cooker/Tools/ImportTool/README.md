@@ -193,11 +193,18 @@ The manifest job and the model import record also hold settings keyed by parts
 of the file, by the names `analyze-sources` reports. They have no command line
 flag:
 
-- `material_remap`: a material's name to the virtual path of an existing
-  material its surfaces use instead; the replaced material is not produced. A
-  target that does not exist warns (`import.material_remap_target_missing`) and
-  the source material is produced.
-- `texture_overrides`: texture settings by texture name, over the job's.
+- `material_remap`: a material's name to a reference to an existing material
+  its surfaces use instead, absolute in another mount or relative to the folder
+  of the model's identity; the replaced material is not produced. A target that
+  does not exist warns (`import.material_remap_target_missing`) and the source
+  material is produced. A target the grammar refuses
+  (`import.reference_invalid`) or in no mounted cooked root
+  (`import.reference_unmounted`) fails the import.
+- `texture_overrides`: texture settings by texture name, over the job's. A
+  texture's use in its material decides its `intent` and `color_space` unless
+  the settings state them, so state them per texture: on the job they apply to
+  every texture of the model. Cube map keys are refused
+  (`import.request.cube_settings_on_model`), since a model's textures are 2D.
 - `geometry_defaults`: by geometry anchor, the asset defaults the geometry
   carries: `lod_policy`, and by surface ID `visible` and `casts_shadows`.
 

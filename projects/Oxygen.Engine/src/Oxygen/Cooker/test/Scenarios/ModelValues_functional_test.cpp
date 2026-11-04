@@ -1925,6 +1925,136 @@ NOLINT_TEST_F(ModelFormatsTest, FbxDecayOtherThanQuadraticWarns)
     import_with("decay_unstated", {}).report, kFbxLightDecayUnsupported));
 }
 
+//! The bytes of what the import cooked as texture data.
+auto TextureBytes(const std::filesystem::path& cooked_root) -> uintmax_t
+{
+  auto bytes = uintmax_t { 0 };
+  const auto folder = cooked_root / "Resources";
+  if (!std::filesystem::exists(folder)) {
+    return bytes;
+  }
+  for (const auto& entry :
+    std::filesystem::recursive_directory_iterator(folder)) {
+    if (entry.is_regular_file()
+      && entry.path().filename().string().starts_with("textures")) {
+      bytes += entry.file_size();
+    }
+  }
+  return bytes;
+}
+
+//! The flags decide what a model import makes, and it makes nothing else: no
+//! texture leaves a material on its values, no material leaves the default
+//! bound, no geometry leaves the recorded surfaces, and no scene the recorded
+//! nodes.
+NOLINT_TEST_F(ModelFormatsTest, ContentFlagsDecideWhatIsMade)
+{
+  using oxygen::content::import::ImportContentFlags;
+  using oxygen::data::AssetType;
+  std::ifstream input(
+    TestModelsDirFromFile() / "static_textured_triangle.gltf");
+  const auto document = nlohmann::json::parse(input);
+  const auto assets_of
+    = [&](const oxygen::content::import::ImportReport& report,
+        const AssetType type) -> size_t {
+    return std::ranges::count_if(LoadInspection(report.cooked_root).Assets(),
+      [&](const auto& entry) -> bool { return entry.type == type; });
+  };
+  const auto import_with = [&](const std::string_view label,
+                             const ImportContentFlags flags) -> auto {
+    const auto root = MakeTempDir(label);
+    const auto source = root / "model.gltf";
+    for (const auto& image : document.at("images")) {
+      const auto file = image.at("uri").get<std::string>();
+      std::filesystem::copy_file(TestModelsDirFromFile() / file, root / file);
+    }
+    {
+      std::ofstream output(source, std::ios::binary);
+      output << document.dump();
+    }
+    auto request = oxygen::content::import::ImportRequest {};
+    request.source_path = source;
+    request.asset_virtual_path = oxygen::cooker::test::ModelVirtualPath(source);
+    request.source_mount_path = oxygen::cooker::test::SourceMountPath(source);
+    request.cooked_root = root / "cooked";
+    request.surface_provenance
+      = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
+        identity_);
+    request.model_import = oxygen::content::import::ModelImportInputs {
+      .node_continuity = {},
+      .published_nodes = { { .anchor = "Kept",
+        .node_id = oxygen::data::NodeId::FromStableIdentity("kept"), }, },
+    };
+    request.options.import_content = flags;
+    const auto report = RunImport(std::move(request)).report;
+    EXPECT_TRUE(report.success) << label;
+    return report;
+  };
+
+  const auto all = import_with("flags_all", ImportContentFlags::kAll);
+  EXPECT_EQ(assets_of(all, AssetType::kMaterial), 1U);
+  EXPECT_EQ(assets_of(all, AssetType::kGeometry), 1U);
+  EXPECT_EQ(assets_of(all, AssetType::kScene), 1U);
+  EXPECT_GT(TextureBytes(all.cooked_root), 0U);
+
+  const auto no_textures = import_with("flags_no_textures",
+    ImportContentFlags::kAll & ~ImportContentFlags::kTextures);
+  EXPECT_EQ(assets_of(no_textures, AssetType::kMaterial), 1U);
+  EXPECT_EQ(TextureBytes(no_textures.cooked_root), 0U);
+  EXPECT_FALSE(Reports(no_textures,
+    oxygen::content::import::import_codes::kMaterialTextureMissing));
+
+  const auto no_materials = import_with("flags_no_materials",
+    ImportContentFlags::kAll & ~ImportContentFlags::kMaterials);
+  EXPECT_EQ(assets_of(no_materials, AssetType::kMaterial), 0U);
+  EXPECT_EQ(assets_of(no_materials, AssetType::kGeometry), 1U);
+  EXPECT_GT(TextureBytes(no_materials.cooked_root), 0U);
+
+  const auto no_geometry = import_with("flags_no_geometry",
+    ImportContentFlags::kAll & ~ImportContentFlags::kGeometry);
+  EXPECT_EQ(assets_of(no_geometry, AssetType::kGeometry), 0U);
+  EXPECT_EQ(assets_of(no_geometry, AssetType::kScene), 1U);
+  EXPECT_EQ(no_geometry.surface_provenance_json,
+    oxygen::content::import::SurfaceProvenance(identity_).Serialize());
+
+  const auto no_scene = import_with(
+    "flags_no_scene", ImportContentFlags::kAll & ~ImportContentFlags::kScene);
+  EXPECT_EQ(assets_of(no_scene, AssetType::kScene), 0U);
+  EXPECT_EQ(assets_of(no_scene, AssetType::kGeometry), 1U);
+  ASSERT_EQ(no_scene.published_nodes.size(), 1U);
+  EXPECT_EQ(no_scene.published_nodes.front().anchor, "Kept");
+}
+
+//! A remap target the grammar refuses, or in no mounted root, fails the import,
+//! which then makes nothing; each has its own code.
+NOLINT_TEST_F(ModelFormatsTest, RefusedRemapTargetsStopTheImport)
+{
+  namespace codes = oxygen::content::import::import_codes;
+  for (const auto& [label, target, code] : {
+         std::tuple { "remap_invalid", "../../..", codes::kReferenceInvalid },
+         std::tuple { "remap_unmounted", "/Elsewhere/Paint.omat",
+           codes::kReferenceUnmounted },
+       }) {
+    SCOPED_TRACE(label);
+    auto request = MakeRequest(label, ModelFormat::kGltf,
+      ParityGltf(TestModelsDirFromFile(),
+        { { .name = "Triangle", .kind = ParityKind::kMesh } })
+        .dump());
+    request.options.material_remap["Scalar"] = target;
+
+    const auto report = RunImport(std::move(request)).report;
+
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(std::ranges::any_of(report.diagnostics,
+      [&](const auto& diagnostic) -> bool {
+        return diagnostic.code == code
+          && diagnostic.object_path == "material_remap/Scalar";
+      }))
+      << code;
+    EXPECT_EQ(report.geometry_written, 0U);
+  }
+}
+
 //! A node with a name of its own keeps its ID, in either format, whatever else
 //! the file adds, removes or reorders.
 NOLINT_TEST_F(ModelFormatsTest, UniqueNamesKeepTheirIdsAcrossFileEdits)

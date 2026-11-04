@@ -253,6 +253,10 @@ namespace {
       TextureIntent::kHeightMap);
     ReadEnum(s, TextureKey("color_space"), t.source_color_space,
       ColorSpace::kLinear, ColorSpace::kSRGB);
+    // A saved value other than the default is one the panel set.
+    t.intent_stated = t.intent != TextureTuning {}.intent;
+    t.source_color_space_stated
+      = t.source_color_space != TextureTuning {}.source_color_space;
     ReadEnum(s, TextureKey("mip_policy"), t.mip_policy, MipPolicy::kNone,
       MipPolicy::kMaxCount);
     Read(s, TextureKey("max_mips"), t.max_mip_levels, 1, 16);

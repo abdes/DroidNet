@@ -1578,7 +1578,9 @@ namespace {
         if (prim.type != cgltf_primitive_type_triangles) {
           result.diagnostics.push_back(
             MakeWarningDiagnostic(std::string(import_codes::kGltfPrimitiveType),
-              "glTF primitive is not a triangle list; the primitive is dropped",
+              "glTF primitive " + std::to_string(prim_i) + " has mode "
+                + std::to_string(static_cast<int>(prim.type))
+                + ", not a triangle list (4); the primitive is dropped",
               input.source_id_prefix, mesh_name));
           continue;
         }
@@ -2828,7 +2830,7 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
   for (auto& [_, item] : work_items) {
     result.sources.push_back(std::move(item));
   }
-  NameModelTextures(result.sources);
+  NameModelTextures(result.sources, input.source_id_prefix, result.diagnostics);
   TuneModelTextures(result.sources, input.request.options);
   return result;
 }

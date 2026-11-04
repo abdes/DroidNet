@@ -26,6 +26,9 @@ public:
   auto Intern(std::span<const data::NodeId> path)
     -> data::pak::world::NodePathIndexT
   {
+    if (path.empty()) {
+      throw std::invalid_argument("A node path names at least one node");
+    }
     auto key = std::vector<data::NodeId>(path.begin(), path.end());
     if (const auto found = index_.find(key); found != index_.end()) {
       return found->second;

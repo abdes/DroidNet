@@ -72,6 +72,10 @@ inline constexpr std::string_view kUnitScaleNeedsCustomPolicy
 inline constexpr std::string_view kBc7QualityNeedsBc7Format
   = "import.request.bc7_quality_needs_bc7_format";
 
+//! Cube map settings on a model job, whose textures are 2D.
+inline constexpr std::string_view kCubeSettingsOnModel
+  = "import.request.cube_settings_on_model";
+
 //! The capture map a batch names is not a valid capture.
 inline constexpr std::string_view kCapturedInputsInvalid
   = "import.request.captured_inputs_invalid";

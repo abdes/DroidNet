@@ -14,6 +14,7 @@
 
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
@@ -527,6 +528,124 @@ NOLINT_TEST(DroppedSourceFeaturesTest, UnmappedScalarFieldsAreReported)
 
   EXPECT_EQ(diagnostics.size(), 2U);
   EXPECT_TRUE(AllDropWarnings(diagnostics));
+}
+
+//! A texture a slot imports may also sit on a channel no slot reads: that use
+//! is lost, and only a legacy channel is an alias of what a slot imports.
+NOLINT_TEST(DroppedSourceFeaturesTest, ATextureOnAnUnreadChannelIsReported)
+{
+  auto shared = FileTexture("Shared");
+  auto material = ufbx_material {};
+  Bind(material.pbr.base_color, shared);
+  Bind(material.fbx.diffuse_color, shared);
+  Bind(material.pbr.opacity, shared);
+
+  EXPECT_EQ(Naming(Report(material), "Shared"), 1);
+}
+
+//! FBX: joints past four and sets past the first are lost, and say so.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxLostInfluencesAndSetsAreReported)
+{
+  auto skin = ufbx_skin_deformer {};
+  skin.max_weights_per_vertex = 6;
+  auto* skin_pointer = &skin;
+  auto mesh = ufbx_mesh {};
+  mesh.uv_sets.count = 2;
+  mesh.color_sets.count = 2;
+  auto* mesh_pointer = &mesh;
+  auto source = ufbx_scene {};
+  source.skin_deformers = { .data = &skin_pointer, .count = 1 };
+  source.meshes = { .data = &mesh_pointer, .count = 1 };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "skin.fbx", diagnostics);
+
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
+  const auto says = [&](const std::string& text) -> bool {
+    return std::ranges::any_of(diagnostics,
+      [&](const auto& issue) -> bool { return issue.message.contains(text); });
+  };
+  EXPECT_TRUE(says("Up to 6 joints"));
+  EXPECT_TRUE(says("UV sets past the first"));
+  EXPECT_TRUE(says("Vertex color sets past the first"));
+  EXPECT_TRUE(says("no skeleton"));
+}
+
+//! glTF: a second joint or colour set is lost, and a skin's weights are kept.
+NOLINT_TEST(DroppedSourceFeaturesTest, GltfLostSetsAreReported)
+{
+  auto attributes = std::array<cgltf_attribute, 2> {};
+  attributes[0].type = cgltf_attribute_type_joints;
+  attributes[0].index = 1;
+  attributes[1].type = cgltf_attribute_type_color;
+  attributes[1].index = 1;
+  auto primitive = cgltf_primitive {};
+  primitive.attributes = attributes.data();
+  primitive.attributes_count = attributes.size();
+  auto mesh = cgltf_mesh {};
+  mesh.primitives = &primitive;
+  mesh.primitives_count = 1;
+  auto source = cgltf_data {};
+  source.meshes = &mesh;
+  source.meshes_count = 1;
+  source.skins_count = 1;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "model.gltf", diagnostics);
+
+  EXPECT_TRUE(AllDropWarnings(diagnostics));
+  const auto says = [&](const std::string& text) -> bool {
+    return std::ranges::any_of(diagnostics,
+      [&](const auto& issue) -> bool { return issue.message.contains(text); });
+  };
+  EXPECT_TRUE(says("Joint sets past the first"));
+  EXPECT_TRUE(says("Vertex color sets past the first"));
+  EXPECT_TRUE(says("Skin weights import"));
+}
+
+//! The wrap modes of an extension's texture are lost like a core texture's.
+NOLINT_TEST(DroppedSourceFeaturesTest, GltfExtensionTextureSamplingIsReported)
+{
+  auto sampler = cgltf_sampler {
+    .wrap_s = cgltf_wrap_mode_clamp_to_edge,
+    .wrap_t = cgltf_wrap_mode_repeat,
+  };
+  auto texture = cgltf_texture {};
+  texture.sampler = &sampler;
+  auto material = cgltf_material {};
+  material.has_clearcoat = 1;
+  material.clearcoat.clearcoat_texture.texture = &texture;
+  auto source = cgltf_data {};
+  source.materials = &material;
+  source.materials_count = 1;
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "model.gltf", diagnostics);
+
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> bool {
+    return issue.message.contains("wrap and filter");
+  }));
+}
+
+//! Only normalizing to meters reads the file's unit, so only it warns.
+NOLINT_TEST(DroppedSourceFeaturesTest, MissingUnitsMatterOnlyWhenNormalizing)
+{
+  using oxygen::content::import::UnitNormalizationPolicy;
+  using oxygen::content::import::internal::ReportFbxUnits;
+  const auto source = ufbx_scene {};
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportFbxUnits(
+    source, UnitNormalizationPolicy::kPreserveSource, "a.fbx", diagnostics);
+  ReportFbxUnits(
+    source, UnitNormalizationPolicy::kApplyCustomFactor, "a.fbx", diagnostics);
+  EXPECT_TRUE(diagnostics.empty());
+
+  ReportFbxUnits(
+    source, UnitNormalizationPolicy::kNormalizeToMeters, "a.fbx", diagnostics);
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kFbxUnitsUnknown);
 }
 
 } // namespace

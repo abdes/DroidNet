@@ -5,7 +5,6 @@
     "bake_hdr": false,
     "bake_transforms": false,
     "bc7_quality": "fast",
-    "color_space": "srgb",
     "content_flags": {
       "geometry": true,
       "materials": true,
@@ -24,7 +23,6 @@
     "hdr_handling": "tonemap",
     "import_cameras": true,
     "import_lights": true,
-    "intent": "albedo",
     "light_intensity_scale": 1.0,
     "lod_levels": 3,
     "lod_reduction_percent": 50.0,

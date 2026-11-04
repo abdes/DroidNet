@@ -2629,6 +2629,9 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
   }
   result.parsed = true;
   result.supported = true;
+  internal::ReportFbxUnits(*scene,
+    input.request.options.coordinate.unit_normalization, input.source_id_prefix,
+    result.diagnostics);
   internal::ReportDroppedSourceFeatures(
     *scene, input.source_id_prefix, result.diagnostics);
   const auto facts = DescribeFbx(*scene);
@@ -2679,6 +2682,9 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
     return result;
   }
 
+  internal::ReportFbxUnits(*scene,
+    input.request.options.coordinate.unit_normalization, input.source_id_prefix,
+    result.diagnostics);
   internal::ReportDroppedSourceFeatures(
     *scene, input.source_id_prefix, result.diagnostics);
 
@@ -2705,6 +2711,9 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
     return result;
   }
 
+  internal::ReportFbxUnits(*scene,
+    input.request.options.coordinate.unit_normalization, input.source_id_prefix,
+    result.diagnostics);
   internal::ReportDroppedSourceFeatures(
     *scene, input.source_id_prefix, result.diagnostics);
 
@@ -3264,7 +3273,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     item.normal_maps_green_up = green_up.value_or(true);
     result.sources.push_back(std::move(item));
   }
-  NameModelTextures(result.sources);
+  NameModelTextures(result.sources, input.source_id_prefix, result.diagnostics);
   TuneModelTextures(result.sources, input.request.options);
   return result;
 }

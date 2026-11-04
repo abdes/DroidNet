@@ -13,6 +13,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <iterator>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
@@ -34,6 +35,7 @@
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/GltfDocuments.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
@@ -573,6 +575,99 @@ namespace {
 
   //! A missing texture is looked for beside the model, in its textures folders,
   //! then the same in the model folder's parent.
+  //! A material's use decides a texture's intent and color space unless the
+  //! settings state them; the HDR and renormalize keys always reach it.
+  NOLINT_TEST(ModelTextureSourceTest, TextureKeysReachTheTextures)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[{"uri":"color.png"},{"uri":"normal.png"}],
+      "textures":[{"source":0},{"source":1}],
+      "materials":[{"pbrMetallicRoughness":{"baseColorTexture":{"index":0}},
+        "normalTexture":{"index":1}}]
+    })" };
+    const auto prepare = [&](const ImportOptions& options)
+      -> std::map<std::string, TextureImportDesc> {
+      auto input = adapters::AdapterInput {};
+      input.source_id_prefix = "model";
+      input.request.source_path = "authoring/model.gltf";
+      input.request.options = options;
+      auto adapter = adapters::GltfAdapter {};
+      EXPECT_TRUE(adapter
+          .Parse(
+            std::as_bytes(std::span(document.data(), document.size())), input)
+          .success);
+      auto descs = std::map<std::string, TextureImportDesc> {};
+      for (const auto& source : adapter.PrepareTextures(input).sources) {
+        descs.emplace(source.name, source.desc);
+      }
+      return descs;
+    };
+
+    auto job = ImportOptions {};
+    // A value nobody stated, as a tuned job holds it, changes nothing.
+    job.texture_tuning.enabled = true;
+    const auto plain = prepare(job);
+    EXPECT_EQ(plain.at("normal.normal").intent, TextureIntent::kNormalTS);
+    EXPECT_EQ(
+      plain.at("normal.normal").source_color_space, ColorSpace::kLinear);
+    EXPECT_EQ(
+      plain.at("color.base_color").source_color_space, ColorSpace::kSRGB);
+
+    job.texture_tuning.hdr_handling = HdrHandling::kKeepFloat;
+    job.texture_tuning.exposure_ev = 1.5F;
+    job.texture_tuning.bake_hdr_to_ldr = true;
+    job.texture_tuning.renormalize_normals_in_mips = false;
+    auto one = job.texture_tuning;
+    one.source_color_space = ColorSpace::kLinear;
+    one.source_color_space_stated = true;
+    one.intent = TextureIntent::kData;
+    one.intent_stated = true;
+    job.texture_overrides["color.base_color"] = one;
+
+    const auto tuned = prepare(job);
+    const auto& color = tuned.at("color.base_color");
+    EXPECT_EQ(color.source_color_space, ColorSpace::kLinear);
+    EXPECT_EQ(color.intent, TextureIntent::kData);
+    const auto& normal = tuned.at("normal.normal");
+    EXPECT_EQ(normal.intent, TextureIntent::kNormalTS);
+    EXPECT_EQ(normal.hdr_handling, HdrHandling::kKeepFloat);
+    EXPECT_FLOAT_EQ(normal.exposure_ev, 1.5F);
+    EXPECT_TRUE(normal.bake_hdr_to_ldr);
+    EXPECT_FALSE(normal.renormalize_normals_in_mips);
+  }
+
+  //! Two images of one name take different texture names, and the import says
+  //! so.
+  NOLINT_TEST(ModelTextureSourceTest, ImagesOfOneNameWarn)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[{"uri":"a/diffuse.png"},{"uri":"b/diffuse.png"}],
+      "textures":[{"source":0},{"source":1}],
+      "materials":[
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}}
+      ]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+
+    const auto prepared = adapter.PrepareTextures(input);
+
+    EXPECT_TRUE(std::ranges::any_of(
+      prepared.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+        return diagnostic.code == import_codes::kNameCollision
+          && diagnostic.object_name == "diffuse_1";
+      }));
+  }
+
   NOLINT_TEST(TextureFallbackPathsTest, SearchesModelThenParentFolders)
   {
     const auto root = std::filesystem::absolute("pack");

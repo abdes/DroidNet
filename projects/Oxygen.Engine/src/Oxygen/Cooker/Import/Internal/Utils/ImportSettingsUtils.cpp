@@ -319,7 +319,9 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
     ApplyPreset(desc, spec->preset);
 
     tuning.intent = desc.intent;
+    tuning.intent_stated = true;
     tuning.source_color_space = desc.source_color_space;
+    tuning.source_color_space_stated = true;
     tuning.flip_y_on_decode = desc.flip_y_on_decode;
     tuning.force_rgba_on_decode = desc.force_rgba_on_decode;
     tuning.mip_policy = desc.mip_policy;
@@ -359,6 +361,7 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
       return false;
     }
     tuning.intent = *parsed;
+    tuning.intent_stated = true;
     tuning.enabled = true;
   } else if (!preset_applied) {
     tuning.enabled = true;
@@ -371,8 +374,10 @@ auto MapSettingsToTuning(const TextureImportSettings& settings,
       return false;
     }
     tuning.source_color_space = *parsed;
+    tuning.source_color_space_stated = true;
   } else if (!preset_applied && !settings.intent.empty()) {
     tuning.source_color_space = DefaultColorSpaceForIntent(tuning.intent);
+    tuning.source_color_space_stated = true;
   }
 
   if (!settings.output_format.empty()) {

@@ -97,6 +97,11 @@ OXGN_COOK_API auto to_string(UnitNormalizationPolicy value) -> std::string;
    the engine default material), but MUST NOT emit authored MaterialAssets.
  - If no material can be assigned to a SubMesh, the importer MUST fail with a
    diagnostic rather than emitting an invalid mesh.
+ - Without `kTextures`, a material binds no texture and renders from its
+   values.
+ - Without `kGeometry`, a scene has no renderables, and the import keeps the
+   surface provenance it was given.
+ - Without `kScene`, the import keeps the published nodes it was given.
 */
 enum class ImportContentFlags : uint32_t {
   kNone = 0,
@@ -555,11 +560,19 @@ struct ImportOptions final {
     //! Enable texture cooking overrides.
     bool enabled = false;
 
-    //! Texture intent for standalone imports.
+    //! Texture intent.
     TextureIntent intent = TextureIntent::kAlbedo;
+
+    //! The settings state `intent`. A model's texture otherwise takes the
+    //! one its use in a material implies.
+    bool intent_stated = false;
 
     //! Source color space for decode and filtering.
     ColorSpace source_color_space = ColorSpace::kSRGB;
+
+    //! The settings state `source_color_space`. A model's texture otherwise
+    //! takes the one its use in a material implies.
+    bool source_color_space_stated = false;
 
     //! Flip image vertically during decode.
     bool flip_y_on_decode = false;

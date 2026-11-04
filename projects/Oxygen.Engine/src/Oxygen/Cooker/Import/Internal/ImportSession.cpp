@@ -983,9 +983,17 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         }
         if (request_.model_import) {
           const std::scoped_lock lock(surface_provenance_mutex_);
-          report.published_nodes = std::move(published_nodes_.published);
+          // An import that makes no scene keeps the nodes on record.
+          const auto made_scene
+            = (request_.options.import_content & ImportContentFlags::kScene)
+            != ImportContentFlags::kNone;
+          report.published_nodes = made_scene
+            ? std::move(published_nodes_.published)
+            : request_.model_import->published_nodes;
           report.new_nodes = std::move(published_nodes_.added);
-          report.vanished_nodes = std::move(published_nodes_.vanished);
+          report.vanished_nodes = made_scene
+            ? std::move(published_nodes_.vanished)
+            : request_.model_import->vanished_nodes;
         }
       }
     } catch (...) {

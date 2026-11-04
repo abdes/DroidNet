@@ -95,13 +95,13 @@ struct FbxMaterialTextures final {
     -> FbxMaterialTextures
   {
     return {
-      .base_color = { &material.pbr.base_color, &material.fbx.diffuse_color },
-      .normal = { &material.pbr.normal_map, &material.fbx.normal_map },
-      .metallic = { &material.pbr.metalness, nullptr },
-      .roughness = { &material.pbr.roughness, nullptr },
-      .occlusion = { &material.pbr.ambient_occlusion, nullptr },
+      .base_color = { .primary=&material.pbr.base_color, .fallback=&material.fbx.diffuse_color },
+      .normal = { .primary=&material.pbr.normal_map, .fallback=&material.fbx.normal_map },
+      .metallic = { .primary=&material.pbr.metalness, .fallback=nullptr },
+      .roughness = { .primary=&material.pbr.roughness, .fallback=nullptr },
+      .occlusion = { .primary=&material.pbr.ambient_occlusion, .fallback=nullptr },
       .emissive
-      = { &material.pbr.emission_color, &material.fbx.emission_color },
+      = { .primary=&material.pbr.emission_color, .fallback=&material.fbx.emission_color },
       .specular = SpecularSlot(material),
       .sheen_color = {
         .primary = &material.pbr.sheen_color,
@@ -171,6 +171,15 @@ struct FbxMaterialTextures final {
   {
     return std::ranges::any_of(Slots(),
       [&](const auto& slot) -> auto { return slot.Texture() == &texture; });
+  }
+
+  //! Whether a slot imports the texture of `map` from that very map.
+  [[nodiscard]] auto Reads(const ufbx_material_map& map) const noexcept -> bool
+  {
+    return std::ranges::any_of(Slots(), [&](const auto& slot) -> auto {
+      return (slot.primary == &map || slot.fallback == &map)
+        && slot.Texture() == map.texture;
+    });
   }
 
   [[nodiscard]] auto Any() const noexcept -> bool

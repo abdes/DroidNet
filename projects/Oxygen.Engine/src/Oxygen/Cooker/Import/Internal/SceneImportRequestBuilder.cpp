@@ -294,9 +294,24 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     options.node_pruning = *parsed;
   }
 
+  // A model's textures are 2D; a material has no use for a cube.
+  const auto refuses_cube = [&](const ImportOptions::TextureTuning& tuning,
+                              const std::string& pointer) -> bool {
+    if (!tuning.import_cubemap && !tuning.equirect_to_cubemap) {
+      return false;
+    }
+    RefuseSetting(diagnostics, request_codes::kCubeSettingsOnModel,
+      "a model's textures are 2D, so cube map settings do not apply to them",
+      pointer);
+    return true;
+  };
+
   // Handle texture tuning overrides for the scene
   if (!internal::MapSettingsToTuning(
         settings.texture_defaults, options.texture_tuning, diagnostics)) {
+    return std::nullopt;
+  }
+  if (refuses_cube(options.texture_tuning, "/cubemap")) {
     return std::nullopt;
   }
 
@@ -310,6 +325,12 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
       for (auto index = first_refusal; index < diagnostics.size(); ++index) {
         diagnostics[index].json_pointer.insert(0, override_pointer);
       }
+      return std::nullopt;
+    }
+    const auto cube_pointer = (nlohmann::json::json_pointer {}
+      / "texture_overrides" / name / "cubemap")
+                                .to_string();
+    if (refuses_cube(tuning, cube_pointer)) {
       return std::nullopt;
     }
     options.texture_overrides[name] = std::move(tuning);

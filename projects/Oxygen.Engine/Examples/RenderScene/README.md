@@ -58,7 +58,7 @@ Tools/cook -Check                    # check the project, cook nothing
 Tools/pak
 Tools/play CameraSwitch              # the example's first scene
 Tools/play VsmBug1Flat VsmBug1LargeThinCube
-Tools/play PhysicsDomains -- -w 1600x900   # player options after --
+Tools/play Emissive -- -w 1600x900         # player options after --
 ```
 
 Run them from `Examples/RenderScene`. In a source checkout each tool selects a
@@ -72,6 +72,11 @@ cooked content and pak the SDK ships (`.cooked/Showcase`, `.build/pak`) and
 writes mounts the cooked root and binds the project's source mounts, so editing
 a scene's script reloads it while playing; `Tools/play <Example> -- --help`
 lists the player's options.
+
+`Tools/play` runs a scene's rendering, scripts and input, but not its physics:
+`Oxygen.Player` has no physics module and reads no physics sidecar, so a scene
+with one, such as `PhysicsDomains`, loads with no issues and its bodies stay
+still. Load such a scene in RenderScene itself, which hydrates the sidecar.
 
 RenderScene's ad-hoc model imports go to `.scratch`, a scratch project that
 mounts the examples' `Showcase` mount (`Showcase/Content`), with the local mounts of any `.mounts.json` at or

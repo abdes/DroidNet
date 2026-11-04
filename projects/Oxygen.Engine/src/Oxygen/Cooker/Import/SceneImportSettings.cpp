@@ -16,7 +16,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
-#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -61,18 +60,36 @@ namespace {
   auto TextureSettings(const ImportOptions::TextureTuning& tuning)
     -> TextureImportSettings
   {
-    TextureImportSettings settings;
-    if (!tuning.enabled) {
-      return settings;
-    }
     if (tuning.placeholder_on_failure) {
       throw std::invalid_argument(
         "Model import records require successful texture cooking");
     }
-    settings.intent
-      = TokenFor(tuning.intent, "texture_intent", internal::ParseIntent);
-    settings.color_space = TokenFor(
-      tuning.source_color_space, "color_space", internal::ParseColorSpace);
+    if (tuning.import_cubemap || tuning.equirect_to_cubemap) {
+      throw std::invalid_argument("A model's textures are 2D");
+    }
+    TextureImportSettings settings;
+    // What applies whether or not the other cooking choices are enabled.
+    settings.max_size = tuning.max_size;
+    settings.flip_normal_green = tuning.flip_normal_green;
+    settings.renormalize_normals = tuning.renormalize_normals_in_mips;
+    settings.exposure_ev = tuning.exposure_ev;
+    settings.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
+    if (tuning.hdr_handling != ImportOptions::TextureTuning {}.hdr_handling) {
+      settings.hdr_handling = TokenFor(
+        tuning.hdr_handling, "hdr_handling", internal::ParseHdrHandling);
+    }
+    // A material's use of a texture decides these unless they are stated.
+    if (tuning.intent_stated) {
+      settings.intent
+        = TokenFor(tuning.intent, "texture_intent", internal::ParseIntent);
+    }
+    if (tuning.source_color_space_stated) {
+      settings.color_space = TokenFor(
+        tuning.source_color_space, "color_space", internal::ParseColorSpace);
+    }
+    if (!tuning.enabled) {
+      return settings;
+    }
     settings.output_format = TokenFor(
       tuning.color_output_format, "texture_format", internal::ParseFormat);
     settings.data_format = TokenFor(
@@ -83,24 +100,10 @@ namespace {
       = TokenFor(tuning.mip_filter, "mip_filter", internal::ParseMipFilter);
     settings.bc7_quality
       = TokenFor(tuning.bc7_quality, "bc7_quality", internal::ParseBc7Quality);
-    settings.hdr_handling = TokenFor(
-      tuning.hdr_handling, "hdr_handling", internal::ParseHdrHandling);
     settings.max_mip_levels = tuning.max_mip_levels;
-    settings.max_size = tuning.max_size;
     settings.packing_policy = tuning.packing_policy_id;
-    settings.exposure_ev = tuning.exposure_ev;
     settings.flip_y = tuning.flip_y_on_decode;
     settings.force_rgba = tuning.force_rgba_on_decode;
-    settings.flip_normal_green = tuning.flip_normal_green;
-    settings.renormalize_normals = tuning.renormalize_normals_in_mips;
-    settings.bake_hdr_to_ldr = tuning.bake_hdr_to_ldr;
-    settings.cubemap = tuning.import_cubemap;
-    settings.equirect_to_cube = tuning.equirect_to_cubemap;
-    settings.cube_face_size = tuning.cubemap_face_size;
-    if (tuning.cubemap_layout != CubeMapImageLayout::kUnknown) {
-      settings.cube_layout = TokenFor(
-        tuning.cubemap_layout, "cube_layout", internal::ParseCubeLayout);
-    }
     return settings;
   }
 

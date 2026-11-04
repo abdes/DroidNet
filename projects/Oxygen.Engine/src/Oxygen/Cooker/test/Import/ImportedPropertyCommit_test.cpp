@@ -88,6 +88,10 @@ NOLINT_TEST(
     EXPECT_EQ(diagnostic.source_path, "model.gltf");
     EXPECT_EQ(diagnostic.object_path, "Camera");
   }
+  // It says what the value was and what the schema asks.
+  EXPECT_THAT(diagnostics.front().message,
+    ::testing::AllOf(::testing::HasSubstr("near_plane"),
+      ::testing::HasSubstr("-1 is not a finite value")));
 }
 
 } // namespace

@@ -6,11 +6,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -40,6 +43,7 @@ public:
       return *committed;
     }
     rejected_.push_back(property);
+    details_.push_back(fmt::format("{} is not {}", value, Describe(range)));
     return schema_default;
   }
 
@@ -56,13 +60,13 @@ public:
     const std::string_view object_path,
     std::vector<ImportDiagnostic>& diagnostics) const -> void
   {
-    for (const auto property : rejected_) {
+    for (size_t index = 0; index < rejected_.size(); ++index) {
       diagnostics.push_back(ImportDiagnostic {
         .severity = ImportSeverity::kWarning,
         .code = std::string(import_codes::kSceneImportPropertyInvalid),
-        .message = "Imported property '" + std::string(property)
-          + "' is not a valid value of the scene schema; it takes the "
-            "schema default",
+        .message = "Imported property '" + std::string(rejected_[index])
+          + "': " + details_[index]
+          + " as the scene schema asks; it takes the schema default",
         .source_path = std::string(source_id),
         .object_path = std::string(object_path),
       });
@@ -70,7 +74,29 @@ public:
   }
 
 private:
+  //! The values `range` admits, in words.
+  template <typename T>
+  [[nodiscard]] static auto Describe(
+    const data::schema::PropertyRange<T>& range) -> std::string
+  {
+    auto text = std::string("a finite value");
+    if (range.min) {
+      text += fmt::format(
+        " {} {}", range.min_exclusive ? "above" : "at least", *range.min);
+    }
+    if (range.max) {
+      text += fmt::format(
+        " {} {}", range.max_exclusive ? "below" : "at most", *range.max);
+    }
+    if (range.nonzero) {
+      text += " other than zero";
+    }
+    return text;
+  }
+
   std::vector<std::string_view> rejected_;
+  //! Why each rejected property was, in commit order.
+  std::vector<std::string> details_;
 };
 
 } // namespace oxygen::content::import::detail

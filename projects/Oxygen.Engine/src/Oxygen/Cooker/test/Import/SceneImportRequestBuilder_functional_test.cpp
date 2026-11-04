@@ -590,4 +590,55 @@ NOLINT_TEST_F(
   EXPECT_FALSE(refused({ { "Body", json::object() } }));
 }
 
+//! A model's textures are 2D: cube settings are refused where they stand.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, CubeSettingsAreRefusedOnAModel)
+{
+  namespace codes = oxygen::content::import::request_codes;
+  auto job = Settings();
+  job.texture_defaults.cubemap = true;
+  auto job_errors = std::vector<ImportDiagnostic> {};
+  EXPECT_FALSE(job.Prepare(ImportFormat::kGltf, job_errors).has_value());
+  ASSERT_EQ(job_errors.size(), 1U);
+  EXPECT_EQ(job_errors.front().code, codes::kCubeSettingsOnModel);
+  EXPECT_EQ(job_errors.front().json_pointer, "/cubemap");
+
+  auto one = Settings();
+  one.texture_overrides["Sky.base_color"].equirect_to_cube = true;
+  auto one_errors = std::vector<ImportDiagnostic> {};
+  EXPECT_FALSE(one.Prepare(ImportFormat::kGltf, one_errors).has_value());
+  ASSERT_EQ(one_errors.size(), 1U);
+  EXPECT_EQ(one_errors.front().code, codes::kCubeSettingsOnModel);
+  EXPECT_EQ(one_errors.front().json_pointer,
+    "/texture_overrides/Sky.base_color/cubemap");
+}
+
+//! A recipe states what the options state, and nothing a material's use
+//! decides: what applies without tuning survives, and defaults are not stated.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, RecipesKeepOnlyWhatIsStated)
+{
+  auto options = oxygen::content::import::ImportOptions {};
+  options.texture_tuning.max_size = 64;
+  options.texture_tuning.exposure_ev = 2.0F;
+  const auto untuned
+    = SceneImportSettings::FromOptions(options).texture_defaults;
+  EXPECT_EQ(untuned.max_size, 64U);
+  EXPECT_FLOAT_EQ(untuned.exposure_ev, 2.0F);
+  EXPECT_TRUE(untuned.intent.empty());
+  EXPECT_TRUE(untuned.color_space.empty());
+
+  options.texture_tuning.enabled = true;
+  const auto tuned = SceneImportSettings::FromOptions(options).texture_defaults;
+  EXPECT_FALSE(tuned.output_format.empty());
+  EXPECT_TRUE(tuned.intent.empty());
+  EXPECT_TRUE(tuned.color_space.empty());
+
+  options.texture_tuning.source_color_space_stated = true;
+  EXPECT_FALSE(SceneImportSettings::FromOptions(options)
+      .texture_defaults.color_space.empty());
+
+  options.texture_tuning.import_cubemap = true;
+  EXPECT_THROW(static_cast<void>(SceneImportSettings::FromOptions(options)),
+    std::invalid_argument);
+}
+
 } // namespace

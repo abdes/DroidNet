@@ -6,8 +6,10 @@
 
 #include <chrono>
 #include <format>
+#include <functional>
 #include <memory>
 #include <optional>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -21,6 +23,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -309,6 +312,10 @@ auto ModelImportJob::ExecuteSessionAsync(ImportSession& session)
   ReportPhaseProgress(ImportPhase::kPlanning, 0.1F, "Building import plan...");
   const auto request_copy = Request();
   const auto remap = internal::ResolveMaterialRemap(session, request_copy);
+  if (session.HasErrors()) {
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Material remap refused");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
   const auto stop_token = StopToken();
   auto plan_outcome = co_await ThreadPool()->Run(
     [this, &model, &request_copy, &remap, stop_token](
@@ -335,7 +342,11 @@ auto ModelImportJob::ExecuteSessionAsync(ImportSession& session)
   }
 
   ReportPhaseProgress(ImportPhase::kFinalizing, 0.9F, "Finalizing import...");
-  session.MarkSurfaceSourceProcessed();
+  // An import that makes no geometry keeps the surfaces on record.
+  if ((request_copy.options.import_content & ImportContentFlags::kGeometry)
+    != ImportContentFlags::kNone) {
+    session.MarkSurfaceSourceProcessed();
+  }
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
@@ -460,6 +471,10 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
     .naming_service = observer_ptr { &GetNamingService() },
     .stop_token = stop_token,
     .external_texture_bytes = {},
+    .source_snapshot = SourceSnapshot(),
+  };
+  const auto imports = [&](const ImportContentFlags flag) -> bool {
+    return (request.options.import_content & flag) != ImportContentFlags::kNone;
   };
 
   const auto add_texture = [&](TexturePipeline::WorkItem item) -> void {
@@ -521,8 +536,18 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
     return outcome;
   }
 
+  // Without textures, a material binds none and renders from its values.
+  if (!imports(ImportContentFlags::kTextures)) {
+    for (auto& item : plan->pending_materials) {
+      for (const auto& slot : MaterialSource::TextureSlots()) {
+        item.material.textures.*slot.binding = {};
+      }
+    }
+  }
+
   // A remapped source material binds the existing material and is not
-  // produced, nor are the textures only it binds.
+  // produced, nor are the textures only it binds. Without materials, no
+  // material decides which textures are made.
   auto produced = std::vector<const MaterialSource*> {};
   auto replaced = std::vector<const MaterialSource*> {};
   for (const auto& item : plan->pending_materials) {
@@ -530,13 +555,16 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
       = remap.contains(item.material.storage_name) ? replaced : produced;
     group.push_back(&item.material);
   }
-  const auto dropped = internal::TexturesOnlyReplacedMaterialsUse({
-    .produced = produced,
-    .replaced = replaced,
-  });
+  const auto dropped = imports(ImportContentFlags::kMaterials)
+    ? internal::TexturesOnlyReplacedMaterialsUse({
+        .produced = produced,
+        .replaced = replaced,
+      })
+    : std::set<std::string, std::less<>> {};
   for (auto& item : plan->pending_textures) {
     plan->product_names.textures.insert(item.name);
-    if (!dropped.contains(item.source_id)) {
+    if (imports(ImportContentFlags::kTextures)
+      && !dropped.contains(item.source_id)) {
       add_texture(std::move(item));
     }
   }
@@ -545,6 +573,8 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
     if (const auto it = remap.find(item.material.storage_name);
       it != remap.end()) {
       plan->surfaces.emplace_back(it->second);
+    } else if (!imports(ImportContentFlags::kMaterials)) {
+      plan->surfaces.emplace_back(input.default_material_key);
     } else {
       plan->surfaces.emplace_back(add_material(std::move(item)));
     }
@@ -552,14 +582,16 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
   plan->pending_textures.clear();
   plan->pending_materials.clear();
 
-  PlannerGeometrySink geometry_sink(*plan);
-  const auto geometry_result = BuildWorkItemsOf(
-    model.adapter, adapters::GeometryWorkTag {}, geometry_sink, input);
-  for (const auto& diagnostic : geometry_result.diagnostics) {
-    outcome.diagnostics.push_back(diagnostic);
-  }
-  if (!geometry_result.success) {
-    return outcome;
+  if (imports(ImportContentFlags::kGeometry)) {
+    PlannerGeometrySink geometry_sink(*plan);
+    const auto geometry_result = BuildWorkItemsOf(
+      model.adapter, adapters::GeometryWorkTag {}, geometry_sink, input);
+    for (const auto& diagnostic : geometry_result.diagnostics) {
+      outcome.diagnostics.push_back(diagnostic);
+    }
+    if (!geometry_result.success) {
+      return outcome;
+    }
   }
   for (auto& diagnostic : internal::ReportMissingSettingTargets(
          request.options, plan->product_names, source_id_prefix)) {
@@ -570,14 +602,16 @@ auto ModelImportJob::BuildPlan(ParsedModel& model, const ImportRequest& request,
     outcome.diagnostics.push_back(std::move(diagnostic));
   }
 
-  PlannerSceneSink scene_sink(*plan);
-  const auto scene_result = BuildWorkItemsOf(
-    model.adapter, adapters::SceneWorkTag {}, scene_sink, input);
-  for (const auto& diagnostic : scene_result.diagnostics) {
-    outcome.diagnostics.push_back(diagnostic);
-  }
-  if (!scene_result.success) {
-    return outcome;
+  if (imports(ImportContentFlags::kScene)) {
+    PlannerSceneSink scene_sink(*plan);
+    const auto scene_result = BuildWorkItemsOf(
+      model.adapter, adapters::SceneWorkTag {}, scene_sink, input);
+    for (const auto& diagnostic : scene_result.diagnostics) {
+      outcome.diagnostics.push_back(diagnostic);
+    }
+    if (!scene_result.success) {
+      return outcome;
+    }
   }
 
   for (const auto scene_item : plan->scene_items) {

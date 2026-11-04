@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/api_export.h>
 
 struct cgltf_data;
@@ -26,6 +27,12 @@ OXGN_COOK_API auto ReportDroppedSourceFeatures(const cgltf_data& source,
 
 //! Warn about each FBX source feature that model import does not carry into
 //! cooked content, and about source units the import has to assume.
+//! Warns of an FBX file that states no unit scale, when the import reads it
+//! (`fbx.units_unknown`).
+OXGN_COOK_API auto ReportFbxUnits(const ufbx_scene& source,
+  UnitNormalizationPolicy policy, std::string_view source_path,
+  std::vector<ImportDiagnostic>& diagnostics) -> void;
+
 OXGN_COOK_API auto ReportDroppedSourceFeatures(const ufbx_scene& source,
   std::string_view source_path, std::vector<ImportDiagnostic>& diagnostics)
   -> void;

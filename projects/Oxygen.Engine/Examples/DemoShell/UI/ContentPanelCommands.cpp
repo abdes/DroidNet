@@ -419,12 +419,18 @@ namespace {
     AddChoice<content::import::TextureIntent>(commands, cc::kIntent,
       "Texture Intent", "What the texture is used for", choices::kIntents,
       [vm](const auto v) -> void {
-        EditTuning(vm, [v](auto& t) -> void { t.intent = v; });
+        EditTuning(vm, [v](auto& t) -> void {
+          t.intent = v;
+          t.intent_stated = true;
+        });
       });
     AddChoice<ColorSpace>(commands, cc::kColorSpace, "Source Color Space",
       "Color space of the source image", choices::kColorSpaces,
       [vm](const auto v) -> void {
-        EditTuning(vm, [v](auto& t) -> void { t.source_color_space = v; });
+        EditTuning(vm, [v](auto& t) -> void {
+          t.source_color_space = v;
+          t.source_color_space_stated = true;
+        });
       });
     AddChoice<content::import::MipPolicy>(commands, cc::kMipPolicy,
       "Mip Policy", "Which mip levels are generated", choices::kMipPolicies,

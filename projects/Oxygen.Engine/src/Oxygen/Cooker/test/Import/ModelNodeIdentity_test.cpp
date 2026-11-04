@@ -6,6 +6,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -404,6 +405,14 @@ NOLINT_TEST(NodePathTableTest, InternsEachDistinctPathOnce)
   EXPECT_EQ(table.Records()[1].first, 1U);
   EXPECT_EQ(table.Records()[1].count, 2U);
   EXPECT_EQ(table.Elements().size(), 3U);
+}
+
+//! A path names a node: an empty one is a defect of its caller.
+NOLINT_TEST(NodePathTableTest, RefusesAnEmptyPath)
+{
+  auto table = NodePathTable {};
+  EXPECT_THROW(static_cast<void>(table.Intern(std::span<const NodeId> {})),
+    std::invalid_argument);
 }
 
 } // namespace
