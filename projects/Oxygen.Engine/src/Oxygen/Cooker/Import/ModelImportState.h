@@ -37,7 +37,7 @@ struct ModelPublishedNode final {
 struct ModelNodePublication final {
   //! The nodes emitted, in emission order.
   std::vector<ModelPublishedNode> published;
-  //! The emitted nodes whose anchor the previous publication did not emit.
+  //! The emitted nodes whose ID the previous publication did not emit.
   std::vector<ModelPublishedNode> added;
   //! The nodes an earlier publication emitted whose ID this one does not,
   //! kept from import to import until their ID is emitted again.

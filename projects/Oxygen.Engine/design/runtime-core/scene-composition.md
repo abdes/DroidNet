@@ -97,10 +97,10 @@ Rules:
 
 An instanced node is targeted by its address, never by name or index:
 
-| Scene kind     | Cooked `NodeRecord.node_id`                                                                                                                                                                                            |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authored scene | The descriptor node's required `id` (the editor's node ID). The cooker refuses a nil or duplicate ID                                                                                                                   |
-| Model scene    | Derived from the node's anchor (its name path in the model, same-named siblings numbered in file order) and the model's source identity, the UUID its import settings keep. The model's virtual path is not part of it |
+| Scene kind     | Cooked `NodeRecord.node_id`                                                                                                                                                                                                                                                          |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Authored scene | The descriptor node's required `id` (the editor's node ID). The cooker refuses a nil or duplicate ID                                                                                                                                                                                 |
+| Model scene    | Derived from the node's anchor (its name path in the model, same-named siblings numbered in file order, so a change among them shifts their IDs and the import warns) and the model's source identity, the UUID its import settings keep. The model's virtual path is not part of it |
 
 The same anchor gives the same ID on every import, as surface IDs are
 derived under

@@ -65,6 +65,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kNameCollision = "import.name_collision";
   inline constexpr std::string_view kNodeContinuityConflict = "import.node_continuity_conflict";
   inline constexpr std::string_view kNodeContinuityCycle = "import.node_continuity_cycle";
+  inline constexpr std::string_view kNodeNamesAmbiguous = "import.node_names_ambiguous";
   inline constexpr std::string_view kNodesChanged = "import.nodes_changed";
   inline constexpr std::string_view kReferenceInvalid = "import.reference_invalid";
   inline constexpr std::string_view kReferenceUnmounted = "import.reference_unmounted";

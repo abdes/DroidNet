@@ -4,10 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cctype>
 #include <cstddef>
-#include <iterator>
 #include <map>
 #include <optional>
 #include <set>
@@ -64,7 +62,7 @@ namespace {
     return start;
   }
 
-  auto Quoted(const std::vector<std::string_view>& anchors) -> std::string
+  auto Quoted(const std::set<std::string_view>& anchors) -> std::string
   {
     auto text = std::string {};
     for (const auto anchor : anchors) {
@@ -241,6 +239,46 @@ auto ModelNodeIdentity::Emit(const std::string_view anchor) -> data::NodeId
   return id;
 }
 
+auto ModelNodeIdentity::ReportAmbiguousNames(const std::string_view source_id,
+  std::vector<ImportDiagnostic>& diagnostics) const -> void
+{
+  constexpr auto kMaxNamedGroups = size_t { 8 };
+  auto groups = std::string {};
+  auto group_count = size_t { 0 };
+  for (const auto& [sibling, count] : sibling_counts_) {
+    if (count < 2U) {
+      continue;
+    }
+    ++group_count;
+    if (group_count > kMaxNamedGroups) {
+      continue;
+    }
+    const auto& [parent, name] = sibling;
+    groups += group_count > 1U ? ", '" : "'";
+    groups += parent.empty() ? "" : parent + "/";
+    groups += name.empty() ? "[no name]" : name;
+    groups += "' (" + std::to_string(count) + ")";
+  }
+  if (group_count == 0U) {
+    return;
+  }
+  if (group_count > kMaxNamedGroups) {
+    groups += " and " + std::to_string(group_count - kMaxNamedGroups)
+      + " more groups";
+  }
+  diagnostics.push_back({
+    .severity = ImportSeverity::kWarning,
+    .code = std::string(import_codes::kNodeNamesAmbiguous),
+    .message = "Siblings without a name of their own are known by their place "
+               "in the file, so adding, removing or reordering one gives the "
+               "others each other's IDs, and scenes' changes follow the IDs. "
+               "Give them unique names in the source file. Sharing a name: "
+      + groups,
+    .source_path = std::string(source_id),
+    .object_path = {},
+  });
+}
+
 auto ModelNodeIdentity::TakePublishedNodes(const std::string_view source_id,
   std::vector<ImportDiagnostic>& diagnostics) -> ModelNodePublication
 {
@@ -261,24 +299,23 @@ auto ModelNodeIdentity::TakePublishedNodes(const std::string_view source_id,
   };
   keep_vanished(previous);
   keep_vanished(history_.vanished_nodes);
+  ReportAmbiguousNames(source_id, diagnostics);
   if (!previous.empty()) {
-    auto before = std::set<std::string_view> {};
+    auto previous_ids = std::set<data::NodeId> {};
+    auto vanished = std::set<std::string_view> {};
     for (const auto& node : previous) {
-      before.insert(node.anchor);
-    }
-    for (const auto& node : published_) {
-      if (!before.contains(node.anchor)) {
-        publication.added.push_back(node);
+      previous_ids.insert(node.node_id);
+      if (!emitted_ids.contains(node.node_id)) {
+        vanished.insert(node.anchor);
       }
     }
-    auto after = std::set<std::string_view> {};
+    auto added = std::set<std::string_view> {};
     for (const auto& node : published_) {
-      after.insert(node.anchor);
+      if (!previous_ids.contains(node.node_id)) {
+        publication.added.push_back(node);
+        added.insert(node.anchor);
+      }
     }
-    auto vanished = std::vector<std::string_view> {};
-    std::ranges::set_difference(before, after, std::back_inserter(vanished));
-    auto added = std::vector<std::string_view> {};
-    std::ranges::set_difference(after, before, std::back_inserter(added));
     if (!vanished.empty() || !added.empty()) {
       auto message
         = std::string("The model's nodes changed since its last import.");

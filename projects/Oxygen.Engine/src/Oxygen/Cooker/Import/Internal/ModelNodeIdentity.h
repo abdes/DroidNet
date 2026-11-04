@@ -36,12 +36,19 @@ namespace oxygen::content::import::internal {
 
  A node's ID is derived from the model's source identity and its anchor, never
  from where the model lives, so it is the same on every import and after the
- model moves.
+ model moves. A uniquely named node also keeps it when other nodes are added,
+ removed or reordered. Siblings that share a name, or have none, do not: each
+ is known by its place among them, so such a change hands their IDs to each
+ other. Every import that has such siblings warns, naming them
+ (`import.node_names_ambiguous`).
 
  The model import record's node continuity makes a node keep the ID of an
  earlier anchor: a renamed or moved node continues the anchor it had. Chains
  are followed to their first anchor, and a node the importer adds follows its
- owner. An entry that would give two nodes one ID is dropped and reported.
+ owner. An entry that would give two nodes one ID is dropped and reported, so
+ continuity cannot undo a shift among same-named siblings while the earlier
+ anchor is still in the file; renaming them can (`Mirror_L` continues `Mirror`,
+ `Mirror_R` continues `Mirror[2]`).
 */
 class ModelNodeIdentity final {
 public:
@@ -97,11 +104,13 @@ public:
   //! The ID of the node with `anchor`, which the import emits.
   OXGN_COOK_NDAPI auto Emit(std::string_view anchor) -> data::NodeId;
 
-  //! The nodes emitted, in emission order, with those whose anchor the
-  //! previous publication did not emit and those earlier publications emitted
-  //! whose ID this import did not. Reports, against the previous
-  //! publication's nodes, the anchors that vanished and those that are new
-  //! (`import.nodes_changed`, info).
+  //! The nodes emitted, in emission order, with those whose ID the previous
+  //! publication did not emit and those earlier publications emitted whose ID
+  //! this import did not, so a node that continues an earlier anchor is
+  //! neither. Reports, against the previous publication's nodes, the anchors
+  //! that vanished and those that are new (`import.nodes_changed`, info), and
+  //! the siblings known only by their place (`import.node_names_ambiguous`,
+  //! warning).
   OXGN_COOK_NDAPI auto TakePublishedNodes(std::string_view source_id,
     std::vector<ImportDiagnostic>& diagnostics) -> ModelNodePublication;
 
@@ -109,6 +118,11 @@ private:
   //! The anchor whose ID the node with `anchor` has.
   [[nodiscard]] auto IdentityAnchor(std::string_view anchor) const
     -> std::string;
+
+  //! Warns of the siblings given the same name, or none, naming each group and
+  //! giving how many more there are past a few.
+  auto ReportAmbiguousNames(std::string_view source_id,
+    std::vector<ImportDiagnostic>& diagnostics) const -> void;
 
   std::string source_identity_;
   ModelImportInputs history_;

@@ -622,9 +622,11 @@ same engine model for the same scene.
 
 - `ModelNodeIdentity`: a node's ID derives from the model's source identity and
   its anchor, the path of names in the source hierarchy, so it survives moving
-  the model, reordering siblings and inserting nodes. Same-named siblings are
-  numbered in file order. A renamed or moved node keeps its ID only through the
-  record's node continuity (`import.node_continuity_conflict`,
+  the model, and a uniquely named node survives reordering siblings and
+  inserting nodes. Same-named siblings are numbered in file order, so a change
+  among them shifts their IDs; every import of them warns
+  (`import.node_names_ambiguous`). A renamed or moved node keeps its ID only
+  through the record's node continuity (`import.node_continuity_conflict`,
   `import.node_continuity_cycle`).
 - `NodePathTable`: interns the node ID paths of a cooked scene, within the
   format's limits.

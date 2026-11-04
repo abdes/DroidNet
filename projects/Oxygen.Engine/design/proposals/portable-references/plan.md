@@ -16,6 +16,7 @@ ledger: every old form found in the code, with the slice that removes it.
 - [Order](#order)
 - [Slices](#slices)
 - [What R16 leaves for the editor](#what-r16-leaves-for-the-editor)
+- [What R11 leaves for the editor](#what-r11-leaves-for-the-editor)
 - [Debt ledger](#debt-ledger)
 - [Test impact](#test-impact)
 - [Commits](#commits)
@@ -490,10 +491,23 @@ The editor's own cancel stays a hard kill (`TerminateJobObject`): it writes no
 report, and the root stays at its last commit, so the items above are about runs
 that end by themselves or by a signal from outside.
 
+### What R11 leaves for the editor
+
+Review set R11, the model adapters and node identity, changed what the importer
+reports and refuses. Each item below belongs to the slice named.
+
+| Item                | What the engine now does                                                                                                                                              | What the editor still does                                                                                                                                                                                                                                                                                                                      | Slice |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Omitted light range | `gltf_omitted_light_range_m` is `omitted_light_range_m`, for both formats; the old key is refused                                                                     | The settings catalog, its test and the panel's view model follow the new key, unbuilt. S7's first build compiles them and passes their lanes                                                                                                                                                                                                    | S7    |
+| Continuity circles  | Entries that continue each other in a circle are an error that blocks the model. A node renamed back has its first anchor's ID, so it needs no entry                  | `ModelImportSettings.WithContinuity` adds the reverse of an entry, reachable from the Continue command and `ReassignKeptChange`: with `B` continuing `A`, `A` continuing `B` blocks the model. An entry that would close a circle replaces the one it closes: walk from `continues`, and remove the entry on that chain that continues `anchor` | S9    |
+| Continued nodes     | `new_nodes` holds nodes whose ID the previous publication did not emit, so after the next import a renamed node that continues its anchor is neither new nor vanished | `NodeContinuityGroup` says each new anchor names the one it continues. That holds only between adding the entry and reimporting: check the panel's wording, and that `Entries` alone shows a continued node afterwards                                                                                                                          | S9    |
+
 ### S7. Editor formats
 
 Requires the S3 and R16 SDK installs, and does the first three rows of
-[what R16 leaves for the editor](#what-r16-leaves-for-the-editor). Deletes: `IdentityField`, `TextureSource.VirtualPath`,
+[what R16 leaves for the editor](#what-r16-leaves-for-the-editor) and the
+omitted light range row of
+[what R11 leaves for the editor](#what-r11-leaves-for-the-editor). Deletes: `IdentityField`, `TextureSource.VirtualPath`,
 `TextureSourceCodes.VirtualPathInvalid`, `Path.IsPathRooted` image resolution,
 `InputActionReference.IsPath`. Adds: identity parameters on every reader and
 writer, `IFileReferenceLocator`, the record suffix in `AssetFileTypes`
@@ -540,6 +554,10 @@ Deletes: `RecordsFolder`, `PathFor`, `RelativePathFor`, `ProjectRootOf`,
 source lookups, the "record lives under Imports" checks. Adds: `Parse(bytes,
 identity)`, records indexed by identity from the mount enumeration,
 `RecordsNaming(source)`.
+
+Also does the continuity circles and continued nodes rows of
+[what R11 leaves for the editor](#what-r11-leaves-for-the-editor), with a
+`ModelImportSettingsTests` case for a renamed-back node and for a longer chain.
 
 All 28 production call sites move here, because removing the members breaks
 them at compile: Assets, ContentExplorer, ContentPipeline, ModelEditor, Scenes.

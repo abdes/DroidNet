@@ -501,8 +501,17 @@ item).
 - A model node's `node_id` derives from the model's source identity and the
   node's anchor (`ModelNodeIdentity`): the path of authored names from the
   model's roots, with same-named siblings numbered from the second
-  (`Body/Mirror[2]`), unnamed ones from the first (`Body/[1]`), and a node the importer adds named by its owner and role
-  (`Body/Lamp#light`). Moving or renaming the model keeps every node ID.
+  (`Body/Mirror[2]`), unnamed ones from the first (`Body/[1]`), and a node the
+  importer adds named by its owner and role (`Body/Lamp#light`). Moving or
+  renaming the model keeps every node ID.
+- A node with a name of its own keeps its ID when the file adds, removes or
+  reorders other nodes. Siblings sharing a name, or with none, are known by
+  their place: such a change hands their IDs to each other, and every import of
+  them warns (`import.node_names_ambiguous`). The remedy is to rename them in
+  the source and add node continuity (`Mirror_L` continues `Mirror`, `Mirror_R`
+  continues `Mirror[2]`). Continuity alone cannot repair a shift: an entry
+  whose earlier anchor is still in the file is dropped
+  (`import.node_continuity_conflict`).
 - A scene descriptor's node takes the `id` the descriptor gives it.
 
 ---

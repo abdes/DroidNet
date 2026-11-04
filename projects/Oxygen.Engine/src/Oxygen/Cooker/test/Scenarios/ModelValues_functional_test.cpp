@@ -59,6 +59,7 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -1922,6 +1923,117 @@ NOLINT_TEST_F(ModelFormatsTest, FbxDecayOtherThanQuadraticWarns)
     kFbxLightDecayUnsupported));
   EXPECT_FALSE(Reports(
     import_with("decay_unstated", {}).report, kFbxLightDecayUnsupported));
+}
+
+//! A node with a name of its own keeps its ID, in either format, whatever else
+//! the file adds, removes or reorders.
+NOLINT_TEST_F(ModelFormatsTest, UniqueNamesKeepTheirIdsAcrossFileEdits)
+{
+  using oxygen::content::import::import_codes::kNodeNamesAmbiguous;
+  const auto triangle = ParityNode {
+    .name = "Triangle",
+    .kind = ParityKind::kMesh,
+  };
+  const auto door = ParityNode { .name = "Door" };
+  const auto lid = ParityNode { .name = "Lid" };
+  const auto hatch = ParityNode { .name = "Hatch" };
+
+  const auto before = ImportBothFormats("ids_before", { triangle, door, lid });
+  const auto edited
+    = ImportBothFormats("ids_edited", { hatch, lid, triangle, door });
+  const auto removed = ImportBothFormats("ids_removed", { door, triangle });
+
+  for (size_t format = 0; format < before.size(); ++format) {
+    SCOPED_TRACE(format);
+    for (const auto* name : { "Triangle", "Door", "Lid" }) {
+      SCOPED_TRACE(name);
+      ASSERT_TRUE(edited.at(format).nodes.contains(name));
+      EXPECT_EQ(edited.at(format).nodes.at(name).id,
+        before.at(format).nodes.at(name).id);
+    }
+    EXPECT_EQ(removed.at(format).nodes.at("Door").id,
+      before.at(format).nodes.at("Door").id);
+    EXPECT_FALSE(Reports(before.at(format).report, kNodeNamesAmbiguous));
+    EXPECT_FALSE(Reports(edited.at(format).report, kNodeNamesAmbiguous));
+  }
+}
+
+//! Same-named siblings are known by their place, in either format: the import
+//! warns, and a new first sibling takes the ID the next one had. This is what
+//! the warning is for.
+NOLINT_TEST_F(ModelFormatsTest, SameNamedSiblingsWarnAndShiftWithTheFile)
+{
+  using oxygen::content::import::import_codes::kNodeNamesAmbiguous;
+  const auto triangle = ParityNode {
+    .name = "Triangle",
+    .kind = ParityKind::kMesh,
+  };
+  const auto mirror = [](const float x) -> ParityNode {
+    return { .name = "Mirror", .translation = { x, 0.0F, 0.0F } };
+  };
+
+  const auto before
+    = ImportBothFormats("shift_before", { triangle, mirror(1), mirror(2) });
+  const auto after = ImportBothFormats(
+    "shift_after", { triangle, mirror(9), mirror(1), mirror(2) });
+
+  for (size_t format = 0; format < before.size(); ++format) {
+    SCOPED_TRACE(format);
+    EXPECT_TRUE(Reports(before.at(format).report, kNodeNamesAmbiguous));
+    const auto& first = before.at(format).nodes.at("Mirror");
+    const auto& inserted = after.at(format).nodes.at("Mirror");
+    const auto& moved = after.at(format).nodes.at("Mirror_1");
+    EXPECT_EQ(inserted.id, first.id);
+    EXPECT_NE(moved.id, first.id);
+    ExpectVec3Near(Origin(moved.world), Origin(first.world));
+  }
+}
+
+//! The remedy the warning gives: renamed in the file, with each new name
+//! continuing the anchor it had, the siblings keep their IDs and the model
+//! reports no change.
+NOLINT_TEST_F(ModelFormatsTest, RenamedSiblingsContinueTheirAnchors)
+{
+  using oxygen::content::import::import_codes::kNodeNamesAmbiguous;
+  using oxygen::content::import::import_codes::kNodesChanged;
+  const auto triangle = ParityNode {
+    .name = "Triangle",
+    .kind = ParityKind::kMesh,
+  };
+  const auto before = ImportBothFormats(
+    "rename_before", { triangle, { .name = "Mirror" }, { .name = "Mirror" } });
+  const auto renamed = std::vector<ParityNode> {
+    triangle,
+    { .name = "Mirror_L" },
+    { .name = "Mirror_R" },
+  };
+
+  for (const auto format : { ModelFormat::kGltf, ModelFormat::kFbx }) {
+    const auto index = static_cast<size_t>(format);
+    SCOPED_TRACE(index);
+    const auto& first = before.at(index);
+    auto request = MakeRequest("rename_after_" + std::to_string(index), format,
+      format == ModelFormat::kFbx
+        ? ParityFbx(renamed)
+        : ParityGltf(TestModelsDirFromFile(), renamed).dump());
+    request.model_import = oxygen::content::import::ModelImportInputs {
+      .node_continuity = {
+        { .anchor = "Mirror_L", .continues = "Mirror" },
+        { .anchor = "Mirror_R", .continues = "Mirror[2]" },
+      },
+      .published_nodes = first.report.published_nodes,
+      .vanished_nodes = first.report.vanished_nodes,
+    };
+
+    const auto after = ImportModel(std::move(request));
+
+    EXPECT_EQ(after.nodes.at("Mirror_L").id, first.nodes.at("Mirror").id);
+    EXPECT_EQ(after.nodes.at("Mirror_R").id, first.nodes.at("Mirror_1").id);
+    EXPECT_TRUE(after.report.new_nodes.empty());
+    EXPECT_TRUE(after.report.vanished_nodes.empty());
+    EXPECT_FALSE(Reports(after.report, kNodesChanged));
+    EXPECT_FALSE(Reports(after.report, kNodeNamesAmbiguous));
+  }
 }
 
 //! A node that ignores its parent's scale keeps its own, whether the parent's

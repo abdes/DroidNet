@@ -26,12 +26,14 @@ namespace {
 using oxygen::Uuid;
 using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportRequest;
+using oxygen::content::import::ImportSeverity;
 using oxygen::content::import::ModelImportInputs;
 using oxygen::content::import::ModelNodeContinuity;
 using oxygen::content::import::SurfaceProvenance;
 using oxygen::content::import::internal::ModelNodeIdentity;
 using oxygen::content::import::internal::NodePathTable;
 using oxygen::data::NodeId;
+namespace import_codes = oxygen::content::import::import_codes;
 
 auto Identity() -> Uuid
 {
@@ -275,6 +277,112 @@ NOLINT_TEST(ModelNodeIdentityTest, PublishedNodesReportWhatChanged)
     << "a node that comes back has its old ID";
   const auto returned = fourth.TakePublishedNodes("car.glb", diagnostics);
   EXPECT_TRUE(returned.vanished.empty());
+}
+
+//! Siblings that share a name, or have none, warn once, naming each group;
+//! nodes with names of their own, and a lone unnamed node, do not.
+NOLINT_TEST(ModelNodeIdentityTest, SiblingsKnownByTheirPlaceWarnOnce)
+{
+  auto identity = ModelNodeIdentity(Identity());
+  const auto body = identity.SourceAnchor({ .name = "Body" });
+  static_cast<void>(identity.SourceAnchor({
+    .parent_anchor = body,
+    .name = "Mirror",
+  }));
+  static_cast<void>(identity.SourceAnchor({
+    .parent_anchor = body,
+    .name = "Mirror",
+  }));
+  static_cast<void>(identity.SourceAnchor({ .parent_anchor = body }));
+  static_cast<void>(identity.SourceAnchor({ .parent_anchor = body }));
+  static_cast<void>(identity.SourceAnchor({ .name = "Lid" }));
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  static_cast<void>(identity.TakePublishedNodes("car.glb", diagnostics));
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  const auto& warning = diagnostics.front();
+  EXPECT_EQ(warning.severity, ImportSeverity::kWarning);
+  EXPECT_EQ(warning.code, import_codes::kNodeNamesAmbiguous);
+  EXPECT_EQ(warning.source_path, "car.glb");
+  EXPECT_THAT(warning.message,
+    testing::AllOf(testing::HasSubstr("'Body/Mirror' (2)"),
+      testing::HasSubstr("'Body/[no name]' (2)"),
+      testing::Not(testing::HasSubstr("Lid"))));
+
+  auto unique = ModelNodeIdentity(Identity());
+  static_cast<void>(unique.SourceAnchor({ .name = "Body" }));
+  static_cast<void>(unique.SourceAnchor({}));
+  diagnostics.clear();
+  static_cast<void>(unique.TakePublishedNodes("car.glb", diagnostics));
+  EXPECT_TRUE(diagnostics.empty());
+}
+
+//! A model with many such groups names a few and counts the rest.
+NOLINT_TEST(ModelNodeIdentityTest, AmbiguousNamesWarningIsBounded)
+{
+  auto identity = ModelNodeIdentity(Identity());
+  for (auto group = 0; group < 10; ++group) {
+    const auto name = "Part" + std::to_string(group);
+    static_cast<void>(identity.SourceAnchor({ .name = name }));
+    static_cast<void>(identity.SourceAnchor({ .name = name }));
+  }
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  static_cast<void>(identity.TakePublishedNodes("car.glb", diagnostics));
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_THAT(diagnostics.front().message,
+    testing::AllOf(testing::HasSubstr("'Part7' (2)"),
+      testing::HasSubstr("and 2 more groups"),
+      testing::Not(testing::HasSubstr("'Part8'"))));
+}
+
+//! A renamed node that continues its old anchor has not changed: it is neither
+//! new nor vanished, and its new anchor is what the model publishes.
+NOLINT_TEST(ModelNodeIdentityTest, AContinuedNodeIsNeitherNewNorVanished)
+{
+  const auto door_id = ModelNodeIdentity(Identity()).IdOf("Door");
+  auto identity = ModelNodeIdentity(Identity(),
+    ModelImportInputs {
+      .node_continuity = { { .anchor = "Door_New", .continues = "Door" } },
+      .published_nodes = { { .anchor = "Door", .node_id = door_id } },
+    });
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  ASSERT_TRUE(identity.ResolveContinuity(
+    std::vector<std::string> { "Door_New" }, "car.glb", diagnostics));
+  static_cast<void>(identity.Emit("Door_New"));
+
+  const auto publication = identity.TakePublishedNodes("car.glb", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_TRUE(publication.added.empty());
+  EXPECT_TRUE(publication.vanished.empty());
+  ASSERT_EQ(publication.published.size(), 1U);
+  EXPECT_EQ(publication.published.front().anchor, "Door_New");
+  EXPECT_EQ(publication.published.front().node_id, door_id);
+}
+
+//! A file renamed back has its first anchor and that anchor's ID: the entry
+//! that continued it waits unused, and nothing changed.
+NOLINT_TEST(ModelNodeIdentityTest, RenamingBackKeepsTheIdAndChangesNothing)
+{
+  const auto door_id = ModelNodeIdentity(Identity()).IdOf("Door");
+  auto identity = ModelNodeIdentity(Identity(),
+    ModelImportInputs {
+      .node_continuity = { { .anchor = "Door_New", .continues = "Door" } },
+      .published_nodes = { { .anchor = "Door_New", .node_id = door_id } },
+    });
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  ASSERT_TRUE(identity.ResolveContinuity(
+    std::vector<std::string> { "Door" }, "car.glb", diagnostics));
+
+  EXPECT_EQ(identity.Emit("Door"), door_id);
+  const auto publication = identity.TakePublishedNodes("car.glb", diagnostics);
+
+  EXPECT_TRUE(diagnostics.empty());
+  EXPECT_TRUE(publication.added.empty());
+  EXPECT_TRUE(publication.vanished.empty());
 }
 
 //! Identical paths share one record; records follow the order paths are

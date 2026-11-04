@@ -269,6 +269,24 @@ nodes, source fingerprint). The record holds the source identity, which never
 changes; node and surface IDs derive from it, so they survive moving or
 renaming the model.
 
+A node's ID also derives from its anchor, the path of names from the model's
+roots (`Body/Door_FL`). A node with a name of its own keeps its ID when the file
+adds, removes or reorders other nodes. Siblings sharing a name, or with none,
+are known by their place (`Body/Mirror`, `Body/Mirror[2]`, `Body/[1]`): such a
+change hands their IDs to each other, and every import of them warns
+(`import.node_names_ambiguous`), so give them unique names in the source.
+
+`node_continuity` keeps a renamed or moved node's ID: each entry says the node
+at `anchor` continues the one at `continues`, and chains are followed to their
+first anchor. Same-named siblings renamed in the source continue their old
+anchors (`Mirror_L` continues `Mirror`, `Mirror_R` continues `Mirror[2]`). An
+entry whose earlier anchor is still in the file, or that another entry already
+continues, is dropped with `import.node_continuity_conflict`, since two nodes
+cannot share an ID. Entries that continue each other in a circle fail the import
+(`import.node_continuity_cycle`). A node renamed back needs no entry of its own:
+its first anchor has its ID, so whoever writes the record removes an entry
+rather than adding its reverse.
+
 The `source` is a file reference from the record, with the grammar of every
 reference: relative within the model's mount (`Ship.glb` beside the record,
 `../SourceMedia/DCC/Ship.glb`), the mount path of a file in another mount
