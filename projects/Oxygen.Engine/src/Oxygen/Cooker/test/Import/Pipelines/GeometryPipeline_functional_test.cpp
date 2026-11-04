@@ -69,14 +69,6 @@ namespace {
   //=== Test Helpers
   //===---------------------------------------------------------//
 
-  constexpr uint32_t kGeomAttr_Normal = 1U << 0U;
-  constexpr uint32_t kGeomAttr_Tangent = 1U << 1U;
-  constexpr uint32_t kGeomAttr_Bitangent = 1U << 2U;
-  constexpr uint32_t kGeomAttr_Texcoord0 = 1U << 3U;
-  constexpr uint32_t kGeomAttr_Color0 = 1U << 4U;
-  constexpr uint32_t kGeomAttr_JointWeights = 1U << 5U;
-  constexpr uint32_t kGeomAttr_JointIndices = 1U << 6U;
-
   struct MeshBuffers {
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> normals;
@@ -351,13 +343,6 @@ namespace {
     EXPECT_EQ(
       asset_desc.header.version, data::pak::geometry::kGeometryAssetVersion);
     EXPECT_EQ(asset_desc.lod_count, 1U);
-    EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Normal), 0U);
-    EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Tangent), 0U);
-    EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Bitangent), 0U);
-    EXPECT_NE((asset_desc.header.variant_flags & kGeomAttr_Texcoord0), 0U);
-    EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_Color0), 0U);
-    EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointIndices), 0U);
-    EXPECT_EQ((asset_desc.header.variant_flags & kGeomAttr_JointWeights), 0U);
 
     size_t offset = sizeof(data::pak::geometry::GeometryAssetDesc);
     const auto mesh_desc_read
@@ -691,6 +676,307 @@ namespace {
     EXPECT_FALSE(result.cooked.has_value());
     EXPECT_TRUE(HasDiagnosticCode(
       result.diagnostics, import_codes::kMeshInvalidLodCount));
+  }
+
+  //=== Unusable Source Data Tests
+  //===---------------------------------------------//
+
+  //! The vertices a cooked LOD holds.
+  [[nodiscard]] auto VerticesOf(const MeshBuildPipeline::CookedMeshPayload& lod)
+    -> std::vector<data::Vertex>
+  {
+    auto vertices = std::vector<data::Vertex>(
+      lod.vertex_buffer.data.Size() / sizeof(data::Vertex));
+    std::memcpy(vertices.data(), lod.vertex_buffer.data.Bytes().data(),
+      vertices.size() * sizeof(data::Vertex));
+    return vertices;
+  }
+
+  class GeometryPipelineSourceDataTest : public GeometryPipelineTest {
+  protected:
+    auto Cook(MeshBuildPipeline::WorkItem item) -> MeshBuildPipeline::WorkResult
+    {
+      return RunPipelineOnce<MeshBuildPipeline>(loop_, std::move(item), pool_,
+        MeshBuildPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+        });
+    }
+  };
+
+  //! A range whose end wraps 32 bits is past the indices, not before them.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, RangeEndDoesNotWrap)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->ranges.push_back(TriangleRange {
+      .surface = 0,
+      .first_index = std::numeric_limits<uint32_t>::max() - 2U,
+      .index_count = 6,
+    });
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshInvalidRange));
+    EXPECT_EQ(result.cooked->lods.front().index_buffer.data.Size(),
+      3U * sizeof(uint32_t));
+  }
+
+  //! Only the corners without a direction take the generated normal; the
+  //! others keep what the source authors.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, UnusableNormalsAreGenerated)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    const auto authored = glm::normalize(glm::vec3 { 1.0F, 0.0F, 1.0F });
+    buffers->normals = {
+      glm::vec3 { 0.0F },
+      glm::vec3 { std::numeric_limits<float>::quiet_NaN() },
+      authored,
+    };
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshInvalidNormals));
+    constexpr auto kTolerance = 1e-5F;
+    const auto vertices = VerticesOf(result.cooked->lods.front());
+    ASSERT_EQ(vertices.size(), 3U);
+    for (const auto& vertex : vertices) {
+      const auto expected
+        = vertex.position.y > 0.0F ? authored : glm::vec3 { 0.0F, 0.0F, 1.0F };
+      EXPECT_GT(glm::dot(vertex.normal, expected), 1.0F - kTolerance);
+    }
+  }
+
+  //! A triangle without an area has no direction: its normal is the engine's
+  //! up, like every other frame without one.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, DegenerateTriangleFacesUp)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->normals.clear();
+    buffers->positions = {
+      glm::vec3 { 1.0F },
+      glm::vec3 { 1.0F },
+      glm::vec3 { 1.0F },
+    };
+    auto item = MakeWorkItem(buffers);
+    item.request.options.normal_policy
+      = GeometryAttributePolicy::kGenerateMissing;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      EXPECT_TRUE(vertex.normal == glm::vec3 { space::move::Up });
+    }
+  }
+
+  //! No renderer draws a position that is not finite: its triangles go, the
+  //! rest of the mesh stays.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, NonFinitePositionsDropTriangles)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->positions.emplace_back(
+      std::numeric_limits<float>::infinity(), 1.0F, 0.0F);
+    buffers->normals.emplace_back(0.0F, 0.0F, 1.0F);
+    buffers->texcoords.emplace_back(1.0F, 1.0F);
+    buffers->indices = { 0U, 1U, 2U, 1U, 3U, 2U };
+    buffers->ranges.front().index_count = 6;
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshInvalidPositions));
+    EXPECT_EQ(result.cooked->lods.front().index_buffer.data.Size(),
+      3U * sizeof(uint32_t));
+    EXPECT_EQ(VerticesOf(result.cooked->lods.front()).size(), 3U);
+  }
+
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, NonFiniteUvsAreZeroed)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->texcoords.at(1).y = std::numeric_limits<float>::quiet_NaN();
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshInvalidUvs));
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      EXPECT_TRUE(std::isfinite(vertex.texcoord.x));
+      EXPECT_TRUE(std::isfinite(vertex.texcoord.y));
+    }
+  }
+
+  //! A surface all of whose triangles are unusable goes; a view drawing
+  //! nothing would make the loader refuse the whole geometry.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, EmptySurfaceIsDropped)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->indices = { 0U, 1U, 2U, 9U, 9U, 9U };
+    buffers->ranges.push_back(TriangleRange {
+      .surface = 1,
+      .source_slot = 1,
+      .first_index = 3,
+      .index_count = 3,
+    });
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success)
+      << oxygen::cooker::test::DiagnosticSummary(result.diagnostics);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshSurfaceEmpty));
+    const auto mesh = oxygen::serio::CopyAt<data::pak::geometry::MeshDesc>(
+      std::span { result.cooked->descriptor_bytes },
+      oxygen::serio::ByteOffset {
+        sizeof(data::pak::geometry::GeometryAssetDesc) });
+    ASSERT_HAS_VALUE(mesh);
+    EXPECT_EQ(mesh->submesh_count, 1U);
+    EXPECT_EQ(mesh->mesh_view_count, 1U);
+  }
+
+  //! A mesh descriptor counts joints in 16 bits: its largest joint index is
+  //! the one below the largest count, and a mesh using more binds to nothing.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, JointCountFitsTheMeshDescriptor)
+  {
+    constexpr auto kMaxJoint = uint32_t { 65534U };
+    const auto cook_up_to = [&](const uint32_t joint) {
+      const auto buffers = MakeSkinnedTriangleMeshBuffers();
+      buffers->joint_indices.assign(3U, glm::uvec4 { joint, 0U, 0U, 0U });
+      buffers->inverse_bind_matrices.assign(joint + 1U, glm::mat4(1.0F));
+      buffers->joint_remap.assign(joint + 1U, 0U);
+      return Cook(MakeSkinnedWorkItem(buffers));
+    };
+
+    const auto fits = cook_up_to(kMaxJoint);
+    ASSERT_HAS_VALUE(fits.cooked);
+    EXPECT_FALSE(fits.cooked->lods.front().auxiliary_buffers.empty());
+
+    const auto too_many = cook_up_to(kMaxJoint + 1U);
+    ASSERT_HAS_VALUE(too_many.cooked);
+    EXPECT_TRUE(too_many.cooked->lods.front().auxiliary_buffers.empty());
+    EXPECT_TRUE(HasDiagnosticCode(
+      too_many.diagnostics, import_codes::kMeshSkinningBuffersMismatch));
+  }
+
+  //! A bitangent too short to have a direction says nothing of the mirroring.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, TinyBitangentDoesNotMirror)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->tangents.assign(3U, glm::vec3 { 1.0F, 0.0F, 0.0F });
+    constexpr auto kTiny = 1e-9F;
+    buffers->bitangents.assign(3U, glm::vec3 { 0.0F, kTiny, 0.0F });
+    auto item = MakeWorkItem(buffers);
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kPreserveIfPresent;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      const auto unmirrored = -glm::cross(vertex.normal, vertex.tangent);
+      EXPECT_GT(glm::dot(vertex.bitangent, unmirrored), 0.0F);
+    }
+  }
+
+  //! Baking keeps a tangent without a direction for the frame repair, rather
+  //! than failing the geometry over it.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, BakeKeepsUnusableTangentFrame)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->tangents.assign(3U, glm::vec3 { 0.0F });
+    buffers->bitangents.assign(3U, glm::vec3 { 0.0F });
+    auto item = MakeWorkItem(buffers);
+    item.request.options.tangent_policy
+      = GeometryAttributePolicy::kPreserveIfPresent;
+    auto scale = glm::mat4(1.0F);
+    scale[0][0] = 2.0F;
+    item.bake_transform = scale;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success)
+      << oxygen::cooker::test::DiagnosticSummary(result.diagnostics);
+    ASSERT_HAS_VALUE(result.cooked);
+    constexpr auto kTolerance = 1e-5F;
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      EXPECT_NEAR(glm::length(vertex.tangent), 1.0F, kTolerance);
+      EXPECT_NEAR(glm::length(vertex.bitangent), 1.0F, kTolerance);
+    }
+  }
+
+  //! Import settings set through the API reach the build unchecked: it keeps
+  //! the geometry readable and says why the setting is not applied.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, InvalidLodPolicyIsNotApplied)
+  {
+    auto item = MakeWorkItem(MakeTriangleMeshBuffers());
+    auto policy = data::pak::geometry::LodPolicyRecord {};
+    policy.lod_index = data::pak::geometry::kMaxLodCount;
+    item.request.options.geometry_defaults[item.storage_mesh_name].lod_policy
+      = policy;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshLodPolicyInvalid));
+    const auto asset
+      = oxygen::serio::CopyAt<data::pak::geometry::GeometryAssetDesc>(
+        std::span { result.cooked->descriptor_bytes });
+    ASSERT_HAS_VALUE(asset);
+    EXPECT_EQ(asset->default_lod_policy.lod_index, 0U);
+  }
+
+  //! A descriptor the geometry's own loader refuses is reported as that, not
+  //! as anything about its surfaces.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, RefusedDescriptorHasItsOwnCode)
+  {
+    auto built = Cook(MakeWorkItem(MakeTriangleMeshBuffers()));
+    ASSERT_HAS_VALUE(built.cooked);
+    auto item = GeometryPipeline::WorkItem {};
+    item.source_id = "mesh0";
+    item.cooked = std::move(*built.cooked);
+    item.bindings = {
+      MeshBufferBindings {
+        .vertex_buffer = data::pak::core::ResourceIndexT { 1U },
+        .index_buffer = data::pak::core::ResourceIndexT { 2U },
+      },
+    };
+    using data::pak::geometry::GeometryAssetDesc;
+    using data::pak::geometry::LodPolicyRecord;
+    item.cooked.descriptor_bytes.at(
+      offsetof(GeometryAssetDesc, default_lod_policy)
+      + offsetof(LodPolicyRecord, lod_index))
+      = std::byte { data::pak::geometry::kMaxLodCount };
+
+    auto result = GeometryPipeline::WorkResult {};
+    // co::Run blocks until the coroutine completes.
+    co::Run(loop_, [&] -> co::Co<> {
+      GeometryPipeline finalizer(GeometryPipeline::Config {});
+      OXCO_WITH_NURSERY(n)
+      {
+        finalizer.Start(n);
+        co_await finalizer.Submit(std::move(item));
+        result = co_await finalizer.Collect();
+        finalizer.Close();
+        co_return kJoin;
+      };
+    });
+
+    EXPECT_FALSE(result.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshDescriptorInvalid));
   }
 
   //=== Mesh View Split Tests

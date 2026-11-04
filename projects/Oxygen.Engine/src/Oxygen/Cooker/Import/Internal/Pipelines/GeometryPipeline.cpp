@@ -471,9 +471,11 @@ auto GeometryPipeline::Worker() -> co::Co<>
         const auto geometry = loaders::LoadGeometryAsset(context);
         item.cooked.surface_provenance->inventory = geometry->Surfaces();
       } catch (const std::exception& error) {
-        diagnostics.push_back(MakeErrorDiagnostic(
-          std::string(import_codes::kMeshSurfaceInventoryInvalid), error.what(),
-          item.source_id, ""));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kMeshDescriptorInvalid),
+            std::string("The geometry's own loader refuses its descriptor: ")
+              + error.what(),
+            item.source_id, ""));
       }
     }
     const bool success = finalized.has_value() && diagnostics.empty();

@@ -182,8 +182,6 @@ inline auto LoadAssetHeader(
   LOG_F(1, "name offset        : {}", header.name_offset);
 
   LOG_F(1, "format version     : {}", header.version);
-  LOG_F(1, "variant flags      : 0x{:08X}", header.variant_flags);
-  LOG_F(1, "streaming priority : {}", header.streaming_priority);
   auto content_hash_hex = std::string {};
   content_hash_hex.reserve(header.content_hash.size() * 2);
   for (const auto byte : header.content_hash) {

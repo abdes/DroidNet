@@ -45,7 +45,7 @@ In scope:
 4. Shader reference cooking: explicit shader stage arrays or synthesized
    defaults.
 5. Loose-cooked descriptor emission (`.omat`) via `LooseCookedLayout`.
-6. Binary format: `MaterialAssetDesc` (311 bytes) + `ShaderReferenceDesc[]` (21
+6. Binary format: `MaterialAssetDesc` (306 bytes) + `ShaderReferenceDesc[]` (21
    bytes each) + the descriptor string table, in `PakFormat_render.h`.
 7. Runtime loading via `MaterialLoader` and `MaterialAsset`.
 8. Manifest batch orchestration with texture dependency ordering.
@@ -98,7 +98,7 @@ The following facts were confirmed during the documentation pass:
 | Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`)                |
 | Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                  |
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                |
-| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==311)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
+| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==306)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
 | Loose cooked layout for materials              | The descriptor lives at its identity: `/Content/Wood/Floor.omat` is `Wood/Floor.omat` under the cooked root (`internal::PlaceAsset`)                     |
 | Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                    |
 | Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                      |
@@ -260,7 +260,7 @@ Architectural split:
      9. `BuildShaderReferences` — validates shader stages (unique types, 1..32
         count, non-empty paths), sorts ascending by `shader_type`, fills
         `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
-     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (311 bytes),
+     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (306 bytes),
          `ShaderReferenceDesc[]` and the string table to a `MemoryStream`.
          The pipeline does not hash the descriptor; `AssetEmitter` records
          `header.content_hash` when it emits the bytes.
@@ -649,7 +649,7 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 | 7    | `AssignTextureIndices`         | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
 | 8    | `BuildMaterialUvTransformDesc` | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
 | 9    | `BuildShaderReferences`        | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
-| 10   | `SerializeMaterialDescriptor`  | Packed write: `MaterialAssetDesc` (311 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
+| 10   | `SerializeMaterialDescriptor`  | Packed write: `MaterialAssetDesc` (306 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
 
 All stages cooperatively support cancellation via `work_item.stop_token`.
 
@@ -657,7 +657,7 @@ All stages cooperatively support cancellation via `work_item.stop_token`.
 
 ## 9. Binary Format
 
-### 9.1 `AssetHeader` (51 bytes, `PakFormat_core.h`)
+### 9.1 `AssetHeader` (46 bytes, `PakFormat_core.h`)
 
 ```cpp
 #pragma pack(push, 1)
@@ -671,19 +671,17 @@ struct AssetHeader {
   DescriptorStringTable strings = {}; // The descriptor's string table
   StringTableOffsetT name_offset = 0; // Asset name (debug/tools)
   uint8_t  version         = 0;      // kMaterialAssetVersion
-  uint8_t  streaming_priority = 0;
   ContentHashDigest content_hash = {}; // SHA-256, set by AssetEmitter
-  uint32_t variant_flags   = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 51);
+static_assert(sizeof(AssetHeader) == 46);
 ```
 
 Every string of the descriptor (the asset name and the three shader strings) is
 an offset into one string table: NUL-terminated UTF-8 strings, starting with the
 empty string at offset 0. Strings have no length limit and are never truncated.
 
-### 9.2 `MaterialAssetDesc` (311 bytes, `PakFormat_render.h`)
+### 9.2 `MaterialAssetDesc` (306 bytes, `PakFormat_render.h`)
 
 All materials stored in loose cooked containers and in PAK files share this
 layout. Written as a single `.omat` file: the record, the shader references,
@@ -692,7 +690,7 @@ then the string table.
 ```cpp
 #pragma pack(push, 1)
 struct MaterialAssetDesc {
-  AssetHeader header;            // 51 bytes
+  AssetHeader header;            // 46 bytes
 
   uint8_t  material_domain;     // MaterialDomain enum
   uint32_t flags;               // Bitfield (see Section 9.4)
@@ -756,7 +754,7 @@ struct MaterialAssetDesc {
   float    grid_origin_color[4];
 };
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 311);
+static_assert(sizeof(MaterialAssetDesc) == 306);
 ```
 
 Immediately following the `MaterialAssetDesc` in the `.omat` file is an array of

@@ -150,6 +150,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kGeometryBufferSidecarMissing = "geometry.buffer.sidecar_missing";
   inline constexpr std::string_view kGeometryBufferSidecarReadFailed = "geometry.buffer.sidecar_read_failed";
   inline constexpr std::string_view kGeometryBufferUsageMismatch = "geometry.buffer.usage_mismatch";
+  inline constexpr std::string_view kGeometryBufferVerticesInvalid = "geometry.buffer.vertices_invalid";
   inline constexpr std::string_view kGeometryBufferViewInvalid = "geometry.buffer.view_invalid";
   inline constexpr std::string_view kGeometryBufferViewMissing = "geometry.buffer.view_missing";
   inline constexpr std::string_view kGeometryBufferViewOverflow = "geometry.buffer.view_overflow";
@@ -234,6 +235,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMeshBufferTooLarge = "mesh.buffer_too_large";
   inline constexpr std::string_view kMeshColorsMismatch = "mesh.colors.mismatch";
   inline constexpr std::string_view kMeshCountOverflow = "mesh.count_overflow";
+  inline constexpr std::string_view kMeshDescriptorInvalid = "mesh.descriptor_invalid";
   inline constexpr std::string_view kMeshDropped = "mesh.dropped";
   inline constexpr std::string_view kMeshEmptyPrimitives = "mesh.empty_primitives";
   inline constexpr std::string_view kMeshFaceMaterialMissing = "mesh.face_material_missing";
@@ -243,10 +245,13 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMeshInvalidIndex = "mesh.invalid_index";
   inline constexpr std::string_view kMeshInvalidIndices = "mesh.invalid_indices";
   inline constexpr std::string_view kMeshInvalidLodCount = "mesh.invalid_lod_count";
+  inline constexpr std::string_view kMeshInvalidNormals = "mesh.invalid_normals";
+  inline constexpr std::string_view kMeshInvalidPositions = "mesh.invalid_positions";
   inline constexpr std::string_view kMeshInvalidRange = "mesh.invalid_range";
   inline constexpr std::string_view kMeshInvalidTransformBake = "mesh.invalid_transform_bake";
   inline constexpr std::string_view kMeshInvalidUvs = "mesh.invalid_uvs";
   inline constexpr std::string_view kMeshLodDropped = "mesh.lod_dropped";
+  inline constexpr std::string_view kMeshLodPolicyInvalid = "mesh.lod_policy_invalid";
   inline constexpr std::string_view kMeshMissingBuffers = "mesh.missing_buffers";
   inline constexpr std::string_view kMeshMissingIndices = "mesh.missing_indices";
   inline constexpr std::string_view kMeshMissingInverseBind = "mesh.missing_inverse_bind";
@@ -264,7 +269,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMeshSkinningBuffers = "mesh.skinning_buffers";
   inline constexpr std::string_view kMeshSkinningBuffersMismatch = "mesh.skinning_buffers_mismatch";
   inline constexpr std::string_view kMeshSkinningMismatch = "mesh.skinning.mismatch";
-  inline constexpr std::string_view kMeshSurfaceInventoryInvalid = "mesh.surface_inventory_invalid";
+  inline constexpr std::string_view kMeshSurfaceEmpty = "mesh.surface_empty";
   inline constexpr std::string_view kMeshSurfaceOob = "mesh.surface_oob";
   inline constexpr std::string_view kMeshSurfaceProvenanceInvalid = "mesh.surface_provenance_invalid";
   inline constexpr std::string_view kMeshTangentsMismatch = "mesh.tangents.mismatch";

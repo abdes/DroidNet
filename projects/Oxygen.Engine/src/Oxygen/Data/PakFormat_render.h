@@ -196,7 +196,7 @@ struct MaterialAssetDesc {
 //   count of `shader_stages`.
 // - The descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 311);
+static_assert(sizeof(MaterialAssetDesc) == 306);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 

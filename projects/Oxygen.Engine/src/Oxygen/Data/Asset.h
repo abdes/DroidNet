@@ -144,23 +144,11 @@ public:
     return GetHeader().version;
   }
 
-  //! Returns the streaming priority (0=highest, 255=lowest).
-  [[nodiscard]] auto GetStreamingPriority() const noexcept -> uint8_t
-  {
-    return GetHeader().streaming_priority;
-  }
-
   //! Returns the content integrity hash (full SHA-256 digest).
   [[nodiscard]] auto GetContentHash() const noexcept
     -> const pak::core::ContentHashDigest&
   {
     return GetHeader().content_hash;
-  }
-
-  //! Returns the project-defined variant flags.
-  [[nodiscard]] auto GetVariantFlags() const noexcept -> uint32_t
-  {
-    return GetHeader().variant_flags;
   }
 
 protected:

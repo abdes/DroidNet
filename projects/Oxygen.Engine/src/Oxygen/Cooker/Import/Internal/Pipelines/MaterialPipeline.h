@@ -56,11 +56,6 @@ namespace oxygen::content::import {
  - Pipelines do not provide a direct cancel API.
  - Cancellation is expressed by cancelling the job nursery and by checking the
    `WorkItem` stop tokens during processing.
-
- ### TODO
-
- - TODO: Wire `header.streaming_priority` from import configuration.
- - TODO: Wire `header.variant_flags` from import configuration.
 */
 class MaterialPipeline final : public Object {
   OXYGEN_TYPED(MaterialPipeline)

@@ -585,7 +585,6 @@ auto LightScene::MakeSolidColorMaterial(std::string_view name, const Vec4& rgba,
   desc.header.asset_type
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
-  desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling
     | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0U);

@@ -2409,13 +2409,8 @@ namespace {
                   min_uv = glm::min(min_uv, uv);
                   max_uv = glm::max(max_uv, uv);
                 }
-                if (has_invalid_uv) {
-                  result.diagnostics.push_back(MakeWarningDiagnostic(
-                    std::string(import_codes::kMeshInvalidUvs),
-                    "glTF primitive has NaN/Inf UVs; rendering may be "
-                    "corrupted",
-                    input.source_id_prefix, mesh_name));
-                } else {
+                // The mesh build zeroes and reports UVs that are not finite.
+                if (!has_invalid_uv) {
                   DLOG_F(INFO,
                     "glTF mesh '{}' UV range min=({:.4f},{:.4f}) "
                     "max=({:.4f},{:.4f})",

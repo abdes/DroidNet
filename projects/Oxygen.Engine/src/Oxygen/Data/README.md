@@ -51,20 +51,20 @@ asset descriptors; they are not listed in the asset directory themselves.
 
 ## 3. Core Types Cheat Sheet
 
-| Type              | Responsibility                                     | Notes                                             |
-| ----------------- | -------------------------------------------------- | ------------------------------------------------- |
-| `Asset`           | Base class for asset metadata                      | Provides type, name, version, hash, variant flags |
-| `AssetKey`        | 128‑bit GUID                                       | Stable identity; hash + to_string                 |
-| `GeometryAsset`   | Group of LOD meshes + bounds                       | Holds `std::vector<std::shared_ptr<Mesh>>`        |
-| `Mesh`            | Vertex/index storage + submeshes + bounds          | Storage variant: owned vs referenced              |
-| `SubMesh`         | Material + ≥1 `MeshView`                           | Enforces 1:1 material & ≥1 view                   |
-| `MeshView`        | Non-owning slice of mesh data                      | Ranges validated on creation                      |
-| `MeshBuilder`     | Fluent safe construction                           | Prevents mixed storage modes                      |
-| `MaterialAsset`   | PBR parameters + texture indices + shader refs     | Factories: `CreateDefault`, `CreateDebug`         |
-| `ShaderReference` | Stage + source path + entry point + source hash    | Inline after material desc; checked when built    |
-| `BufferResource`  | Raw / typed / structured buffer descriptor + bytes | Usage flags + format interpretation               |
-| `TextureResource` | Texture descriptor + bytes                         | Width/height/depth/mips/format                    |
-| `Vertex`          | Position/normal/UV/tangent frame/color             | Epsilon equality + quantized hash                 |
+| Type              | Responsibility                                     | Notes                                          |
+| ----------------- | -------------------------------------------------- | ---------------------------------------------- |
+| `Asset`           | Base class for asset metadata                      | Provides type, name, version, hash             |
+| `AssetKey`        | 128‑bit GUID                                       | Stable identity; hash + to_string              |
+| `GeometryAsset`   | Group of LOD meshes + bounds                       | Holds `std::vector<std::shared_ptr<Mesh>>`     |
+| `Mesh`            | Vertex/index storage + submeshes + bounds          | Storage variant: owned vs referenced           |
+| `SubMesh`         | Material + ≥1 `MeshView`                           | Enforces 1:1 material & ≥1 view                |
+| `MeshView`        | Non-owning slice of mesh data                      | Ranges validated on creation                   |
+| `MeshBuilder`     | Fluent safe construction                           | Prevents mixed storage modes                   |
+| `MaterialAsset`   | PBR parameters + texture indices + shader refs     | Factories: `CreateDefault`, `CreateDebug`      |
+| `ShaderReference` | Stage + source path + entry point + source hash    | Inline after material desc; checked when built |
+| `BufferResource`  | Raw / typed / structured buffer descriptor + bytes | Usage flags + format interpretation            |
+| `TextureResource` | Texture descriptor + bytes                         | Width/height/depth/mips/format                 |
+| `Vertex`          | Position/normal/UV/tangent frame/color             | Epsilon equality + quantized hash              |
 
 ---
 

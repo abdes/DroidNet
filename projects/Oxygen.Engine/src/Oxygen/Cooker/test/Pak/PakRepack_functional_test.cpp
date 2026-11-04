@@ -114,11 +114,11 @@ NOLINT_TEST(PakRepackTest, RejectsDescriptorBytesThatDisagreeWithTheCatalog)
   const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);
   ASSERT_THAT(packed.Diagnostics(), HasNoErrors());
   ASSERT_HAS_VALUE(packed.planned.plan);
-  // Corrupt the descriptor's variant flags after the pak was published.
+  // Corrupt the descriptor's name offset after the pak was published.
   const auto published = workspace.Storage().Bytes(request.output_pak_path);
   auto bytes = std::vector<std::byte>(published.begin(), published.end());
   bytes.at(oxygen::base::CheckedAt(packed.planned.plan->Assets(), 0U).offset
-    + offsetof(core::AssetHeader, variant_flags)) = std::byte { 'X' };
+    + offsetof(core::AssetHeader, name_offset)) = std::byte { 'X' };
   workspace.Storage().AddFile(request.output_pak_path, bytes);
 
   const auto rejected

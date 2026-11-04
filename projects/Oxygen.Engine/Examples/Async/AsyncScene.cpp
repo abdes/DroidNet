@@ -99,7 +99,6 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.header.asset_type = static_cast<uint8_t>(
     oxygen::data::AssetType::kMaterial); // MaterialAsset (for tooling/debug)
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
-  desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling
     | (double_sided ? pak::render::kMaterialFlag_DoubleSided : 0U);

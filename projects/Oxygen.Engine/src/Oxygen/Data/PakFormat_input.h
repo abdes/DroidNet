@@ -116,7 +116,7 @@ struct InputActionAssetDesc {
   InputActionAssetFlags flags = InputActionAssetFlags::kNone;
 };
 #pragma pack(pop)
-static_assert(sizeof(InputActionAssetDesc) == 56);
+static_assert(sizeof(InputActionAssetDesc) == 51);
 
 #pragma pack(push, 1)
 struct InputMappingContextAssetDesc {
@@ -130,7 +130,7 @@ struct InputMappingContextAssetDesc {
 // Followed by the mapping, trigger and trigger aux tables, then the descriptor
 // string table, which holds the slot names.
 #pragma pack(pop)
-static_assert(sizeof(InputMappingContextAssetDesc) == 107);
+static_assert(sizeof(InputMappingContextAssetDesc) == 102);
 
 #pragma pack(push, 1)
 struct InputActionMappingRecord {

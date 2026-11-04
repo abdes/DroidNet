@@ -174,7 +174,7 @@ struct PhysicsMaterialAssetDesc {
 };
 #pragma pack(pop)
 // clang-format off
-static_assert(sizeof(PhysicsMaterialAssetDesc) == 69);
+static_assert(sizeof(PhysicsMaterialAssetDesc) == 64);
 static_assert(offsetof(PhysicsMaterialAssetDesc, static_friction) == sizeof(core::AssetHeader));
 static_assert(offsetof(PhysicsMaterialAssetDesc, dynamic_friction) == offsetof(PhysicsMaterialAssetDesc, static_friction) + sizeof(float));
 static_assert(offsetof(PhysicsMaterialAssetDesc, combine_mode_friction) == offsetof(PhysicsMaterialAssetDesc, density) + sizeof(float));
@@ -348,7 +348,7 @@ struct CollisionShapeAssetDesc {
 };
 #pragma pack(pop)
 // clang-format off
-static_assert(sizeof(CollisionShapeAssetDesc) == 225);
+static_assert(sizeof(CollisionShapeAssetDesc) == 220);
 static_assert(offsetof(CollisionShapeAssetDesc, shape_type) == sizeof(core::AssetHeader));
 static_assert(offsetof(CollisionShapeAssetDesc, is_sensor) == offsetof(CollisionShapeAssetDesc, local_scale) + sizeof(float[3]));
 static_assert(offsetof(CollisionShapeAssetDesc, shape_params) == offsetof(CollisionShapeAssetDesc, material_asset_key) + sizeof(AssetKey));
@@ -405,8 +405,8 @@ struct PhysicsSceneAssetDesc {
 };
 #pragma pack(pop)
 // clang-format off
-static_assert(sizeof(PhysicsSceneAssetDesc) == 116);
-static_assert(offsetof(PhysicsSceneAssetDesc, backend) == 115);
+static_assert(sizeof(PhysicsSceneAssetDesc) == 111);
+static_assert(offsetof(PhysicsSceneAssetDesc, backend) == 110);
 static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_key) == sizeof(core::AssetHeader));
 static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_content_hash) == offsetof(PhysicsSceneAssetDesc, component_table_directory_offset) + sizeof(core::OffsetT));
 // clang-format on

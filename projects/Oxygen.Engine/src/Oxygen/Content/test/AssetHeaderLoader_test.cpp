@@ -51,11 +51,9 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   header.strings = { .offset = 200U, .size = 9U };
   header.name_offset = 1U;
   header.version = 42;
-  header.streaming_priority = 7;
   constexpr uint64_t kExpectedHashPrefix = 0x123456789ABCDEF0ULL;
   std::memcpy(header.content_hash.data(), &kExpectedHashPrefix,
     sizeof(kExpectedHashPrefix));
-  header.variant_flags = 0xAABBCCDD;
   const auto buffer
     = std::bit_cast<std::array<std::byte, sizeof(AssetHeader)>>(header);
 
@@ -73,12 +71,10 @@ NOLINT_TEST(LoadAssetHeaderBasic, ReturnsCorrectHeader)
   EXPECT_EQ(result.strings.size, 9U);
   EXPECT_EQ(result.name_offset, 1U);
   EXPECT_EQ(result.version, 42);
-  EXPECT_EQ(result.streaming_priority, 7);
   const auto hash_prefix = oxygen::serio::CopyAt<uint64_t>(
     std::as_bytes(std::span { result.content_hash }));
   ASSERT_HAS_VALUE(hash_prefix);
   EXPECT_EQ(*hash_prefix, kExpectedHashPrefix);
-  EXPECT_EQ(result.variant_flags, 0xAABBCCDDU);
 }
 
 //! Scenario: LoadAssetHeader throws on invalid asset type

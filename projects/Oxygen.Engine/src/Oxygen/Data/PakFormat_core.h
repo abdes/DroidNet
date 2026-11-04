@@ -531,24 +531,18 @@ static_assert(offsetof(DescriptorStringTable, size) == 4);
 //! Asset header.
 /*!
  Always the first field in every asset descriptor. Contains metadata about the
- asset, such as its type, name, version, streaming priority, content hash, and
- variant flags.
+ asset: its type, name, version and content hash.
 
  ### Notes
 
  - `strings` locates the descriptor's string table; `name_offset` is the asset
    name's offset in it. The name is a label for tools and logs, not an
    identity.
- - The `streaming_priority` field is used to determine the order in which
-   assets should be loaded. Lower values indicate higher priority.
  - The `asset_type` field is redundant with the directory entry, but is
    necessary for debugging and sanity checks.
  - The `content_hash` field is the SHA-256 of the whole descriptor, taken with
    this field zeroed (`data::ComputeDescriptorHash`). A cook records it and
    every reader of cooked content refuses a descriptor that does not.
- - The `variant_flags` field is a project-defined bitfield that can be used to
-   store additional metadata about the asset, such as its intended use or
-   compatibility with specific features.
 */
 #pragma pack(push, 1)
 struct AssetHeader {
@@ -556,19 +550,15 @@ struct AssetHeader {
   DescriptorStringTable strings = {}; // The descriptor's string table
   StringTableOffsetT name_offset = 0; // Asset name, for debugging/tools
   uint8_t version = 0; // Asset format version (up to 256 versions)
-  uint8_t streaming_priority = 0; // Loading priority: 0=highest, 255=lowest
   ContentHashDigest content_hash = {}; // Full SHA-256 content integrity hash
-  uint32_t variant_flags = 0; // Project-defined (not interpreted by engine)
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 51);
+static_assert(sizeof(AssetHeader) == 46);
 static_assert(offsetof(AssetHeader, asset_type) == 0);
 static_assert(offsetof(AssetHeader, strings) == 1);
 static_assert(offsetof(AssetHeader, name_offset) == 9);
 static_assert(offsetof(AssetHeader, version) == 13);
-static_assert(offsetof(AssetHeader, streaming_priority) == 14);
-static_assert(offsetof(AssetHeader, content_hash) == 15);
-static_assert(offsetof(AssetHeader, variant_flags) == 47);
+static_assert(offsetof(AssetHeader, content_hash) == 14);
 
 } // namespace oxygen::data::pak::core
 

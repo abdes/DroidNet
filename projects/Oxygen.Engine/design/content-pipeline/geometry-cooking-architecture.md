@@ -70,7 +70,7 @@ In scope:
 7. Descriptor finalization: `GeometryPipeline::FinalizeDescriptor` patches
    `ResourceIndexT` placeholders and material `AssetKey` fields.
 8. Loose-cooked descriptor emission (`.ogeo`) via `LooseCookedLayout`.
-9. Binary format: `GeometryAssetDesc` (174 bytes) + `MeshDesc[lod_count]` (85
+9. Binary format: `GeometryAssetDesc` (169 bytes) + `MeshDesc[lod_count]` (85
    bytes each, variable tail) + `SurfaceDesc[surface_count]` (20 bytes each) +
    the descriptor string table, in `PakFormat_geometry.h`.
 10. Asset defaults: each surface's `Visibility` and `CastsShadows` and the
@@ -855,7 +855,7 @@ when the finalized bytes are emitted.
 
 ## 9. Binary Format
 
-### 9.1 `AssetHeader` (51 bytes, `PakFormat_core.h`)
+### 9.1 `AssetHeader` (46 bytes, `PakFormat_core.h`)
 
 ```cpp
 #pragma pack(push, 1)
@@ -864,24 +864,22 @@ struct AssetHeader {
   DescriptorStringTable strings = {};  // {offset, size} of the string table
   StringTableOffsetT name_offset = 0;  // geometry name
   uint8_t version = 0;                 // kGeometryAssetVersion
-  uint8_t streaming_priority = 0;      // 0 = highest
   ContentHashDigest content_hash = {}; // SHA-256, set by AssetEmitter
-  uint32_t variant_flags = 0;          // geometry attribute mask
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetHeader) == 51);
+static_assert(sizeof(AssetHeader) == 46);
 ```
 
 The geometry, LOD and submesh names are offsets into the descriptor's string
 table: NUL-terminated UTF-8 strings after the last record, starting with the
 empty string at offset 0. Names have no length limit and are never truncated.
 
-### 9.2 `GeometryAssetDesc` (174 bytes, `PakFormat_geometry.h`)
+### 9.2 `GeometryAssetDesc` (169 bytes, `PakFormat_geometry.h`)
 
 ```cpp
 #pragma pack(push, 1)
 struct GeometryAssetDesc {
-  AssetHeader header;             // 51 bytes; asset_type = kGeometry
+  AssetHeader header;             // 46 bytes; asset_type = kGeometry
   uint32_t lod_count = 0;         // 1 to kMaxLodCount (8) MeshDesc entries
   float bounding_box_min[3] = {}; // AABB min (pre-computed by tooling)
   float bounding_box_max[3] = {}; // AABB max (pre-computed by tooling)
@@ -891,7 +889,7 @@ struct GeometryAssetDesc {
 // Followed by: MeshDesc meshes[lod_count]; SurfaceDesc surfaces[surface_count];
 // then the string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 174);
+static_assert(sizeof(GeometryAssetDesc) == 169);
 ```
 
 `LodPolicyRecord` (91 bytes) holds `LodPolicyType type` (`kFixed`,
@@ -1005,7 +1003,7 @@ layout revision. Adding the table and `default_lod_policy` increments
 ### 9.7 Full `.ogeo` File Layout
 
 ```text
-GeometryAssetDesc                       174 bytes
+GeometryAssetDesc                       169 bytes
   MeshDesc[0]                           85 bytes
     [if procedural] param_blob          params_size bytes
     SubMeshDesc[0]                      64 bytes

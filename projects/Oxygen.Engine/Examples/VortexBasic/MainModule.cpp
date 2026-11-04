@@ -191,7 +191,6 @@ auto MakeSolidColorMaterial(
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(d::AssetType::kMaterial);
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
-  desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(spec.domain);
   desc.flags = pak::render::kMaterialFlag_NoTextureSampling | spec.extra_flags;
   if (spec.double_sided) {

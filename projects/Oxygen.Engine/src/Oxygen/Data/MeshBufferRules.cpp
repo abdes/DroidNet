@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -89,6 +91,37 @@ auto CheckVertexBufferRow(const BufferResourceDesc& row) -> void
       fmt::format(
         "The vertex buffer of {} bytes does not hold whole vertices of {}",
         row.size_bytes, sizeof(Vertex)));
+  }
+}
+
+auto CheckVertexValues(const std::span<const std::byte> vertices) -> void
+{
+  const auto finite = [](const std::span<const float> values) -> bool {
+    return std::ranges::all_of(
+      values, [](const float value) -> bool { return std::isfinite(value); });
+  };
+  for (std::size_t at = 0; at + sizeof(Vertex) <= vertices.size();
+    at += sizeof(Vertex)) {
+    auto vertex = Vertex {};
+    std::memcpy(
+      &vertex, vertices.subspan(at, sizeof(Vertex)).data(), sizeof(Vertex));
+    const auto position = std::array {
+      vertex.position.x,
+      vertex.position.y,
+      vertex.position.z,
+    };
+    const auto normal = std::array {
+      vertex.normal.x,
+      vertex.normal.y,
+      vertex.normal.z,
+    };
+    const auto texcoord = std::array { vertex.texcoord.x, vertex.texcoord.y };
+    if (!finite(position) || !finite(normal) || !finite(texcoord)) {
+      throw CookedFormatError(CookedDefect::kInvalidValue,
+        fmt::format("Vertex {} has a position, normal or texture coordinate "
+                    "that is NaN or infinite",
+          at / sizeof(Vertex)));
+    }
   }
 }
 

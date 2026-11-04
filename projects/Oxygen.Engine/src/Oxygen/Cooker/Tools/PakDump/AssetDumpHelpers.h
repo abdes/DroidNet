@@ -97,10 +97,7 @@ inline auto PrintAssetHeaderFields(std::ostream& out,
   PrintUtils::Field(out, "String Table",
     fmt::format("{} bytes at {}", h.strings.size, h.strings.offset), indent);
   PrintUtils::Field(out, "Format Version", static_cast<int>(h.version), indent);
-  PrintUtils::Field(
-    out, "Streaming Priority", static_cast<int>(h.streaming_priority), indent);
   PrintUtils::Field(out, "Content Hash", ToHexString(h.content_hash), indent);
-  PrintUtils::Field(out, "Variant Flags", ToHexString(h.variant_flags), indent);
 }
 
 [[nodiscard]] inline auto FormatVec3(const std::span<const float, 3> v)

@@ -70,16 +70,14 @@ constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey::FromBytes(
 auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
 {
   static const std::shared_ptr<const MaterialAsset> kDefaultMaterial
-    = []() -> std::shared_ptr<const MaterialAsset> {
+    = [] -> std::shared_ptr<const MaterialAsset> {
     pak::render::MaterialAssetDesc desc {};
 
     // Asset header - mark as procedural/default
     desc.header.asset_type
       = static_cast<uint8_t>(AssetType::kMaterial); // MaterialAsset type
     desc.header.version = pak::render::kMaterialAssetVersion;
-    desc.header.streaming_priority = 255; // Lowest priority
     desc.header.content_hash = {}; // No specific content hash
-    desc.header.variant_flags = 0;
 
     // Material properties
     desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);

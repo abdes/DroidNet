@@ -87,7 +87,6 @@ struct MixedExposureBenchmarkScene {
     desc.header.asset_type
       = static_cast<std::uint8_t>(data::AssetType::kMaterial);
     desc.header.version = data::pak::render::kMaterialAssetVersion;
-    desc.header.streaming_priority = 255U;
     desc.material_domain = static_cast<std::uint8_t>(domain);
     desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling;
     desc.shader_stages = 0U;

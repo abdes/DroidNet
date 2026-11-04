@@ -667,10 +667,6 @@ reproducible, and every material property the engine renders is authorable.
 - `BufferSource` JSON input: a product's `virtual_path` resolves against the
   identity of its container or geometry. `BufferPipeline`: digests come from
   the bytes stored.
-- `MaterialPipeline.h:62`: `header.streaming_priority` and
-  `header.variant_flags` are not wired from import settings. The V0.1 rule is
-  that every engine capability is authorable, so these are gaps to close or
-  record.
 - `MaterialPipeline.cpp:195` (one UV transform per material) and `:270` (a
   masked material's out-of-range alpha cutoff is clamped and warns; the TODO at
   `:278` leaves a cutoff of zero or less alone): confirm the behaviour on sources

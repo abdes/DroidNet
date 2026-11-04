@@ -139,7 +139,7 @@ struct GeometryAssetDesc {
 // Followed by: MeshDesc meshes[lod_count], SurfaceDesc surfaces[surface_count],
 // then the descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(GeometryAssetDesc) == 174);
+static_assert(sizeof(GeometryAssetDesc) == 169);
 
 //! Fields for a standard (static) mesh
 /*! Boundaries are required and must be pre-computed by tooling. All-zero

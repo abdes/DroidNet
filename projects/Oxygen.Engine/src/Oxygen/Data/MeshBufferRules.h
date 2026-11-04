@@ -45,6 +45,15 @@ struct SkinBufferRows final {
 OXGN_DATA_API auto CheckVertexBufferRow(
   const pak::core::BufferResourceDesc& row) -> void;
 
+//! Checks that the position, normal and texture coordinates of every vertex
+//! are finite: the renderer refuses a mesh with any that is not.
+/*!
+ @param vertices The buffer's bytes: whole `Vertex` records, at any address.
+ @throw CookedFormatError When a value is NaN or infinite.
+*/
+OXGN_DATA_API auto CheckVertexValues(std::span<const std::byte> vertices)
+  -> void;
+
 //! The type of the indices a buffer holds, which its format names, or its
 //! stride for a buffer without one.
 /*!

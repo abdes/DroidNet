@@ -11,11 +11,14 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "GeometryDescriptorImportJobTestSupport.h"
@@ -859,6 +862,24 @@ NOLINT_TEST(
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(HasDiagnosticCode(
     report->diagnostics, import_codes::kGeometryBufferLayoutInvalid));
+}
+
+//! The renderer refuses a mesh with a position that is not finite, so the cook
+//! does.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, NonFiniteVerticesAreRefused)
+{
+  auto vertices = VertexBytes();
+  const auto not_a_number = std::numeric_limits<float>::quiet_NaN();
+  std::memcpy(vertices.data(), &not_a_number, sizeof(not_a_number));
+
+  const auto report = CookLocalMesh(LocalMesh {
+    .vertices = std::move(vertices),
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferVerticesInvalid));
 }
 
 NOLINT_TEST(

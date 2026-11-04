@@ -60,6 +60,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/StableId.h>
@@ -76,14 +77,6 @@ namespace oxygen::content::import {
 namespace {
 
   using WorkItem = MeshBuildPipeline::WorkItem;
-
-  constexpr uint32_t kGeomAttr_Normal = 1U << 0U;
-  constexpr uint32_t kGeomAttr_Tangent = 1U << 1U;
-  constexpr uint32_t kGeomAttr_Bitangent = 1U << 2U;
-  constexpr uint32_t kGeomAttr_Texcoord0 = 1U << 3U;
-  constexpr uint32_t kGeomAttr_Color0 = 1U << 4U;
-  constexpr uint32_t kGeomAttr_JointWeights = 1U << 5U;
-  constexpr uint32_t kGeomAttr_JointIndices = 1U << 6U;
 
   constexpr uint32_t kDefaultStaticUsageFlags
     = static_cast<uint32_t>(data::BufferResource::UsageFlags::kStatic);
@@ -149,6 +142,29 @@ namespace {
     bounds.max.at(0) = (std::max)(bounds.max.at(0), p.x);
     bounds.max.at(1) = (std::max)(bounds.max.at(1), p.y);
     bounds.max.at(2) = (std::max)(bounds.max.at(2), p.z);
+  }
+
+  [[nodiscard]] auto IsFinite(const glm::vec3& value) -> bool
+  {
+    return std::isfinite(value.x) && std::isfinite(value.y)
+      && std::isfinite(value.z);
+  }
+
+  //! The unit vector along `value`, or none for a vector without a direction:
+  //! not finite, or zero. Scaling first keeps a tiny vector's direction, whose
+  //! squared length would underflow.
+  [[nodiscard]] auto UnitDirection(const glm::vec3& value)
+    -> std::optional<glm::vec3>
+  {
+    const auto largest = (std::max)({
+      std::abs(value.x),
+      std::abs(value.y),
+      std::abs(value.z),
+    });
+    if (!IsFinite(value) || largest == 0.0F) {
+      return std::nullopt;
+    }
+    return glm::normalize(value / largest);
   }
 
   //! Shortest accumulated normal that still normalizes reliably.
@@ -356,7 +372,7 @@ namespace {
     };
     const auto normal_of = [](const glm::vec3& sum) -> glm::vec3 {
       const auto len = glm::length(sum);
-      return len > kMinNormalLength ? sum / len : glm::vec3(0.0F, 1.0F, 0.0F);
+      return len > kMinNormalLength ? sum / len : glm::vec3 { space::move::Up };
     };
 
     // Corners sorted by position, so the corners of one position are a run.
@@ -419,6 +435,30 @@ namespace {
     }
   }
 
+  //! Gives the corners whose authored normal has no direction, zero here, the
+  //! normal generated for their triangles; every other corner keeps its own.
+  //! Returns how many there were.
+  auto RepairUnusableNormals(std::vector<data::Vertex>& corners,
+    const std::span<const SubmeshBucket> buckets,
+    const float smoothing_angle_deg) -> std::size_t
+  {
+    const auto unusable = [](const data::Vertex& corner) -> bool {
+      return corner.normal == glm::vec3(0.0F);
+    };
+    const auto count = std::ranges::count_if(corners, unusable);
+    if (count == 0) {
+      return 0U;
+    }
+    auto generated = corners;
+    ComputeNormalsFromTriangles(generated, buckets, smoothing_angle_deg);
+    for (auto&& [corner, repaired] : std::views::zip(corners, generated)) {
+      if (unusable(corner)) {
+        corner.normal = repaired.normal;
+      }
+    }
+    return static_cast<std::size_t>(count);
+  }
+
   //! Makes every vertex's frame orthonormal and follow `space::texture`.
   /*!
    The tangent is projected into the surface plane and the bitangent rebuilt
@@ -428,18 +468,14 @@ namespace {
   */
   auto FixInvalidTangents(std::vector<data::Vertex>& vertices) -> void
   {
-    const auto finite = [](const glm::vec3& value) -> bool {
-      return std::isfinite(value.x) && std::isfinite(value.y)
-        && std::isfinite(value.z);
-    };
     for (auto& v : vertices) {
       auto n = glm::vec3 { space::move::Up };
-      if (finite(v.normal) && glm::length(v.normal) >= kMinTangentLength) {
+      if (IsFinite(v.normal) && glm::length(v.normal) >= kMinTangentLength) {
         n = glm::normalize(v.normal);
       }
 
-      auto t = finite(v.tangent) ? v.tangent - n * glm::dot(n, v.tangent)
-                                 : glm::vec3(0.0F);
+      auto t = IsFinite(v.tangent) ? v.tangent - n * glm::dot(n, v.tangent)
+                                   : glm::vec3(0.0F);
       if (glm::length(t) < kMinTangentLength) {
         // Without a usable tangent no direction is preferred: any axis away
         // from the normal serves.
@@ -451,8 +487,10 @@ namespace {
       t = glm::normalize(t);
 
       const auto unmirrored = -glm::cross(n, t);
+      const auto has_bitangent = IsFinite(v.bitangent)
+        && glm::length(v.bitangent) >= kMinTangentLength;
       const auto mirrored
-        = finite(v.bitangent) && glm::dot(unmirrored, v.bitangent) < 0.0F;
+        = has_bitangent && glm::dot(unmirrored, v.bitangent) < 0.0F;
       v.tangent = t;
       v.bitangent = mirrored ? -unmirrored : unmirrored;
     }
@@ -490,7 +528,6 @@ namespace {
     const std::vector<LodBuildData>& lods, const Bounds3& bounds,
     const GeometryImportDefaults* defaults,
     const data::pak::geometry::LodPolicyRecord& imported_policy,
-    const uint32_t attr_mask,
     std::vector<MeshBuildPipeline::SurfacePatchOffset>& material_patch_offsets,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::vector<std::byte>
@@ -504,7 +541,6 @@ namespace {
     asset_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
-    asset_desc.header.variant_flags = attr_mask;
     auto strings = data::DescriptorStringsBuilder {};
     asset_desc.header.name_offset = strings.Add(mesh_name);
     asset_desc.lod_count = static_cast<uint32_t>(lods.size());
@@ -527,10 +563,18 @@ namespace {
       : std::vector<internal::AuthoredSurfaceDefaults> {};
     const auto surface_table = internal::MakeSurfaceTable(declared, authored);
     asset_desc.surface_count = static_cast<uint32_t>(surface_table.size());
-    asset_desc.default_lod_policy
-      = defaults != nullptr && defaults->lod_policy.has_value()
-      ? *defaults->lod_policy
-      : imported_policy;
+    asset_desc.default_lod_policy = imported_policy;
+    if (defaults != nullptr && defaults->lod_policy.has_value()) {
+      if (data::IsValidLodPolicy(*defaults->lod_policy)) {
+        asset_desc.default_lod_policy = *defaults->lod_policy;
+      } else {
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kMeshLodPolicyInvalid),
+          "Geometry defaults set a LOD policy no reader accepts; the import's "
+          "own policy is used",
+          source_id, mesh_name));
+      }
+    }
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -745,6 +789,8 @@ namespace {
     };
 
     uint32_t next_index = 0;
+    size_t invalid_position_triangles = 0;
+    size_t invalid_uv_corners = 0;
     for (const auto& range : ranges) {
       uint32_t range_count = range.index_count;
       if (range_count == 0) {
@@ -773,7 +819,7 @@ namespace {
         continue;
       }
 
-      const auto range_end = range.first_index + range_count;
+      const auto range_end = uint64_t { range.first_index } + range_count;
       if (range_end > mesh.indices.size()) {
         diagnostics.push_back(
           MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
@@ -808,12 +854,19 @@ namespace {
         vertex.position = oxygen::base::CheckedAt(positions, source_index);
 
         if (preserve_authored_normals && has_normals) {
+          // Zero marks a normal without a direction for RepairUnusableNormals.
           vertex.normal
-            = glm::normalize(oxygen::base::CheckedAt(normals, source_index));
+            = UnitDirection(oxygen::base::CheckedAt(normals, source_index))
+                .value_or(glm::vec3(0.0F));
         }
 
         if (has_uvs) {
-          vertex.texcoord = oxygen::base::CheckedAt(texcoords, source_index);
+          const auto uv = oxygen::base::CheckedAt(texcoords, source_index);
+          if (std::isfinite(uv.x) && std::isfinite(uv.y)) {
+            vertex.texcoord = uv;
+          } else {
+            ++invalid_uv_corners;
+          }
         }
 
         if (preserve_authored_tangents && has_tangents) {
@@ -854,6 +907,15 @@ namespace {
           ++skipped_triangles;
           continue;
         }
+        const auto position_is_finite
+          = [&positions](const uint32_t at) -> bool {
+          return IsFinite(oxygen::base::CheckedAt(positions, at));
+        };
+        if (!position_is_finite(idx0) || !position_is_finite(idx1)
+          || !position_is_finite(idx2)) {
+          ++invalid_position_triangles;
+          continue;
+        }
 
         emit_vertex(idx0);
         emit_vertex(idx1);
@@ -866,6 +928,24 @@ namespace {
             "Skipped triangles with out-of-range indices", source_id,
             object_path));
       }
+    }
+
+    if (invalid_position_triangles > 0) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidPositions),
+          fmt::format("Dropped {} triangles with a NaN or infinite position, "
+                      "which no renderer can draw",
+            invalid_position_triangles),
+          source_id, object_path));
+    }
+    if (invalid_uv_corners > 0) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidUvs),
+          fmt::format(
+            "Zeroed the NaN or infinite UVs of {} triangle corners, so their "
+            "textures sample one point",
+            invalid_uv_corners),
+          source_id, object_path));
     }
 
     if ((mesh.mesh_type == data::MeshType::kSkinned)
@@ -932,6 +1012,17 @@ namespace {
     return runs;
   }
 
+  //! What a LOD's surface is called: its source's name, or else its slot.
+  [[nodiscard]] auto SurfaceNameOf(
+    const std::map<uint32_t, std::string>& surface_names,
+    const uint32_t source_slot) -> std::string
+  {
+    const auto named = surface_names.find(source_slot);
+    return named != surface_names.end()
+      ? named->second
+      : "Surface " + std::to_string(source_slot);
+  }
+
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
     const AllocatedSurfaces& allocation,
@@ -980,10 +1071,7 @@ namespace {
           static_cast<uint32_t>(bucket.indices.size() / 3U));
       }
 
-      const auto named = surface_names.find(bucket.source_slot);
-      const auto name = named != surface_names.end()
-        ? named->second
-        : "Surface " + std::to_string(bucket.source_slot);
+      const auto name = SurfaceNameOf(surface_names, bucket.source_slot);
 
       SubMeshDesc submesh {};
       submesh.material_asset_key = bucket.material_key;
@@ -1078,6 +1166,11 @@ namespace {
       return std::pair { import_codes::kMeshSkinningBuffersMismatch,
         "Skinned mesh joint data exceeds inverse bind/remap counts" };
     }
+    // The mesh descriptor counts joints in 16 bits.
+    if (max_joint >= std::numeric_limits<uint16_t>::max()) {
+      return std::pair { import_codes::kMeshSkinningBuffersMismatch,
+        "Skinned mesh uses more joints than a mesh descriptor can count" };
+    }
     return std::nullopt;
   }
 
@@ -1108,7 +1201,8 @@ namespace {
     std::vector<uint32_t> joint_remap;
     //! The source's bounds, when nothing moved its vertices.
     std::optional<Bounds3> authored_bounds;
-    uint32_t attr_mask = 0;
+    //! The attributes the source authors, which simplification weighs.
+    internal::SimplifiedAttributes authored_attributes;
   };
 
   //! Reads a LOD's triangles over the source's own vertices and welds them.
@@ -1183,6 +1277,17 @@ namespace {
 
     if (HasAnyError(diagnostics)) {
       return std::nullopt;
+    }
+
+    const auto repaired_normals = RepairUnusableNormals(
+      corners, lod.buckets, item.request.options.normals_smoothing_angle_deg);
+    if (repaired_normals > 0U) {
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidNormals),
+          fmt::format("Generated the normals of {} triangle corners whose "
+                      "authored normal is zero, NaN or infinite",
+            repaired_normals),
+          item.source_id, item.mesh_name));
     }
 
     if (lod.mesh_type == data::MeshType::kSkinned) {
@@ -1301,37 +1406,23 @@ namespace {
       const auto& transform = *bake_transform;
       const auto linear = glm::mat3(transform);
       const auto normal_matrix = glm::transpose(glm::inverse(linear));
-      const auto finite = [](const glm::vec3& value) -> bool {
-        return std::isfinite(value.x) && std::isfinite(value.y)
-          && std::isfinite(value.z);
-      };
-      const auto normalize_direction
-        = [&finite](const glm::vec3& value, glm::vec3& normalized) -> bool {
-        const auto largest = (std::max)({
-          std::abs(value.x),
-          std::abs(value.y),
-          std::abs(value.z),
-        });
-        if (!finite(value) || largest == 0.0F) {
-          return false;
-        }
-        normalized = glm::normalize(value / largest);
-        return finite(normalized);
-      };
       for (auto& vertex : corners) {
         vertex.position
           = glm::vec3(transform * glm::vec4(vertex.position, 1.0F));
-        if (!finite(vertex.position)
-          || !normalize_direction(normal_matrix * vertex.normal, vertex.normal)
-          || !normalize_direction(linear * vertex.tangent, vertex.tangent)
-          || !normalize_direction(
-            linear * vertex.bitangent, vertex.bitangent)) {
+        const auto normal = UnitDirection(normal_matrix * vertex.normal);
+        if (!IsFinite(vertex.position) || !normal.has_value()) {
           diagnostics.push_back(MakeErrorDiagnostic(
             std::string(import_codes::kMeshInvalidTransformBake),
             "Transform baking produced an invalid vertex attribute",
             item.source_id, item.mesh_name));
           return std::nullopt;
         }
+        vertex.normal = *normal;
+        // A frame without a direction stays so, for FixInvalidTangents.
+        vertex.tangent
+          = UnitDirection(linear * vertex.tangent).value_or(glm::vec3(0.0F));
+        vertex.bitangent
+          = UnitDirection(linear * vertex.bitangent).value_or(glm::vec3(0.0F));
       }
       if (glm::determinant(linear) < 0.0F) {
         for (auto& bucket : lod.buckets) {
@@ -1347,23 +1438,12 @@ namespace {
       lod.authored_bounds = *mesh.bounds;
     }
 
-    if (final_has_normals) {
-      lod.attr_mask |= kGeomAttr_Normal;
-    }
-    if (tangents_emitted) {
-      lod.attr_mask |= kGeomAttr_Tangent;
-      lod.attr_mask |= kGeomAttr_Bitangent;
-    }
-    if (has_uvs) {
-      lod.attr_mask |= kGeomAttr_Texcoord0;
-    }
-    if (mesh.streams.colors.size() == mesh.streams.positions.size()) {
-      lod.attr_mask |= kGeomAttr_Color0;
-    }
-    if (lod.mesh_type == data::MeshType::kSkinned) {
-      lod.attr_mask |= kGeomAttr_JointIndices;
-      lod.attr_mask |= kGeomAttr_JointWeights;
-    }
+    // Normals the import generates are not the source's.
+    lod.authored_attributes = internal::SimplifiedAttributes {
+      .normals = final_has_normals && !lod.generation.normals,
+      .texcoords = has_uvs,
+      .colors = mesh.streams.colors.size() == mesh.streams.positions.size(),
+    };
 
     const auto streams = internal::CornerStreams {
       .vertices = corners,
@@ -1481,6 +1561,16 @@ namespace {
     for (auto&& [index, bucket] : std::views::enumerate(buckets)) {
       const auto at = static_cast<size_t>(index);
       const auto& surface = base::CheckedAt(surfaces, at);
+      if (surface.indices.empty()) {
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshSurfaceEmpty),
+            fmt::format("Surface '{}' of LOD '{}' has no triangle left and is "
+                        "dropped: a mesh view must draw something",
+              SurfaceNameOf(item.surface_names, bucket.source_slot),
+              lod.lod_name),
+            item.source_id, item.mesh_name));
+        continue;
+      }
       auto triangles = surface.indices;
       const auto runs = lod.mesh_type == data::MeshType::kStandard
         ? OrderIntoViewRuns(surface.vertices, triangles)
@@ -1509,6 +1599,9 @@ namespace {
         bucket.view_triangle_counts.push_back(run);
       }
     }
+    std::erase_if(buckets, [](const SubmeshBucket& bucket) -> bool {
+      return bucket.indices.empty();
+    });
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
       allocation, item.surface_names, lod.submeshes, lod.submesh_names,
@@ -1579,12 +1672,9 @@ namespace {
       }
 
       if (!lod.joint_indices.empty()) {
-        // SkinDefect proved every joint has an inverse bind and a remap.
-        const uint32_t required_joint_count = max_joint + 1;
-        const auto max_u16
-          = static_cast<uint32_t>(std::numeric_limits<uint16_t>::max());
-        lod.joint_count
-          = static_cast<uint16_t>((std::min)(required_joint_count, max_u16));
+        // SkinDefect proved every joint has an inverse bind and a remap, and
+        // that their count fits.
+        lod.joint_count = static_cast<uint16_t>(max_joint + 1U);
         lod.influences_per_vertex = 4;
       }
     }
@@ -1720,7 +1810,7 @@ namespace {
 
   [[nodiscard]] auto BuildCookedGeometryPayload(const WorkItem& item,
     const std::vector<LodBuildData>& lods,
-    const std::span<const float> generated_errors, const uint32_t attr_mask,
+    const std::span<const float> generated_errors,
     const co::ThreadPool::CancelToken& canceled,
     std::vector<ImportDiagnostic>& diagnostics)
     -> std::optional<MeshBuildPipeline::CookedGeometryPayload>
@@ -1747,7 +1837,7 @@ namespace {
     auto material_patch_offsets
       = std::vector<MeshBuildPipeline::SurfacePatchOffset> {};
     auto descriptor_bytes = BuildDescriptorBytes(item.mesh_name, lods,
-      geom_bounds, GeometryDefaultsOf(item), imported_policy, attr_mask,
+      geom_bounds, GeometryDefaultsOf(item), imported_policy,
       material_patch_offsets, diagnostics, item.source_id);
     if (HasAnyError(diagnostics)) {
       return std::nullopt;
@@ -1823,16 +1913,8 @@ namespace {
       item.mesh_name, options.levels, options.reduction_percent,
       source.triangles, source.vertices);
 
-    // Normals the import generates are not the source's: simplification
-    // weighs only the attributes the source authors.
-    const auto generated = internal::GenerateLods(lod0.sources, options,
-      internal::SimplifiedAttributes {
-        .normals
-        = (lod0.attr_mask & kGeomAttr_Normal) != 0U && !lod0.generation.normals,
-        .texcoords = (lod0.attr_mask & kGeomAttr_Texcoord0) != 0U,
-        .colors = (lod0.attr_mask & kGeomAttr_Color0) != 0U,
-      },
-      item.stop_token);
+    const auto generated = internal::GenerateLods(
+      lod0.sources, options, lod0.authored_attributes, item.stop_token);
     if (item.stop_token.stop_requested()) {
       return std::nullopt;
     }
@@ -1920,7 +2002,6 @@ namespace {
       return out;
     }
 
-    uint32_t attr_mask = 0;
     auto only_lod = std::optional<PreparedLod> {};
     for (const auto& lod : item.lods) {
       if (item.stop_token.stop_requested()) {
@@ -1934,7 +2015,6 @@ namespace {
           = item.stop_token.stop_requested() && !HasAnyError(out.diagnostics);
         return out;
       }
-      attr_mask |= prepared->attr_mask;
       const auto surfaces
         = CompleteLod(*prepared, IndicesOf(prepared->sources), item.stop_token);
       if (!surfaces.has_value()) {
@@ -1976,7 +2056,7 @@ namespace {
       }
     }
 
-    if (item.stop_token.stop_requested()) {
+    if (IsCanceled(item.stop_token, canceled)) {
       out.canceled = true;
       return out;
     }
@@ -1985,7 +2065,12 @@ namespace {
     }
 
     auto cooked_payload = BuildCookedGeometryPayload(
-      item, lods, generated_errors, attr_mask, canceled, out.diagnostics);
+      item, lods, generated_errors, canceled, out.diagnostics);
+    // A cancel stops the hashing and leaves the buffers empty: no cook.
+    if (IsCanceled(item.stop_token, canceled)) {
+      out.canceled = true;
+      return out;
+    }
     if (!cooked_payload.has_value()) {
       return out;
     }

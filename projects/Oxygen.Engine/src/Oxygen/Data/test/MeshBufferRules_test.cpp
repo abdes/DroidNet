@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <limits>
 #include <span>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -23,6 +24,7 @@ using oxygen::data::CheckJointIndices;
 using oxygen::data::CheckMeshViewRange;
 using oxygen::data::CheckSkinBufferRows;
 using oxygen::data::CheckVertexBufferRow;
+using oxygen::data::CheckVertexValues;
 using oxygen::data::CookedDefect;
 using oxygen::data::CookedFormatError;
 using oxygen::data::IndexTypeOf;
@@ -71,6 +73,39 @@ NOLINT_TEST(MeshBufferRulesTest, VertexRowHoldsWholeVertices)
   EXPECT_EQ(
     DefectOf([] -> void { CheckVertexBufferRow(Row(0U, kVertexSize)); }),
     CookedDefect::kWrongRowSize);
+}
+
+//! The renderer refuses a mesh with a position, normal or texture coordinate
+//! that is not finite. It does not read the tangent frame or colour.
+NOLINT_TEST(MeshBufferRulesTest, VertexValuesAreFinite)
+{
+  const auto check = [](const Vertex& vertex) -> void {
+    const auto vertices = std::array { Vertex {}, vertex };
+    CheckVertexValues(std::as_bytes(std::span { vertices }));
+  };
+  const auto with = [](auto&& change) -> Vertex {
+    auto vertex = Vertex {};
+    change(vertex);
+    return vertex;
+  };
+  constexpr auto kNan = std::numeric_limits<float>::quiet_NaN();
+  constexpr auto kInfinity = std::numeric_limits<float>::infinity();
+
+  EXPECT_NO_THROW(check(Vertex {}));
+  EXPECT_NO_THROW(check(with([](Vertex& v) -> void { v.tangent.x = kNan; })));
+
+  EXPECT_EQ(DefectOf([&] -> void {
+    check(with([](Vertex& v) -> void { v.position.y = kNan; }));
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(DefectOf([&] -> void {
+    check(with([](Vertex& v) -> void { v.normal.z = kInfinity; }));
+  }),
+    CookedDefect::kInvalidValue);
+  EXPECT_EQ(DefectOf([&] -> void {
+    check(with([](Vertex& v) -> void { v.texcoord.x = -kInfinity; }));
+  }),
+    CookedDefect::kInvalidValue);
 }
 
 //! A format names the width; a buffer without one has it from its stride.

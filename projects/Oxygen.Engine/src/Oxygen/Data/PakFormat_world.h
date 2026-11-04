@@ -194,7 +194,7 @@ struct SceneAssetDesc {
   NodeRef starting_camera { .node_index = kNoStartingCamera };
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 107);
+static_assert(sizeof(SceneAssetDesc) == 102);
 
 //! Scene component table directory entry.
 /*!

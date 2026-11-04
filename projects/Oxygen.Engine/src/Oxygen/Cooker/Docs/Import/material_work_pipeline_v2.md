@@ -292,8 +292,6 @@ For each work item:
    - `header.asset_type = AssetType::kMaterial`
    - `header.name = material_name`
    - `header.version = kMaterialAssetVersion`
-   - `header.streaming_priority` from `ImportRequest` (0 if unspecified)
-   - `header.variant_flags` from import configuration
    - Fill `material_domain`, `flags`, `shader_stages`, and all scalar fields
 10. Serialize descriptor bytes with packed alignment = 1, followed by shader
     references.
@@ -419,16 +417,14 @@ the PAK format:
 - Shader reference table emission for all required stages.
 - Full PBR Tier 1/2 fields: emissive, specular, sheen, clearcoat, transmission,
   thickness, IOR, and attenuation.
-- Asset header metadata: `version`, `streaming_priority`, `variant_flags`
-  (the emitter records `content_hash` when it emits the descriptor).
+- Asset header metadata: `version` (the emitter records `content_hash` when it
+  emits the descriptor).
 - UV transform and UV set handling via the extension above or baking.
 
 ---
 
 ## TODO (Future Wiring)
 
-- TODO: Wire `header.streaming_priority` from import configuration.
-- TODO: Wire `header.variant_flags` from import configuration.
 - TODO: Evolve UV handling to support multi-UV sets and per-slot transforms:
   - Define descriptor layout changes or an extension that encodes per-slot
     `uv_set` and `uv_transform` when required.

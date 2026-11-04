@@ -168,14 +168,12 @@ inline auto MakeHeader() -> core::AssetHeader
     .strings = { .offset = 0x11121314U, .size = 0x21222324U, },
     .name_offset = 0x31323334U,
     .version = 0x41U,
-    .streaming_priority = 0x51U,
     .content_hash = Digest(0x60U),
-    .variant_flags = 0x71727374U,
   };
 }
 
 //! The documented bytes of the header `MakeHeader` returns: type, string
-//! table, name, version, priority, content hash and variant flags.
+//! table, name, version and content hash.
 inline auto HeaderBytes() -> WireBytes
 {
   auto bytes = WireBytes {};
@@ -184,9 +182,7 @@ inline auto HeaderBytes() -> WireBytes
     .U32(0x21222324U)
     .U32(0x31323334U)
     .U8(0x41U)
-    .U8(0x51U)
-    .Run(0x60U, 32)
-    .U32(0x71727374U);
+    .Run(0x60U, 32);
   return bytes;
 }
 

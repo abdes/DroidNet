@@ -223,7 +223,7 @@ struct ScriptAssetDesc {
   ScriptDataTable params {};
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptAssetDesc) == 83);
+static_assert(sizeof(ScriptAssetDesc) == 78);
 
 } // namespace oxygen::data::pak::scripting
 

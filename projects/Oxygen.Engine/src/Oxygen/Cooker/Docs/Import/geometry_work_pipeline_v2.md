@@ -421,25 +421,18 @@ Requirements:
 - `material_patch_offsets` provides absolute offsets (from payload start) for
   each submesh material key
 
-### Geometry Attribute Mask
+### Source Data No Renderer Can Draw
 
-`GeometryAssetDesc.header.variant_flags` encodes a per-geometry attribute mask:
+The renderer refuses a whole mesh over one vertex whose position, normal or UV
+is NaN or infinite, and the loader refuses a whole geometry over one view that
+draws nothing. So the build repairs what it can and warns:
 
-```text
-bit 0: kGeomAttr_Normal
-bit 1: kGeomAttr_Tangent
-bit 2: kGeomAttr_Bitangent
-bit 3: kGeomAttr_Texcoord0
-bit 4: kGeomAttr_Color0
-bit 5: kGeomAttr_JointWeights
-bit 6: kGeomAttr_JointIndices
-```
-
-The pipeline must clear bits when attributes are not emitted by policy. Loaders
-and runtime must treat missing attributes as defaults.
-
-@note The bit layout is a pipeline contract and must be mirrored by loaders and
-tools that interpret `variant_flags`. The mask is **union-of-LOD attributes**.
+| Found                                     | What the build does                          | Code                     |
+| ----------------------------------------- | -------------------------------------------- | ------------------------ |
+| Position that is not finite               | Drops the triangles using it                 | `mesh.invalid_positions` |
+| Authored normal zero or not finite        | Takes the generated normal, that corner only | `mesh.invalid_normals`   |
+| UV that is not finite                     | Zeroes it                                    | `mesh.invalid_uvs`       |
+| Surface left with no triangle, in any LOD | Drops the submesh; its surface ID is kept    | `mesh.surface_empty`     |
 
 ### Mesh-Type Blobs
 
@@ -485,8 +478,6 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - **Header metadata**: `header.version` is populated by the pipeline;
   `AssetEmitter` records `header.content_hash` when it emits the finalized
   descriptor.
-- **Attribute mask**: missing attributes are reflected via
-  `header.variant_flags` (union-of-LOD attributes).
 - **Failure policy**: no geometry fallback is allowed. Any failure produces
   explicit diagnostics and `success=false`.
 

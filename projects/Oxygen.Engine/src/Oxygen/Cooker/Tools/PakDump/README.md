@@ -22,7 +22,7 @@ Use PakDump to:
 
 - Verify packer output integrity during content pipeline development
 - Debug missing or malformed assets in builds
-- Inspect material shader linkage & variant flags
+- Inspect material shader linkage
 - Spot size anomalies (oversized resources or descriptors)
 - Quickly sample raw resource payloads without a debugger
 

@@ -383,7 +383,8 @@ namespace {
     co_return sidecar;
   }
 
-  //! The products whose bytes the link reads: index and joint index buffers.
+  //! The products whose bytes the link reads: vertex, index and joint index
+  //! buffers.
   auto ContentsTheLinkReads(const ImportRequest& request,
     const internal::GeometrySource& source) -> std::unordered_set<std::string>
   {
@@ -398,9 +399,11 @@ namespace {
     for (const auto& lod : source.lods) {
       if (const auto* buffers
         = std::get_if<internal::GeometrySource::Buffers>(&lod.mesh)) {
+        add(buffers->vertex);
         add(buffers->index);
       } else if (const auto* skinned
         = std::get_if<internal::GeometrySource::Skinned>(&lod.mesh)) {
+        add(skinned->buffers.vertex);
         add(skinned->buffers.index);
         add(skinned->joint_index);
       }
@@ -594,14 +597,21 @@ namespace {
     };
   }
 
-  //! Refuses a vertex buffer of other records than `data::Vertex`.
+  //! Refuses a vertex buffer of other records than `data::Vertex`, or of
+  //! values the renderer refuses.
   auto PassesVertexBufferRule(GeometryExecutionContext& context,
     const ResolvedBufferSidecar& vertices, const JsonPointer& pointer) -> bool
   {
     return PassesBufferRule(
-      context,
-      [&vertices] -> void { data::CheckVertexBufferRow(vertices.descriptor); },
-      import_codes::kGeometryBufferLayoutInvalid, pointer);
+             context,
+             [&vertices] -> void {
+               data::CheckVertexBufferRow(vertices.descriptor);
+             },
+             import_codes::kGeometryBufferLayoutInvalid, pointer)
+      && PassesBufferRule(
+        context,
+        [&vertices] -> void { data::CheckVertexValues(*vertices.contents); },
+        import_codes::kGeometryBufferVerticesInvalid, pointer);
   }
 
   //! Refuses an index buffer of other values than 16-bit or 32-bit indices.
@@ -774,7 +784,6 @@ namespace {
     asset_desc.header.asset_type
       = static_cast<uint8_t>(data::AssetType::kGeometry);
     asset_desc.header.version = data::pak::geometry::kGeometryAssetVersion;
-    asset_desc.header.variant_flags = 0;
     asset_desc.lod_count = static_cast<uint32_t>(lod_count);
     std::ranges::copy(
       root_bounds->min, std::begin(asset_desc.bounding_box_min));
@@ -819,7 +828,7 @@ namespace {
         const auto& vb_ref = buffers->vertex;
         const auto& ib_ref = buffers->index;
 
-        auto vb_sidecar_opt = co_await ResolveBufferSidecar(
+        auto vb_sidecar_opt = co_await ResolveBufferWithContents(
           context, vb_ref, lod_pointer / "buffers" / "vb_ref");
         auto ib_sidecar_opt = co_await ResolveBufferWithContents(
           context, ib_ref, lod_pointer / "buffers" / "ib_ref");
