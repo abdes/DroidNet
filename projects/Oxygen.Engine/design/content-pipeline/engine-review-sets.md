@@ -553,17 +553,20 @@ order, and produce the same output whatever the concurrency.
 
 - Determinism: the same inputs give byte-identical cooked output with one
   worker or many; table row order does not depend on completion order.
-- Cancellation: `CancelJob` (now `[[nodiscard]]`) cancels at every stage,
-  leaves no partial publication, and reports a cancelled outcome distinct
-  from failure.
-- `WorkDispatcher.cpp` (2 000 lines): no deadlock when every worker waits on
-  a dependency; back-pressure bounds memory in `WorkPayloadStore`.
+- Cancellation: `CancelJob` and `CancelAll` cancel at every stage, leave no
+  partial publication, and report a cancelled outcome distinct from failure.
+- `WorkDispatcher.cpp` (2 000 lines): no deadlock when every worker waits on a
+  dependency; `WorkPayloadStore` has no limit of its own, so the pipeline
+  queues' back-pressure (`queue_capacity` in `ImportConcurrency`) must bound the
+  payloads it holds.
 - `ImportSourceSnapshot`: a source changed during an import is detected, not
   half-read.
 - `ImportReport`: diagnostics, products and telemetry are complete for
   failed and cancelled jobs, and progress events end with exactly one final
   event per job.
-- Session reuse: state from one batch never leaks into the next.
+- Reuse: `ImportSession` is per job, while `AsyncImportService` and its
+  `ResourceTableRegistry` and `LooseCookedIndexRegistry` outlive jobs and
+  batches; state from one job or batch never leaks into the next.
 
 ## R10. Textures
 
