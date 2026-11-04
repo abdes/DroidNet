@@ -32,7 +32,7 @@
       "name": "Msft_Default",
       "parent": 0,
       "transform": {
-        "translation": [-6.0, 0.0, 1.0],
+        "translation": [-6.0, -13.0, 1.0],
         "scale": [1.5, 1.5, 1.5]
       }
     },
@@ -89,7 +89,7 @@
       "name": "Named_Default",
       "parent": 0,
       "transform": {
-        "translation": [6.0, 0.0, 1.0],
+        "translation": [6.0, -13.0, 1.0],
         "scale": [1.5, 1.5, 1.5]
       }
     },
@@ -190,6 +190,24 @@
       "transform": {
         "translation": [0.0, 0.0, 0.0]
       }
+    },
+    {
+      "id": "537ef370-b383-5ac3-8375-62856ad5fe44",
+      "name": "Msft_Probe",
+      "parent": 0,
+      "transform": {
+        "translation": [-6.0, -60.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
+    },
+    {
+      "id": "b81cc671-adab-574b-8262-e5fd2bbeb2f9",
+      "name": "Named_Probe",
+      "parent": 0,
+      "transform": {
+        "translation": [6.0, -60.0, 1.0],
+        "scale": [1.5, 1.5, 1.5]
+      }
     }
   ],
   "renderables": [
@@ -276,6 +294,14 @@
     {
       "node": 15,
       "geometry_ref": "../../Models/MSFT_lod_test.gltf/Mesh_0.ogeo"
+    },
+    {
+      "node": 20,
+      "geometry_ref": "../../Models/LodStacked.gltf/Stacked.ogeo"
+    },
+    {
+      "node": 21,
+      "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
     }
   ],
   "cameras": {

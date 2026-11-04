@@ -235,6 +235,20 @@
               "key": "color_lod3",
               "type": "asset",
               "value": "MlLod3Red.omat"
+            },
+            {
+              "key": "msft_probe",
+              "type": "node",
+              "value": {
+                "node": 20
+              }
+            },
+            {
+              "key": "named_probe",
+              "type": "node",
+              "value": {
+                "node": 21
+              }
             }
           ]
         }

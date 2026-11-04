@@ -23,7 +23,9 @@ view mode shows the triangles themselves.
 In its first frames the script checks every instance through the renderable API and
 logs one `[model-lods] PASS` or `FAIL` line per check, ending with a count: three
 LODs that bind the file's two materials, each fixed policy drawing its LOD, and the
-imported policy following the distance. The ride starts after that.
+imported policy drawing LODs 1, 2 and 3 in turn as two probe instances, out of view
+behind the camera, move away from it, whatever the window size and wherever the
+camera is. The ride never stops for the checks.
 
 The levels of `MSFT_lod_complex_hierarchy.gltf` are whole subtrees, which a geometry
 LOD cannot hold, so the import reports the group (`import.lod_group.ignored`) and

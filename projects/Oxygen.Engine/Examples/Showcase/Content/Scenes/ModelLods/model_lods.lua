@@ -23,6 +23,8 @@ local script = oxygen.script {
     named_mat1 = oxygen.param.asset { kind = "material" },
     named_mat2 = oxygen.param.asset { kind = "material" },
     real_default = oxygen.param.node { description = "the real file" },
+    msft_probe = oxygen.param.node { description = "out of view, for the LOD check" },
+    named_probe = oxygen.param.node { description = "out of view, for the LOD check" },
     real_mat1 = oxygen.param.asset { kind = "material" },
     real_mat2 = oxygen.param.asset { kind = "material" },
     color_lod1 = oxygen.param.asset { kind = "material" },
@@ -34,6 +36,7 @@ local script = oxygen.script {
 local assets = oxygen.assets
 local log = oxygen.log
 local omath = oxygen.math
+local scene = oxygen.scene
 local time = oxygen.time
 
 local TAG = "[model-lods] "
@@ -43,15 +46,14 @@ local LANE_X = { msft = -6.0, named = 6.0 }
 local LOD_COUNT = 3
 local LOD_CHECK_FRAME = 30
 
--- The camera's authored place and view, for the checks of the first frames.
-local CAMERA = { x = 0.0, y = -26.0, z = 9.0 }
-local VIEW = { y = 0.9781, z = -0.2079 }
-local DISTANCE_STEPS = {
-  { distance = 10.0, lod = 1, name = "near" },
-  { distance = 25.0, lod = 2, name = "middle" },
-  { distance = 120.0, lod = 3, name = "far" },
-}
-local FRAMES_PER_STEP = 10
+-- The LOD follows the size on screen, which also depends on the window and on where
+-- the camera is (RenderScene restores it per scene). So the check moves away from the
+-- live camera in small steps, and asks for each LOD in turn rather than one at a
+-- given distance. A LOD spans a distance ratio of 2, so no step can jump over one.
+local SWEEP_NEAR = 5.0
+local SWEEP_FAR = 300.0
+local SWEEP_GROWTH = 1.15
+local FRAMES_PER_STEP = 4
 
 -- The ride along the lane, in meters from the scene's origin.
 local RIDE_NEAR_Y = -13.0
@@ -119,32 +121,43 @@ local function check_selection(p)
   end
 end
 
-local function place_at_distance(node, distance)
-  node:set_local_position(omath.vec3(CAMERA.x, CAMERA.y + (VIEW.y * distance),
-    CAMERA.z + (VIEW.z * distance)))
+-- Behind the camera, which looks along +Y: a LOD is selected before the frustum
+-- culls, so the check runs out of view.
+local function place_away_from_camera(node, distance)
+  local camera = scene.active_camera():get_world_position()
+  node:set_local_position(omath.vec3(camera.x, camera.y - distance, camera.z))
 end
 
--- Puts the moving instances at each distance for a few frames, and checks the LOD
--- each one reaches. Returns true when the last check is done.
-local function step_distance_checks(self)
-  local p = self.params
-  local step = self.distance_step
-  if step > 0 then
-    local expected = DISTANCE_STEPS[step]
-    for _, label in ipairs(LABELS) do
-      check(p[label .. "_default"]:renderable_get_active_lod_index() == expected.lod,
-        string.format("%s_default draws LOD %d when %s", label, expected.lod,
-          expected.name))
+local function record_lods(self)
+  for _, label in ipairs(LABELS) do
+    local lod = self.params[label .. "_probe"]:renderable_get_active_lod_index()
+    local seen = self.lods_seen[label]
+    if lod ~= nil and lod ~= seen[#seen] then
+      seen[#seen + 1] = lod
     end
   end
-  step = step + 1
-  self.distance_step = step
-  if step > #DISTANCE_STEPS then
+end
+
+-- Moves the probes one step further and records the LOD each one draws.
+-- Returns true when the check is done.
+local function step_distance_check(self)
+  if self.sweep_distance == nil then
+    self.sweep_distance = SWEEP_NEAR
+  else
+    record_lods(self)
+    self.sweep_distance = self.sweep_distance * SWEEP_GROWTH
+  end
+  if self.sweep_distance > SWEEP_FAR then
+    for _, label in ipairs(LABELS) do
+      local seen = table.concat(self.lods_seen[label], ", ")
+      check(seen == "1, 2, 3", string.format(
+        "%s_probe draws LODs 1, 2, 3 in turn going away, drew %s", label, seen))
+    end
     log.info(string.format(TAG .. "%d checks passed, %d failed", passed, failed))
     return true
   end
   for _, label in ipairs(LABELS) do
-    place_at_distance(p[label .. "_default"], DISTANCE_STEPS[step].distance)
+    place_away_from_camera(self.params[label .. "_probe"], self.sweep_distance)
   end
   return false
 end
@@ -181,7 +194,8 @@ end
 function script.on_start(self)
   self.started = false
   self.frames = 0
-  self.distance_step = 0
+  self.sweep_distance = nil
+  self.lods_seen = { msft = {}, named = {} }
   self.checks_done = false
   self.ride_seconds = 0.0
   self.shown = {}
@@ -195,13 +209,11 @@ function script.on_scene_mutation(self, dt_seconds)
     check_bindings(self.params)
     fix_policies(self.params)
   end
-  if not self.checks_done then
-    if self.frames >= LOD_CHECK_FRAME and self.frames % FRAMES_PER_STEP == 0 then
-      self.checks_done = step_distance_checks(self)
-    end
-  else
-    ride(self, dt_seconds)
+  if not self.checks_done and self.frames >= LOD_CHECK_FRAME
+    and self.frames % FRAMES_PER_STEP == 0 then
+    self.checks_done = step_distance_check(self)
   end
+  ride(self, dt_seconds)
   for _, label in ipairs(LABELS) do
     show_lod(self, label .. "_default")
     for lod = 1, LOD_COUNT do
