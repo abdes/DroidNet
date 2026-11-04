@@ -13,9 +13,11 @@
 #include <print>
 // MSVC declares the platform-specific _dupenv_s in the C runtime header.
 // NOLINTNEXTLINE(modernize-deprecated-headers)
-#include <stdlib.h>
 #include <utility>
 #include <vector>
+
+// MSVC's nonstandard _dupenv_s is declared by the platform C header.
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/PostProcess.h>

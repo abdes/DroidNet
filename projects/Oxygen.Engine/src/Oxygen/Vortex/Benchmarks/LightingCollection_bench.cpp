@@ -8,20 +8,31 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
+#include <ostream>
 #include <ratio>
 #include <span>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <glm/ext/vector_float3.hpp>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
@@ -32,6 +43,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -46,6 +58,9 @@
 
 namespace oxygen::vortex::testing {
 namespace {
+  //! The version the report states.
+  constexpr std::uint32_t kCollectionReportSchemaVersion = 1U;
+
   using Clock = std::chrono::steady_clock;
   constexpr std::uint32_t kWidth = 1920U;
   constexpr std::uint32_t kHeight = 1080U;
@@ -55,14 +70,6 @@ namespace {
   constexpr std::uint32_t kWarmupViewId = 9000U;
   constexpr std::uint32_t kMeasuredViewId = 100U;
   constexpr std::uint32_t kGpuScopeCapacity = 128U;
-
-  //! Collection overhead means nothing in an unoptimized build. The collection
-  //! still compiles in every configuration; only running it needs Release.
-#ifdef NDEBUG
-  constexpr auto kCanMeasureOverhead = true;
-#else
-  constexpr auto kCanMeasureOverhead = false;
-#endif
 
   struct FrameSample {
     unsigned sequence { 0U };
@@ -93,7 +100,6 @@ namespace {
       FailureBackend().SetRecorderNameCollectionEnabled(false);
     }
     auto RunCollection(bool smoke, std::span<const ShadingMode> paths) -> void;
-    auto Collect(bool smoke, std::span<const ShadingMode> paths) -> void;
     auto RenderFrame(bool forward, CpuTimingCapture* cpu,
       D3D12MemoryCapture* memory, MemorySampleId sample) -> FrameSample;
   };
@@ -152,16 +158,6 @@ namespace {
   }
 
   auto LightingCollectionBenchmark::RunCollection(
-    const bool smoke, const std::span<const ShadingMode> paths) -> void
-  {
-    if constexpr (kCanMeasureOverhead) {
-      Collect(smoke, paths);
-    } else {
-      GTEST_SKIP() << "Collection overhead requires Release.";
-    }
-  }
-
-  auto LightingCollectionBenchmark::Collect(
     const bool smoke, const std::span<const ShadingMode> paths) -> void
   {
     // Frozen authored recipe, matching the mixed-light image qualification.
@@ -367,7 +363,7 @@ namespace {
     const auto adapter = Backend().GetCurrentDevice()->GetAdapterLuid();
     auto manifest = std::ofstream(directory / "manifest.json");
     manifest << nlohmann::json {
-      { "schema_version", 1U }, { "smoke", smoke }, { "complete", true },
+      { "schema_version", kCollectionReportSchemaVersion }, { "smoke", smoke }, { "complete", true },
       { "width", kWidth }, { "height", kHeight }, { "lights", kLightCount },
       { "adapter_luid_low", adapter.LowPart }, { "adapter_luid_high", adapter.HighPart },
       { "control", "GPU timeline queries only; no CPU observer or memory sampling" },

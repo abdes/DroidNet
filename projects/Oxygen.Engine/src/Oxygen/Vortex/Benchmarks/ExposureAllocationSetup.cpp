@@ -7,11 +7,13 @@
 #include <charconv>
 #include <cstdlib>
 #include <memory>
-#include <stdlib.h>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
+
+// MSVC's nonstandard _dupenv_s is declared by the platform C header.
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Commands/Command.h>

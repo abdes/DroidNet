@@ -12,8 +12,10 @@
 #include <ratio>
 // MSVC declares the platform-specific _dupenv_s in the C runtime header.
 // NOLINTNEXTLINE(modernize-deprecated-headers)
-#include <stdlib.h>
 #include <string>
+
+// MSVC's nonstandard _dupenv_s is declared by the platform C header.
+#include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include <nlohmann/json.hpp>
 
@@ -342,12 +344,6 @@ auto ManyLightBaseline::RenderFrame(
 }
 auto ManyLightBaseline::RunBaseline() -> void
 {
-#ifndef NDEBUG
-  if (measure_) {
-    FAIL() << "Timing requires optimized Release; Debug permits reference "
-              "validation only.";
-  }
-#endif
   ASSERT_NO_FATAL_FAILURE(SetupCase());
   const auto verbosity = loguru::g_global_verbosity;
   loguru::g_global_verbosity = loguru::Verbosity_WARNING;

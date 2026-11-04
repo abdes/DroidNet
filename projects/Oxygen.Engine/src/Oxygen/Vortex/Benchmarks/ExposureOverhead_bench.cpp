@@ -4,42 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#ifdef NDEBUG
-#  include <array>
-#  include <chrono>
-#  include <filesystem>
-#  include <fstream>
-#  include <memory>
-#  include <ratio>
-#  include <string>
-#  include <tuple>
-#  include <vector>
+#include <array>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <ratio>
+#include <string>
+#include <tuple>
+#include <vector>
 
-#  include <nlohmann/json.hpp>
+#include <nlohmann/json.hpp>
 
-#  include <Oxygen/Base/Logging.h>
-#  include <Oxygen/Base/ObserverPtr.h>
-#  include <Oxygen/Core/Types/Format.h>
-#  include <Oxygen/Core/Types/View.h>
-#  include <Oxygen/Data/MaterialDomain.h>
-#  include <Oxygen/OxCo/Co.h>
-#  include <Oxygen/OxCo/Run.h>
-#  include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
-#  include <Oxygen/Scene/Camera/Perspective.h>
-#  include <Oxygen/Scene/Environment/Fog.h>
-#  include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#  include <Oxygen/Scene/Environment/SkyAtmosphere.h>
-#  include <Oxygen/Vortex/CompositionView.h>
-#  include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
-#  include <Oxygen/Vortex/RenderContext.h>
-#  include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#  include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
-#endif
-
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
+#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -49,9 +47,6 @@ using graphics::ResourceStates;
 
 NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
 {
-#ifndef NDEBUG
-  FAIL() << "This performance measurement requires Release.";
-#else
   // Reuse C01: the existing two-view accounting recipe. This run removes its
   // correctness readbacks and explicit queue drains from the timed loop.
   constexpr unsigned width = 1920U;
@@ -197,8 +192,9 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
         != kInvalidViewId);
     }
     auto loop = co::testing::TestEventLoop {};
-    // Run completes synchronously before the closure or captures are destroyed.
-    co::Run(loop, [&]() -> co::Co<void> {
+    // Run completes synchronously before the closure or captures are
+    // destroyed.
+    co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,
       });
@@ -254,7 +250,8 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
     const auto elapsed
       = std::chrono::duration<double>(Clock::now() - sample_start).count();
     // One ordinary frame publishes the final GPU capture. Its time is outside
-    // the declared steady-state population, and no explicit GPU wait is added.
+    // the declared steady-state population, and no explicit GPU wait is
+    // added.
     const auto* const label = enabled ? "on" : "off";
     const auto finish_sample = render(false);
     RecordProperty(
@@ -312,12 +309,12 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
     "dt 1/60, native offscreen");
   RecordProperty("scope",
     "Collection/export on versus runtime off. Scope wrappers exist in both. "
-    "Wall interval includes ordinary frame-start queue waits; submission span "
+    "Wall interval includes ordinary frame-start queue waits; submission "
+    "span "
     "includes driver calls and recording enqueue work. The separate "
     "finalization "
     "frame includes writer drain. Not a presented FPS or exposure CPU-budget "
     "acceptance test.");
-#endif
 }
 
 } // namespace oxygen::vortex::testing::exposure

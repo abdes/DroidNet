@@ -9,7 +9,6 @@
 #include <ios>
 #include <ratio>
 #include <string>
-#include <tuple>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
@@ -39,13 +38,8 @@ auto ExposureIndoorOutdoorBenchmarkTest::AdditionalCapabilities() const
 auto ExposureProfilingOverheadTest::MeasureReleaseBaseline(
   const BaselineRecipe kind) -> void
 {
-#ifndef NDEBUG
-  std::ignore = kind;
-  FAIL() << "This performance measurement requires Release.";
-#else
   auto scenario = ExposureBaselineScenario(*this, kind);
   scenario.Run();
-#endif
 }
 auto ExposureBaselineScenario::Run() -> void
 {

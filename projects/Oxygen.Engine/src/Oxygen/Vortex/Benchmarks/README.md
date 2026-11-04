@@ -72,7 +72,7 @@ that workload:
 The [exposure inventory](../../../../design/vortex/milestones/exposure/EX05.1/README.md#tasks-and-outcome)
 owns the recipe controls and measurement requirements. Run GPU workloads
 serially. Do not enable every disabled workload as an ordinary test suite or
-rerun timing experiments merely to validate a directory/target split. Debug
-builds support discovery; Release-only workloads retain their configuration
-guards. Existing historical evidence keeps the executable/source paths used
+rerun timing experiments merely to validate a directory/target split. The
+benchmark targets build only in Release: ll skips them in any other
+configuration, which also refuses to link them. Existing historical evidence keeps the executable/source paths used
 when it was collected.
