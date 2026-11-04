@@ -736,10 +736,13 @@ base correctly.
   tombstones.
 - Requirements: the catalog records requirements of other mounts, and the
   runtime check (R4) reads them the same way.
-- `ScriptSealing.cpp`: what it seals and how a sealed script is verified at
-  load.
-- `ArtifactPublication` and `StagedSourceStorage`: the pak and its catalog
-  publish together or not at all.
+- `ScriptSealing.cpp`: it rewrites external-source scripts of loose roots into
+  embedded-source inputs in a staged root, and stamps the rewritten descriptors'
+  hashes. No seal is verified at load: `CheckDescriptorHash` covers the
+  descriptor, and a sealed script must no longer allow an external source.
+- `ArtifactPublication`: the pak, its catalog and any manifest and report
+  publish together or not at all. `StagedSourceStorage`: a staged root overlays
+  its original, which is never written.
 - The browse index is mandatory (no `embed_browse_index`).
 - `PakDump`: dumpers read through the product readers, not their own
   layouts.
