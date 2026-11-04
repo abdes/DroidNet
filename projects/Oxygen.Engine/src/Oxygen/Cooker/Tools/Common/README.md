@@ -35,6 +35,7 @@ calls `RunToolMain`, which runs it on the process streams inside a
 | Logging        | `ToolLogging` initializes loguru with the log silenced. A tool raises it from its own options in its lifecycle.                   |
 | Shared setup   | `ToolInfo::lifecycle` brackets the selected command, for services all commands use.                                               |
 | Global options | `ToolInfo::global_options` are accepted before the command name, and stored like command options.                                 |
+| Report files   | `ReportFile.h` refuses a destination that replaces an input or lies in a cooked source, and publishes reports atomically.         |
 
 ## Exit codes
 

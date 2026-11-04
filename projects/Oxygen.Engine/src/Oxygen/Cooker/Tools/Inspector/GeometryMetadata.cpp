@@ -7,8 +7,6 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -28,11 +26,10 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Serio/MemoryStream.h>
@@ -99,27 +96,16 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
   using nlohmann::json;
   const auto root
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path
-    = std::filesystem::absolute(options.output).lexically_normal();
-  if (output_path == root / oxygen::data::loose_cooked::kIndexFileName) {
-    throw std::runtime_error(
-      "Geometry metadata output must not replace its source index.");
-  }
-  if (output_path == root) {
-    throw std::runtime_error(
-      "Geometry metadata output must not replace its source pak.");
+  const auto output_path = toolkit::ResolveReportPath(options.output);
+  if (auto safe = toolkit::CheckToolReportDestination(
+        output_path, { .inputs = {}, .cooked_roots = { root } });
+    !safe) {
+    return safe;
   }
   const auto content
     = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
   auto geometries = json::array();
   for (const auto& entry : content.Assets()) {
-    if (content.Source().kind == data::CookedSourceKind::kLooseCooked) {
-      const auto stored = content.DescriptorStored(entry.key);
-      if (output_path == stored.file.lexically_normal()) {
-        throw std::runtime_error(
-          "Geometry metadata output must not replace a source descriptor.");
-      }
-    }
     if (entry.type != data::AssetType::kGeometry) {
       continue;
     }
@@ -194,13 +180,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options)
     { "schema_version", data::kSurfaceInventorySchemaVersion },
     { "geometries", std::move(geometries) },
   };
-  std::ofstream output(output_path, std::ios::binary);
-  output << report.dump(2) << '\n';
-  output.close();
-  if (!output) {
-    throw std::runtime_error("Could not write geometry metadata report.");
-  }
-  return {};
+  return toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
 }
 
 } // namespace oxygen::content::inspection

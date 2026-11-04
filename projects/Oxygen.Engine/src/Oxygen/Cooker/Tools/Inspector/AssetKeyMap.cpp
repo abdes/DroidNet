@@ -5,8 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -23,6 +21,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -57,6 +56,15 @@ auto BuildAssetKeyMapCommand(AssetKeyMapOptions& options)
 
 auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
 {
+  const auto output_path = toolkit::ResolveReportPath(options.output);
+  if (auto safe = toolkit::CheckToolReportDestination(output_path,
+        {
+          .inputs = { std::filesystem::path(options.input) },
+          .cooked_roots = {},
+        });
+    !safe) {
+    return safe;
+  }
   const auto bytes = serio::ReadPublishedFile(
     std::filesystem::path(options.input), import::kMaxImportMetadataBytes);
   if (!bytes) {
@@ -84,13 +92,7 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> toolkit::ToolResult
     { "schema", "oxygen.asset-key-map.v1" },
     { "assets", std::move(assets) },
   };
-  std::ofstream output(options.output, std::ios::binary);
-  output << report.dump(2);
-  output.close();
-  if (!output) {
-    throw std::runtime_error("Could not write asset key map.");
-  }
-  return {};
+  return toolkit::PublishToolReport(output_path, report.dump(2));
 }
 
 } // namespace oxygen::content::inspection

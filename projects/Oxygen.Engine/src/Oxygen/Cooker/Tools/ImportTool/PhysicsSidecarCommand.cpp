@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/PhysicsSidecarCommand.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 
 namespace oxygen::content::import::tool {
 
@@ -75,7 +76,7 @@ auto PhysicsSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto report
     = Option::WithKey("report")
-        .About("Write a JSON report (absolute or relative to cooked root)")
+        .About("Write a JSON report (absolute or relative to working dir)")
         .Long("report")
         .WithValue<std::string>()
         .StoreTo(&options_.report_path)
@@ -120,21 +121,39 @@ auto PhysicsSidecarCommand::Execute() -> std::expected<void, std::error_code>
     "Global message writer must be set by main");
   auto writer = global_options_->writer;
 
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto refuse = [&] -> std::unexpected<std::error_code> {
+    return RefuseImportJob(
+      {
+        .report_path = settings.report_path,
+        .command_line = global_options_->command_line,
+        .job_type = "physics-sidecar",
+        .source_path = settings.source_path,
+        .cooked_root = settings.cooked_root,
+        .diagnostics = diagnostics,
+      },
+      writer);
+  };
+
   if (!physics_backend_.empty()) {
     const auto backend = ParsePhysicsBackend(physics_backend_);
     if (!backend.has_value()) {
-      writer->Error("ERROR: --physics-backend must be jolt, physx or none");
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+      diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { import_tool_codes::kOptionInvalid },
+        .message = "--physics-backend must be jolt, physx or none",
+      });
+      writer->Error(internal::FormatDiagnostics(diagnostics));
+      return refuse();
     }
     settings.physics_backend = *backend;
   }
 
-  auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto request
     = internal::BuildPhysicsSidecarRequest(settings, diagnostics);
   if (!request.has_value()) {
     writer->Error(internal::FormatDiagnostics(diagnostics));
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    return refuse();
   }
 
   return RunImportJob(*request, writer, settings.report_path,

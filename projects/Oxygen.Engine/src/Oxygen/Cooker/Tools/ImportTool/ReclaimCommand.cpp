@@ -10,6 +10,7 @@
 #include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <fmt/base.h>
 
@@ -19,6 +20,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReclaimCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
@@ -58,8 +60,9 @@ auto ReclaimCommand::Execute() -> std::expected<void, std::error_code>
 {
   DCHECK_F(global_options_ != nullptr && global_options_->writer,
     "Global message writer must be set by main");
+  auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto mounts
-    = ResolveSourceMounts(mount_options_, global_options_->writer);
+    = ResolveSourceMounts(mount_options_, global_options_->writer, diagnostics);
   if (!mounts.has_value()) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }

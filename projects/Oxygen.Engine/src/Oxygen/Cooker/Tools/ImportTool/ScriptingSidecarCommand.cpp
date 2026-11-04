@@ -74,7 +74,7 @@ auto ScriptingSidecarCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto report
     = Option::WithKey("report")
-        .About("Write a JSON report (absolute or relative to cooked root)")
+        .About("Write a JSON report (absolute or relative to working dir)")
         .Long("report")
         .WithValue<std::string>()
         .StoreTo(&options_.report_path)
@@ -115,7 +115,16 @@ auto ScriptingSidecarCommand::Execute() -> std::expected<void, std::error_code>
     = internal::BuildScriptingSidecarRequest(settings, diagnostics);
   if (!request.has_value()) {
     writer->Error(internal::FormatDiagnostics(diagnostics));
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    return RefuseImportJob(
+      {
+        .report_path = settings.report_path,
+        .command_line = global_options_->command_line,
+        .job_type = "script-sidecar",
+        .source_path = settings.source_path,
+        .cooked_root = settings.cooked_root,
+        .diagnostics = diagnostics,
+      },
+      writer);
   }
 
   return RunImportJob(*request, writer, settings.report_path,

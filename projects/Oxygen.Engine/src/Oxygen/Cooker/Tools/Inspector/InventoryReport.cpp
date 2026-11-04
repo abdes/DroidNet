@@ -30,12 +30,12 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Serio/AtomicFile.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Integrity.h>
 #include <Oxygen/Serio/NativeFile.h>
@@ -133,12 +133,11 @@ auto RunInventoryReport(const InventoryReportOptions& options)
   using nlohmann::json;
   const auto root
     = std::filesystem::canonical(base::ToNativePath(options.cooked_root));
-  const auto output
-    = std::filesystem::weakly_canonical(base::ToNativePath(options.output));
-  const auto relative = output.lexically_relative(root);
-  if (!relative.empty() && *relative.begin() != "..") {
-    throw std::runtime_error(
-      "Inventory report output must be outside the cooked root");
+  const auto output = toolkit::ResolveReportPath(options.output);
+  if (auto safe = toolkit::CheckToolReportDestination(
+        output, { .inputs = {}, .cooked_roots = { root } });
+    !safe) {
+    return safe;
   }
   const auto index_path = root / oxygen::data::loose_cooked::kIndexFileName;
   const auto index_digest = FileDigest(index_path);
@@ -252,16 +251,7 @@ auto RunInventoryReport(const InventoryReportOptions& options)
       { "resources", std::move(resources) },
       { "issues", std::move(issues) },
     }.dump();
-  const auto result
-    = serio::WriteFileAtomically(output, std::as_bytes(std::span(report)));
-  if (!result) {
-    throw std::system_error(result.error(), "Write integrity inventory report");
-  }
-  if (result->durability_error) {
-    throw std::system_error(
-      result->durability_error, "Synchronize integrity inventory report");
-  }
-  return {};
+  return toolkit::PublishToolReport(output, report);
 }
 
 } // namespace oxygen::content::inspection

@@ -11,11 +11,11 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <ratio>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -42,6 +42,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/ModelImportRecordError.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
@@ -60,52 +61,30 @@ namespace {
 
   using nlohmann::ordered_json;
 
-  auto ResolveReportPath(std::string_view report_path,
-    const std::filesystem::path& cooked_root,
-    const oxygen::observer_ptr<IMessageWriter>& writer)
-    -> std::optional<std::filesystem::path>
+  //! A file path as reports spell it: absolute and lexically normal.
+  auto AbsolutePath(const std::filesystem::path& path) -> std::filesystem::path
   {
-    std::filesystem::path path(report_path);
-    if (path.is_absolute()) {
-      return path;
-    }
-    if (cooked_root.empty()) {
-      if (writer) {
-        writer->Error(
-          "ERROR: --report requires a cooked root when using a relative path");
-      }
-      return std::nullopt;
-    }
-    return (cooked_root / path).lexically_normal();
+    return path.empty() ? path : toolkit::ResolveReportPath(path);
   }
 
-  auto WriteJsonReport(const ordered_json& payload,
-    const std::filesystem::path& report_path,
-    const oxygen::observer_ptr<IMessageWriter>& writer) -> bool
+  //! The cooked sources a request reads and writes.
+  auto CookedRootsOf(const ImportRequest& request)
+    -> std::vector<std::filesystem::path>
   {
-    std::error_code ec;
-    const auto parent = report_path.parent_path();
-    if (!parent.empty()) {
-      std::filesystem::create_directories(parent, ec);
-      if (ec) {
-        if (writer) {
-          writer->Error(fmt::format(
-            "ERROR: failed to create report directory: {}", parent.string()));
-        }
-        return false;
-      }
-    }
+    auto roots = request.cooked_context_roots;
+    roots.push_back(request.ResolveCookedRoot());
+    return roots;
+  }
 
-    std::ofstream output(report_path);
-    if (!output) {
-      if (writer) {
-        writer->Error(fmt::format(
-          "ERROR: failed to open report file: {}", report_path.string()));
-      }
-      return false;
-    }
-    output << payload.dump(2) << "\n";
-    return true;
+  auto MakeError(const std::string_view code, std::string message,
+    const std::filesystem::path& source_path) -> ImportDiagnostic
+  {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = std::string { code },
+      .message = std::move(message),
+      .source_path = source_path.string(),
+    };
   }
 
   auto ResolveReportJobType(const ImportRequest& request) -> std::string
@@ -132,7 +111,87 @@ namespace {
 
 } // namespace
 
-auto RunImportJob(const ImportRequest& request,
+auto RefuseImportJob(const ImportRefusal& refusal,
+  const oxygen::observer_ptr<IMessageWriter> writer)
+  -> std::unexpected<std::error_code>
+{
+  const auto refused
+    = std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  if (refusal.report_path.empty()
+    || !IsReportDestinationSafe(refusal.report_path,
+      {
+        .inputs = { refusal.source_path },
+        .cooked_roots = { refusal.cooked_root },
+      },
+      writer)) {
+    return refused;
+  }
+
+  const auto now = std::chrono::system_clock::now();
+  ordered_json session = ordered_json::object();
+  session.update({
+    { "id", MakeSessionId(now) },
+    { "started_utc", FormatUtcTimestamp(now) },
+    { "ended_utc", FormatUtcTimestamp(now) },
+    { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
+    { "command_line", std::string(refusal.command_line) },
+  });
+  if (!refusal.cooked_root.empty()) {
+    session.update({
+      {
+        "cooked_root",
+        std::filesystem::absolute(refusal.cooked_root)
+          .lexically_normal()
+          .string(),
+      },
+    });
+  }
+
+  // A refusal names its source as the command line spelled it.
+  auto diagnostics = std::vector<ImportDiagnostic>(
+    refusal.diagnostics.begin(), refusal.diagnostics.end());
+  for (auto& diagnostic : diagnostics) {
+    if (diagnostic.source_path == refusal.source_path.string()) {
+      diagnostic.source_path = AbsolutePath(refusal.source_path).string();
+    }
+  }
+
+  ordered_json job = ordered_json::object();
+  job.update({
+    { "index", 1 },
+    { "type", std::string(refusal.job_type) },
+    { "work_items", ordered_json::array() },
+    { "status", "failed" },
+    { "outputs", ordered_json::array() },
+    { "products", ordered_json::array() },
+    { "stats", BuildEmptyStatsJson() },
+    { "diagnostics", BuildDiagnosticsJson(diagnostics) },
+  });
+
+  ordered_json payload = ordered_json::object();
+  payload.update({
+    { "report_version", std::string(kReportVersion) },
+    { "session", std::move(session) },
+    {
+      "summary",
+      {
+        { "jobs_total", 1 },
+        { "jobs_succeeded", 0 },
+        { "jobs_failed", 1 },
+        { "jobs_skipped", 0 },
+        { "time_ms_total", 0.0 },
+        { "time_ms_io", 0.0 },
+        { "time_ms_cpu", 0.0 },
+      },
+    },
+    { "jobs", ordered_json::array({ std::move(job) }) },
+  });
+  static_cast<void>(
+    PublishImportReport(refusal.report_path, payload.dump(2) + "\n", writer));
+  return refused;
+}
+
+auto RunImportJob(const ImportRequest& command_request,
   oxygen::observer_ptr<IMessageWriter> writer,
   const std::string_view report_path, const std::string_view command_line,
   const bool enable_tui, oxygen::observer_ptr<AsyncImportService> service,
@@ -144,6 +203,22 @@ auto RunImportJob(const ImportRequest& request,
   DCHECK_NOTNULL_F(writer, "Message writer must be provided by main");
   DCHECK_NOTNULL_F(service, "Import service must be provided by main");
   CHECK_F(!command_line.empty(), "Command line is required for report output");
+
+  // The job's paths reach its report, whatever the command line's spelling.
+  auto request = command_request;
+  request.source_path = AbsolutePath(request.source_path);
+  if (request.cooked_root.has_value()) {
+    request.cooked_root = AbsolutePath(*request.cooked_root);
+  }
+
+  if (!IsReportDestinationSafe(report_path,
+        {
+          .inputs = { request.source_path },
+          .cooked_roots = CookedRootsOf(request),
+        },
+        writer)) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  }
 
   std::mutex mutex;
   std::condition_variable cv;
@@ -270,6 +345,18 @@ auto RunImportJob(const ImportRequest& request,
 
   if (submit_error.has_value()) {
     writer->Error(*submit_error);
+    const auto failure = MakeError(
+      import_tool_codes::kSubmitFailed, *submit_error, request.source_path);
+    static_cast<void>(RefuseImportJob(
+      {
+        .report_path = report_path,
+        .command_line = command_line,
+        .job_type = ResolveReportJobType(request),
+        .source_path = request.source_path,
+        .cooked_root = request.ResolveCookedRoot(),
+        .diagnostics = std::span { &failure, 1U },
+      },
+      writer));
     return std::unexpected(
       std::make_error_code(std::errc::state_not_recoverable));
   }
@@ -284,12 +371,6 @@ auto RunImportJob(const ImportRequest& request,
   std::optional<std::filesystem::path> written_report;
   if (!report_path.empty()) {
     const auto cooked_root = report_copy.cooked_root;
-    const auto resolved_path
-      = ResolveReportPath(report_path, cooked_root, writer);
-    if (!resolved_path.has_value()) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
-
     const auto session_ended = std::chrono::system_clock::now();
     const auto elapsed_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - start_time)
@@ -348,12 +429,12 @@ auto RunImportJob(const ImportRequest& request,
     job.update({ { "status", std::string(JobStatusFromReport(report_copy)) } });
     job.update({ { "outputs", BuildOutputsJson(report_copy.outputs) } });
     job.update({ { "products", BuildProductsJson(report_copy.products) } });
-    job.update({ { "cooked_root", report_copy.cooked_root.generic_string() } });
+    job.update({ { "cooked_root", report_copy.cooked_root.string() } });
     if (report_copy.model_record_path) {
       job.update({
         {
           "model_record_path",
-          report_copy.model_record_path->generic_string(),
+          report_copy.model_record_path->string(),
         },
       });
     }
@@ -361,7 +442,7 @@ auto RunImportJob(const ImportRequest& request,
       job.update({
         {
           "previous_cooked_root",
-          report_copy.previous_cooked_root->generic_string(),
+          report_copy.previous_cooked_root->string(),
         },
       });
     }
@@ -375,11 +456,11 @@ auto RunImportJob(const ImportRequest& request,
       { { "diagnostics", BuildDiagnosticsJson(report_copy.diagnostics) } });
     payload.update({ { "jobs", ordered_json::array({ std::move(job) }) } });
 
-    if (!WriteJsonReport(payload, *resolved_path, writer)) {
+    if (!PublishImportReport(report_path, payload.dump(2) + "\n", writer)) {
       return std::unexpected(std::make_error_code(std::errc::io_error));
     }
 
-    written_report = *resolved_path;
+    written_report = toolkit::ResolveReportPath(report_path);
   }
 
   if (!report_copy.success) {
@@ -416,12 +497,27 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
   const ImportFormat format, const SourceMountOptions& mount_options,
   const GlobalOptions& globals) -> std::expected<void, std::error_code>
 {
+  const auto refuse = [&](const std::span<const ImportDiagnostic> diagnostics)
+    -> std::unexpected<std::error_code> {
+    return RefuseImportJob(
+      {
+        .report_path = settings.report_path,
+        .command_line = globals.command_line,
+        .job_type = to_string(format),
+        .source_path = settings.source_path,
+        .cooked_root = settings.cooked_root,
+        .diagnostics = diagnostics,
+      },
+      globals.writer);
+  };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
   try {
     // Records are found, and their sources located, through the mounts of
     // the project at `--root`, the working directory by default.
-    const auto mounts = ResolveSourceMounts(mount_options, globals.writer);
+    const auto mounts
+      = ResolveSourceMounts(mount_options, globals.writer, diagnostics);
     if (!mounts.has_value()) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+      return refuse(diagnostics);
     }
     // `--record` names a record; `--root` makes the import a record import,
     // its record at the `--virtual-path` identity.
@@ -529,6 +625,12 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
       notes = std::move(location.diagnostics);
     }
     if (!record_path.empty()) {
+      if (!IsReportDestinationSafe(settings.report_path,
+            { .inputs = { record_path }, .cooked_roots = {} },
+            globals.writer)) {
+        return std::unexpected(
+          std::make_error_code(std::errc::invalid_argument));
+      }
       if (!settings.source_path.empty()) {
         ImportRequest source;
         source.source_path = settings.source_path;
@@ -554,23 +656,30 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         settings.report_path, globals.command_line, !globals.no_tui,
         globals.import_service, publication);
     }
-    auto diagnostics = std::vector<ImportDiagnostic> {};
     auto request = internal::BuildSceneRequest(settings, format, diagnostics);
     if (!request) {
       globals.writer->Error(internal::FormatDiagnostics(diagnostics));
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+      return refuse(diagnostics);
     }
-    if (!LocateRequestSource(*request, *mounts, globals.writer)) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    if (!LocateRequestSource(*request, *mounts, globals.writer, diagnostics)) {
+      return refuse(diagnostics);
     }
     return RunImportJob(*request, globals.writer, settings.report_path,
       globals.command_line, !globals.no_tui, globals.import_service);
+  } catch (const ModelImportRecordError& error) {
+    globals.writer->Error(error.what());
+    return refuse(std::span { &error.Diagnostic(), 1U });
   } catch (const std::system_error& error) {
     globals.writer->Error(error.what());
+    const auto failure = MakeError(
+      import_tool_codes::kCommandFailed, error.what(), settings.source_path);
+    static_cast<void>(refuse(std::span { &failure, 1U }));
     return std::unexpected(error.code());
   } catch (const std::exception& error) {
     globals.writer->Error(error.what());
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    const auto failure = MakeError(
+      import_tool_codes::kOptionInvalid, error.what(), settings.source_path);
+    return refuse(std::span { &failure, 1U });
   }
 }
 

@@ -24,14 +24,44 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Importer.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
+#include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 
 namespace oxygen::content::import::tool {
+
+auto IsReportDestinationSafe(const std::string_view report_path,
+  const toolkit::ReportGuard& guard, const observer_ptr<IMessageWriter> writer)
+  -> bool
+{
+  if (report_path.empty()) {
+    return true;
+  }
+  const auto checked = toolkit::CheckReportDestination(
+    toolkit::ResolveReportPath(report_path), guard);
+  if (!checked) {
+    writer->Error(checked.error().Text());
+  }
+  return checked.has_value();
+}
+
+auto PublishImportReport(const std::string_view report_path,
+  const std::string_view text, const observer_ptr<IMessageWriter> writer)
+  -> bool
+{
+  const auto published
+    = toolkit::PublishReport(toolkit::ResolveReportPath(report_path), text);
+  if (!published) {
+    writer->Error(published.error().Text());
+  }
+  return published.has_value();
+}
 
 namespace {
 

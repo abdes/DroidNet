@@ -49,6 +49,7 @@
 #include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
@@ -239,18 +240,25 @@ auto WriteOverrideScene(const std::filesystem::path& root,
 
 class InspectorGeometryMetadataTest : public oxygen::testing::TempDirTest {
 protected:
+  //! A report beside the cooked root, which is `TempDir()`.
+  [[nodiscard]] auto ReportPath(const std::string_view name) const
+    -> std::filesystem::path
+  {
+    return reports_.Path() / name;
+  }
+
   auto Report() -> int
   {
     return RunGeometryMetadataReport({
       .cooked_root = TempDir().string(),
-      .output = TempPath("geometries.json").string(),
+      .output = ReportPath("geometries.json").string(),
       .virtual_path = {},
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(TempPath("geometries.json"));
+    std::ifstream input(ReportPath("geometries.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-geometries.schema.json");
@@ -258,6 +266,9 @@ protected:
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
     return report;
   }
+
+private:
+  oxygen::testing::ScopedTempDir reports_;
 };
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
@@ -308,7 +319,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsRetiredGeometryVersion)
   WriteGeometryRoot(TempDir(), { .version = 1 });
   EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(TempPath("geometries.json")));
+  EXPECT_FALSE(std::filesystem::exists(ReportPath("geometries.json")));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
@@ -316,7 +327,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
   WriteGeometryRoot(TempDir());
   EXPECT_EQ(RunGeometryMetadataReport({
               .cooked_root = TempDir().string(),
-              .output = TempPath("geometries.json").string(),
+              .output = ReportPath("geometries.json").string(),
               .virtual_path = "/Content/Geometry/Absent.ogeo",
             }),
     0);
@@ -328,7 +339,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsNilSurfaceIdentity)
   WriteGeometryRoot(TempDir(), { .first_surface = {} });
   EXPECT_THROW(ValidateRoot(TempDir()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(TempPath("geometries.json")));
+  EXPECT_FALSE(std::filesystem::exists(ReportPath("geometries.json")));
 }
 
 NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)
@@ -340,7 +351,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)
       .output = TempPath("Descriptors/Geometry/Inspection.ogeo").string(),
       .virtual_path = {},
     }),
-    2);
+    1);
   EXPECT_NO_THROW(ValidateRoot(TempDir()));
 }
 
@@ -384,7 +395,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
   Materialize(workspace.Storage().Bytes(PakWorkspace::PakPath("out.pak")), pak);
   ASSERT_EQ(RunGeometryMetadataReport({
               .cooked_root = loose.string(),
-              .output = TempPath("loose.json").string(),
+              .output = ReportPath("loose.json").string(),
               .virtual_path = {},
             }),
     0);
@@ -392,13 +403,13 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
   // Act
   const auto exit_code = RunGeometryMetadataReport({
     .cooked_root = pak.string(),
-    .output = TempPath("geometries.json").string(),
+    .output = ReportPath("geometries.json").string(),
     .virtual_path = "/Content/Geometry/Inspection.ogeo",
   });
 
   // Assert
   ASSERT_EQ(exit_code, 0);
-  std::ifstream expected(TempPath("loose.json"));
+  std::ifstream expected(ReportPath("loose.json"));
   EXPECT_EQ(ReadReport(), nlohmann::json::parse(expected));
 }
 

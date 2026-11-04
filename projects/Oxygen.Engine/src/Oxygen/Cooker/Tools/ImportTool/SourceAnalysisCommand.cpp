@@ -4,12 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <optional>
 #include <string>
@@ -20,7 +17,6 @@
 
 #include <fmt/format.h>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
@@ -31,7 +27,9 @@
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
 #include <Oxygen/Core/Version.h>
 
@@ -102,40 +100,29 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
       global_options_->writer->Error(message);
     }
   };
-  const auto destination = std::filesystem::path(report_path_);
-  const auto aliases = [&](const std::filesystem::path& source) -> bool {
-    if (source.empty()) {
-      return false;
-    }
-    return base::PathIdentityKey(std::filesystem::weakly_canonical(source))
-      == base::PathIdentityKey(std::filesystem::weakly_canonical(destination))
-      || (std::filesystem::exists(source)
-        && std::filesystem::exists(destination)
-        && std::filesystem::equivalent(source, destination));
+  const auto writer = global_options_->writer;
+  auto report_guard = toolkit::ReportGuard {
+    .inputs = { manifest_path, captured_inputs_path_, mounts_path_ },
+    .cooked_roots = {},
   };
-  if (aliases(manifest_path) || aliases(captured_inputs_path_)) {
+  if (!IsReportDestinationSafe(report_path_, report_guard, writer)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   // Writes the report, refusing one that would overwrite a file it read.
   const auto write_report = [&](const ImportSourceAnalysis& report)
     -> std::expected<void, std::error_code> {
     for (const auto& job : report.jobs) {
-      if (aliases(job.source_path)
-        || std::ranges::any_of(job.accessed_paths, aliases)
-        || std::ranges::any_of(job.files,
-          [&](const auto& file) -> bool { return aliases(file.path); })) {
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
+      report_guard.inputs.push_back(job.source_path);
+      report_guard.inputs.insert(report_guard.inputs.end(),
+        job.accessed_paths.begin(), job.accessed_paths.end());
+      for (const auto& file : job.files) {
+        report_guard.inputs.push_back(file.path);
       }
     }
-    if (!destination.parent_path().empty()) {
-      std::filesystem::create_directories(destination.parent_path());
+    if (!IsReportDestinationSafe(report_path_, report_guard, writer)) {
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
-    auto output
-      = std::ofstream(base::ToNativePath(destination), std::ios::binary);
-    output << report.ToJson() << '\n';
-    output.close();
-    if (!output) {
+    if (!PublishImportReport(report_path_, report.ToJson() + '\n', writer)) {
       return std::unexpected(std::make_error_code(std::errc::io_error));
     }
     return {};
@@ -177,17 +164,17 @@ auto SourceAnalysisCommand::Execute() -> std::expected<void, std::error_code>
   }
   if (captured_inputs) {
     for (const auto& input : captured_inputs->Inputs()) {
-      if (aliases(input.logical_path)
-        || (input.file.has_value() && aliases(input.file->path))) {
-        return std::unexpected(
-          std::make_error_code(std::errc::invalid_argument));
+      report_guard.inputs.emplace_back(input.logical_path);
+      if (input.file.has_value()) {
+        report_guard.inputs.emplace_back(input.file->path);
       }
     }
   }
   for (const auto& job : manifest->jobs) {
-    if (aliases(job.SourcePath())) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
+    report_guard.inputs.push_back(job.SourcePath());
+  }
+  if (!IsReportDestinationSafe(report_path_, report_guard, writer)) {
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   auto report = manifest->AnalyzeSources({}, captured_inputs);
   report.diagnostics = std::move(manifest_diagnostics);

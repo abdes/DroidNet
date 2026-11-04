@@ -89,7 +89,7 @@ namespace {
 
   auto PathText(const std::filesystem::path& path) -> std::string
   {
-    const auto encoded = path.generic_u8string();
+    const auto encoded = path.u8string();
     return { encoded.begin(), encoded.end() };
   }
 

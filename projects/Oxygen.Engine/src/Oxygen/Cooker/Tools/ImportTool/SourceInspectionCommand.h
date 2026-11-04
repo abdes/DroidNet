@@ -8,6 +8,7 @@
 
 #include <string>
 
+#include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -16,6 +17,11 @@ namespace oxygen::content::import::tool {
 //! workers.
 class SourceInspectionCommand final : public ImportCommand {
 public:
+  explicit SourceInspectionCommand(const GlobalOptions* global_options)
+    : global_options_(global_options)
+  {
+  }
+
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
   [[nodiscard]] auto Execute() -> std::expected<void, std::error_code> override;
@@ -25,6 +31,7 @@ public:
   }
 
 private:
+  const GlobalOptions* global_options_ = nullptr;
   std::string source_path_;
   std::string output_path_;
 };

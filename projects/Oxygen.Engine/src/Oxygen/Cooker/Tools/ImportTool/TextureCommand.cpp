@@ -276,8 +276,8 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .Build();
 
   auto report = Option::WithKey("report")
-                  .About("Write a JSON report (absolute or relative to cooked "
-                         "root)")
+                  .About("Write a JSON report (absolute or relative to working "
+                         "dir)")
                   .Long("report")
                   .WithValue<std::string>()
                   .StoreTo(&options_.report_path)
@@ -328,14 +328,27 @@ auto TextureCommand::Execute() -> std::expected<void, std::error_code>
   auto writer = global_options_->writer;
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto refuse = [&] -> std::unexpected<std::error_code> {
+    return RefuseImportJob(
+      {
+        .report_path = settings.report_path,
+        .command_line = global_options_->command_line,
+        .job_type = "texture",
+        .source_path = settings.source_path,
+        .cooked_root = settings.cooked_root,
+        .diagnostics = diagnostics,
+      },
+      writer);
+  };
   auto request = internal::BuildTextureRequest(settings, diagnostics);
   if (!request.has_value()) {
     writer->Error(internal::FormatDiagnostics(diagnostics));
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    return refuse();
   }
-  const auto mounts = ResolveSourceMounts(mount_options_, writer);
-  if (!mounts.has_value() || !LocateRequestSource(*request, *mounts, writer)) {
-    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+  const auto mounts = ResolveSourceMounts(mount_options_, writer, diagnostics);
+  if (!mounts.has_value()
+    || !LocateRequestSource(*request, *mounts, writer, diagnostics)) {
+    return refuse();
   }
 
   return RunImportJob(*request, writer, settings.report_path,

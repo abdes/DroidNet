@@ -12,3 +12,12 @@ oxygen_cooker_test(
   SOURCES
     "ToolApp_unit_test.cpp"
 )
+
+oxygen_cooker_test(
+  ToolKit
+  FUNCTIONAL
+  DEPS
+    oxygen-cooker-toolkit
+  SOURCES
+    "ReportFile_functional_test.cpp"
+)

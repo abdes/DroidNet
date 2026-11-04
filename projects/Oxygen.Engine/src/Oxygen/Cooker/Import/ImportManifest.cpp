@@ -17,6 +17,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -74,6 +75,15 @@
 namespace oxygen::content::import {
 
 namespace {
+
+  //! A path as diagnostics and job sources spell it, wherever the command line
+  //! starts from: absolute and lexically normal.
+  auto AbsolutePath(const std::filesystem::path& path) -> std::filesystem::path
+  {
+    auto error = std::error_code {};
+    const auto absolute = std::filesystem::absolute(path, error);
+    return error ? path : absolute.lexically_normal();
+  }
 
   using nlohmann::json;
   using nlohmann::json_schema::json_validator;
@@ -1395,8 +1405,8 @@ namespace {
       }
       manifest.mounts = std::make_shared<const MountTable>(
         ResolveMountTable(MountTableRequest {
-          .project_root = options.project_root.value_or(
-            (manifest_dir / project_root).lexically_normal()),
+          .project_root = AbsolutePath(options.project_root.value_or(
+            (manifest_dir / project_root).lexically_normal())),
           .declarations = std::move(*declarations),
           .form = MountDeclarationForm::kCommittedFile,
           .declared_in = declared_in,
@@ -1468,8 +1478,9 @@ auto ImportManifest::Load(const std::filesystem::path& manifest_path,
   std::vector<ImportDiagnostic>& diagnostics) -> std::optional<ImportManifest>
 {
   const auto first_finding = diagnostics.size();
-  const auto source_path = manifest_path.string();
-  auto manifest = LoadManifestFile(manifest_path, options,
+  const auto path = AbsolutePath(manifest_path);
+  const auto source_path = path.string();
+  auto manifest = LoadManifestFile(path, options,
     Findings {
       .diagnostics = make_observer(&diagnostics),
       .source_path = source_path,
@@ -1502,7 +1513,8 @@ auto ImportManifest::LoadBatch(
   }
 
   auto manifests = std::vector<ImportManifest> {};
-  for (const auto& path : manifest_paths) {
+  for (const auto& manifest_path : manifest_paths) {
+    const auto path = AbsolutePath(manifest_path);
     const auto source_path = path.string();
     auto manifest = LoadManifestFile(path, options,
       Findings {

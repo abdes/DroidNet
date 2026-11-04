@@ -66,6 +66,23 @@ protected:
   }
 };
 
+//! A report over a cooked file would break the root it describes.
+NOLINT_TEST_F(InspectorDependencyReportTest, RefusesAReportInsideItsCookedRoot)
+{
+  const auto library = MakeLibrary();
+  const auto loose = TempPath("loose");
+  oxygen::cooker::testing::Materialize(library.Files(), loose);
+  const auto output = loose / "dependencies.json";
+
+  EXPECT_EQ(RunDependencyReport({
+              .cooked_root = loose.string(),
+              .output = output.string(),
+            }),
+    1);
+
+  EXPECT_FALSE(std::filesystem::exists(output));
+}
+
 //! A pak reports the same direct dependencies as the loose root it packs.
 NOLINT_TEST_F(InspectorDependencyReportTest, ReportsDependenciesFromAPak)
 {

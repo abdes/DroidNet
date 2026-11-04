@@ -13,6 +13,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 
@@ -35,15 +36,17 @@ struct SourceMountOptions final {
 [[nodiscard]] auto BuildSourceMountOptions(SourceMountOptions& options)
   -> std::shared_ptr<clap::Options>;
 
-//! Builds the command's mount table; reports its diagnostics and returns
-//! nothing when it is invalid.
+//! Builds the command's mount table; reports its diagnostics, adds them to
+//! `diagnostics` and returns nothing when it is invalid.
 [[nodiscard]] auto ResolveSourceMounts(const SourceMountOptions& options,
-  observer_ptr<IMessageWriter> writer) -> std::optional<MountTable>;
+  observer_ptr<IMessageWriter> writer,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<MountTable>;
 
 //! Sets the request's recorded source: the mount path of its positional
-//! source. Reports `import.source_outside_mount` and returns false when no
-//! mount holds it.
+//! source. Reports `import.source_outside_mount`, adds it to `diagnostics` and
+//! returns false when no mount holds it.
 [[nodiscard]] auto LocateRequestSource(ImportRequest& request,
-  const MountTable& mounts, observer_ptr<IMessageWriter> writer) -> bool;
+  const MountTable& mounts, observer_ptr<IMessageWriter> writer,
+  std::vector<ImportDiagnostic>& diagnostics) -> bool;
 
 } // namespace oxygen::content::import::tool

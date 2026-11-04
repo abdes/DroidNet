@@ -5,12 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
-#include <cstdint>
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <map>
 #include <memory>
 #include <optional>
@@ -38,12 +35,11 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/CookedSource.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -598,11 +594,11 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
 {
   const auto root
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
-  const auto output_path
-    = std::filesystem::absolute(options.output).lexically_normal();
-  if (output_path == root / oxygen::data::loose_cooked::kIndexFileName) {
-    throw std::runtime_error(
-      "Scene metadata output must not replace its source index.");
+  const auto output_path = toolkit::ResolveReportPath(options.output);
+  if (auto safe = toolkit::CheckToolReportDestination(
+        output_path, { .inputs = {}, .cooked_roots = { root } });
+    !safe) {
+    return safe;
   }
   const auto content
     = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
@@ -611,12 +607,6 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
   // Each scene that could not be read, as `scene '<path>' (<key>): <why>`.
   auto failures = std::vector<std::string> {};
   for (const auto& entry : content.Assets()) {
-    if (content.Source().kind == data::CookedSourceKind::kLooseCooked
-      && output_path
-        == content.DescriptorStored(entry.key).file.lexically_normal()) {
-      throw std::runtime_error(
-        "Scene metadata output must not replace a source descriptor.");
-    }
     if (entry.type != data::AssetType::kScene
       || (!options.virtual_path.empty()
         && entry.virtual_path != options.virtual_path)) {
@@ -655,12 +645,10 @@ auto RunSceneMetadataReport(const SceneMetadataOptions& options)
     { "complete", failures.empty() },
     { "scenes", std::move(scenes) },
   };
-  // An output stream truncates the file it opens.
-  std::ofstream output(output_path, std::ios::binary);
-  output << report.dump(2) << '\n';
-  output.close();
-  if (!output) {
-    throw std::runtime_error("Could not write scene metadata report.");
+  if (auto published
+    = toolkit::PublishToolReport(output_path, report.dump(2) + '\n');
+    !published) {
+    return published;
   }
   if (!failures.empty()) {
     auto message = std::string {};

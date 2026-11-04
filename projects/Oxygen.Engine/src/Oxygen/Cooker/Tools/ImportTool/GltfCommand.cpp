@@ -72,7 +72,7 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
 
   auto report
     = Option::WithKey("report")
-        .About("Write a JSON report (absolute or relative to cooked root)")
+        .About("Write a JSON report (absolute or relative to working dir)")
         .Long("report")
         .WithValue<std::string>()
         .StoreTo(&options_.report_path)

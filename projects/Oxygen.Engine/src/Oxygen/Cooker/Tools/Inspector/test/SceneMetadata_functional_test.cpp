@@ -44,6 +44,7 @@
 #include <Oxygen/Data/Schema/Generated.SceneChanges.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
@@ -346,19 +347,26 @@ auto WriteNestedRoot(
 
 class InspectorRootValidationTest : public oxygen::testing::TempDirTest {
 protected:
+  //! A report beside the cooked root, which is `TempDir()`.
+  [[nodiscard]] auto ReportPath(const std::string_view name) const
+    -> std::filesystem::path
+  {
+    return reports_.Path() / name;
+  }
+
   auto Report(const std::filesystem::path& root,
     const std::string_view virtual_path = {}) -> int
   {
     return RunSceneMetadataReport({
       .cooked_root = root.string(),
-      .output = TempPath("scenes.json").string(),
+      .output = ReportPath("scenes.json").string(),
       .virtual_path = std::string(virtual_path),
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(TempPath("scenes.json"));
+    std::ifstream input(ReportPath("scenes.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-scenes.schema.json");
@@ -366,6 +374,9 @@ protected:
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
     return report;
   }
+
+private:
+  oxygen::testing::ScopedTempDir reports_;
 };
 
 NOLINT_TEST_F(InspectorRootValidationTest, AcceptsCurrentMaterialVersion)

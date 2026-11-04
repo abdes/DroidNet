@@ -21,6 +21,8 @@ oxygen_cooker_test(
     oxygen-cooker-importtool-core
   SOURCES
     "BatchCommand_functional_test.cpp"
+    "CapturingWriter.h"
+    "ImportRefusal_functional_test.cpp"
 )
 
 # -- Python CLI Tests ----------------------------------------------------------

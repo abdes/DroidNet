@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -28,6 +29,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
 namespace {
@@ -97,18 +99,25 @@ protected:
     Materialize(library.Files(), TempDir());
   }
 
+  //! A report beside the cooked root, which is `TempDir()`.
+  [[nodiscard]] auto ReportPath(const std::string_view name) const
+    -> std::filesystem::path
+  {
+    return reports_.Path() / name;
+  }
+
   auto Report(std::string virtual_path = {}) -> int
   {
     return RunScriptMetadataReport({
       .cooked_root = TempDir().string(),
-      .output = TempPath("scripts.json").string(),
+      .output = ReportPath("scripts.json").string(),
       .virtual_path = std::move(virtual_path),
     });
   }
 
   auto ReadReport() -> nlohmann::json
   {
-    std::ifstream input(TempPath("scripts.json"));
+    std::ifstream input(ReportPath("scripts.json"));
     auto report = nlohmann::json::parse(input);
     static const auto schema = oxygen::cooker::test::LoadSchema(
       "Tools/Inspector/Schemas/oxygen.cooked-scripts.schema.json");
@@ -116,6 +125,9 @@ protected:
       oxygen::cooker::test::ValidateJson(schema, report), ::testing::IsEmpty());
     return report;
   }
+
+private:
+  oxygen::testing::ScopedTempDir reports_;
 };
 
 NOLINT_TEST_F(InspectorScriptMetadataTest, ReportsDeclarationsInOrder)
@@ -154,7 +166,7 @@ NOLINT_TEST_F(InspectorScriptMetadataTest, RejectsRetiredScriptVersion)
 {
   WriteRoot(static_cast<uint8_t>(scripting::kScriptAssetVersion - 1U));
   EXPECT_EQ(Report(), 2);
-  EXPECT_FALSE(std::filesystem::exists(TempPath("scripts.json")));
+  EXPECT_FALSE(std::filesystem::exists(ReportPath("scripts.json")));
 }
 
 } // namespace

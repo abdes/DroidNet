@@ -62,7 +62,7 @@ namespace {
     GlobalOptions global_options;
     BatchCommand batch_command(&global_options);
     EngineContentCommand engine_content_command;
-    SourceInspectionCommand source_inspection_command;
+    SourceInspectionCommand source_inspection_command(&global_options);
     SourceAnalysisCommand source_analysis_command(&global_options);
     FbxCommand fbx_command(&global_options);
     GltfCommand gltf_command(&global_options);

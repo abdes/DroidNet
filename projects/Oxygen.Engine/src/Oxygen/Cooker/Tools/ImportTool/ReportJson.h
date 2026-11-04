@@ -16,16 +16,41 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 
 namespace oxygen::content::import::tool {
 
 using nlohmann::ordered_json;
 
 inline constexpr std::string_view kReportVersion = "5";
+
+class IMessageWriter;
+
+//! The refusal codes of a command, before a request or a job can state its own.
+namespace import_tool_codes {
+  //! A command line option's value or combination is refused.
+  inline constexpr std::string_view kOptionInvalid = "import.option_invalid";
+  //! The import service did not accept the job.
+  inline constexpr std::string_view kSubmitFailed = "import.submit_failed";
+  //! A system call failed before the job could be submitted.
+  inline constexpr std::string_view kCommandFailed = "import.command_failed";
+} // namespace import_tool_codes
+
+//! Whether a report may be written to `report_path`; prints the typed refusal
+//! when it may not. A command without a report has nothing to refuse.
+[[nodiscard]] auto IsReportDestinationSafe(std::string_view report_path,
+  const toolkit::ReportGuard& guard, observer_ptr<IMessageWriter> writer)
+  -> bool;
+
+//! Publishes a report to the file `report_path` names; prints the typed failure
+//! and returns false when it is not written.
+[[nodiscard]] auto PublishImportReport(std::string_view report_path,
+  std::string_view text, observer_ptr<IMessageWriter> writer) -> bool;
 
 constexpr auto PhaseCount() -> size_t
 {

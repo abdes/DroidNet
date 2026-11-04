@@ -6,8 +6,6 @@
 
 #include <expected>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -19,6 +17,8 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceInspectionCommand.h>
 
 namespace oxygen::content::import::tool {
@@ -53,28 +53,19 @@ auto SourceInspectionCommand::Execute() -> std::expected<void, std::error_code>
 {
   const auto source = std::filesystem::path(source_path_);
   const auto report = InspectSceneSource(source);
-  const auto output = std::filesystem::path(output_path_);
-  const auto aliases_output = [&](const std::filesystem::path& input) -> bool {
-    return std::filesystem::weakly_canonical(input)
-      == std::filesystem::weakly_canonical(output)
-      || (std::filesystem::exists(input) && std::filesystem::exists(output)
-        && std::filesystem::equivalent(input, output));
+  const auto writer = global_options_->writer;
+  auto guard = toolkit::ReportGuard {
+    .inputs = { source },
+    .cooked_roots = {},
   };
-  if (aliases_output(source)) {
+  for (const auto& dependency : report.external_files) {
+    guard.inputs.push_back(source.parent_path() / dependency);
+  }
+  if (!IsReportDestinationSafe(output_path_, guard, writer)) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
-  for (const auto& dependency : report.external_files) {
-    if (aliases_output(source.parent_path() / dependency)) {
-      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    }
-  }
-  if (const auto parent = output.parent_path(); !parent.empty()) {
-    std::filesystem::create_directories(parent);
-  }
-  auto stream = std::ofstream(output, std::ios::binary);
-  stream << ExportSceneSourceInspection(report) << '\n';
-  stream.close();
-  if (!stream) {
+  if (!PublishImportReport(
+        output_path_, ExportSceneSourceInspection(report) + '\n', writer)) {
     return std::unexpected(std::make_error_code(std::errc::io_error));
   }
   return {};

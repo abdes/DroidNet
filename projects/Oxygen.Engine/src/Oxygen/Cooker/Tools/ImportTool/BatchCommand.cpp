@@ -14,14 +14,11 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <fstream>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <ostream>
 #include <ratio>
 #include <span>
-#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -61,6 +58,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/DescriptorDocument.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
@@ -666,47 +664,6 @@ namespace {
     return "unknown";
   }
 
-  auto ResolveReportPath(std::string_view report_path,
-    const std::optional<std::filesystem::path>& cooked_root,
-    std::ostream& error_stream) -> std::optional<std::filesystem::path>
-  {
-    std::filesystem::path path(report_path);
-    if (path.is_absolute()) {
-      return path;
-    }
-    if (!cooked_root.has_value()) {
-      error_stream << "ERROR: --report requires a cooked root when using a "
-                      "relative path\n";
-      return std::nullopt;
-    }
-    return (*cooked_root / path).lexically_normal();
-  }
-
-  auto WriteJsonReport(const ordered_json& payload,
-    const std::filesystem::path& report_path, std::ostream& error_stream)
-    -> bool
-  {
-    std::error_code ec;
-    const auto parent = report_path.parent_path();
-    if (!parent.empty()) {
-      std::filesystem::create_directories(parent, ec);
-      if (ec) {
-        error_stream << "ERROR: failed to create report directory: "
-                     << parent.string() << "\n";
-        return false;
-      }
-    }
-
-    std::ofstream output(report_path);
-    if (!output) {
-      error_stream << "ERROR: failed to open report file: "
-                   << report_path.string() << "\n";
-      return false;
-    }
-    output << payload.dump(2) << "\n";
-    return true;
-  }
-
   struct BatchSummaryCounts {
     size_t succeeded = 0;
     size_t failed = 0;
@@ -814,15 +771,6 @@ namespace {
   {
     const auto cooked_root = ResolveCookedRootForReport(
       inputs.jobs, inputs.reports, inputs.command_line_root);
-    auto report_path_errors = std::ostringstream {};
-    const auto resolved_path
-      = ResolveReportPath(inputs.report_path, cooked_root, report_path_errors);
-    if (!report_path_errors.view().empty()) {
-      writer->Error(report_path_errors.str());
-    }
-    if (!resolved_path.has_value()) {
-      return {};
-    }
     CHECK_F(!inputs.command_line.empty(),
       "Command line is required in report output");
 
@@ -940,12 +888,12 @@ namespace {
       { "diagnostics", BuildDiagnosticsJson(inputs.diagnostics) },
     });
 
-    auto write_errors = std::ostringstream {};
-    const auto written = WriteJsonReport(payload, *resolved_path, write_errors);
-    if (!write_errors.view().empty()) {
-      writer->Error(write_errors.str());
-    }
-    return { .path = *resolved_path, .failed = !written };
+    const auto written
+      = PublishImportReport(inputs.report_path, payload.dump(2) + "\n", writer);
+    return {
+      .path = toolkit::ResolveReportPath(inputs.report_path),
+      .failed = !written,
+    };
   }
 
 } // namespace
@@ -1011,8 +959,9 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .Build();
 
   auto report = Option::WithKey("report")
-                  .About("Write a JSON report (absolute or relative to cooked "
-                         "root)")
+                  .About("Write a JSON report (absolute or relative to the "
+                         "working directory), outside the inputs and cooked "
+                         "roots")
                   .Long("report")
                   .WithValue<std::string>()
                   .StoreTo(&options_.report_path)
@@ -1070,6 +1019,19 @@ auto BatchCommand::LoadManifests() const -> std::optional<ImportManifest>
   if (!options_.mounts_path.empty()) {
     options.mounts_file = std::filesystem::path(options_.mounts_path);
   }
+  // A refused destination gets no report, so it comes before what a report
+  // says.
+  auto report_guard = toolkit::ReportGuard {
+    .inputs = options_.manifest_paths,
+    .cooked_roots = { global_options_->cooked_root },
+  };
+  report_guard.inputs.emplace_back(options_.mounts_path);
+  report_guard.inputs.emplace_back(options_.captured_inputs_path);
+  if (!IsReportDestinationSafe(
+        options_.report_path, report_guard, global_options_->writer)) {
+    return std::nullopt;
+  }
+
   auto diagnostics = std::vector<ImportDiagnostic> {};
   auto manifest
     = ImportManifest::LoadBatch(options_.manifest_paths, options, diagnostics);
@@ -1196,32 +1158,35 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     ? std::string_view { global_options_->cooked_root }
     : std::string_view {};
 
-  // Nothing more runs, so what stopped the batch is all the report can say.
-  const auto stop_batch = [&] -> std::error_code {
-    if (!options_.dry_run && !options_.report_path.empty()) {
-      const auto not_run
-        = std::vector<std::optional<ImportReport>>(jobs.size());
-      const auto no_traces = std::vector<JobProgressTrace>(jobs.size());
-      const auto outcome = WriteBatchReport(
-        BatchReportInputs {
-          .report_path = options_.report_path,
-          .command_line = global_options_->command_line,
-          .command_line_root = command_line_root,
-          .jobs = jobs,
-          .refused = refused_jobs,
-          .reports = not_run,
-          .progress_traces = no_traces,
-          .diagnostics = batch_diagnostics,
-          .validation_failures = validation_failures,
-          .session_started = session_started,
-          .elapsed_ms = 0.0,
-        },
-        writer);
-      if (outcome.failed) {
-        return std::make_error_code(std::errc::io_error);
-      }
+  // Nothing ran, so what the batch prepared is all the report can say; false
+  // when the report could not be written.
+  const auto report_nothing_ran = [&] -> bool {
+    if (options_.dry_run || options_.report_path.empty()) {
+      return true;
     }
-    return std::make_error_code(std::errc::invalid_argument);
+    const auto not_run = std::vector<std::optional<ImportReport>>(jobs.size());
+    const auto no_traces = std::vector<JobProgressTrace>(jobs.size());
+    const auto outcome = WriteBatchReport(
+      BatchReportInputs {
+        .report_path = options_.report_path,
+        .command_line = global_options_->command_line,
+        .command_line_root = command_line_root,
+        .jobs = jobs,
+        .refused = refused_jobs,
+        .reports = not_run,
+        .progress_traces = no_traces,
+        .diagnostics = batch_diagnostics,
+        .validation_failures = validation_failures,
+        .session_started = session_started,
+        .elapsed_ms = 0.0,
+      },
+      writer);
+    return !outcome.failed;
+  };
+  const auto stop_batch = [&] -> std::error_code {
+    return report_nothing_ran()
+      ? std::make_error_code(std::errc::invalid_argument)
+      : std::make_error_code(std::errc::io_error);
   };
 
   auto captured_inputs = std::shared_ptr<const CapturedInputSet> {};
@@ -1263,6 +1228,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
   for (size_t manifest_index = 0; manifest_index < manifest->jobs.size();
     ++manifest_index) {
     const auto& job = manifest->jobs[manifest_index];
+    if (!IsReportDestinationSafe(options_.report_path,
+          { .inputs = { job.SourcePath() }, .cooked_roots = {} }, writer)) {
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
     auto diagnostics = std::vector<ImportDiagnostic> {};
     auto request = job.BuildRequest(diagnostics, captured_inputs);
     if (!request.has_value()) {
@@ -1282,6 +1251,14 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
     request->cooked_root
       = base::ToLogicalPath(std::filesystem::weakly_canonical(
         base::ToNativePath(request->ResolveCookedRoot())));
+    auto report_guard = toolkit::ReportGuard {
+      .inputs = { request->source_path },
+      .cooked_roots = request->cooked_context_roots,
+    };
+    report_guard.cooked_roots.push_back(*request->cooked_root);
+    if (!IsReportDestinationSafe(options_.report_path, report_guard, writer)) {
+      return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
     if (request->source_key.has_value()) {
       const auto root = base::PathIdentityKey(request->cooked_root.value());
       const auto [found, inserted]
@@ -1406,6 +1383,10 @@ auto BatchCommand::Execute() -> std::expected<void, std::error_code>
 
   const auto nothing_to_cook = options_.dry_run || jobs.empty();
   if (validation_failures == 0 && nothing_to_cook) {
+    // A valid batch of no jobs succeeded, and its report says so.
+    if (!report_nothing_ran()) {
+      return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
     return {};
   }
   if (validation_failures > 0 && (nothing_to_cook || fail_fast)) {

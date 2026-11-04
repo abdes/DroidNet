@@ -246,6 +246,12 @@ reads only these versions.
 - `2`: validation or runtime error while loading/inspecting, or an unexpected
   failure
 
+An `--output` path is absolute or relative to the working directory. A
+destination that is the command's input (`report.destination_is_input`) or lies
+in its cooked source (`report.destination_in_cooked_root`) exits `1` and writes
+nothing. Reports are published atomically; one that cannot be written is
+`report.write_failed` and exits `2`.
+
 ## Implementation notes
 
 This tool intentionally depends only on exported module APIs:

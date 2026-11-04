@@ -13,6 +13,8 @@ add_library(
   oxygen-cooker-toolkit
   STATIC
   "EnumString.h"
+  "ReportFile.cpp"
+  "ReportFile.h"
   "ToolApp.cpp"
   "ToolApp.h"
   "ToolCommand.h"
@@ -29,6 +31,7 @@ target_link_libraries(
     oxygen::base
     oxygen::cooker
     oxygen::clap
+    oxygen::serio
 )
 
 if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")

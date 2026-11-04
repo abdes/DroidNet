@@ -21,6 +21,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceMountOptions.h>
 
 namespace oxygen::content::import::tool {
@@ -75,14 +76,20 @@ auto BuildSourceMountOptions(SourceMountOptions& options)
 }
 
 auto ResolveSourceMounts(const SourceMountOptions& options,
-  const observer_ptr<IMessageWriter> writer) -> std::optional<MountTable>
+  const observer_ptr<IMessageWriter> writer,
+  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<MountTable>
 {
   auto declarations = std::vector<MountDeclaration> {};
   for (const auto& mount : options.mounts) {
     const auto equals = mount.find('=');
     if (equals == std::string::npos || equals == 0
       || equals + 1 == mount.size()) {
-      writer->Error(fmt::format("--mount '{}' is not <Name>=<dir>", mount));
+      diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kError,
+        .code = std::string { import_tool_codes::kOptionInvalid },
+        .message = fmt::format("--mount '{}' is not <Name>=<dir>", mount),
+      });
+      Report(std::span { &diagnostics.back(), 1U }, writer);
       return std::nullopt;
     }
     declarations.push_back({
@@ -105,6 +112,8 @@ auto ResolveSourceMounts(const SourceMountOptions& options,
     .owner = MountTableOwner::kProject,
   });
   Report(table.diagnostics, writer);
+  diagnostics.insert(
+    diagnostics.end(), table.diagnostics.begin(), table.diagnostics.end());
   if (!table.IsValid()) {
     return std::nullopt;
   }
@@ -112,12 +121,13 @@ auto ResolveSourceMounts(const SourceMountOptions& options,
 }
 
 auto LocateRequestSource(ImportRequest& request, const MountTable& mounts,
-  const observer_ptr<IMessageWriter> writer) -> bool
+  const observer_ptr<IMessageWriter> writer,
+  std::vector<ImportDiagnostic>& diagnostics) -> bool
 {
-  auto diagnostics = std::vector<ImportDiagnostic> {};
+  const auto first_finding = diagnostics.size();
   const auto located = mounts.MountPathOf(
     std::filesystem::absolute(request.source_path), diagnostics);
-  Report(diagnostics, writer);
+  Report(std::span(diagnostics).subspan(first_finding), writer);
   if (!located.has_value()) {
     return false;
   }

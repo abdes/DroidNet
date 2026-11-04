@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -30,9 +31,11 @@
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Importer.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
+#include <Oxygen/Cooker/Tools/ImportTool/test/CapturingWriter.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -46,52 +49,9 @@ using oxygen::content::import::AsyncImportService;
 using oxygen::content::import::tool::BatchCommand;
 using oxygen::content::import::tool::GlobalOptions;
 using oxygen::content::import::tool::IMessageWriter;
+using oxygen::content::import::tool::test::CapturingWriter;
 using oxygen::cooker::test::WriteText;
-
-class CapturingWriter final : public IMessageWriter {
-public:
-  auto Error(const std::string_view message) -> bool override
-  {
-    messages_.emplace_back(message);
-    return true;
-  }
-
-  auto Warning(const std::string_view message) -> bool override
-  {
-    messages_.emplace_back(message);
-    return true;
-  }
-
-  auto Info(const std::string_view message) -> bool override
-  {
-    messages_.emplace_back(message);
-    return true;
-  }
-
-  auto Report(const std::string_view message) -> bool override
-  {
-    messages_.emplace_back(message);
-    return true;
-  }
-
-  auto Progress(const std::string_view message) -> bool override
-  {
-    messages_.emplace_back(message);
-    return true;
-  }
-
-  [[nodiscard]] auto JoinedMessages() const -> std::string
-  {
-    auto out = std::ostringstream {};
-    for (const auto& msg : messages_) {
-      out << msg << "\n";
-    }
-    return out.str();
-  }
-
-private:
-  std::vector<std::string> messages_;
-};
+namespace report_codes = oxygen::content::toolkit::report_codes;
 
 auto CountOccurrences(const std::string& text, const std::string_view token)
   -> size_t
@@ -1015,6 +975,145 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenForARefusedManifest)
   ASSERT_FALSE(report.at("diagnostics").empty());
   EXPECT_EQ(report.at("diagnostics").at(0).at("code"),
     "manifest.schema_validation_failed");
+}
+
+//! A report over a file the batch reads would destroy it.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportOverTheManifestIsRefused)
+{
+  const auto root = MakeScenarioDir("report_over_manifest");
+  const auto manifest_path = root / "import-manifest.json";
+  constexpr auto kManifest = std::string_view { R"({"version":1,"jobs":[]})" };
+  WriteText(manifest_path, kManifest);
+
+  const auto result = RunBatch(manifest_path, root / ".cooked", manifest_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  EXPECT_EQ(CountOccurrences(Messages(), report_codes::kDestinationIsInput), 1U)
+    << Messages();
+  auto stream = std::ifstream(manifest_path);
+  const auto kept = std::string {
+    std::istreambuf_iterator<char>(stream),
+    std::istreambuf_iterator<char>(),
+  };
+  EXPECT_EQ(kept, kManifest);
+}
+
+//! A job's source is an input, so nothing cooks and the source keeps its bytes.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportOverAJobSourceIsRefused)
+{
+  const auto root = MakeScenarioDir("report_over_source");
+  const auto manifest_path = root / "import-manifest.json";
+  const auto source = root / "Valid.material.json";
+  const auto descriptor
+    = authored::MaterialDescriptor { "/Cooked/Materials/Valid.omat" }.Text();
+  WriteText(source, descriptor);
+  WriteText(manifest_path, R"({
+    "version": 1,
+    "output": ".cooked",
+    "mounts": [{"name": "Content", "path": "."}],
+    "jobs": [
+      {"type":"material-descriptor","source":"Valid.material.json",
+       "virtual_path":"/Cooked/Materials/Valid.omat"}
+    ]
+  })");
+
+  const auto result = RunBatch(manifest_path, std::nullopt, source);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  EXPECT_EQ(CountOccurrences(Messages(), report_codes::kDestinationIsInput), 1U)
+    << Messages();
+  auto stream = std::ifstream(source);
+  const auto kept = std::string {
+    std::istreambuf_iterator<char>(stream),
+    std::istreambuf_iterator<char>(),
+  };
+  EXPECT_EQ(kept, descriptor);
+  EXPECT_FALSE(std::filesystem::exists(root / ".cooked"));
+}
+
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportInTheCookedRootIsRefused)
+{
+  const auto root = MakeScenarioDir("report_in_cooked_root");
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(manifest_path, R"({"version":1,"jobs":[]})");
+  const auto report_path = root / ".cooked" / "report.json";
+
+  const auto result = RunBatch(manifest_path, root / ".cooked", report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+  EXPECT_EQ(
+    CountOccurrences(Messages(), report_codes::kDestinationInCookedRoot), 1U)
+    << Messages();
+  EXPECT_FALSE(std::filesystem::exists(report_path));
+}
+
+//! A valid batch of no jobs succeeded, and its report says so.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, EmptyBatchWritesItsReport)
+{
+  const auto root = MakeScenarioDir("report_empty_batch");
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(manifest_path,
+    R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[]})");
+  const auto report_path = root / "report.json";
+
+  ASSERT_TRUE(
+    RunBatch(manifest_path, root / ".cooked", report_path).has_value())
+    << Messages();
+
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_TRUE(report.at("jobs").empty());
+  EXPECT_EQ(report.at("summary").at("jobs_total"), 0);
+  EXPECT_EQ(report.at("summary").at("validation_errors"), 0);
+}
+
+//! A batch whose report is not written has not told its caller what happened.
+NOLINT_TEST_F(
+  BatchCommandPhysicsDagTest, AReportThatCannotBeWrittenFailsTheBatch)
+{
+  const auto root = MakeScenarioDir("report_write_failure");
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(manifest_path,
+    R"({"version":1,"mounts":[{"name":"Content","path":"."}],"jobs":[]})");
+  const auto report_path = root / "folder";
+  std::filesystem::create_directories(report_path);
+
+  const auto result = RunBatch(manifest_path, root / ".cooked", report_path);
+
+  ASSERT_FALSE(result.has_value()) << Messages();
+  EXPECT_EQ(result.error(), std::make_error_code(std::errc::io_error));
+  EXPECT_EQ(CountOccurrences(Messages(), report_codes::kWriteFailed), 1U)
+    << Messages();
+}
+
+//! Paths in a report name the files whatever the command line's spelling, and a
+//! relative `--report` is relative to the working directory.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportSpellsARelativeManifestAbsolute)
+{
+  const auto root = MakeScenarioDir("report_relative_manifest");
+  const auto manifest_path = root / "import-manifest.json";
+  WriteText(manifest_path, R"({"version":1,"jobs":[{"type":"unknown"}]})");
+  const auto working_directory = std::filesystem::current_path();
+  std::filesystem::current_path(root);
+
+  const auto result
+    = RunBatch("import-manifest.json", root / ".cooked", "reports/report.json");
+
+  std::filesystem::current_path(working_directory);
+  EXPECT_FALSE(result.has_value()) << Messages();
+  auto stream = std::ifstream(root / "reports" / "report.json");
+  ASSERT_TRUE(stream.is_open()) << Messages();
+  const auto report = nlohmann::json::parse(stream);
+  ASSERT_FALSE(report.at("diagnostics").empty());
+  const auto source_path = std::filesystem::path {
+    report.at("diagnostics").at(0).at("source_path").get<std::string>(),
+  };
+  EXPECT_TRUE(source_path.is_absolute());
+  EXPECT_TRUE(std::filesystem::equivalent(source_path, manifest_path));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)

@@ -5,10 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -22,6 +19,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -56,6 +54,12 @@ auto RunDependencyReport(const DependencyReportOptions& options)
 {
   const auto root
     = std::filesystem::absolute(options.cooked_root).lexically_normal();
+  const auto output_path = toolkit::ResolveReportPath(options.output);
+  if (auto safe = toolkit::CheckToolReportDestination(
+        output_path, { .inputs = {}, .cooked_roots = { root } });
+    !safe) {
+    return safe;
+  }
   const auto content
     = cooked::CookedContent::Open(cooked::RealCookerStorage(), root);
   nlohmann::json assets = nlohmann::json::array();
@@ -106,13 +110,7 @@ auto RunDependencyReport(const DependencyReportOptions& options)
     { "source_key", nostd::to_string(content.Summary().source_key) },
     { "assets", std::move(assets) },
   };
-  std::ofstream output(options.output, std::ios::binary);
-  output << report.dump(2);
-  output.close();
-  if (!output) {
-    throw std::runtime_error("Could not write dependency report.");
-  }
-  return {};
+  return toolkit::PublishToolReport(output_path, report.dump(2));
 }
 
 } // namespace oxygen::content::inspection

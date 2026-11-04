@@ -947,6 +947,25 @@ Per-command `--report` and batch `--report` write JSON report output, version
   `texture`) has neither. A tool maps a source to its products, and a product to
   its source, from this list rather than from the cooked layout.
 
+A report path is absolute or relative to the working directory. Before it cooks,
+a command refuses a destination that is a file the run reads, under any spelling
+or hard link (`report.destination_is_input`), or that lies in a cooked source
+the run reads or writes (`report.destination_in_cooked_root`). It prints the
+code and writes no report, since the destination is what it refused. The same
+holds for the `analyze-sources` report and the `inspect-source` output.
+
+Reports are published atomically: the destination holds the old file or the
+complete new one. A report that cannot be written is `report.write_failed` and
+exits `2`, whatever the jobs did.
+
+A batch of no jobs writes its report. A single-job command that stops before it
+submits its job writes one `failed` job holding the typed refusal, such as
+`import.option_invalid` for a refused option or `import.submit_failed` when the
+service does not accept the job.
+
+File paths in reports are absolute and lexically normal, with native separators;
+identities are virtual paths.
+
 Current process exit codes:
 
 - `0` success
