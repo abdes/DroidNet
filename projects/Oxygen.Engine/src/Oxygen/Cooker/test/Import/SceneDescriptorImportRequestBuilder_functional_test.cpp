@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -138,8 +139,9 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("scene.descriptor.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kSceneDescriptorSchemaValidationFailed));
 }
 
 NOLINT_TEST(SceneDescriptorImportRequestBuilderTest, RejectsMissingFile)
@@ -197,7 +199,9 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("scene.descriptor.recook_required"))
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::import_codes::kSceneDescriptorRecookRequired))
     << DiagnosticSummary(errors);
 }
 

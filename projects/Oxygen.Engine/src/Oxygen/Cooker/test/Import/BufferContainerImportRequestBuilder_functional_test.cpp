@@ -18,6 +18,7 @@
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -120,8 +121,9 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kBufferContainerSchemaValidationFailed));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsInvalidJson)
@@ -138,7 +140,9 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsInvalidJson)
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("buffer.container.request_invalid_json"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kBufferContainerRequestInvalidJson));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest, RejectsMissingFile)
@@ -194,8 +198,9 @@ NOLINT_TEST(
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kBufferContainerSchemaValidationFailed));
 }
 
 NOLINT_TEST(
@@ -262,8 +267,9 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kBufferContainerSchemaValidationFailed));
 }
 
 NOLINT_TEST(BufferContainerImportRequestBuilderTest,
@@ -299,8 +305,9 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
     = BuildBufferContainerRequest(settings, kIdentity, *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("buffer.container.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kBufferContainerSchemaValidationFailed));
 }
 
 } // namespace

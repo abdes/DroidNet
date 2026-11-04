@@ -187,51 +187,51 @@ namespace {
 
 } // namespace
 
-auto to_string(const VirtualPathError error) noexcept -> const char*
+auto to_string(const VirtualPathError error) noexcept -> std::string_view
 {
   switch (error) {
   case VirtualPathError::kEmpty:
-    return "vpath.empty";
+    return vpath_codes::kEmpty;
   case VirtualPathError::kNotAbsolute:
-    return "vpath.not_absolute";
+    return vpath_codes::kNotAbsolute;
   case VirtualPathError::kTrailingSlash:
-    return "vpath.trailing_slash";
+    return vpath_codes::kTrailingSlash;
   case VirtualPathError::kEmptySegment:
-    return "vpath.segment.empty";
+    return vpath_codes::kSegmentEmpty;
   case VirtualPathError::kDotSegment:
-    return "vpath.segment.dot";
+    return vpath_codes::kSegmentDot;
   case VirtualPathError::kInvalidUtf8:
-    return "vpath.segment.invalid_utf8";
+    return vpath_codes::kSegmentInvalidUtf8;
   case VirtualPathError::kControlCharacter:
-    return "vpath.segment.control_character";
+    return vpath_codes::kSegmentControlCharacter;
   case VirtualPathError::kReservedCharacter:
-    return "vpath.segment.reserved_character";
+    return vpath_codes::kSegmentReservedCharacter;
   case VirtualPathError::kUnassignedCodePoint:
-    return "vpath.segment.unassigned_code_point";
+    return vpath_codes::kSegmentUnassignedCodePoint;
   case VirtualPathError::kNotNfc:
-    return "vpath.segment.not_nfc";
+    return vpath_codes::kSegmentNotNfc;
   case VirtualPathError::kEdgeSpace:
-    return "vpath.segment.edge_space";
+    return vpath_codes::kSegmentEdgeSpace;
   case VirtualPathError::kTrailingDot:
-    return "vpath.segment.trailing_dot";
+    return vpath_codes::kSegmentTrailingDot;
   case VirtualPathError::kDeviceName:
-    return "vpath.segment.device_name";
+    return vpath_codes::kSegmentDeviceName;
   case VirtualPathError::kSegmentTooLong:
-    return "vpath.segment.too_long";
+    return vpath_codes::kSegmentTooLong;
   case VirtualPathError::kInvalidMountName:
-    return "vpath.mount.invalid";
+    return vpath_codes::kMountInvalid;
   case VirtualPathError::kMountOnly:
-    return "vpath.mount_only";
+    return vpath_codes::kMountOnly;
   case VirtualPathError::kMissingExtension:
-    return "vpath.leaf.missing_extension";
+    return vpath_codes::kLeafMissingExtension;
   case VirtualPathError::kDerivedContent:
-    return "vpath.segment.derived_content";
+    return vpath_codes::kSegmentDerivedContent;
   case VirtualPathError::kReferenceOutsideMount:
-    return "vpath.reference_outside_mount";
+    return vpath_codes::kReferenceOutsideMount;
   case VirtualPathError::kReferenceSelfAbsolute:
-    return "vpath.reference_self_absolute";
+    return vpath_codes::kReferenceSelfAbsolute;
   }
-  return "vpath.unknown";
+  return vpath_codes::kUnknown;
 }
 
 auto ValidateVirtualPathSegment(const std::string_view segment)

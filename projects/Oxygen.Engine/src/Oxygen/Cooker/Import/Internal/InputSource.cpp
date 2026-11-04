@@ -20,6 +20,7 @@
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/InputSource.h>
@@ -98,10 +99,10 @@ namespace {
   auto ValidateInputSchema(const json& doc, Reader& reader) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "input.schema.validation_failed",
+      .validation_failed_code = import_codes::kInputSchemaValidationFailed,
       .validation_failed_prefix
       = "Schema validation failed (oxygen.input.schema.json): ",
-      .validator_failure_code = "input.schema.validator_failure",
+      .validator_failure_code = import_codes::kInputSchemaValidatorFailure,
       .validator_failure_prefix = "Input schema validator failure: ",
     };
     return internal::ValidateJsonSchemaWithDiagnostics(InputSchemaValidator(),
@@ -208,7 +209,7 @@ namespace {
     const auto type = node.at("type").get<std::string>();
     const auto parsed_type = ParseActionType(type);
     if (!parsed_type.has_value()) {
-      reader.Error("input.schema.contract_mismatch",
+      reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
         "Unsupported action type '" + type + "'", (path / "type").to_string());
       return false;
     }
@@ -217,7 +218,7 @@ namespace {
     const auto accumulation
       = node.value("accumulation", std::string { "highest_absolute" });
     if (accumulation != "highest_absolute" && accumulation != "cumulative") {
-      reader.Error("input.schema.contract_mismatch",
+      reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
         "Unsupported action accumulation '" + accumulation + "'",
         (path / "accumulation").to_string());
       return false;
@@ -225,7 +226,7 @@ namespace {
     action.cumulative = accumulation == "cumulative";
 
     if (reader.document.local_action_keys.contains(action.name)) {
-      reader.Error("input.asset.action_conflict",
+      reader.Error(std::string(import_codes::kInputAssetActionConflict),
         "Duplicate action declaration '" + action.name + "'",
         (path / "name").to_string());
       return false;
@@ -256,7 +257,7 @@ namespace {
       if (entry.contains("time_to_complete")) {
         const auto seconds = entry.at("time_to_complete").get<float>();
         if (!SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
-          reader.Error("input.context.trigger_invalid",
+          reader.Error(std::string(import_codes::kInputContextTriggerInvalid),
             "'time_to_complete' exceeds supported range",
             (entry_path / "time_to_complete").to_string());
           ok = false;
@@ -274,7 +275,7 @@ namespace {
     const auto type = node.at("type").get<std::string>();
     const auto parsed_type = ParseTriggerType(type);
     if (!parsed_type.has_value()) {
-      reader.Error("input.schema.contract_mismatch",
+      reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
         "Unsupported trigger type '" + type + "'", (path / "type").to_string());
       return false;
     }
@@ -284,7 +285,7 @@ namespace {
       const auto behavior = node.at("behavior").get<std::string>();
       const auto parsed_behavior = ParseTriggerBehavior(behavior);
       if (!parsed_behavior.has_value()) {
-        reader.Error("input.schema.contract_mismatch",
+        reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
           "Unsupported trigger behavior '" + behavior + "'",
           (path / "behavior").to_string());
         return false;
@@ -328,7 +329,7 @@ namespace {
 
     if (trigger.type != InputTriggerType::kCombo && !trigger.aux.empty()) {
       reader.Report(ImportSeverity::kWarning,
-        "input.context.trigger_aux_ignored",
+        std::string(import_codes::kInputContextTriggerAuxIgnored),
         "Aux records are ignored for non-combo triggers", path.to_string());
       trigger.aux.clear();
     }
@@ -356,7 +357,7 @@ namespace {
       const auto shorthand = node.at("trigger").get<std::string>();
       const auto type = ParseTriggerType(shorthand);
       if (!type.has_value()) {
-        reader.Error("input.schema.contract_mismatch",
+        reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
           "Unknown trigger shorthand '" + shorthand + "'",
           (path / "trigger").to_string());
         return false;
@@ -425,7 +426,7 @@ namespace {
         continue;
       }
       if (!context_names.insert(context.name).second) {
-        reader.Error("input.context.name_duplicate",
+        reader.Error(std::string(import_codes::kInputContextNameDuplicate),
           "Duplicate context name '" + context.name + "'",
           (context_path / "name").to_string());
         ok = false;
@@ -444,7 +445,7 @@ namespace {
       || reader.document.local_action_keys.contains(std::string(name))) {
       return true;
     }
-    reader.Error("input.context.action_unresolved",
+    reader.Error(std::string(import_codes::kInputContextActionUnresolved),
       "No action of this source is named '" + std::string(name) + "'",
       std::string(json_pointer));
     return false;
@@ -480,7 +481,7 @@ namespace {
     try {
       return ReadDeclarations(doc, reader) && CheckLocalActions(reader);
     } catch (const std::exception& ex) {
-      reader.Error("input.schema.contract_mismatch",
+      reader.Error(std::string(import_codes::kInputSchemaContractMismatch),
         std::string(
           "Schema validated input document failed invariant extraction: ")
           + ex.what());
@@ -507,7 +508,7 @@ auto PrepareInputDocument(const std::string_view bytes,
   try {
     doc = json::parse(bytes);
   } catch (const json::exception& ex) {
-    reader.Error("input.import.parse_failed",
+    reader.Error(std::string(import_codes::kInputImportParseFailed),
       std::string("Failed to parse input JSON: ") + ex.what());
     return std::nullopt;
   }

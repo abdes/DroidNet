@@ -19,6 +19,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -219,11 +220,11 @@ namespace {
 
     EXPECT_TRUE(
       HasDiagnosticCode(read(R"({"parts":[)" + part + "," + part + "]}"),
-        "scene.descriptor.surface_id_invalid"));
+        import_codes::kSceneDescriptorSurfaceIdInvalid));
     EXPECT_TRUE(HasDiagnosticCode(
       read(
         R"({"values":{"/lod_policy":{"type":"distance","thresholds":[9,4],"hysteresis_ratio":0.1}}})"),
-      "scene.descriptor.lod_policy_invalid"));
+      import_codes::kSceneDescriptorLodPolicyInvalid));
   }
 
   NOLINT_TEST(SceneSourceTest, DisabledSkyRetainsItsCubemapDependency)
@@ -258,7 +259,7 @@ namespace {
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+      diagnostics, import_codes::kSceneDescriptorCameraNodeIndexOutOfRange));
   }
 
   //! Instances, the starting camera and starting contexts stay symbolic until
@@ -316,7 +317,7 @@ namespace {
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "scene.descriptor.starting_camera_out_of_range"));
+      diagnostics, import_codes::kSceneDescriptorStartingCameraOutOfRange));
   }
 
   NOLINT_TEST(SceneSourceTest, RejectsInvalidExposureBeforeCookedLinking)
@@ -328,8 +329,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "scene.descriptor.exposure_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kSceneDescriptorExposureInvalid));
   }
 
   //! The first diagnostic with `code`, or null.
@@ -609,8 +610,8 @@ namespace {
       auto diagnostics = std::vector<ImportDiagnostic> {};
       EXPECT_FALSE(SceneSource::FromDescriptor(
         document.Text(), "scene.json", diagnostics));
-      const auto* const found
-        = FindDiagnostic(diagnostics, internal::kScenePropertyOutOfRangeCode);
+      const auto* const found = FindDiagnostic(
+        diagnostics, import_codes::kSceneDescriptorPropertyOutOfRange);
       ASSERT_NE(found, nullptr)
         << oxygen::cooker::test::DiagnosticSummary(diagnostics);
       EXPECT_EQ(found->json_pointer, json_pointer);
@@ -628,9 +629,9 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
-    EXPECT_EQ(
-      std::ranges::count(diagnostics, internal::kScenePropertyOutOfRangeCode,
-        &ImportDiagnostic::code),
+    EXPECT_EQ(std::ranges::count(diagnostics,
+                import_codes::kSceneDescriptorPropertyOutOfRange,
+                &ImportDiagnostic::code),
       3);
   }
 
@@ -657,7 +658,7 @@ namespace {
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "scene.descriptor.schema_validation_failed"));
+      diagnostics, import_codes::kSceneDescriptorSchemaValidationFailed));
   }
 
   //! A nil node id is refused.
@@ -673,8 +674,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "scene.descriptor.node_id_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kSceneDescriptorNodeIdInvalid));
   }
 
   //! Two nodes of one descriptor cannot share an id.
@@ -686,8 +687,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.Text(), "scene.json", diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "scene.descriptor.node_id_duplicate"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kSceneDescriptorNodeIdDuplicate));
   }
 
   //! A cooked node record carries the id its descriptor node authored.
@@ -806,7 +807,7 @@ namespace {
 
     EXPECT_FALSE(source.has_value());
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "scene.descriptor.instance_override_duplicate"));
+      diagnostics, import_codes::kSceneDescriptorInstanceOverrideDuplicate));
   }
 
   //! Every element of a change's path is a non-nil node ID.
@@ -834,7 +835,7 @@ namespace {
     EXPECT_FALSE(source.has_value());
     const auto invalid = std::ranges::find_if(
       diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "scene.descriptor.node_path_invalid";
+        return diagnostic.code == import_codes::kSceneDescriptorNodePathInvalid;
       });
     ASSERT_NE(invalid, diagnostics.end());
     EXPECT_THAT(invalid->json_pointer, ::testing::EndsWith("/path/1"));
@@ -848,9 +849,9 @@ namespace {
       EXPECT_FALSE(
         SceneSource::FromDescriptor(text, "scene.json", diagnostics));
       EXPECT_TRUE(HasDiagnosticCode(
-        diagnostics, "scene.descriptor.request_invalid_json"));
-      EXPECT_FALSE(
-        HasDiagnosticCode(diagnostics, "scene.descriptor.recook_required"));
+        diagnostics, import_codes::kSceneDescriptorRequestInvalidJson));
+      EXPECT_FALSE(HasDiagnosticCode(
+        diagnostics, import_codes::kSceneDescriptorRecookRequired));
     }
   }
 } // namespace

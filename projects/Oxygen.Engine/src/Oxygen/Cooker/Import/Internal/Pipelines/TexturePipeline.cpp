@@ -28,6 +28,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
@@ -57,7 +58,7 @@ namespace {
   {
     ImportDiagnostic diag {
       .severity = ImportSeverity::kError,
-      .code = "texture.cook_failed",
+      .code = std::string(import_codes::kTextureCookFailed),
       .message = std::string("Texture cook failed: ") + to_string(error) + " ("
         + std::string(source_id) + ")",
       .source_path = std::string(source_id),
@@ -72,7 +73,7 @@ namespace {
   {
     ImportDiagnostic diag {
       .severity = ImportSeverity::kWarning,
-      .code = "texture.packing_policy_unknown",
+      .code = std::string(import_codes::kTexturePackingPolicyUnknown),
       .message = std::string("Unknown packing policy '")
         + std::string(policy_id) + "'; using '" + std::string(fallback_id)
         + "'.",
@@ -107,7 +108,7 @@ namespace {
     }
     return ImportDiagnostic {
       .severity = ImportSeverity::kWarning,
-      .code = "texture.half_narrowing",
+      .code = std::string(import_codes::kTextureHalfNarrowing),
       .message = std::move(message) + ".",
       .source_path = std::string(source_id),
       .object_path = {},
@@ -820,9 +821,10 @@ namespace {
 
     const auto source_path_string = item.source_path.string();
     if (reader == nullptr) {
-      diagnostics.push_back(MakeErrorDiagnosticMessage("import.file_reader",
-        "Import session has no async file reader", item.source_id,
-        source_path_string));
+      diagnostics.push_back(
+        MakeErrorDiagnosticMessage(std::string(import_codes::kFileReader),
+          "Import session has no async file reader", item.source_id,
+          source_path_string));
       co_return load;
     }
 
@@ -842,11 +844,11 @@ namespace {
       for (const auto& fallback_path : item.fallback_source_paths) {
         auto fallback = co_await reader.get()->ReadFile(fallback_path);
         if (fallback.has_value()) {
-          diagnostics.push_back(
-            MakeWarningDiagnostic("import.texture.found_by_name",
-              "Texture file is missing; using '" + fallback_path.string()
-                + "' instead",
-              item.source_id, source_path_string));
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kTextureFoundByName),
+            "Texture file is missing; using '" + fallback_path.string()
+              + "' instead",
+            item.source_id, source_path_string));
           read_result = std::move(fallback);
           break;
         }
@@ -859,8 +861,9 @@ namespace {
     if (!read_result.has_value()) {
       const auto message = "Failed to read texture file '" + source_path_string
         + "': " + read_result.error().message();
-      diagnostics.push_back(MakeWarningDiagnostic("import.texture.load_failed",
-        message, item.source_id, source_path_string));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kTextureLoadFailed),
+          message, item.source_id, source_path_string));
       LOG_F(INFO,
         "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
         item.source_id, source_path_string);

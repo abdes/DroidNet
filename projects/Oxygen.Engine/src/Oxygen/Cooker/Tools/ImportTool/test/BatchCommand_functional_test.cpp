@@ -30,7 +30,10 @@
 #include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/Importer.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Tools/Common/ReportFile.h>
 #include <Oxygen/Cooker/Tools/Common/ToolCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
@@ -298,7 +301,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsARefusedJobAtItsPosition)
   EXPECT_EQ(jobs.at(0).at("type"), "geometry-descriptor");
   EXPECT_EQ(jobs.at(0).at("status"), "failed");
   EXPECT_EQ(jobs.at(0).at("diagnostics").at(0).at("code"),
-    "geometry.descriptor.schema_validation_failed");
+    std::string(oxygen::content::import::import_codes::
+        kGeometryDescriptorSchemaValidationFailed));
   EXPECT_EQ(jobs.at(1).at("index"), 2);
   EXPECT_EQ(jobs.at(1).at("status"), "succeeded");
 }
@@ -336,7 +340,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenWhenEveryJobIsRefused)
   ASSERT_EQ(jobs.size(), 1U);
   EXPECT_EQ(jobs.at(0).at("status"), "failed");
   EXPECT_EQ(jobs.at(0).at("diagnostics").at(0).at("code"),
-    "geometry.descriptor.schema_validation_failed");
+    std::string(oxygen::content::import::import_codes::
+        kGeometryDescriptorSchemaValidationFailed));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -540,8 +545,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, MappingToAMissingActionIsRefused)
         "virtual_path":"/Cooked/Input/Player.input"}]})");
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
-  EXPECT_THAT(
-    Messages(), ::testing::HasSubstr("input.context.action_unresolved"));
+  EXPECT_THAT(Messages(),
+    ::testing::HasSubstr(std::string(
+      oxygen::content::import::import_codes::kInputContextActionUnresolved)));
 }
 
 //! A single-asset job without `virtual_path` has no identity: the manifest is
@@ -560,8 +566,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
     "jobs":[{"type":"material-descriptor","source":"Wood.material.json"}]})");
 
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
-  EXPECT_THAT(
-    Messages(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
+  EXPECT_THAT(Messages(),
+    ::testing::HasSubstr(std::string(
+      oxygen::content::import::manifest_codes::kVirtualPathMissing)));
   EXPECT_FALSE(std::filesystem::exists(cooked_root));
 }
 
@@ -580,7 +587,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   WriteText(manifest_path, manifest.str());
   const auto shared_root = root / "shared";
   EXPECT_FALSE(RunBatch(manifest_path, shared_root).has_value());
-  EXPECT_THAT(Messages(), ::testing::HasSubstr("import.source_key_conflict"));
+  EXPECT_THAT(Messages(),
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::import_codes::kSourceKeyConflict)));
   EXPECT_FALSE(std::filesystem::exists(shared_root));
 }
 
@@ -598,7 +607,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
            << oxygen::Uuid::Generate().ToString() << R"("}]})";
   WriteText(manifest_path, manifest.str());
   EXPECT_FALSE(RunBatch(manifest_path).has_value());
-  EXPECT_THAT(Messages(), ::testing::HasSubstr("import.source_key_conflict"));
+  EXPECT_THAT(Messages(),
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::import_codes::kSourceKeyConflict)));
   EXPECT_FALSE(std::filesystem::exists(root / "Cooked"));
 }
 #endif
@@ -636,8 +647,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   const auto result = RunBatch(manifest_path);
   EXPECT_TRUE(result.has_value()) << Messages();
-  EXPECT_THAT(
-    Messages(), ::testing::Not(::testing::HasSubstr("import.queue_full")));
+  EXPECT_THAT(Messages(),
+    ::testing::Not(::testing::HasSubstr(
+      std::string(oxygen::content::import::import_codes::kQueueFull))));
   size_t materials = 0;
   for (const auto& entry :
     std::filesystem::recursive_directory_iterator(cooked_root)) {
@@ -731,8 +743,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(
-    messages, ::testing::HasSubstr("physics.manifest.dependency_ambiguous"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(std::string(oxygen::content::import::import_codes::
+        kPhysicsManifestDependencyAmbiguous)));
 
   // The job's report entry holds the error too.
   auto stream = std::ifstream(report_path);
@@ -745,7 +758,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
       return std::ranges::any_of(
         diagnostics, [](const nlohmann::json& diagnostic) -> bool {
           return diagnostic.at("code")
-            == "physics.manifest.dependency_ambiguous";
+            == std::string(oxygen::content::import::import_codes::
+                kPhysicsManifestDependencyAmbiguous);
         });
     });
   EXPECT_TRUE(in_entry) << report.dump(2);
@@ -830,8 +844,10 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_EQ(
-    CountOccurrences(messages, "physics.manifest.dependency_ambiguous"), 2U);
+  EXPECT_EQ(CountOccurrences(messages,
+              oxygen::content::import::import_codes::
+                kPhysicsManifestDependencyAmbiguous),
+    2U);
 }
 
 NOLINT_TEST_F(
@@ -877,7 +893,9 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::manifest_codes::kDependencyCycle)));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -931,7 +949,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   const auto messages = Messages();
   EXPECT_THAT(messages,
-    ::testing::Not(::testing::HasSubstr("manifest.dependency_cycle")));
+    ::testing::Not(::testing::HasSubstr(
+      std::string(oxygen::content::import::manifest_codes::kDependencyCycle))));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -969,7 +988,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
 
   const auto messages = Messages();
   EXPECT_THAT(messages,
-    ::testing::HasSubstr("physics.manifest.dependency_inference_failed"));
+    ::testing::HasSubstr(std::string(oxygen::content::import::import_codes::
+        kPhysicsManifestDependencyInferenceFailed)));
   EXPECT_THAT(messages, ::testing::HasSubstr("top-level 'bindings'"));
 }
 
@@ -994,7 +1014,8 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportIsWrittenForARefusedManifest)
   EXPECT_GE(report.at("summary").at("validation_errors"), 1);
   ASSERT_FALSE(report.at("diagnostics").empty());
   EXPECT_EQ(report.at("diagnostics").at(0).at("code"),
-    "manifest.schema_validation_failed");
+    std::string(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 //! A report over a file the batch reads would destroy it.
@@ -1170,7 +1191,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, NonPhysicsCycleIsRefused)
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::manifest_codes::kDependencyCycle)));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,
@@ -1205,7 +1228,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_cycle"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::manifest_codes::kDependencyCycle)));
 }
 
 NOLINT_TEST_F(
@@ -1239,7 +1264,9 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.dependency_missing"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(std::string(
+      oxygen::content::import::manifest_codes::kDependencyMissing)));
 }
 
 NOLINT_TEST_F(
@@ -1282,7 +1309,9 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.has_value());
 
   const auto messages = Messages();
-  EXPECT_THAT(messages, ::testing::HasSubstr("manifest.job_id_duplicate"));
+  EXPECT_THAT(messages,
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::manifest_codes::kJobIdDuplicate)));
 }
 
 //! Several `--manifest` options are one batch: the jobs of every manifest run
@@ -1354,7 +1383,9 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, ManifestsMappingOneMountToTwoFolders)
   const auto result = RunBatchOf({ first_path, second_path });
 
   EXPECT_FALSE(result.has_value());
-  EXPECT_THAT(Messages(), ::testing::HasSubstr("mount.name_conflict"));
+  EXPECT_THAT(Messages(),
+    ::testing::HasSubstr(
+      std::string(oxygen::content::import::mount_codes::kNameConflict.id)));
   EXPECT_FALSE(std::filesystem::exists(root / ".cooked"));
 }
 
@@ -1540,7 +1571,7 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest, AStoppedBatchReportsItsJobsCancelled)
   for (const auto& job : report.at("jobs")) {
     EXPECT_EQ(job.at("status"), "cancelled");
     EXPECT_EQ(job.at("diagnostics").at(0).at("code").get<std::string>(),
-      oxygen::content::import::tool::import_tool_codes::kCanceled);
+      oxygen::content::import::import_codes::kCanceled);
   }
   EXPECT_FALSE(std::filesystem::exists(root / ".cooked" / "Wood.omat"));
 }

@@ -18,6 +18,7 @@
 #include "ScriptImportTestSupport.h"
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -117,7 +118,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     const auto diagnostic
-      = FindDiagnostic(report, "script.sidecar.param_undeclared");
+      = FindDiagnostic(report, import_codes::kScriptSidecarParamUndeclared);
     ASSERT_HAS_VALUE(diagnostic);
     EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/key");
   }
@@ -137,7 +138,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     const auto diagnostic
-      = FindDiagnostic(report, "script.sidecar.param_type_mismatch");
+      = FindDiagnostic(report, import_codes::kScriptSidecarParamTypeMismatch);
     ASSERT_HAS_VALUE(diagnostic);
     EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/type");
   }
@@ -161,8 +162,8 @@ namespace {
         R"([ { "key": "target", "type": "node", "value": { "node": 0 } } ])");
 
     EXPECT_FALSE(rejected.success);
-    const auto diagnostic
-      = FindDiagnostic(rejected, "script.sidecar.param_node_out_of_range");
+    const auto diagnostic = FindDiagnostic(
+      rejected, import_codes::kScriptSidecarParamNodeOutOfRange);
     ASSERT_HAS_VALUE(diagnostic);
     EXPECT_EQ(diagnostic->json_pointer, "/bindings/0/params/0/value");
 
@@ -189,7 +190,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.instance_root_invalid"));
+      report.diagnostics, import_codes::kScriptSidecarInstanceRootInvalid));
   }
 
   //! An asset override cooks the asset key and kind and joins the scene's
@@ -274,12 +275,13 @@ namespace {
       R"([ { "key": "orb", "type": "asset", "value": "../Materials/none.omat" } ])");
 
     EXPECT_FALSE(wrong_kind.success);
-    const auto kind_diagnostic
-      = FindDiagnostic(wrong_kind, "script.sidecar.param_asset_kind_mismatch");
+    const auto kind_diagnostic = FindDiagnostic(
+      wrong_kind, import_codes::kScriptSidecarParamAssetKindMismatch);
     ASSERT_HAS_VALUE(kind_diagnostic);
     EXPECT_EQ(kind_diagnostic->json_pointer, "/bindings/0/params/0/value");
     EXPECT_FALSE(missing.success);
-    EXPECT_TRUE(FindDiagnostic(missing, "script.sidecar.param_asset_unresolved")
+    EXPECT_TRUE(
+      FindDiagnostic(missing, import_codes::kScriptSidecarParamAssetUnresolved)
         .has_value());
   }
 

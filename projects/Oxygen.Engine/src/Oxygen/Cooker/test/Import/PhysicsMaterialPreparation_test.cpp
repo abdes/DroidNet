@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -52,7 +53,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics[0].code, "physics.material.request_invalid_json");
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsMaterialRequestInvalidJson);
     EXPECT_EQ(diagnostics[0].source_path, "ground.opmat.json");
   }
 
@@ -64,8 +66,8 @@ namespace {
       = Prepare(R"({ /* note */ "name": "Ground" })", diagnostics);
 
     EXPECT_FALSE(prepared.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "physics.material.request_invalid_json"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kPhysicsMaterialRequestInvalidJson));
   }
 
   NOLINT_TEST(PhysicsMaterialPreparationTest, RefusesANonObjectRoot)
@@ -76,7 +78,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics[0].code, "physics.material.request_invalid_json");
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsMaterialRequestInvalidJson);
   }
 
   NOLINT_TEST(PhysicsMaterialPreparationTest, LocatesEverySchemaIssue)
@@ -90,7 +93,8 @@ namespace {
     EXPECT_FALSE(prepared.has_value());
     auto pointers = std::vector<std::string> {};
     for (const auto& diagnostic : diagnostics) {
-      EXPECT_EQ(diagnostic.code, "physics.material.schema_validation_failed");
+      EXPECT_EQ(
+        diagnostic.code, import_codes::kPhysicsMaterialSchemaValidationFailed);
       EXPECT_TRUE(diagnostic.object_path.empty());
       pointers.push_back(diagnostic.json_pointer);
     }

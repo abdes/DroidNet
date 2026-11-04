@@ -24,6 +24,33 @@
 */
 namespace oxygen::content {
 
+// clang-format off
+//! The stable refusal codes of the virtual path grammar.
+namespace vpath_codes {
+  inline constexpr std::string_view kEmpty = "vpath.empty";
+  inline constexpr std::string_view kLeafMissingExtension = "vpath.leaf.missing_extension";
+  inline constexpr std::string_view kMountInvalid = "vpath.mount.invalid";
+  inline constexpr std::string_view kMountOnly = "vpath.mount_only";
+  inline constexpr std::string_view kNotAbsolute = "vpath.not_absolute";
+  inline constexpr std::string_view kReferenceOutsideMount = "vpath.reference_outside_mount";
+  inline constexpr std::string_view kReferenceSelfAbsolute = "vpath.reference_self_absolute";
+  inline constexpr std::string_view kSegmentControlCharacter = "vpath.segment.control_character";
+  inline constexpr std::string_view kSegmentDerivedContent = "vpath.segment.derived_content";
+  inline constexpr std::string_view kSegmentInvalidUtf8 = "vpath.segment.invalid_utf8";
+  inline constexpr std::string_view kSegmentDeviceName = "vpath.segment.device_name";
+  inline constexpr std::string_view kSegmentDot = "vpath.segment.dot";
+  inline constexpr std::string_view kSegmentEdgeSpace = "vpath.segment.edge_space";
+  inline constexpr std::string_view kSegmentEmpty = "vpath.segment.empty";
+  inline constexpr std::string_view kSegmentNotNfc = "vpath.segment.not_nfc";
+  inline constexpr std::string_view kSegmentReservedCharacter = "vpath.segment.reserved_character";
+  inline constexpr std::string_view kSegmentTooLong = "vpath.segment.too_long";
+  inline constexpr std::string_view kSegmentTrailingDot = "vpath.segment.trailing_dot";
+  inline constexpr std::string_view kSegmentUnassignedCodePoint = "vpath.segment.unassigned_code_point";
+  inline constexpr std::string_view kTrailingSlash = "vpath.trailing_slash";
+  inline constexpr std::string_view kUnknown = "vpath.unknown";
+} // namespace vpath_codes
+// clang-format on
+
 //! Why a virtual path, a segment or a mount name is refused.
 enum class VirtualPathError : std::uint8_t {
   kEmpty,
@@ -49,7 +76,8 @@ enum class VirtualPathError : std::uint8_t {
 };
 
 //! The stable refusal code, such as `vpath.segment.reserved_character`.
-OXGN_CNTT_NDAPI auto to_string(VirtualPathError error) noexcept -> const char*;
+OXGN_CNTT_NDAPI auto to_string(VirtualPathError error) noexcept
+  -> std::string_view;
 
 //! Which rules a path is checked against.
 enum class VirtualPathRuleSet : std::uint8_t {

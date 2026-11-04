@@ -16,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -106,7 +107,9 @@ NOLINT_TEST(CollisionShapeDescriptorImportRequestBuilderTest,
   const auto request = BuildCollisionShapeDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("physics.shape.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kPhysicsShapeSchemaValidationFailed));
 }
 
 //! Verifies missing descriptor files fail with a readable error.

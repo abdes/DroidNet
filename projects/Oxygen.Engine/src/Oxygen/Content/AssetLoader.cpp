@@ -3002,7 +3002,7 @@ auto AssetLoader::ResolveTextureResourceKey(const std::string_view virtual_path)
   AssertOwningThread();
   if (const auto error = ValidateVirtualPath(virtual_path); error.has_value()) {
     throw std::invalid_argument(std::string("Virtual path is not canonical: ")
-      + nostd::to_string(*error));
+      + std::string(nostd::to_string(*error)));
   }
   return ResolveTextureResourceKey(
     data::TextureKeyFromVirtualPath(virtual_path));

@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -193,7 +194,7 @@ namespace {
 
     if (context.reader == nullptr) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.reader_unavailable",
+        std::string(import_codes::kGeometryBufferReaderUnavailable),
         "Async file reader is not available", pointer);
       co_return std::nullopt;
     }
@@ -220,7 +221,8 @@ namespace {
         "sidecars; provide a single canonical source: "
       } + reference->resolved;
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.sidecar_ambiguous", std::move(message), pointer);
+        std::string(import_codes::kGeometryBufferSidecarAmbiguous),
+        std::move(message), pointer);
       co_return std::nullopt;
     }
 
@@ -230,7 +232,7 @@ namespace {
         != base::PathIdentityKey(
           std::filesystem::weakly_canonical(context.session.CookedRoot()))) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.foreign_root",
+          std::string(import_codes::kGeometryBufferForeignRoot),
           "Raw geometry buffers must belong to the geometry's cooked root. "
           "Reference the other root's geometry asset, or import the buffer "
           "source into this root.",
@@ -254,7 +256,8 @@ namespace {
           context.session.AddDiagnostic(std::move(*too_large));
         } else {
           AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.buffer.sidecar_read_failed",
+            ImportSeverity::kError,
+            std::string(import_codes::kGeometryBufferSidecarReadFailed),
             "Failed reading buffer descriptor '" + descriptor_path.string()
               + "': " + read_result.error().message(),
             pointer);
@@ -266,7 +269,8 @@ namespace {
         = data::DecodeBufferResourceDescriptor(read_result.value().Bytes());
       if (!decoded) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.buffer.sidecar_invalid", decoded.error().what(), pointer);
+          std::string(import_codes::kGeometryBufferSidecarInvalid),
+          decoded.error().what(), pointer);
         co_return std::nullopt;
       }
 
@@ -280,7 +284,7 @@ namespace {
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-      "geometry.buffer.sidecar_missing",
+      std::string(import_codes::kGeometryBufferSidecarMissing),
       "Buffer descriptor was not found: "
         + internal::DescribeLookup(*reference,
           internal::AssetReferenceRefused {
@@ -385,7 +389,7 @@ namespace {
     const auto* const vb_view = FindBufferView(vb_sidecar, view_ref);
     if (vb_view == nullptr) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.view_missing",
+        std::string(import_codes::kGeometryBufferViewMissing),
         "Vertex buffer view_ref was not found: " + std::string(view_ref),
         view_pointer / "view_ref");
       return false;
@@ -394,28 +398,31 @@ namespace {
     const auto* const ib_view = FindBufferView(ib_sidecar, view_ref);
     if (ib_view == nullptr) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.buffer.view_missing",
+        std::string(import_codes::kGeometryBufferViewMissing),
         "Index buffer view_ref was not found: " + std::string(view_ref),
         view_pointer / "view_ref");
       return false;
     }
 
-    const auto first_index = CheckedU32(ib_view->element_offset,
-      context.session, context.request, "geometry.buffer.view_overflow",
-      "Mesh view first_index exceeds supported range",
-      view_pointer / "view_ref");
+    const auto first_index
+      = CheckedU32(ib_view->element_offset, context.session, context.request,
+        import_codes::kGeometryBufferViewOverflow,
+        "Mesh view first_index exceeds supported range",
+        view_pointer / "view_ref");
     const auto index_count = CheckedU32(ib_view->element_count, context.session,
-      context.request, "geometry.buffer.view_overflow",
+      context.request, import_codes::kGeometryBufferViewOverflow,
       "Mesh view index_count exceeds supported range",
       view_pointer / "view_ref");
-    const auto first_vertex = CheckedU32(vb_view->element_offset,
-      context.session, context.request, "geometry.buffer.view_overflow",
-      "Mesh view first_vertex exceeds supported range",
-      view_pointer / "view_ref");
-    const auto vertex_count = CheckedU32(vb_view->element_count,
-      context.session, context.request, "geometry.buffer.view_overflow",
-      "Mesh view vertex_count exceeds supported range",
-      view_pointer / "view_ref");
+    const auto first_vertex
+      = CheckedU32(vb_view->element_offset, context.session, context.request,
+        import_codes::kGeometryBufferViewOverflow,
+        "Mesh view first_vertex exceeds supported range",
+        view_pointer / "view_ref");
+    const auto vertex_count
+      = CheckedU32(vb_view->element_count, context.session, context.request,
+        import_codes::kGeometryBufferViewOverflow,
+        "Mesh view vertex_count exceeds supported range",
+        view_pointer / "view_ref");
 
     if (!first_index.has_value() || !index_count.has_value()
       || !first_vertex.has_value() || !vertex_count.has_value()) {
@@ -441,7 +448,7 @@ namespace {
     }
 
     AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-      "geometry.buffer.usage_mismatch",
+      std::string(import_codes::kGeometryBufferUsageMismatch),
       std::string(logical_name) + " does not advertise required usage flag",
       pointer);
     return false;
@@ -480,18 +487,18 @@ namespace {
       procedural.name, std::span<const std::byte>(procedural.parameters));
     if (!generated.has_value() || generated->first.empty()) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.procedural.generation_failed",
+        std::string(import_codes::kGeometryProceduralGenerationFailed),
         "Procedural mesh generator rejected descriptor parameters",
         lod_pointer / "procedural");
       return std::nullopt;
     }
     const auto& [vertices, indices] = *generated;
     const auto vertex_count = CheckedU32(vertices.size(), context.session,
-      context.request, "geometry.procedural.mesh_too_large",
+      context.request, import_codes::kGeometryProceduralMeshTooLarge,
       "Generated procedural vertex count exceeds supported range",
       lod_pointer / "procedural");
     const auto index_count = CheckedU32(indices.size(), context.session,
-      context.request, "geometry.procedural.mesh_too_large",
+      context.request, import_codes::kGeometryProceduralMeshTooLarge,
       "Generated procedural index count exceeds supported range",
       lod_pointer / "procedural");
     if (!vertex_count.has_value() || !index_count.has_value()) {
@@ -546,7 +553,7 @@ namespace {
     }
     if (!source.bounds->Contains(lods_bounds)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.descriptor.bounds_invalid",
+        std::string(import_codes::kGeometryDescriptorBoundsInvalid),
         "Geometry bounds must be ordered and contain every LOD's bounds",
         JsonPointer { "/bounds" });
       return std::nullopt;
@@ -601,7 +608,7 @@ namespace {
 
     if (!WritePod(writer, asset_desc)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.descriptor.serialize_failed",
+        std::string(import_codes::kGeometryDescriptorSerializeFailed),
         "Failed writing geometry descriptor header");
       co_return std::nullopt;
     }
@@ -700,13 +707,14 @@ namespace {
             const auto skeleton_key = LookupAssetKey(context, skeleton_ref,
               lod_pointer / "skinning" / "skeleton_ref", std::nullopt,
               {
-                .missing = "geometry.asset.missing",
+                .missing = import_codes::kGeometryAssetMissing,
                 .type_mismatch = {},
                 .noun = "Skeleton descriptor",
               });
             if (!skeleton_key.has_value()) {
               AddDiagnostic(context.session, context.request,
-                ImportSeverity::kError, "geometry.skinning.skeleton_missing",
+                ImportSeverity::kError,
+                std::string(import_codes::kGeometrySkinningSkeletonMissing),
                 "skeleton_ref could not be resolved",
                 lod_pointer / "skinning" / "skeleton_ref");
               co_return std::nullopt;
@@ -750,7 +758,7 @@ namespace {
         total_mesh_views += submesh.views.size();
       }
       const auto mesh_view_count = CheckedU32(total_mesh_views, context.session,
-        context.request, "geometry.descriptor.view_count_overflow",
+        context.request, import_codes::kGeometryDescriptorViewCountOverflow,
         "Mesh view count exceeds supported range", lod_pointer / "submeshes");
       if (!mesh_view_count.has_value()) {
         co_return std::nullopt;
@@ -759,7 +767,7 @@ namespace {
 
       if (!WritePod(writer, mesh_desc)) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "geometry.descriptor.serialize_failed",
+          std::string(import_codes::kGeometryDescriptorSerializeFailed),
           "Failed writing mesh descriptor", lod_pointer);
         co_return std::nullopt;
       }
@@ -768,7 +776,8 @@ namespace {
         if (!writer.WriteBlob(std::as_bytes(std::span<const std::byte>(
               procedural_blob.data(), procedural_blob.size())))) {
           AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.descriptor.serialize_failed",
+            ImportSeverity::kError,
+            std::string(import_codes::kGeometryDescriptorSerializeFailed),
             "Failed writing procedural parameter blob",
             lod_pointer / "procedural" / "params");
           co_return std::nullopt;
@@ -787,8 +796,8 @@ namespace {
         const auto material_key = LookupAssetKey(context, material_ref,
           submesh_pointer / "material_ref", data::AssetType::kMaterial,
           {
-            .missing = "geometry.material.missing",
-            .type_mismatch = "geometry.material.type_mismatch",
+            .missing = import_codes::kGeometryMaterialMissing,
+            .type_mismatch = import_codes::kGeometryMaterialTypeMismatch,
             .noun = "Material descriptor",
           });
         if (!material_key.has_value()) {
@@ -807,7 +816,8 @@ namespace {
 
         if (!WritePod(writer, submesh_desc)) {
           AddDiagnostic(context.session, context.request,
-            ImportSeverity::kError, "geometry.descriptor.serialize_failed",
+            ImportSeverity::kError,
+            std::string(import_codes::kGeometryDescriptorSerializeFailed),
             "Failed writing submesh descriptor", submesh_pointer);
           co_return std::nullopt;
         }
@@ -840,7 +850,8 @@ namespace {
 
           if (!WritePod(writer, view_desc)) {
             AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "geometry.descriptor.serialize_failed",
+              ImportSeverity::kError,
+              std::string(import_codes::kGeometryDescriptorSerializeFailed),
               "Failed writing mesh view descriptor", view_pointer);
             co_return std::nullopt;
           }
@@ -852,7 +863,7 @@ namespace {
 
     if (!writer.WriteBlob(std::as_bytes(std::span(surface_table)))) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "geometry.descriptor.serialize_failed",
+        std::string(import_codes::kGeometryDescriptorSerializeFailed),
         "Failed writing the surface table", JsonPointer { "/surfaces" });
       co_return std::nullopt;
     }
@@ -897,7 +908,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& descriptor = Request().geometry_descriptor;
   if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "geometry.descriptor.request_invalid",
+      std::string(import_codes::kGeometryDescriptorRequestInvalid),
       "GeometryDescriptorImportJob requires request geometry_descriptor "
       "payload");
     ReportPhaseProgress(
@@ -935,7 +946,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .asset_cache = {},
   };
   context.mounts = internal::LoadMountedCookedSources(
-    session, Request(), "geometry.descriptor.");
+    session, Request(), import_codes::kGeometryDescriptorIndexLoadFailed);
 
   if (!source->buffers.empty()) {
     auto& pipeline = CreatePipeline<BufferPipeline>(*ThreadPool(),
@@ -953,7 +964,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     if (submission.submitted_count == 0U) {
       if (!session.HasErrors()) {
         AddDiagnostic(session, Request(), ImportSeverity::kError,
-          "geometry.buffer.no_submissions",
+          std::string(import_codes::kGeometryBufferNoSubmissions),
           "No buffer work items were submitted");
       }
       ReportPhaseProgress(ImportPhase::kFailed, 1.0F,

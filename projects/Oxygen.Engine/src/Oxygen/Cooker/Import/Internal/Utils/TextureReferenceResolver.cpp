@@ -10,6 +10,7 @@
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -32,10 +33,11 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   TextureReferenceRequest reference)
   -> co::Co<std::optional<ResolvedTextureReference>>
 {
-  const auto report_error = [&](const char* code, std::string message) -> void {
+  const auto report_error
+    = [&](const std::string_view code, std::string message) -> void {
     session->AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = std::string(reference.diagnostic_prefix) + code,
+      .code = std::string(code),
       .message = std::move(message),
       .source_path = request->source_path.string(),
       .json_pointer = reference.json_pointer,
@@ -68,7 +70,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
     const auto is_output
       = std::filesystem::equivalent(mount.root, output_root, output_error);
     if (is_output && named->row == data::pak::core::kNoResourceIndex) {
-      report_error("texture_descriptor_invalid",
+      report_error(reference.descriptor_invalid_code,
         "Texture descriptor names no texture-table entry");
       co_return std::nullopt;
     }
@@ -77,7 +79,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
       descriptor = mount.content->ResourceTable(data::ResourceKind::kTexture)
                      .Row<data::pak::core::TextureResourceDesc>(named->row);
     } catch (const std::exception& error) {
-      report_error("texture_descriptor_invalid", error.what());
+      report_error(reference.descriptor_invalid_code, error.what());
       co_return std::nullopt;
     }
     co_return ResolvedTextureReference {
@@ -102,8 +104,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
   if (reference.allow_missing) {
     session->AddDiagnostic({
       .severity = ImportSeverity::kWarning,
-      .code
-      = std::string(reference.diagnostic_prefix) + "texture_descriptor_missing",
+      .code = std::string(reference.descriptor_missing_code),
       .message = "Texture descriptor not found: " + looked_for
         + "; cooking continues without it",
       .source_path = request->source_path.string(),
@@ -112,7 +113,7 @@ auto ResolveTextureReference(observer_ptr<ImportSession> session,
     co_return ResolvedTextureReference { .missing = true };
   }
 
-  report_error("texture_descriptor_missing",
+  report_error(reference.descriptor_missing_code,
     "Texture descriptor not found: " + looked_for);
   co_return std::nullopt;
 }

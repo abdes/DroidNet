@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -265,7 +266,7 @@ namespace {
       first_level.GetComponents<data::pak::world::NodePathRecord>().size(), 1U);
     ASSERT_TRUE(with_stranger.success);
     EXPECT_TRUE(HasDiagnosticCode(with_stranger.diagnostics,
-      "script.sidecar.instance_override_unresolved"));
+      import_codes::kScriptSidecarInstanceOverrideUnresolved));
     EXPECT_EQ(
       stranger_level
         .GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
@@ -309,17 +310,17 @@ namespace {
     // Assert
     EXPECT_FALSE(undeclared.success);
     const auto undeclared_path
-      = path_of(undeclared, "script.sidecar.param_undeclared");
+      = path_of(undeclared, import_codes::kScriptSidecarParamUndeclared);
     ASSERT_HAS_VALUE(undeclared_path);
     EXPECT_EQ(*undeclared_path, "/instance_bindings/0/params/0/key");
     EXPECT_FALSE(other_type.success);
     const auto other_type_path
-      = path_of(other_type, "script.sidecar.param_type_mismatch");
+      = path_of(other_type, import_codes::kScriptSidecarParamTypeMismatch);
     ASSERT_HAS_VALUE(other_type_path);
     EXPECT_EQ(*other_type_path, "/instance_bindings/0/params/0/type");
     EXPECT_FALSE(other_asset_type.success);
-    const auto other_asset_type_path
-      = path_of(other_asset_type, "script.sidecar.param_asset_kind_mismatch");
+    const auto other_asset_type_path = path_of(
+      other_asset_type, import_codes::kScriptSidecarParamAssetKindMismatch);
     ASSERT_HAS_VALUE(other_asset_type_path);
     EXPECT_EQ(*other_asset_type_path, "/instance_bindings/0/params/0/value");
     EXPECT_TRUE(declared.success);
@@ -344,8 +345,8 @@ namespace {
 
     // Assert
     EXPECT_TRUE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.instance_script_unavailable"));
+    EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+      import_codes::kScriptSidecarInstanceScriptUnavailable));
     EXPECT_EQ(
       level.GetComponents<data::pak::scripting::ScriptParamOverrideRecord>()
         .size(),
@@ -375,8 +376,8 @@ namespace {
 
     // Assert
     EXPECT_FALSE(other_kind.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      other_kind.diagnostics, "script.sidecar.instance_override_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(other_kind.diagnostics,
+      import_codes::kScriptSidecarInstanceOverrideInvalid));
     const auto changes
       = level.GetComponents<data::pak::scripting::ScriptParamOverrideRecord>();
     ASSERT_EQ(changes.size(), 1U);
@@ -565,8 +566,8 @@ namespace {
       .scene_virtual_path = scene_asset->virtual_path,
     }));
     ASSERT_FALSE(failure_report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      failure_report.diagnostics, "script.sidecar.script_ref_unresolved"));
+    EXPECT_TRUE(HasDiagnosticCode(failure_report.diagnostics,
+      import_codes::kScriptSidecarScriptRefUnresolved));
 
     const auto scene_after_failure
       = ReadCurrentDescriptor(cooked_root, scene_asset->key);
@@ -628,7 +629,7 @@ namespace {
     const auto report = Submit(std::move(request));
     ASSERT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.scene_emit_failed"));
+      report.diagnostics, import_codes::kScriptSidecarSceneEmitFailed));
     EXPECT_EQ(
       scene_before, ReadCurrentDescriptor(cooked_root, scene_asset->key));
     EXPECT_EQ(listing_before, listed_descriptors(cooked_root));

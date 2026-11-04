@@ -60,7 +60,7 @@ namespace {
     if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path);
       error.has_value()) {
       throw std::runtime_error(std::string("Virtual path is not canonical: ")
-        + nostd::to_string(*error));
+        + std::string(nostd::to_string(*error)));
     }
   }
 

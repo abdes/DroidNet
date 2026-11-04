@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -80,7 +81,7 @@ auto ScriptingSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (Request().options.scripting.import_kind
     != ScriptingImportKind::kScriptingSidecar) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "script.request.invalid_import_kind",
+      std::string(import_codes::kScriptRequestInvalidImportKind),
       "ScriptingSidecarImportJob requires "
       "options.scripting.import_kind=kScriptingSidecar");
     ReportPhaseProgress(
@@ -146,7 +147,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
       std::as_bytes(std::span(inline_bindings.data(), inline_bindings.size())));
     if (!bytes.has_value()) {
       AddDiagnostic(session, req, ImportSeverity::kError,
-        "script.sidecar.source_read_failed",
+        std::string(import_codes::kScriptSidecarSourceReadFailed),
         "Failed to hold the inline bindings: " + bytes.error().message());
       co_return LoadedSource {
         .success = false,
@@ -161,7 +162,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
 
   if (req.source_path.empty()) {
     AddDiagnostic(session, req, ImportSeverity::kError,
-      "script.sidecar.source_missing",
+      std::string(import_codes::kScriptSidecarSourceMissing),
       "Scripting sidecar import requires source_path or inline_bindings_json");
     co_return LoadedSource {
       .success = false,
@@ -172,7 +173,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
   auto* const reader = FileReader().get();
   if (reader == nullptr) {
     AddDiagnostic(session, req, ImportSeverity::kError,
-      "script.sidecar.reader_unavailable",
+      std::string(import_codes::kScriptSidecarReaderUnavailable),
       "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
@@ -187,7 +188,7 @@ auto ScriptingSidecarImportJob::LoadSource(ImportSession& session)
       session.AddDiagnostic(std::move(*too_large));
     } else {
       AddDiagnostic(session, req, ImportSeverity::kError,
-        "script.sidecar.source_read_failed",
+        std::string(import_codes::kScriptSidecarSourceReadFailed),
         "Failed to read source file '" + req.source_path.string()
           + "': " + read.error().message());
     }

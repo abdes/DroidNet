@@ -19,6 +19,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -64,9 +65,11 @@ namespace {
     const json::json_pointer& chunk_pointer) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "buffer.container.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kBufferContainerSchemaValidationFailed,
       .validation_failed_prefix = "Buffer chunk validation failed: ",
-      .validator_failure_code = "buffer.container.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kBufferContainerSchemaValidatorFailure,
       .validator_failure_prefix = "Buffer container schema validator failed: ",
     };
 
@@ -93,9 +96,11 @@ namespace {
     const nlohmann::json& document) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "buffer.container.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kBufferContainerSchemaValidationFailed,
       .validation_failed_prefix = "Buffer container validation failed: ",
-      .validator_failure_code = "buffer.container.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kBufferContainerSchemaValidatorFailure,
       .validator_failure_prefix = "Buffer container schema validator failed: ",
     };
 
@@ -120,12 +125,13 @@ auto BufferSource::FromContainer(const std::string_view bytes,
     document = json::parse(bytes);
   } catch (const json::exception& failure) {
     AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-      "buffer.container.request_invalid_json", failure.what());
+      std::string(import_codes::kBufferContainerRequestInvalidJson),
+      failure.what());
     return std::nullopt;
   }
   if (!document.is_object()) {
     AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-      "buffer.container.request_invalid_json",
+      std::string(import_codes::kBufferContainerRequestInvalidJson),
       "Buffer container must be a JSON object");
     return std::nullopt;
   }
@@ -148,7 +154,7 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
 
   if (!buffer_chunks.is_array()) {
     AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-      "buffer.container.buffers_missing",
+      std::string(import_codes::kBufferContainerBuffersMissing),
       "Descriptor must contain an array 'buffers'");
     return std::nullopt;
   }
@@ -191,7 +197,7 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
     entry.source_id = *product;
     if (!seen_source_ids.insert(entry.source_id).second) {
       AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
-        "buffer.container.virtual_path_duplicate",
+        std::string(import_codes::kBufferContainerVirtualPathDuplicate),
         "Duplicate buffer virtual_path in descriptor: " + entry.source_id,
         product_field);
       continue;

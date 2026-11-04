@@ -25,6 +25,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -228,7 +229,7 @@ namespace {
       }
       if (!mounts_.has_value()) {
         mounts_ = internal::LoadMountedCookedSources(
-          session_, request_, "input.import.");
+          session_, request_, import_codes::kInputImportIndexLoadFailed);
       }
       const auto resolved = internal::LookupReference(
         *mounts_, request_, *reference, AssetType::kInputAction);
@@ -241,12 +242,12 @@ namespace {
         session_.AddDiagnostic(internal::RefuseUnmountedReference(
           request_, *reference, location.to_string()));
       } else if (refused.reason == AssetReferenceRefusal::kTypeMismatch) {
-        Refuse("input.context.action_type_mismatch",
+        Refuse(std::string(import_codes::kInputContextActionTypeMismatch),
           internal::DescribeLookup(*reference, refused)
             + "; it does not name an input action",
           location.to_string());
       } else {
-        Refuse("input.context.action_unresolved",
+        Refuse(std::string(import_codes::kInputContextActionUnresolved),
           internal::DescribeLookup(*reference, refused), location.to_string());
       }
       return std::nullopt;
@@ -299,7 +300,7 @@ namespace {
           return context.strings.Add(slot_name);
         } catch (const std::length_error&) {
           AddDiagnostic(session, request, ImportSeverity::kError,
-            "input.context.string_table_overflow",
+            std::string(import_codes::kInputContextStringTableOverflow),
             "Input mapping context string table exceeded uint32 limits",
             source_ctx.json_pointer);
           return std::nullopt;
@@ -320,7 +321,7 @@ namespace {
 
         if (context.triggers.size() > std::numeric_limits<uint32_t>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
-            "input.context.trigger_count_overflow",
+            std::string(import_codes::kInputContextTriggerCountOverflow),
             "Trigger table exceeded uint32 limits", mapping_path.to_string());
           build_ok = false;
           break;
@@ -419,7 +420,7 @@ namespace {
           bytes, {});
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.asset.descriptor_emit_failed", ex.what(),
+          std::string(import_codes::kInputAssetDescriptorEmitFailed), ex.what(),
           "actions." + action.name);
         return false;
       }
@@ -435,7 +436,8 @@ namespace {
       const auto bytes = SerializeContext(context, error);
       if (!bytes.has_value()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.context.serialize_failed", error, "contexts." + context.name);
+          std::string(import_codes::kInputContextSerializeFailed), error,
+          "contexts." + context.name);
         return false;
       }
       try {
@@ -457,8 +459,8 @@ namespace {
           context.descriptor_relpath, *bytes, std::move(references).Build());
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "input.context.descriptor_emit_failed", ex.what(),
-          "contexts." + context.name);
+          std::string(import_codes::kInputContextDescriptorEmitFailed),
+          ex.what(), "contexts." + context.name);
         return false;
       }
     }
@@ -598,7 +600,8 @@ auto InputImportPipeline::Worker() -> co::Co<>
     } catch (const std::exception& ex) {
       if (item.session != nullptr) {
         AddDiagnostic(*item.session, item.session->Request(),
-          ImportSeverity::kError, "input.import.pipeline_exception",
+          ImportSeverity::kError,
+          std::string(import_codes::kInputImportPipelineException),
           std::string("Unhandled exception in InputImportPipeline: ")
             + ex.what());
       }
@@ -623,7 +626,7 @@ auto InputImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   const auto& request = session->Request();
   if (!request.input.has_value()) {
     AddDiagnostic(*session, request, ImportSeverity::kError,
-      "input.request.invalid_job_type",
+      std::string(import_codes::kInputRequestInvalidJobType),
       "Input import pipeline requires request input payload to be set");
     co_return false;
   }

@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
@@ -1380,7 +1381,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
 
   const auto has_backend_mismatch = std::ranges::any_of(
     report->diagnostics, [](const auto& diagnostic) -> auto {
-      return diagnostic.code == "physics.sidecar.backend_mismatch";
+      return diagnostic.code == import_codes::kPhysicsSidecarBackendMismatch;
     });
   EXPECT_TRUE(has_backend_mismatch);
 
@@ -1437,7 +1438,8 @@ NOLINT_TEST(
   PhysicsPhase3ClosureTest, SoftBodyPinOnAVertexNoFaceUsesFailsTheCook)
 {
   const auto codes = CookComplexSidecarCodes("pin_not_on_surface", { 0U, 5U });
-  EXPECT_NE(std::ranges::find(codes, "physics.sidecar.soft_body_pin_invalid"),
+  EXPECT_NE(std::ranges::find(codes,
+              std::string(import_codes::kPhysicsSidecarSoftBodyPinInvalid)),
     codes.end());
 }
 

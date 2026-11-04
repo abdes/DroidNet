@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -97,7 +98,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& descriptor = Request().material_descriptor;
   if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "material.descriptor.request_invalid",
+      std::string(import_codes::kMaterialDescriptorRequestInvalid),
       "MaterialDescriptorImportJob requires request material_descriptor "
       "payload");
     ReportPhaseProgress(
@@ -133,7 +134,7 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto parse_failed = false;
   {
     const auto mounts = internal::LoadMountedCookedSources(
-      session, Request(), "material.descriptor.");
+      session, Request(), import_codes::kMaterialDescriptorIndexLoadFailed);
     for (const auto& slot : MaterialSource::TextureSlots()) {
       auto& binding = item.material.textures.*slot.binding;
       if (!binding.assigned) {
@@ -146,7 +147,10 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
           .json_pointer = (nlohmann::json::json_pointer {} / "textures"
             / std::string(slot.name))
             .to_string(),
-          .diagnostic_prefix = "material.descriptor.",
+          .descriptor_invalid_code
+          = import_codes::kMaterialDescriptorTextureDescriptorInvalid,
+          .descriptor_missing_code
+          = import_codes::kMaterialDescriptorTextureDescriptorMissing,
           .allow_missing = true,
         });
       if (!index) {

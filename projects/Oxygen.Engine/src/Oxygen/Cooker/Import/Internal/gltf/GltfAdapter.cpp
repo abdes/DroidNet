@@ -51,6 +51,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -158,7 +159,7 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.canceled",
+      .code = std::string(import_codes::kCanceled),
       .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
@@ -207,7 +208,7 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "gltf.parse_failed",
+      .code = std::string(import_codes::kGltfParseFailed),
       .message = std::string(ResultToMessage(result)),
       .source_path = std::string(source_id),
       .object_path = {},
@@ -423,9 +424,10 @@ namespace {
     if (result == cgltf_result_success) {
       return data;
     }
-    diagnostics.push_back(MakeErrorDiagnostic("gltf.validation_failed",
-      std::string("The glTF document is invalid: ") + ResultToMessage(result),
-      input.source_id_prefix, {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfValidationFailed),
+        std::string("The glTF document is invalid: ") + ResultToMessage(result),
+        input.source_id_prefix, {}));
     return { nullptr, &cgltf_free };
   }
 
@@ -500,7 +502,7 @@ namespace {
   {
     if (input.request.options.coordinate.up_axis != SourceUpAxis::kFromFile) {
       diagnostics.push_back(
-        MakeWarningDiagnostic("import.setting_not_applicable",
+        MakeWarningDiagnostic(std::string(import_codes::kSettingNotApplicable),
           "up_axis applies to FBX sources only; a glTF source is +Y up",
           input.source_id_prefix, "up_axis"));
     }
@@ -517,19 +519,20 @@ namespace {
         found.has_value()) {
         chosen = found;
       } else {
-        diagnostics.push_back(MakeWarningDiagnostic("import.gltf_scene_missing",
-          "The file has no scene '" + requested
-            + "'; the import takes its default scene.",
-          input.source_id_prefix, "/scenes"));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kGltfSceneMissing),
+            "The file has no scene '" + requested
+              + "'; the import takes its default scene.",
+            input.source_id_prefix, "/scenes"));
       }
     }
     for (size_t index = 0; index < data.scenes_count; ++index) {
       if (index != chosen) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic("import.source_feature_dropped",
-            "Import does not carry scene '" + GltfSceneSelector(data, index)
-              + "'; only the model scene imports.",
-            input.source_id_prefix, "/scenes/" + std::to_string(index)));
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSourceFeatureDropped),
+          "Import does not carry scene '" + GltfSceneSelector(data, index)
+            + "'; only the model scene imports.",
+          input.source_id_prefix, "/scenes/" + std::to_string(index)));
       }
     }
     return chosen;
@@ -1107,22 +1110,25 @@ namespace {
   {
     const auto comma = uri.find(',');
     if (comma == std::string_view::npos) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.data_uri",
-        "glTF data URI is missing a payload", source_id, ""));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kGltfImageDataUri),
+          "glTF data URI is missing a payload", source_id, ""));
       return std::make_shared<std::vector<std::byte>>();
     }
 
     const auto header = uri.substr(0, comma);
     if (!header.contains(";base64")) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.data_uri",
-        "glTF data URI is not base64 encoded", source_id, ""));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kGltfImageDataUri),
+          "glTF data URI is not base64 encoded", source_id, ""));
       return std::make_shared<std::vector<std::byte>>();
     }
 
     auto bytes = DecodeBase64(uri.substr(comma + 1));
     if (bytes->empty()) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.data_uri",
-        "glTF data URI payload is empty", source_id, ""));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kGltfImageDataUri),
+          "glTF data URI payload is empty", source_id, ""));
       return std::make_shared<std::vector<std::byte>>();
     }
 
@@ -1175,8 +1181,9 @@ namespace {
     }
 
     if (image.uri == nullptr || *image.uri == '\0') {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.missing_uri",
-        "glTF image has no buffer view or URI", source_id, ""));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kGltfImageMissingUri),
+          "glTF image has no buffer view or URI", source_id, ""));
       return make_placeholder();
     }
 
@@ -1422,7 +1429,7 @@ namespace {
         // nothing is lost, so the import only notes it.
         result.diagnostics.push_back(ImportDiagnostic {
           .severity = ImportSeverity::kInfo,
-          .code = "mesh.transform_bake_retained",
+          .code = std::string(import_codes::kMeshTransformBakeRetained),
           .message = "Retained authored node transform: "
             + bake_plan.retained_reasons.at(index),
           .source_path = std::string(input.source_id_prefix),
@@ -1551,7 +1558,7 @@ namespace {
           std::span(mesh->primitives, mesh->primitives_count), prim_i);
         if (prim.type != cgltf_primitive_type_triangles) {
           result.diagnostics.push_back(
-            MakeWarningDiagnostic("gltf.primitive.type",
+            MakeWarningDiagnostic(std::string(import_codes::kGltfPrimitiveType),
               "glTF primitive is not a triangle list; the primitive is dropped",
               input.source_id_prefix, mesh_name));
           continue;
@@ -1623,19 +1630,19 @@ namespace {
                   [first_uv](const cgltf_size uv_set) -> bool {
                     return uv_set != first_uv;
                   })) {
-              result.diagnostics.push_back(
-                MakeWarningDiagnostic("mesh.uv_set_conflict",
-                  "Material uses multiple UV sets; using the first available",
-                  input.source_id_prefix, mesh_name));
+              result.diagnostics.push_back(MakeWarningDiagnostic(
+                std::string(import_codes::kMeshUvSetConflict),
+                "Material uses multiple UV sets; using the first available",
+                input.source_id_prefix, mesh_name));
             }
             if (texcoords_by_index.contains(first_uv)) {
               selected_uv_set = first_uv;
             } else {
-              result.diagnostics.push_back(
-                MakeWarningDiagnostic("mesh.uv_set_missing",
-                  "Material requests a UV set not present on the primitive; "
-                  "using the first available",
-                  input.source_id_prefix, mesh_name));
+              result.diagnostics.push_back(MakeWarningDiagnostic(
+                std::string(import_codes::kMeshUvSetMissing),
+                "Material requests a UV set not present on the primitive; "
+                "using the first available",
+                input.source_id_prefix, mesh_name));
             }
           }
 
@@ -1651,9 +1658,9 @@ namespace {
             }
             message << "}; only set " << selected_uv_set
                     << " is imported, and textures of the other sets use it";
-            result.diagnostics.push_back(
-              MakeWarningDiagnostic("mesh.uv_sets_dropped", message.str(),
-                input.source_id_prefix, mesh_name));
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshUvSetsDropped), message.str(),
+              input.source_id_prefix, mesh_name));
           }
 
           if (const auto it = texcoords_by_index.find(selected_uv_set);
@@ -1675,21 +1682,21 @@ namespace {
         }
 
         if (positions == nullptr) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.missing_positions",
-              "glTF primitive missing POSITION attribute; the primitive is "
-              "dropped",
-              input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshMissingPositions),
+            "glTF primitive missing POSITION attribute; the primitive is "
+            "dropped",
+            input.source_id_prefix, mesh_name));
           continue;
         }
 
         const auto vertex_count = static_cast<uint32_t>(positions->count);
         if (vertex_count == 0) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.missing_positions",
-              "glTF primitive contains no vertex positions; the primitive is "
-              "dropped",
-              input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshMissingPositions),
+            "glTF primitive contains no vertex positions; the primitive is "
+            "dropped",
+            input.source_id_prefix, mesh_name));
           continue;
         }
 
@@ -1727,9 +1734,10 @@ namespace {
 
         if (prim.material != nullptr && !input.material_keys.empty()
           && surface >= input.material_keys.size()) {
-          result.diagnostics.push_back(MakeWarningDiagnostic("mesh.surface_oob",
-            "glTF material index exceeds imported material key count",
-            input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshSurfaceOob),
+              "glTF material index exceeds imported material key count",
+              input.source_id_prefix, mesh_name));
         }
 
         if (prim.material != nullptr) {
@@ -1748,7 +1756,7 @@ namespace {
 
         if ((index_count % 3U) != 0U) {
           result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.invalid_range",
+            MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
               "glTF primitive index count is not a multiple of 3; the "
               "incomplete last triangle is dropped",
               input.source_id_prefix, mesh_name));
@@ -1779,17 +1787,18 @@ namespace {
 
       if (primitives.empty()) {
         result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.empty_primitives",
+          MakeWarningDiagnostic(std::string(import_codes::kMeshEmptyPrimitives),
             "glTF mesh has no supported primitives; skipping",
             input.source_id_prefix, mesh_name));
         continue;
       }
 
       if (any_texcoords && !all_texcoords) {
-        result.diagnostics.push_back(MakeWarningDiagnostic("mesh.missing_uvs",
-          "glTF mesh has mixed UV availability across primitives; some "
-          "submeshes will use default UVs",
-          input.source_id_prefix, mesh_name));
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshMissingUvs),
+            "glTF mesh has mixed UV availability across primitives; some "
+            "submeshes will use default UVs",
+            input.source_id_prefix, mesh_name));
       }
 
       MeshBuildPipeline::WorkItem item;
@@ -1798,11 +1807,11 @@ namespace {
         witness = GltfSourceLayoutWitness(*mesh, material_index);
       }
       if (!witness.has_value()) {
-        result.diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.source_layout_invalid",
-            "Could not read the source-native glTF positions; the mesh is "
-            "dropped",
-            input.source_id_prefix, mesh_name));
+        result.diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kMeshSourceLayoutInvalid),
+          "Could not read the source-native glTF positions; the mesh is "
+          "dropped",
+          input.source_id_prefix, mesh_name));
         continue;
       }
       item.source_layout_witness = *witness;
@@ -1893,11 +1902,11 @@ namespace {
       for (const auto& prim_info : primitives) {
         auto positions_vec = ReadVec3(prim_info.positions);
         if (positions_vec.empty()) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.missing_positions",
-              "glTF primitive positions cannot be read; the primitive is "
-              "dropped",
-              input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshMissingPositions),
+            "glTF primitive positions cannot be read; the primitive is "
+            "dropped",
+            input.source_id_prefix, mesh_name));
           continue;
         }
 
@@ -1941,7 +1950,7 @@ namespace {
               }
               if (has_invalid_uv) {
                 result.diagnostics.push_back(MakeWarningDiagnostic(
-                  "mesh.invalid_uvs",
+                  std::string(import_codes::kMeshInvalidUvs),
                   "glTF primitive has NaN/Inf UVs; rendering may be corrupted",
                   input.source_id_prefix, mesh_name));
               } else {
@@ -1960,9 +1969,9 @@ namespace {
                           << "min=" << std::setprecision(3) << min_uv.x << ","
                           << min_uv.y << " max=" << max_uv.x << "," << max_uv.y
                           << ")";
-                  result.diagnostics.push_back(
-                    MakeWarningDiagnostic("mesh.uv_range_suspicious",
-                      message.str(), input.source_id_prefix, mesh_name));
+                  result.diagnostics.push_back(MakeWarningDiagnostic(
+                    std::string(import_codes::kMeshUvRangeSuspicious),
+                    message.str(), input.source_id_prefix, mesh_name));
                 }
               }
             }
@@ -2027,10 +2036,10 @@ namespace {
 
         auto indices_vec = ReadIndices(prim_info.prim->indices);
         if (indices_vec.empty()) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("gltf.missing_indices",
-              "glTF primitive missing indices; generated sequential indices",
-              input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kGltfMissingIndices),
+            "glTF primitive missing indices; generated sequential indices",
+            input.source_id_prefix, mesh_name));
           indices_vec.resize(positions_vec.size());
           for (size_t i = 0; i < indices_vec.size(); ++i) {
             indices_vec.at(i) = static_cast<uint32_t>(i);
@@ -2057,16 +2066,16 @@ namespace {
         }
         indices_vec.resize(kept * 3U);
         if (kept != authored_triangles) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.invalid_indices",
-              "glTF primitive has " + std::to_string(authored_triangles - kept)
-                + " triangles that reference out-of-range vertices; they are "
-                  "dropped",
-              input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshInvalidIndices),
+            "glTF primitive has " + std::to_string(authored_triangles - kept)
+              + " triangles that reference out-of-range vertices; they are "
+                "dropped",
+            input.source_id_prefix, mesh_name));
         }
         if (indices_vec.empty()) {
           result.diagnostics.push_back(MakeWarningDiagnostic(
-            "mesh.missing_indices",
+            std::string(import_codes::kMeshMissingIndices),
             "glTF primitive has no usable triangles; the primitive is dropped",
             input.source_id_prefix, mesh_name));
           continue;
@@ -2090,9 +2099,10 @@ namespace {
       }
 
       if (owner->ranges.empty()) {
-        result.diagnostics.push_back(MakeWarningDiagnostic("mesh.dropped",
-          "glTF mesh has no usable primitives; the mesh is dropped",
-          input.source_id_prefix, mesh_name));
+        result.diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+            "glTF mesh has no usable primitives; the mesh is dropped",
+            input.source_id_prefix, mesh_name));
         continue;
       }
 
@@ -2103,8 +2113,8 @@ namespace {
         // Skin data that cannot bind the mesh is dropped: the mesh imports as
         // static geometry in its bind pose.
         const auto drop_skin
-          = [&](const char* code, const char* reason) -> void {
-          result.diagnostics.push_back(MakeWarningDiagnostic(code,
+          = [&](const std::string_view code, const char* reason) -> void {
+          result.diagnostics.push_back(MakeWarningDiagnostic(std::string(code),
             std::string(reason)
               + "; the mesh imports as static geometry in its bind pose",
             input.source_id_prefix, mesh_name));
@@ -2115,16 +2125,16 @@ namespace {
         };
         const auto* skin = FindSkinForMesh(data, *mesh);
         if (skin == nullptr || skin->inverse_bind_matrices == nullptr) {
-          drop_skin("mesh.missing_inverse_bind",
+          drop_skin(import_codes::kMeshMissingInverseBind,
             "glTF skinned mesh missing inverse bind matrices");
         } else {
           owner->inverse_bind_matrices = ReadMat4(skin->inverse_bind_matrices);
           const auto joint_count = DetermineJointCount(owner->joint_indices);
           if (joint_count == 0 || owner->inverse_bind_matrices.empty()) {
-            drop_skin("mesh.missing_inverse_bind",
+            drop_skin(import_codes::kMeshMissingInverseBind,
               "glTF skinned mesh missing inverse bind matrices");
           } else if (owner->inverse_bind_matrices.size() < joint_count) {
-            drop_skin("mesh.skinning_buffers_mismatch",
+            drop_skin(import_codes::kMeshSkinningBuffersMismatch,
               "glTF skin inverse bind count is smaller than joint count");
           } else {
             owner->joint_remap.resize(joint_count);
@@ -2215,7 +2225,8 @@ namespace {
     if (!result.success && result.diagnostics.empty()) {
       DLOG_F(ERROR, "glTF import failed without diagnostics: source_id='{}'",
         input.source_id_prefix);
-      result.diagnostics.push_back(MakeErrorDiagnostic("gltf.unknown_failure",
+      result.diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kGltfUnknownFailure),
         "glTF import failed without diagnostics", input.source_id_prefix, ""));
     }
     return result;
@@ -2262,10 +2273,10 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
     if (uri.empty() || uri.contains(':') || uri.contains('\0')
       || uri.starts_with('/') || uri.starts_with('\\')) {
       result.supported = false;
-      result.diagnostics.push_back(
-        MakeErrorDiagnostic("import.source.nonlocal_dependency",
-          "A glTF buffer must use a relative file URI or embedded data.",
-          input.source_id_prefix, "/buffers"));
+      result.diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSourceNonlocalDependency),
+        "A glTF buffer must use a relative file URI or embedded data.",
+        input.source_id_prefix, "/buffers"));
       continue;
     }
     std::ranges::replace(uri, '\\', '/');
@@ -2304,8 +2315,9 @@ auto GltfAdapter::Parse(const std::filesystem::path& source_path,
     DLOG_F(ERROR, "glTF parse failed: path='{}' diagnostics={} ",
       source_path.string(), result.diagnostics.size());
     if (result.diagnostics.empty()) {
-      result.diagnostics.push_back(MakeErrorDiagnostic("gltf.parse_failed",
-        "glTF parse failed without diagnostics", input.source_id_prefix, ""));
+      result.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kGltfParseFailed),
+          "glTF parse failed without diagnostics", input.source_id_prefix, ""));
     }
     impl_->data_owner.reset();
     result.success = false;
@@ -2335,8 +2347,9 @@ auto GltfAdapter::Parse(const std::span<const std::byte> source_bytes,
     DLOG_F(ERROR, "glTF parse failed (memory): diagnostics={}",
       result.diagnostics.size());
     if (result.diagnostics.empty()) {
-      result.diagnostics.push_back(MakeErrorDiagnostic("gltf.parse_failed",
-        "glTF parse failed without diagnostics", input.source_id_prefix, ""));
+      result.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kGltfParseFailed),
+          "glTF parse failed without diagnostics", input.source_id_prefix, ""));
     }
     impl_->data_owner.reset();
     result.success = false;
@@ -2365,9 +2378,10 @@ auto GltfAdapter::PrepareGeometry(const AdapterInput& input) const
   if (!impl_->data_owner) {
     auto result = ModelGeometryPreparation {};
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "gltf adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "gltf adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
   return PrepareGeometryNames(*impl_->data_owner, input);
@@ -2379,9 +2393,10 @@ auto GltfAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
   if (!impl_->data_owner) {
     WorkItemStreamResult result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "glTF adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -2395,9 +2410,10 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
   if (!impl_->data_owner) {
     ModelMaterialPreparation result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "glTF adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -2658,9 +2674,10 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
   if (!impl_->data_owner) {
     ModelTexturePreparation result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "glTF adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -2772,8 +2789,9 @@ auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
         impl_->data_owner, result.diagnostics, source.source_id,
         input.external_texture_bytes);
     } else {
-      result.diagnostics.push_back(MakeWarningDiagnostic("gltf.image.missing",
-        "glTF texture has no image", source.source_id, ""));
+      result.diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kGltfImageMissing),
+          "glTF texture has no image", source.source_id, ""));
       auto bytes = std::make_shared<std::vector<std::byte>>();
       resolved = ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
@@ -2858,14 +2876,16 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   if (!impl_->data_owner) {
-    diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id, {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "glTF adapter has no parsed scene", input.source_id, {}));
     return result;
   }
 
   if (input.request == nullptr) {
-    diagnostics.push_back(MakeErrorDiagnostic("scene.request_missing",
-      "Scene stage input is missing request data", input.source_id, {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kSceneRequestMissing),
+        "Scene stage input is missing request data", input.source_id, {}));
     return result;
   }
 
@@ -2875,9 +2895,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
 
   if (input.geometry_keys.size() > impl_->emitted_variants.size()) {
-    diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
-      "Geometry key count does not match the emitted geometry", input.source_id,
-      {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kSceneGeometryKeyMissing),
+        "Geometry key count does not match the emitted geometry",
+        input.source_id, {}));
   }
   // A node whose mesh was dropped keeps its place but shows no geometry.
   const auto geometry_keys = GeometryKeysByVariant(
@@ -2910,7 +2931,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto source_node_index = cgltf_node_index(&data, node);
     if (reached.at(source_node_index)) {
       diagnostics.push_back(
-        MakeErrorDiagnostic("import.gltf_node_reached_twice",
+        MakeErrorDiagnostic(std::string(import_codes::kGltfNodeReachedTwice),
           "A glTF node is reached twice in the model scene's hierarchy.",
           input.source_id, "/nodes/" + std::to_string(source_node_index)));
       return;
@@ -3081,11 +3102,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         && transforms::IsIdentityRotation(parent_rotation);
 
       if (!can_reparent) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic("scene.pruning.reparent_skipped",
-            "Skipped reparenting due to non-uniform or rotated parent; "
-            "preserving world transform",
-            input.source_id, node.base_name));
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kScenePruningReparentSkipped),
+          "Skipped reparenting due to non-uniform or rotated parent; "
+          "preserving world transform",
+          input.source_id, node.base_name));
         new_parent_index = new_index;
         node.local_matrix = node.world_matrix;
       } else {
@@ -3094,7 +3115,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
-          diagnostics.push_back(MakeWarningDiagnostic("scene.pruning.singular",
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kScenePruningSingular),
             "Node keeps its local transform: its parent transform is singular",
             input.source_id, node.base_name));
         }
@@ -3155,7 +3177,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const bool used_fallback = transforms::DecomposeTransformOrFallback(
       node.local_matrix, translation, rotation, scale);
     if (used_fallback) {
-      diagnostics.push_back(MakeWarningDiagnostic("scene.transform_sanitized",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kSceneTransformSanitized),
         "Node '" + name
           + "' transform sanitized: non-finite values reset to identity TRS; "
             "invalid rotation set to identity.",
@@ -3265,7 +3288,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         camera.aspect_mode = CameraAspectMode::kFixed;
         build.orthographic_cameras.push_back(camera);
       } else {
-        diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSceneCameraUnsupported),
           "Unsupported camera projection type", input.source_id, name));
       }
       commit.Report(input.source_id, name, diagnostics);
@@ -3351,11 +3375,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           = lighting::ResolveSpotConeProfile(rec_light.inner_cone_angle_radians,
             rec_light.outer_cone_angle_radians);
         if (!cone) {
-          diagnostics.push_back(
-            MakeWarningDiagnostic("scene.light.photometry_invalid",
-              "Spot cone angles do not form a representable cone pair; the "
-              "light is dropped",
-              input.source_id, name));
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kSceneLightPhotometryInvalid),
+            "Spot cone angles do not form a representable cone pair; the "
+            "light is dropped",
+            input.source_id, name));
           break;
         }
         rec_light.luminous_flux_lm
@@ -3366,7 +3390,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         break;
       }
       default:
-        diagnostics.push_back(MakeWarningDiagnostic("scene.light.unsupported",
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSceneLightUnsupported),
           "Unsupported light type", input.source_id, name));
         break;
       }
@@ -3388,9 +3413,10 @@ auto GltfAdapter::BuildWorkItems(SceneWorkTag /*unused*/,
   if (!impl_->data_owner) {
     WorkItemStreamResult result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("gltf.scene.not_parsed",
-      "glTF adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kGltfSceneNotParsed),
+        "glTF adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 

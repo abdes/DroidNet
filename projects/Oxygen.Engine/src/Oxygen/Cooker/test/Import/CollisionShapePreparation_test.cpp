@@ -11,6 +11,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -117,7 +118,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics[0].code, "physics.shape.request_invalid_json");
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsShapeRequestInvalidJson);
     EXPECT_EQ(diagnostics[0].source_path, "floor.ocshape.json");
   }
 
@@ -129,7 +131,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics[0].code, "physics.shape.request_invalid_json");
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsShapeRequestInvalidJson);
   }
 
   NOLINT_TEST(CollisionShapePreparationTest, LocatesASchemaIssue)
@@ -144,7 +147,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(diagnostics[0].code, "physics.shape.schema_validation_failed");
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsShapeSchemaValidationFailed);
     EXPECT_EQ(diagnostics[0].json_pointer, "/radius");
     EXPECT_TRUE(diagnostics[0].object_path.empty());
   }
@@ -159,8 +163,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(
-      diagnostics[0].code, "physics.shape.world_boundary_limits_invalid");
+    EXPECT_EQ(diagnostics[0].code,
+      import_codes::kPhysicsShapeWorldBoundaryLimitsInvalid);
     EXPECT_EQ(diagnostics[0].json_pointer, "/limits_min");
   }
 
@@ -175,8 +179,8 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     ASSERT_EQ(diagnostics.size(), 1U);
-    EXPECT_EQ(
-      diagnostics[0].code, "physics.shape.world_boundary_limits_invalid");
+    EXPECT_EQ(diagnostics[0].code,
+      import_codes::kPhysicsShapeWorldBoundaryLimitsInvalid);
     EXPECT_EQ(diagnostics[0].json_pointer, "/children/1/limits_min");
   }
 
@@ -205,8 +209,8 @@ namespace {
     const auto prepared = Prepare(document.Text(), diagnostics);
 
     EXPECT_FALSE(prepared.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "physics.shape.schema_validation_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kPhysicsShapeSchemaValidationFailed));
   }
 
 } // namespace

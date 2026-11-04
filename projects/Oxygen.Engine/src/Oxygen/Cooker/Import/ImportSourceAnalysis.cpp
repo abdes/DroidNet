@@ -40,6 +40,7 @@
 #include <Oxygen/Cooker/Import/CapturedInputSet.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
@@ -995,17 +996,18 @@ namespace {
             + "': " + info.error().message());
         }
         if (!info && file.required) {
-          AddError(report, "analysis.source_missing",
+          AddError(report, std::string(import_codes::kAnalysisSourceMissing),
             "Required source is missing: " + file.path.string());
         }
         if (info && file.required && info->is_directory) {
-          AddError(report, "analysis.source_not_file",
+          AddError(report, std::string(import_codes::kAnalysisSourceNotFile),
             "Required source is a directory: " + file.path.string());
         }
       }
     } catch (const std::exception& error) {
       AddError(report,
-        stop.stop_requested() ? "import.canceled" : "analysis.failed",
+        stop.stop_requested() ? std::string(import_codes::kCanceled)
+                              : std::string(import_codes::kAnalysisFailed),
         error.what());
     }
     if (stop.stop_requested()) {
@@ -1021,7 +1023,8 @@ namespace {
             return item.severity == ImportSeverity::kError;
           });
     } catch (const std::exception& error) {
-      AddError(report, "analysis.source_changed", error.what());
+      AddError(report, std::string(import_codes::kAnalysisSourceChanged),
+        error.what());
     }
     report.accessed_paths = snapshot.AccessedPaths();
     co_return report;

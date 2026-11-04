@@ -7,14 +7,13 @@
 // Covers: Import/Internal/fbx/FbxAdapter.cpp (skin weights)
 
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
-#include <ios>
 #include <memory>
 #include <utility>
 
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
@@ -52,8 +51,8 @@ namespace {
 
     ASSERT_TRUE(imported.report.success)
       << DiagnosticSummary(imported.report.diagnostics);
-    EXPECT_FALSE(
-      HasDiagnosticCode(imported.report.diagnostics, "mesh.skinning.mismatch"))
+    EXPECT_FALSE(HasDiagnosticCode(
+      imported.report.diagnostics, import_codes::kMeshSkinningMismatch))
       << DiagnosticSummary(imported.report.diagnostics);
     const auto inspection = LoadInspection(imported.report.cooked_root);
     auto skinned_lods = std::size_t { 0 };

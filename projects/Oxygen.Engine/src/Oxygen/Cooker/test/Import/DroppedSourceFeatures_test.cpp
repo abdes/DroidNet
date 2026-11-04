@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
@@ -25,12 +26,13 @@ using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportSeverity;
 using oxygen::content::import::internal::ReportDroppedSourceFeatures;
 
-constexpr auto kDropped = "import.source_feature_dropped";
+using oxygen::content::import::import_codes::kSourceFeatureDropped;
 
 auto AllDropWarnings(const std::vector<ImportDiagnostic>& diagnostics) -> bool
 {
   return std::ranges::all_of(diagnostics, [](const auto& issue) -> bool {
-    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning;
+    return issue.code == kSourceFeatureDropped
+      && issue.severity == ImportSeverity::kWarning;
   });
 }
 
@@ -88,7 +90,8 @@ NOLINT_TEST(DroppedSourceFeaturesTest, ActiveUnmappedFbxChannelsAreReported)
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "opacity.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning
+    return issue.code == kSourceFeatureDropped
+      && issue.severity == ImportSeverity::kWarning
       && issue.object_path
       == "/Materials/0/pbr/" + std::to_string(UFBX_MATERIAL_PBR_OPACITY);
   }));
@@ -129,7 +132,8 @@ auto Naming(const std::vector<ImportDiagnostic>& diagnostics,
   const std::string& texture) -> std::ptrdiff_t
 {
   return std::ranges::count_if(diagnostics, [&](const auto& issue) -> bool {
-    return issue.code == kDropped && issue.severity == ImportSeverity::kWarning
+    return issue.code == kSourceFeatureDropped
+      && issue.severity == ImportSeverity::kWarning
       && issue.message.contains("'" + texture + "'");
   });
 }
@@ -249,8 +253,8 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "wrap.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kDropped && issue.object_path == "/Materials/0"
-      && issue.object_name == "Bun";
+    return issue.code == kSourceFeatureDropped
+      && issue.object_path == "/Materials/0" && issue.object_name == "Bun";
   }));
 }
 
@@ -276,8 +280,8 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureOnAnotherUvSetIsReported)
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "uv.fbx", diagnostics);
   EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kDropped && issue.object_path == "/Nodes/0"
-      && issue.message.contains("Second");
+    return issue.code == kSourceFeatureDropped
+      && issue.object_path == "/Nodes/0" && issue.message.contains("Second");
   }));
 }
 
@@ -338,7 +342,8 @@ NOLINT_TEST(DroppedSourceFeaturesTest, RequiredUnreadExtensionIsReported)
   ReportDroppedSourceFeatures(source, "physics.gltf", diagnostics);
 
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "import.source_extension_required");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kSourceExtensionRequired);
   EXPECT_EQ(diagnostics.front().severity, ImportSeverity::kWarning);
   EXPECT_THAT(diagnostics.front().message, ::testing::HasSubstr(extension));
 }

@@ -28,6 +28,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -245,7 +246,7 @@ namespace {
           request, *reference, "/material_ref"));
       } else {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.material_ref_unresolved",
+          std::string(import_codes::kPhysicsShapeMaterialRefUnresolved),
           "Reference was not found: "
             + internal::DescribeLookup(*reference, found.error()),
           "/material_ref");
@@ -256,7 +257,7 @@ namespace {
     const auto primary_it = primary_assets.find(found->key);
     if (primary_it == primary_assets.end()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.reference_source_mismatch",
+        std::string(import_codes::kPhysicsShapeReferenceSourceMismatch),
         "Resolved material_ref is not in the target source domain: " + named,
         "/material_ref");
       return false;
@@ -264,7 +265,7 @@ namespace {
 
     if (primary_it->second != data::AssetType::kPhysicsMaterial) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.material_ref_not_physics_material",
+        std::string(import_codes::kPhysicsShapeMaterialRefNotPhysicsMaterial),
         "Resolved material_ref has unexpected asset type: " + named,
         "/material_ref");
       return false;
@@ -319,7 +320,7 @@ namespace {
     if (!SerializeAuthoredShapeBlob(
           descriptor_doc, shape_type, payload_type, blob_bytes)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_emit_failed",
+        std::string(import_codes::kPhysicsShapePayloadEmitFailed),
         "Authored non-analytic shape payload exceeds supported blob size");
       return std::nullopt;
     }
@@ -339,7 +340,7 @@ namespace {
       };
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.shape.payload_emit_failed",
+        std::string(import_codes::kPhysicsShapePayloadEmitFailed),
         "Failed emitting non-analytic shape payload: "
           + std::string(ex.what()));
       return std::nullopt;
@@ -546,7 +547,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& request_payload = Request().collision_shape_descriptor;
   if (!request_payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.shape.request_invalid",
+      std::string(import_codes::kPhysicsShapeRequestInvalid),
       "CollisionShapeDescriptorImportJob requires request "
       "collision_shape_descriptor payload");
     ReportPhaseProgress(
@@ -567,8 +568,8 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
   const auto& descriptor_doc = *prepared;
 
-  auto mounts
-    = internal::LoadMountedCookedSources(session, Request(), "physics.shape.");
+  auto mounts = internal::LoadMountedCookedSources(
+    session, Request(), import_codes::kPhysicsShapeIndexLoadFailed);
   if (session.HasErrors()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape descriptor context loading failed");
@@ -586,7 +587,7 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     = PrimaryAssets(mounts, session.CookedRoot());
   if (!primary_source_assets.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.shape.primary_source_missing",
+      std::string(import_codes::kPhysicsShapePrimarySourceMissing),
       "Primary source asset index is not available");
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape descriptor context loading failed");

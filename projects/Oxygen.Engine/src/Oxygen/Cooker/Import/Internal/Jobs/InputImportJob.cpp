@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -76,7 +77,7 @@ auto InputImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (!Request().input.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "input.request.invalid_job_type",
+      std::string(import_codes::kInputRequestInvalidJobType),
       "InputImportJob requires request input payload to be present");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid input import options");
@@ -132,7 +133,8 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
   auto* const reader = FileReader().get();
   if (reader == nullptr) {
     AddDiagnostic(session, request, ImportSeverity::kError,
-      "input.import.reader_unavailable", "Async file reader is not available");
+      std::string(import_codes::kInputImportReaderUnavailable),
+      "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
       .bytes = {},
@@ -146,7 +148,7 @@ auto InputImportJob::LoadSource(ImportSession& session) -> co::Co<LoadedSource>
       session.AddDiagnostic(std::move(*too_large));
     } else {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "input.import.source_read_failed",
+        std::string(import_codes::kInputImportSourceReadFailed),
         "Failed to read source file '" + request.source_path.string()
           + "': " + read.error().message());
     }

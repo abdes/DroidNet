@@ -19,6 +19,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -305,7 +306,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     if (!descriptor.has_value()) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.fallback_descriptor_missing",
+        .code = std::string(import_codes::kTextureFallbackDescriptorMissing),
         .message = "Missing fallback texture descriptor",
         .source_path = Request().source_path.string(),
         .object_path = {},
@@ -319,7 +320,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     } catch (const std::exception& ex) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.fallback_descriptor_emit_failed",
+        .code = std::string(import_codes::kTextureFallbackDescriptorEmitFailed),
         .message = std::string("Failed to emit fallback texture descriptor: ")
           + ex.what(),
         .source_path = Request().source_path.string(),
@@ -375,7 +376,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
   if (reader == nullptr) {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = "texture.reader_missing",
+      .code = std::string(import_codes::kTextureReaderMissing),
       .message = "Async file reader is not available",
       .source_path = Request().source_path.string(),
       .object_path = {},
@@ -402,7 +403,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         } else {
           session.AddDiagnostic({
             .severity = ImportSeverity::kError,
-            .code = "texture.read_failed",
+            .code = std::string(import_codes::kTextureReadFailed),
             .message = error.message(),
             .source_path = mapping.path.string(),
             .object_path = {},
@@ -439,7 +440,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       if (tuning.cubemap_face_size == 0U) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
-          .code = "texture.cubemap_face_size_missing",
+          .code = std::string(import_codes::kTextureCubemapFaceSizeMissing),
           .message = "Cubemap face size is required for equirect conversion",
           .source_path = Request().source_path.string(),
           .object_path = {},
@@ -450,7 +451,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       if ((tuning.cubemap_face_size % 256U) != 0U) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
-          .code = "texture.cubemap_face_size_invalid",
+          .code = std::string(import_codes::kTextureCubemapFaceSizeInvalid),
           .message = "Cubemap face size must be a multiple of 256",
           .source_path = Request().source_path.string(),
           .object_path = {},
@@ -471,7 +472,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         } else {
           session.AddDiagnostic({
             .severity = ImportSeverity::kError,
-            .code = "texture.read_failed",
+            .code = std::string(import_codes::kTextureReadFailed),
             .message = error.message(),
             .source_path = Request().source_path.string(),
             .object_path = {},
@@ -486,7 +487,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
             tuning, bytes->Bytes(), options.extension_hint, true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
-          .code = "texture.desc_invalid",
+          .code = std::string(import_codes::kTextureDescInvalid),
           .message
           = std::string("Invalid texture descriptor: ") + to_string(*error),
           .source_path = Request().source_path.string(),
@@ -518,7 +519,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         } else {
           session.AddDiagnostic({
             .severity = ImportSeverity::kError,
-            .code = "texture.read_failed",
+            .code = std::string(import_codes::kTextureReadFailed),
             .message = error.message(),
             .source_path = Request().source_path.string(),
             .object_path = {},
@@ -533,7 +534,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
             tuning, bytes->Bytes(), options.extension_hint, true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
-          .code = "texture.desc_invalid",
+          .code = std::string(import_codes::kTextureDescInvalid),
           .message
           = std::string("Invalid texture descriptor: ") + to_string(*error),
           .source_path = Request().source_path.string(),
@@ -554,8 +555,8 @@ auto TextureImportJob::LoadSource(ImportSession& session)
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
         .code = discovered.error() == serio::Error::kNotFound
-          ? "texture.cubemap_faces_missing"
-          : "texture.read_failed",
+          ? std::string(import_codes::kTextureCubemapFacesMissing)
+          : std::string(import_codes::kTextureReadFailed),
         .message = discovered.error().message(),
         .source_path = Request().source_path.string(),
         .object_path = {},
@@ -579,7 +580,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         } else {
           session.AddDiagnostic({
             .severity = ImportSeverity::kError,
-            .code = "texture.read_failed",
+            .code = std::string(import_codes::kTextureReadFailed),
             .message = error.message(),
             .source_path = face_path.string(),
             .object_path = {},
@@ -593,7 +594,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
             tuning, bytes.Bytes(), face_path.extension().string(), true)) {
         session.AddDiagnostic({
           .severity = ImportSeverity::kError,
-          .code = "texture.desc_invalid",
+          .code = std::string(import_codes::kTextureDescInvalid),
           .message
           = std::string("Invalid texture descriptor: ") + to_string(*error),
           .source_path = face_path.string(),
@@ -628,7 +629,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
     } else {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.read_failed",
+        .code = std::string(import_codes::kTextureReadFailed),
         .message = error.message(),
         .source_path = Request().source_path.string(),
         .object_path = {},
@@ -644,7 +645,7 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         tuning, bytes->Bytes(), options.extension_hint, false)) {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = "texture.desc_invalid",
+      .code = std::string(import_codes::kTextureDescInvalid),
       .message
       = std::string("Invalid texture descriptor: ") + to_string(*error),
       .source_path = Request().source_path.string(),
@@ -744,7 +745,7 @@ auto TextureImportJob::CookTexture(
     if (const auto error = desc.Validate()) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.desc_invalid",
+        .code = std::string(import_codes::kTextureDescInvalid),
         .message
         = std::string("Invalid texture descriptor: ") + to_string(*error),
         .source_path = Request().source_path.string(),
@@ -782,7 +783,7 @@ auto TextureImportJob::CookTexture(
   } else {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = "texture.source_missing",
+      .code = std::string(import_codes::kTextureSourceMissing),
       .message = "Texture source data is missing",
       .source_path = Request().source_path.string(),
       .object_path = {},
@@ -801,7 +802,7 @@ auto TextureImportJob::CookTexture(
   if (result.used_placeholder) {
     session.AddDiagnostic({
       .severity = ImportSeverity::kWarning,
-      .code = "texture.placeholder_used",
+      .code = std::string(import_codes::kTexturePlaceholderUsed),
       .message = "Texture cook failed; used placeholder payload",
       .source_path = Request().source_path.string(),
       .object_path = {},
@@ -812,7 +813,7 @@ auto TextureImportJob::CookTexture(
     if (result.used_placeholder) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kWarning,
-        .code = "texture.placeholder_used",
+        .code = std::string(import_codes::kTexturePlaceholderUsed),
         .message = "Texture cooking failed; using fallback texture",
         .source_path = Request().source_path.string(),
         .object_path = {},
@@ -828,7 +829,7 @@ auto TextureImportJob::CookTexture(
 
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = "texture.cook_failed",
+      .code = std::string(import_codes::kTextureCookFailed),
       .message = "Texture pipeline did not return a cooked payload",
       .source_path = Request().source_path.string(),
       .object_path = {},
@@ -859,7 +860,7 @@ auto TextureImportJob::EmitTexture(
     if (!descriptor.has_value()) {
       session.AddDiagnostic({
         .severity = ImportSeverity::kError,
-        .code = "texture.descriptor_missing",
+        .code = std::string(import_codes::kTextureJobDescriptorMissing),
         .message = "Missing descriptor for emitted texture index "
           + std::to_string(index),
         .source_path = Request().source_path.string(),
@@ -878,7 +879,7 @@ auto TextureImportJob::EmitTexture(
   } catch (const std::exception& ex) {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = "texture.emit_failed",
+      .code = std::string(import_codes::kTextureEmitFailed),
       .message = std::string("Texture emission failed: ") + ex.what(),
       .source_path = Request().source_path.string(),
       .object_path = {},

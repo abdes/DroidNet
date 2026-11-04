@@ -38,6 +38,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -469,12 +470,12 @@ namespace {
     auto authored = std::vector<internal::AuthoredSurfaceDefaults> {};
     for (const auto& [surface_id, surface] : defaults.surfaces) {
       if (std::ranges::find(declared, surface_id) == declared.end()) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic("import.setting_target_missing",
-            "Geometry defaults name a surface the geometry no longer has; the "
-            "setting is kept and not applied",
-            source_id,
-            std::string(mesh_name) + "/" + data::to_string(surface_id)));
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSettingTargetMissing),
+          "Geometry defaults name a surface the geometry no longer has; the "
+          "setting is kept and not applied",
+          source_id,
+          std::string(mesh_name) + "/" + data::to_string(surface_id)));
         continue;
       }
       authored.push_back({
@@ -546,7 +547,8 @@ namespace {
     const auto asset_result = writer.WriteBlob(
       std::as_bytes(std::span<const GeometryAssetDesc, 1>(&asset_desc, 1)));
     if (!asset_result.has_value()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kMeshSerializeFailed),
         "Failed to serialize geometry asset descriptor", source_id, mesh_name));
       return {};
     }
@@ -591,16 +593,18 @@ namespace {
       const auto mesh_result = writer.WriteBlob(
         std::as_bytes(std::span<const MeshDesc, 1>(&mesh_desc, 1)));
       if (!mesh_result.has_value()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
-          "Failed to serialize mesh descriptor", source_id, mesh_name));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kMeshSerializeFailed),
+            "Failed to serialize mesh descriptor", source_id, mesh_name));
         return {};
       }
 
       if (lod.submesh_surfaces.size() != lod.submeshes.size()
         || lod.submesh_names.size() != lod.submeshes.size()) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Submesh surface or name list size does not match submesh count",
-          source_id, mesh_name));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kMeshFinalizeFailed),
+            "Submesh surface or name list size does not match submesh count",
+            source_id, mesh_name));
         return {};
       }
 
@@ -614,7 +618,8 @@ namespace {
 
         const auto pos = writer.Position();
         if (!pos) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
+          diagnostics.push_back(MakeErrorDiagnostic(
+            std::string(import_codes::kMeshSerializeFailed),
             "Failed to query submesh descriptor offset", source_id, mesh_name));
           return {};
         }
@@ -623,9 +628,10 @@ namespace {
           = pos.value() + offsetof(SubMeshDesc, material_asset_key);
         if (offset
           > std::numeric_limits<data::pak::core::DataBlobSizeT>::max()) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
-            "Submesh material patch offset exceeds supported range", source_id,
-            mesh_name));
+          diagnostics.push_back(
+            MakeErrorDiagnostic(std::string(import_codes::kMeshSerializeFailed),
+              "Submesh material patch offset exceeds supported range",
+              source_id, mesh_name));
           return {};
         }
         material_patch_offsets.push_back(MeshBuildPipeline::SurfacePatchOffset {
@@ -637,14 +643,16 @@ namespace {
         const auto sm_result = writer.WriteBlob(
           std::as_bytes(std::span<const SubMeshDesc, 1>(&sm, 1)));
         if (!sm_result.has_value()) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
-            "Failed to serialize submesh descriptor", source_id, mesh_name));
+          diagnostics.push_back(
+            MakeErrorDiagnostic(std::string(import_codes::kMeshSerializeFailed),
+              "Failed to serialize submesh descriptor", source_id, mesh_name));
           return {};
         }
 
         const auto view_result = writer.WriteBlob(std::as_bytes(submesh_views));
         if (!view_result.has_value()) {
-          diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
+          diagnostics.push_back(MakeErrorDiagnostic(
+            std::string(import_codes::kMeshSerializeFailed),
             "Failed to serialize mesh view descriptor", source_id, mesh_name));
           return {};
         }
@@ -652,8 +660,9 @@ namespace {
     }
 
     if (!writer.WriteBlob(std::as_bytes(std::span(surface_table)))) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.serialize_failed",
-        "Failed to serialize the surface table", source_id, mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshSerializeFailed),
+          "Failed to serialize the surface table", source_id, mesh_name));
       return {};
     }
 
@@ -711,8 +720,9 @@ namespace {
 
     const bool has_positions = !positions.empty();
     if (!has_positions) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_positions",
-        "Mesh has no vertex positions", source_id, object_path));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingPositions),
+          "Mesh has no vertex positions", source_id, object_path));
       return;
     }
 
@@ -739,33 +749,37 @@ namespace {
     for (const auto& range : ranges) {
       uint32_t range_count = range.index_count;
       if (range_count == 0) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
-          "Triangle range index_count is zero; skipping range", source_id,
-          object_path));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
+            "Triangle range index_count is zero; skipping range", source_id,
+            object_path));
         continue;
       }
 
       const auto remainder = range_count % 3;
       if (remainder != 0) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_range",
-          "Triangle range index_count must be a multiple of 3", source_id,
-          object_path));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kMeshInvalidRange),
+            "Triangle range index_count must be a multiple of 3", source_id,
+            object_path));
         return;
       }
 
       auto* bucket = find_bucket(range.source_slot);
       if (bucket == nullptr) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
-          "Triangle range references unknown surface; skipping range",
-          source_id, object_path));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
+            "Triangle range references unknown surface; skipping range",
+            source_id, object_path));
         continue;
       }
 
       const auto range_end = range.first_index + range_count;
       if (range_end > mesh.indices.size()) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
-          "Triangle range exceeds index buffer bounds; truncating", source_id,
-          object_path));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidRange),
+            "Triangle range exceeds index buffer bounds; truncating", source_id,
+            object_path));
         if (range.first_index >= mesh.indices.size()) {
           continue;
         }
@@ -848,17 +862,19 @@ namespace {
       }
 
       if (skipped_triangles > 0) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_index",
-          "Skipped triangles with out-of-range indices", source_id,
-          object_path));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidIndex),
+            "Skipped triangles with out-of-range indices", source_id,
+            object_path));
       }
     }
 
     if ((mesh.mesh_type == data::MeshType::kSkinned)
       && (!has_joints || !has_weights)) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_skinning",
-        "Skinned mesh requires joint indices and weights", source_id,
-        object_path));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingSkinning),
+          "Skinned mesh requires joint indices and weights", source_id,
+          object_path));
       return;
     }
   }
@@ -1037,20 +1053,20 @@ namespace {
 
   //! Why a skinned mesh's skin data cannot bind it, or null when it can.
   [[nodiscard]] auto SkinDefect(const TriangleMesh& mesh)
-    -> std::optional<std::pair<const char*, const char*>>
+    -> std::optional<std::pair<std::string_view, const char*>>
   {
     const auto vertex_count = mesh.streams.positions.size();
     if (mesh.streams.joint_indices.size() != vertex_count
       || mesh.streams.joint_weights.size() != vertex_count) {
-      return std::pair { "mesh.missing_skinning",
+      return std::pair { import_codes::kMeshMissingSkinning,
         "Skinned mesh lacks joint indices or weights for its vertices" };
     }
     if (mesh.inverse_bind_matrices.empty()) {
-      return std::pair { "mesh.missing_inverse_bind",
+      return std::pair { import_codes::kMeshMissingInverseBind,
         "Skinned mesh missing inverse bind matrices" };
     }
     if (mesh.joint_remap.empty()) {
-      return std::pair { "mesh.missing_joint_remap",
+      return std::pair { import_codes::kMeshMissingJointRemap,
         "Skinned mesh missing joint remap data" };
     }
     uint32_t max_joint = 0;
@@ -1060,7 +1076,7 @@ namespace {
     }
     if (max_joint >= mesh.inverse_bind_matrices.size()
       || max_joint >= mesh.joint_remap.size()) {
-      return std::pair { "mesh.skinning_buffers_mismatch",
+      return std::pair { import_codes::kMeshSkinningBuffersMismatch,
         "Skinned mesh joint data exceeds inverse bind/remap counts" };
     }
     return std::nullopt;
@@ -1113,7 +1129,7 @@ namespace {
     auto mesh = lod_source.source;
     if (mesh.mesh_type == data::MeshType::kSkinned) {
       if (const auto defect = SkinDefect(mesh); defect.has_value()) {
-        diagnostics.push_back(MakeWarningDiagnostic(defect->first,
+        diagnostics.push_back(MakeWarningDiagnostic(std::string(defect->first),
           std::string(defect->second)
             + "; the mesh imports as static geometry in its bind pose",
           item.source_id, item.mesh_name));
@@ -1129,7 +1145,8 @@ namespace {
     lod.mesh_type = mesh.mesh_type;
 
     if (lod.mesh_type == data::MeshType::kProcedural) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.procedural_unsupported",
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kMeshProceduralUnsupported),
         "Procedural meshes are not supported by MeshBuildPipeline",
         item.source_id, item.mesh_name));
       return std::nullopt;
@@ -1137,16 +1154,18 @@ namespace {
 
     if (lod.mesh_type != data::MeshType::kStandard
       && lod.mesh_type != data::MeshType::kSkinned) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.unsupported_type",
-        "Mesh type is unsupported in MeshBuildPipeline", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshUnsupportedType),
+          "Mesh type is unsupported in MeshBuildPipeline", item.source_id,
+          item.mesh_name));
       return std::nullopt;
     }
 
     if (mesh.indices.empty() || mesh.ranges.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
-        "Mesh is missing triangle indices or ranges", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingBuffers),
+          "Mesh is missing triangle indices or ranges", item.source_id,
+          item.mesh_name));
       return std::nullopt;
     }
 
@@ -1177,9 +1196,10 @@ namespace {
       = mesh.streams.texcoords.size() == mesh.streams.positions.size();
 
     if (item.want_textures && item.has_material_textures && !has_uvs) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.missing_uvs",
-        "Mesh has textured materials but no UVs", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshMissingUvs),
+          "Mesh has textured materials but no UVs", item.source_id,
+          item.mesh_name));
     }
 
     const auto normal_policy = item.request.options.normal_policy;
@@ -1213,10 +1233,10 @@ namespace {
       // Tangents serve tangent-space textures; a mesh none of whose materials
       // samples one loses nothing without them.
       if (item.has_tangent_space_textures) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic("mesh.missing_tangent_prereq",
-            "Tangents require positions, normals, and UVs", item.source_id,
-            item.mesh_name));
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kMeshMissingTangentPrereq),
+          "Tangents require positions, normals, and UVs", item.source_id,
+          item.mesh_name));
       }
     } else if (needs_tangents) {
       const bool has_tangents
@@ -1244,7 +1264,8 @@ namespace {
         if (generated >= authored + kMinGeneratedFrameGain) {
           const auto regenerate
             = tangent_policy == GeometryAttributePolicy::kGenerateMissing;
-          diagnostics.push_back(MakeWarningDiagnostic("mesh.tangents_unusable",
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kMeshTangentsUnusable),
             fmt::format("Authored tangent frames follow the UVs on {:.0f}% of "
                         "triangles, generated ones on {:.0f}%; {}",
               authored * 100.0F, generated * 100.0F,
@@ -1271,7 +1292,8 @@ namespace {
     if (bake_transform.has_value()) {
       if (lod.mesh_type != data::MeshType::kStandard
         || !internal::IsBakeTransformInvertible(*bake_transform)) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_transform_bake",
+        diagnostics.push_back(MakeErrorDiagnostic(
+          std::string(import_codes::kMeshInvalidTransformBake),
           "Transform baking requires static geometry and an invertible "
           "transform",
           item.source_id, item.mesh_name));
@@ -1305,10 +1327,10 @@ namespace {
           || !normalize_direction(linear * vertex.tangent, vertex.tangent)
           || !normalize_direction(
             linear * vertex.bitangent, vertex.bitangent)) {
-          diagnostics.push_back(
-            MakeErrorDiagnostic("mesh.invalid_transform_bake",
-              "Transform baking produced an invalid vertex attribute",
-              item.source_id, item.mesh_name));
+          diagnostics.push_back(MakeErrorDiagnostic(
+            std::string(import_codes::kMeshInvalidTransformBake),
+            "Transform baking produced an invalid vertex attribute",
+            item.source_id, item.mesh_name));
           return std::nullopt;
         }
       }
@@ -1498,34 +1520,38 @@ namespace {
     lod.bounds = authored_bounds.value_or(computed_bounds);
 
     if (lod.vertices.empty() || lod.indices.empty() || lod.submeshes.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
-        "Mesh does not produce valid vertex/index buffers", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingBuffers),
+          "Mesh does not produce valid vertex/index buffers", item.source_id,
+          item.mesh_name));
       return std::nullopt;
     }
 
     if (lod.views.empty()) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_buffers",
-        "Mesh does not produce valid mesh views", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingBuffers),
+          "Mesh does not produce valid mesh views", item.source_id,
+          item.mesh_name));
       return std::nullopt;
     }
 
     const auto max_u32 = std::numeric_limits<uint32_t>::max();
     if (lod.vertices.size() > max_u32 || lod.indices.size() > max_u32
       || lod.submeshes.size() > max_u32 || lod.views.size() > max_u32) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.count_overflow",
-        "Mesh vertex/index/submesh counts exceed uint32 limits", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshCountOverflow),
+          "Mesh vertex/index/submesh counts exceed uint32 limits",
+          item.source_id, item.mesh_name));
       return std::nullopt;
     }
 
     const auto vb_bytes = lod.vertices.size() * sizeof(data::Vertex);
     const auto ib_bytes = lod.indices.size() * sizeof(uint32_t);
     if (vb_bytes > max_data_blob_bytes || ib_bytes > max_data_blob_bytes) {
-      diagnostics.push_back(MakeErrorDiagnostic("mesh.buffer_too_large",
-        "Mesh buffer exceeds maximum data blob size", item.source_id,
-        item.mesh_name));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshBufferTooLarge),
+          "Mesh buffer exceeds maximum data blob size", item.source_id,
+          item.mesh_name));
       return std::nullopt;
     }
 
@@ -1539,9 +1565,10 @@ namespace {
         || weight_bytes > max_data_blob_bytes
         || inverse_bind_bytes > max_data_blob_bytes
         || remap_bytes > max_data_blob_bytes) {
-        diagnostics.push_back(MakeErrorDiagnostic("mesh.buffer_too_large",
-          "Skinned mesh buffer exceeds maximum data blob size", item.source_id,
-          item.mesh_name));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kMeshBufferTooLarge),
+            "Skinned mesh buffer exceeds maximum data blob size",
+            item.source_id, item.mesh_name));
         return std::nullopt;
       }
 
@@ -1842,8 +1869,9 @@ namespace {
         stopped.triangle_count, stopped.allowed_triangle_count,
         options.reduction_percent);
       LOG_F(INFO, "{}", message);
-      diagnostics.push_back(MakeInfoDiagnostic("import.lod_generation.stopped",
-        std::move(message), item.source_id, item.mesh_name));
+      diagnostics.push_back(
+        MakeInfoDiagnostic(std::string(import_codes::kLodGenerationStopped),
+          std::move(message), item.source_id, item.mesh_name));
     }
     return errors;
   }
@@ -1866,16 +1894,18 @@ namespace {
     }
 
     if (item.lods.empty()) {
-      out.diagnostics.push_back(MakeErrorDiagnostic("mesh.missing_lods",
-        "Mesh LOD list is empty", item.source_id, item.mesh_name));
+      out.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshMissingLods),
+          "Mesh LOD list is empty", item.source_id, item.mesh_name));
       return out;
     }
 
     if (item.lods.size() > data::pak::geometry::kMaxLodCount) {
-      out.diagnostics.push_back(MakeErrorDiagnostic("mesh.invalid_lod_count",
-        "Mesh LOD count exceeds maximum of "
-          + std::to_string(data::pak::geometry::kMaxLodCount),
-        item.source_id, item.mesh_name));
+      out.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMeshInvalidLodCount),
+          "Mesh LOD count exceeds maximum of "
+            + std::to_string(data::pak::geometry::kMaxLodCount),
+          item.source_id, item.mesh_name));
       return out;
     }
 
@@ -1886,9 +1916,9 @@ namespace {
     try {
       allocation = AllocateSurfaces(item);
     } catch (const std::exception& error) {
-      out.diagnostics.push_back(
-        MakeErrorDiagnostic("mesh.surface_provenance_invalid", error.what(),
-          item.source_id, item.mesh_name));
+      out.diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kMeshSurfaceProvenanceInvalid), error.what(),
+        item.source_id, item.mesh_name));
       return out;
     }
 
@@ -1943,7 +1973,7 @@ namespace {
           item.mesh_name, item.lods.size());
         LOG_F(INFO, "{}", message);
         out.diagnostics.push_back(
-          MakeInfoDiagnostic("import.lod_generation.skipped",
+          MakeInfoDiagnostic(std::string(import_codes::kLodGenerationSkipped),
             std::move(message), item.source_id, item.mesh_name));
       }
     }

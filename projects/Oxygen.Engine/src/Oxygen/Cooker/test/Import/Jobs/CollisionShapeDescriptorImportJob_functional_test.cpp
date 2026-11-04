@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -246,7 +247,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.shape.schema_validation_failed"));
+      report->diagnostics, import_codes::kPhysicsShapeSchemaValidationFailed));
   }
 
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
@@ -390,7 +391,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.shape.schema_validation_failed"));
+      report->diagnostics, import_codes::kPhysicsShapeSchemaValidationFailed));
   }
 
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
@@ -415,7 +416,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.shape.schema_validation_failed"));
+      report->diagnostics, import_codes::kPhysicsShapeSchemaValidationFailed));
   }
 
   //! A material_ref is looked up as every reference is: one of no mounted
@@ -447,12 +448,12 @@ namespace {
 
     ASSERT_HAS_VALUE(unmounted);
     EXPECT_FALSE(unmounted->success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(unmounted->diagnostics, "import.reference_unmounted"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      unmounted->diagnostics, import_codes::kReferenceUnmounted));
     ASSERT_HAS_VALUE(missing);
     EXPECT_FALSE(missing->success);
     const auto unresolved = std::ranges::find(missing->diagnostics,
-      std::string { "physics.shape.material_ref_unresolved" },
+      std::string(import_codes::kPhysicsShapeMaterialRefUnresolved),
       &ImportDiagnostic::code);
     ASSERT_NE(unresolved, missing->diagnostics.end());
     EXPECT_THAT(unresolved->message, ::testing::HasSubstr("looked for"));

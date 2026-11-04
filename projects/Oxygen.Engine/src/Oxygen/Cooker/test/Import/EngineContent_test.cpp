@@ -171,7 +171,8 @@ NOLINT_TEST_F(EngineContentTest, ManifestsLoadOnlyAsTheEngineContentBuild)
   EXPECT_EQ(mounts_file, (json { { "version", 1 }, { "root", true } }));
   EXPECT_TRUE(engine.has_value()) << DiagnosticSummary(engine_errors);
   EXPECT_FALSE(project.has_value());
-  EXPECT_THAT(project_errors, HasDiagnostic("mount.name_invalid"));
+  EXPECT_THAT(project_errors,
+    HasDiagnostic(oxygen::content::import::mount_codes::kNameInvalid.id));
 }
 
 } // namespace

@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
@@ -43,7 +44,7 @@ auto InspectSceneSource(const std::filesystem::path& source_path,
     default:
       result.diagnostics.push_back({
         .severity = ImportSeverity::kError,
-        .code = "import.source.unsupported_format",
+        .code = std::string(import_codes::kSourceUnsupportedFormat),
         .message = "Select a glTF, GLB or FBX source.",
         .source_path = source_id,
         .object_path = {},
@@ -53,7 +54,7 @@ auto InspectSceneSource(const std::filesystem::path& source_path,
   } catch (const std::exception& error) {
     result.diagnostics.push_back({
       .severity = ImportSeverity::kError,
-      .code = "import.source.inspection_failed",
+      .code = std::string(import_codes::kSourceInspectionFailed),
       .message = error.what(),
       .source_path = source_path.string(),
       .object_path = {},

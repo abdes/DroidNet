@@ -21,6 +21,7 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
@@ -406,8 +407,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
   EXPECT_EQ(report->geometry_written, 1U)
     << DiagnosticSummary(report->diagnostics);
-  EXPECT_FALSE(
-    HasDiagnosticCode(report->diagnostics, "geometry.material.missing"));
+  EXPECT_FALSE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryMaterialMissing));
 
   const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
   ASSERT_HAS_VALUE(geometry_relpath)
@@ -488,7 +489,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, ResolvesLocalBufferSidecars)
     << DiagnosticSummary(geometry_report->diagnostics);
   EXPECT_EQ(geometry_report->geometry_written, 1U);
   EXPECT_FALSE(HasDiagnosticCode(
-    geometry_report->diagnostics, "geometry.buffer.sidecar_missing"));
+    geometry_report->diagnostics, import_codes::kGeometryBufferSidecarMissing));
 
   const auto geometry_relpath
     = FindOutputByExtension(*geometry_report, ".ogeo");
@@ -546,8 +547,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_HAS_VALUE(rejected);
   EXPECT_FALSE(rejected->success);
   EXPECT_EQ(rejected->geometry_written, 0U);
-  EXPECT_TRUE(
-    HasDiagnosticCode(rejected->diagnostics, "geometry.buffer.foreign_root"));
+  EXPECT_TRUE(HasDiagnosticCode(
+    rejected->diagnostics, import_codes::kGeometryBufferForeignRoot));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -616,7 +617,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   EXPECT_FALSE(geometry_report->success);
   EXPECT_EQ(geometry_report->geometry_written, 0U);
   EXPECT_TRUE(HasDiagnosticCode(
-    geometry_report->diagnostics, "geometry.buffer.foreign_root"));
+    geometry_report->diagnostics, import_codes::kGeometryBufferForeignRoot));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -689,8 +690,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     }));
   ASSERT_HAS_VALUE(geometry_report);
   EXPECT_FALSE(geometry_report->success);
-  EXPECT_TRUE(HasDiagnosticCode(
-    geometry_report->diagnostics, "geometry.buffer.sidecar_ambiguous"));
+  EXPECT_TRUE(HasDiagnosticCode(geometry_report->diagnostics,
+    import_codes::kGeometryBufferSidecarAmbiguous));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -726,7 +727,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(
-    HasDiagnosticCode(report->diagnostics, "import.reference_unmounted"));
+    HasDiagnosticCode(report->diagnostics, import_codes::kReferenceUnmounted));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -775,8 +776,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
-  EXPECT_TRUE(
-    HasDiagnosticCode(report->diagnostics, "geometry.buffer.view_missing"));
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferViewMissing));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -861,8 +862,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     }));
   ASSERT_HAS_VALUE(report_b);
   EXPECT_FALSE(report_b->success);
-  EXPECT_TRUE(HasDiagnosticCode(
-    report_b->diagnostics, "buffer.container.dedup_virtual_path_conflict"));
+  EXPECT_TRUE(HasDiagnosticCode(report_b->diagnostics,
+    import_codes::kBufferContainerDedupVirtualPathConflict));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -921,8 +922,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
-  EXPECT_TRUE(HasDiagnosticCode(
-    report->diagnostics, "buffer.container.dedup_virtual_path_conflict"));
+  EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+    import_codes::kBufferContainerDedupVirtualPathConflict));
 }
 
 } // namespace oxygen::content::import::test

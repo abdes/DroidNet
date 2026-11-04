@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
@@ -51,7 +52,7 @@ inline auto CheckAssetVirtualPath(std::string source_path,
   }
   return ImportDiagnostic {
     .severity = ImportSeverity::kError,
-    .code = oxygen::content::to_string(*error),
+    .code = std::string(oxygen::content::to_string(*error)),
     .message = "The asset name gives a virtual path the engine refuses: "
       + std::string(virtual_path),
     .source_path = std::move(source_path),
@@ -107,13 +108,6 @@ inline auto TryVirtualPathToRelPath(const ImportRequest& request,
   return TryVirtualPathToRelPath(virtual_path, relpath);
 }
 
-//! The diagnostic code of a reference the grammar refuses.
-inline constexpr auto kReferenceInvalidCode = "import.reference_invalid";
-
-//! The diagnostic code of a reference that resolves outside every mounted
-//! cooked root.
-inline constexpr auto kReferenceUnmountedCode = "import.reference_unmounted";
-
 //! A reference as authored and the virtual path it names.
 struct ResolvedReference final {
   //! The text as written in the authored file.
@@ -156,10 +150,10 @@ inline auto RefuseReference(const std::string_view anchor,
 {
   return ImportDiagnostic {
     .severity = ImportSeverity::kError,
-    .code = kReferenceInvalidCode,
+    .code = std::string(import_codes::kReferenceInvalid),
     .message = "'" + std::string(text) + "' read in " + std::string(anchor)
       + " is not a reference the engine accepts ("
-      + oxygen::content::to_string(error) + ")",
+      + std::string(oxygen::content::to_string(error)) + ")",
     .source_path = std::move(source_path),
     .json_pointer = std::move(json_pointer),
   };
@@ -182,7 +176,7 @@ inline auto RefuseUnmountedReference(const ImportRequest& request,
 {
   return ImportDiagnostic {
     .severity = ImportSeverity::kError,
-    .code = kReferenceUnmountedCode,
+    .code = std::string(import_codes::kReferenceUnmounted),
     .message = "'" + reference.written + "' resolves to " + reference.resolved
       + ", which is in no mounted cooked root",
     .source_path = request.source_path.string(),
@@ -233,15 +227,17 @@ inline auto PlaceAsset(
         "The job names no virtual_path for the asset it cooks"));
   }
   if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path)) {
-    return std::unexpected(refuse(oxygen::content::to_string(*error),
-      "The engine refuses the asset's virtual path: " + virtual_path));
+    return std::unexpected(
+      refuse(std::string(oxygen::content::to_string(*error)),
+        "The engine refuses the asset's virtual path: " + virtual_path));
   }
   auto relpath = std::string {};
   if (!TryVirtualPathToRelPath(virtual_path, relpath)
     || !virtual_path.ends_with(extension)) {
-    return std::unexpected(refuse("import.asset_virtual_path_invalid",
-      "The asset's virtual path must name a '" + std::string(extension)
-        + "' asset in a mount: " + virtual_path));
+    return std::unexpected(
+      refuse(std::string(import_codes::kAssetVirtualPathInvalid),
+        "The asset's virtual path must name a '" + std::string(extension)
+          + "' asset in a mount: " + virtual_path));
   }
   return AssetPlacement {
     .virtual_path = virtual_path,

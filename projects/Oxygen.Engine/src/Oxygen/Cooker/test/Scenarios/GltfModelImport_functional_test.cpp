@@ -44,12 +44,12 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -945,7 +945,7 @@ NOLINT_TEST_F(
     EXPECT_TRUE(std::ranges::any_of(
       imported.report.diagnostics, [](const auto& diagnostic) -> auto {
         return diagnostic.code
-          == oxygen::content::import::detail::kImportedPropertyInvalidCode;
+          == oxygen::content::import::import_codes::kSceneImportPropertyInvalid;
       }));
   }
 }
@@ -967,7 +967,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, InvalidSpotConePairsDropTheLight)
     EXPECT_TRUE(imported.report.success);
     EXPECT_TRUE(std::ranges::any_of(
       imported.report.diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "scene.light.photometry_invalid"
+        return diagnostic.code
+          == oxygen::content::import::import_codes::kSceneLightPhotometryInvalid
           && diagnostic.severity
           == oxygen::content::import::ImportSeverity::kWarning;
       }));
@@ -1021,7 +1022,7 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ImportedValuesCommitThroughTheSchema)
   const auto warnings = std::ranges::count_if(
     imported.report.diagnostics, [](const auto& diagnostic) -> auto {
       return diagnostic.code
-        == oxygen::content::import::detail::kImportedPropertyInvalidCode;
+        == oxygen::content::import::import_codes::kSceneImportPropertyInvalid;
     });
   EXPECT_EQ(warnings, 1);
 }
@@ -1472,7 +1473,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, ModelIdentityOfAnotherTypeIsRefused)
   EXPECT_FALSE(imported.report.success);
   EXPECT_TRUE(std::ranges::any_of(
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "import.asset_virtual_path_invalid";
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kAssetVirtualPathInvalid;
     }));
 }
 
@@ -1506,11 +1508,13 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, MissingTextureIsFoundInTexturesFolder)
   EXPECT_TRUE(imported.report.success);
   EXPECT_TRUE(std::ranges::any_of(
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "import.texture.found_by_name";
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kTextureFoundByName;
     }));
   EXPECT_TRUE(std::ranges::none_of(
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "import.texture.load_failed";
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kTextureLoadFailed;
     }));
 }
 
@@ -1602,7 +1606,8 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, UnbuildableMeshIsDroppedWithoutShift)
   EXPECT_EQ(imported.report.geometry_written, 1U);
   EXPECT_TRUE(std::ranges::any_of(
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "gltf.primitive.type"
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kGltfPrimitiveType
         && diagnostic.severity
         == oxygen::content::import::ImportSeverity::kWarning;
     }));
@@ -1707,9 +1712,11 @@ NOLINT_TEST_F(GltfSceneSelectionTest, ChosenSceneImportsAndTheOtherIsReported)
       });
     ASSERT_TRUE(imported.report.success);
     EXPECT_EQ(NodeNames(imported), item.nodes);
-    EXPECT_TRUE(Reports(imported, "import.source_feature_dropped",
+    EXPECT_TRUE(Reports(imported,
+      oxygen::content::import::import_codes::kSourceFeatureDropped,
       ImportSeverity::kWarning, item.dropped));
-    EXPECT_FALSE(Reports(imported, "import.gltf_scene_missing",
+    EXPECT_FALSE(Reports(imported,
+      oxygen::content::import::import_codes::kGltfSceneMissing,
       ImportSeverity::kWarning, "/scenes"));
   }
 }
@@ -1725,8 +1732,9 @@ NOLINT_TEST_F(
       .scene = "Third",
     });
   ASSERT_TRUE(imported.report.success);
-  EXPECT_TRUE(Reports(imported, "import.gltf_scene_missing",
-    ImportSeverity::kWarning, "/scenes"));
+  EXPECT_TRUE(
+    Reports(imported, oxygen::content::import::import_codes::kGltfSceneMissing,
+      ImportSeverity::kWarning, "/scenes"));
   EXPECT_EQ(NodeNames(imported), std::vector<std::string> { "A" });
 }
 
@@ -1745,7 +1753,8 @@ NOLINT_TEST_F(GltfSceneSelectionTest, NodeReachedTwiceIsRefused)
     Case {
       .document = R"({"asset": {"version": "2.0"},
         "nodes": [{"name": "A"}], "scenes": [{"nodes": [0, 0]}]})",
-      .code = "import.gltf_node_reached_twice",
+      .code = std::string(
+        oxygen::content::import::import_codes::kGltfNodeReachedTwice),
       .node = "/nodes/0",
     },
     Case {
@@ -1753,7 +1762,8 @@ NOLINT_TEST_F(GltfSceneSelectionTest, NodeReachedTwiceIsRefused)
         "nodes": [{"name": "P", "children": [2]},
           {"name": "Q", "children": [2]}, {"name": "C"}],
         "scenes": [{"nodes": [0, 1]}]})",
-      .code = "gltf.parse_failed",
+      .code
+      = std::string(oxygen::content::import::import_codes::kGltfParseFailed),
       .node = "",
     },
   };
@@ -1788,7 +1798,8 @@ NOLINT_TEST_F(GltfSceneSelectionTest, InvalidDocumentIsRefused)
   EXPECT_FALSE(imported.report.success);
   EXPECT_TRUE(std::ranges::any_of(
     imported.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "gltf.validation_failed"
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kGltfValidationFailed
         && diagnostic.severity == ImportSeverity::kError;
     }));
 }

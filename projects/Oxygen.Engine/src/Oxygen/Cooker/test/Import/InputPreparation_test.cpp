@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/InputSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -110,8 +111,8 @@ namespace {
     const auto prepared = Prepare("{ not json");
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(prepared.diagnostics, "input.import.parse_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      prepared.diagnostics, import_codes::kInputImportParseFailed));
     EXPECT_EQ(prepared.diagnostics.front().source_path, "Player.input.json");
   }
 
@@ -120,8 +121,8 @@ namespace {
     const auto prepared = Prepare("{ /* comment */ \"actions\": [] }");
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(prepared.diagnostics, "input.import.parse_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      prepared.diagnostics, import_codes::kInputImportParseFailed));
   }
 
   NOLINT_TEST(InputPreparationTest, RefusesARootThatIsNotAnObject)
@@ -130,8 +131,9 @@ namespace {
 
     EXPECT_FALSE(prepared.document.has_value());
     EXPECT_TRUE(HasDiagnosticCode(
-      prepared.diagnostics, "input.schema.validation_failed"));
-    EXPECT_EQ(PointerOf(prepared, "input.schema.validation_failed"), "");
+      prepared.diagnostics, import_codes::kInputSchemaValidationFailed));
+    EXPECT_EQ(
+      PointerOf(prepared, import_codes::kInputSchemaValidationFailed), "");
   }
 
   NOLINT_TEST(InputPreparationTest, LocatesEverySchemaIssue)
@@ -145,7 +147,7 @@ namespace {
     EXPECT_FALSE(prepared.document.has_value());
     auto pointers = std::vector<std::string> {};
     for (const auto& d : prepared.diagnostics) {
-      EXPECT_EQ(d.code, "input.schema.validation_failed");
+      EXPECT_EQ(d.code, import_codes::kInputSchemaValidationFailed);
       pointers.push_back(d.json_pointer);
     }
     EXPECT_THAT(pointers, ::testing::Contains("/actions/0/type"));
@@ -178,8 +180,8 @@ namespace {
       = Prepare(Source().Action("Jump", "bool").Action("Jump", "axis1d"));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(
-      PointerOf(prepared, "input.asset.action_conflict"), "/actions/1/name");
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputAssetActionConflict),
+      "/actions/1/name");
   }
 
   NOLINT_TEST(InputPreparationTest, RefusesADuplicateContext)
@@ -188,8 +190,8 @@ namespace {
       = Prepare(Source().Context("Gameplay").Context("Gameplay"));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(
-      PointerOf(prepared, "input.context.name_duplicate"), "/contexts/1/name");
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputContextNameDuplicate),
+      "/contexts/1/name");
   }
 
   NOLINT_TEST(InputPreparationTest, RefusesATimeOutOfRange)
@@ -201,7 +203,7 @@ namespace {
         } ])")));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(PointerOf(prepared, "input.context.trigger_invalid"),
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputContextTriggerInvalid),
       "/contexts/0/mappings/0/triggers/0/combo_actions/0/time_to_complete");
   }
 
@@ -215,8 +217,8 @@ namespace {
 
     ASSERT_HAS_VALUE(prepared.document);
     ASSERT_EQ(prepared.diagnostics.size(), 1U);
-    EXPECT_EQ(
-      prepared.diagnostics[0].code, "input.context.trigger_aux_ignored");
+    EXPECT_EQ(prepared.diagnostics[0].code,
+      import_codes::kInputContextTriggerAuxIgnored);
     EXPECT_EQ(prepared.diagnostics[0].severity, ImportSeverity::kWarning);
     EXPECT_EQ(prepared.diagnostics[0].json_pointer,
       "/contexts/0/mappings/0/triggers/0");
@@ -231,7 +233,7 @@ namespace {
       = Prepare(JumpSource().Set("/contexts/0/mappings/0/action", "Missing"));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(PointerOf(prepared, "input.context.action_unresolved"),
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputContextActionUnresolved),
       "/contexts/0/mappings/0/action");
   }
 
@@ -243,7 +245,7 @@ namespace {
         json::parse(R"([ { "type": "chord", "chord_action": "Missing" } ])")));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(PointerOf(prepared, "input.context.action_unresolved"),
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputContextActionUnresolved),
       "/contexts/0/mappings/0/triggers/0/chord_action");
   }
 
@@ -257,7 +259,7 @@ namespace {
         } ])")));
 
     EXPECT_FALSE(prepared.document.has_value());
-    EXPECT_EQ(PointerOf(prepared, "input.context.action_unresolved"),
+    EXPECT_EQ(PointerOf(prepared, import_codes::kInputContextActionUnresolved),
       "/contexts/0/mappings/0/triggers/0/combo_actions/0/action");
   }
 

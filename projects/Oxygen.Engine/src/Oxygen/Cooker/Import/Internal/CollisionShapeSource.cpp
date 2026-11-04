@@ -23,6 +23,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/CollisionShapeSource.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -60,10 +61,12 @@ namespace {
     -> bool
   {
     const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "physics.shape.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kPhysicsShapeSchemaValidationFailed,
       .validation_failed_prefix
       = "Collision shape descriptor validation failed: ",
-      .validator_failure_code = "physics.shape.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kPhysicsShapeSchemaValidatorFailure,
       .validator_failure_prefix
       = "Collision shape descriptor schema validator failed: ",
     };
@@ -170,7 +173,7 @@ namespace {
       CheckPlacementFields(child_doc);
     } catch (const std::exception& ex) {
       AddError(diagnostics, source_path,
-        "physics.shape.schema_contract_mismatch",
+        std::string(import_codes::kPhysicsShapeSchemaContractMismatch),
         std::string("Compound child extraction failed after schema "
                     "validation: ")
           + ex.what(),
@@ -184,14 +187,14 @@ namespace {
     try {
       if (!CheckAnalyticParameters(child_doc, type)) {
         AddError(diagnostics, source_path,
-          "physics.shape.world_boundary_limits_invalid",
+          std::string(import_codes::kPhysicsShapeWorldBoundaryLimitsInvalid),
           "Compound child limits_min must be <= limits_max for each axis",
           (child_path / "limits_min").to_string());
         return false;
       }
     } catch (const std::exception& ex) {
       AddError(diagnostics, source_path,
-        "physics.shape.schema_contract_mismatch",
+        std::string(import_codes::kPhysicsShapeSchemaContractMismatch),
         std::string("Compound child parameter extraction failed after schema "
                     "validation: ")
           + ex.what(),
@@ -241,7 +244,7 @@ namespace {
       static_cast<void>(Require<std::string>(descriptor_doc, "material_ref"));
     } catch (const std::exception& ex) {
       AddError(diagnostics, source_path,
-        "physics.shape.schema_contract_mismatch",
+        std::string(import_codes::kPhysicsShapeSchemaContractMismatch),
         std::string("Schema validated descriptor failed extraction: ")
           + ex.what());
       return false;
@@ -249,7 +252,7 @@ namespace {
 
     if (!limits_valid) {
       AddError(diagnostics, source_path,
-        "physics.shape.world_boundary_limits_invalid",
+        std::string(import_codes::kPhysicsShapeWorldBoundaryLimitsInvalid),
         "limits_min must be <= limits_max for each axis", "/limits_min");
       return false;
     }
@@ -269,12 +272,14 @@ auto PrepareCollisionShapeDescriptor(const std::string_view bytes,
   try {
     document = json::parse(bytes);
   } catch (const json::exception& failure) {
-    AddError(diagnostics, source_path, "physics.shape.request_invalid_json",
+    AddError(diagnostics, source_path,
+      std::string(import_codes::kPhysicsShapeRequestInvalidJson),
       std::string("Descriptor payload is invalid JSON: ") + failure.what());
     return std::nullopt;
   }
   if (!document.is_object()) {
-    AddError(diagnostics, source_path, "physics.shape.request_invalid_json",
+    AddError(diagnostics, source_path,
+      std::string(import_codes::kPhysicsShapeRequestInvalidJson),
       "Descriptor payload must be a JSON object");
     return std::nullopt;
   }

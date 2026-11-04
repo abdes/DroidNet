@@ -13,6 +13,7 @@
 #include <utility>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
@@ -78,10 +79,10 @@ namespace {
     const auto physics_report = Import(MakePhysicsSidecarRequest(cooked_root));
     ASSERT_HAS_VALUE(physics_report);
     EXPECT_TRUE(physics_report->success);
-    EXPECT_FALSE(HasDiagnosticCode(
-      physics_report->diagnostics, "physics.sidecar.target_scene_missing"));
-    EXPECT_FALSE(HasDiagnosticCode(
-      physics_report->diagnostics, "physics.sidecar.payload_parse_failed"));
+    EXPECT_FALSE(HasDiagnosticCode(physics_report->diagnostics,
+      import_codes::kPhysicsSidecarTargetSceneMissing));
+    EXPECT_FALSE(HasDiagnosticCode(physics_report->diagnostics,
+      import_codes::kPhysicsSidecarPayloadParseFailed));
     EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
       cooked_root, "Scenes/DemoScene.opscene"));
 
@@ -109,7 +110,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
-      "physics.sidecar.target_scene_virtual_path_invalid"));
+      import_codes::kPhysicsSidecarTargetSceneVirtualPathInvalid));
   }
 
   NOLINT_TEST_F(
@@ -128,7 +129,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.sidecar.payload_parse_failed"));
+      report->diagnostics, import_codes::kPhysicsSidecarPayloadParseFailed));
   }
 
   //! A node holds at most one collider, as the sidecar reader requires.
@@ -151,7 +152,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.sidecar.payload_invalid"));
+      report->diagnostics, import_codes::kPhysicsSidecarPayloadInvalid));
   }
 
 } // namespace

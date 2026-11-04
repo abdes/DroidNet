@@ -8,10 +8,12 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ScriptSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -48,7 +50,8 @@ auto AnalyzeScriptDeclarations(const std::span<const std::byte> source,
   for (const auto& diagnostic : analysis.diagnostics) {
     diagnostics.push_back({
       .severity = ToImportSeverity(diagnostic.severity),
-      .code = "script." + scripting::to_string(diagnostic.code),
+      .code = std::string(import_codes::kScriptCodePrefix)
+        + scripting::to_string(diagnostic.code),
       .message = scripting::FormatSummary(diagnostic),
       .source_path = source_path.string(),
     });
@@ -65,7 +68,7 @@ auto AnalyzeScriptDeclarations(const std::span<const std::byte> source,
           declaration.name, declaration.default_value, strings)) {
       diagnostics.push_back({
         .severity = ImportSeverity::kError,
-        .code = "script.asset.declaration_unencodable",
+        .code = std::string(import_codes::kScriptAssetDeclarationUnencodable),
         .message = "Parameter '" + declaration.name
           + "' has an empty name or holds a NUL byte",
         .source_path = source_path.string(),

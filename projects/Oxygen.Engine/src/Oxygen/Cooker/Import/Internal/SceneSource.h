@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -33,11 +34,6 @@ namespace oxygen::content::import::internal {
  layout change recooks content without changing authored descriptors.
 */
 inline constexpr uint32_t kSceneDescriptorVersion = 15;
-
-//! The code of a descriptor property that is not a finite value inside its
-//! generated range, or not a declared member of its enum.
-inline constexpr std::string_view kScenePropertyOutOfRangeCode
-  = "scene.descriptor.property_out_of_range";
 
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {
@@ -147,9 +143,10 @@ struct SceneSource final {
    and node properties only; the scene schema owns their defaults, ranges and
    members. A property the descriptor omits takes the scene schema's default.
    One whose value is not finite, lies outside the property's generated range
-   or is not a declared enum member fails with `kScenePropertyOutOfRangeCode`
-   at the property's path; every such property of an object is reported. A
-   descriptor is scene data: unlike a model import, it is never clamped.
+   or is not a declared enum member fails with
+   `import_codes::kSceneDescriptorPropertyOutOfRange` at the property's path;
+   every such property of an object is reported. A descriptor is scene data:
+   unlike a model import, it is never clamped.
   */
   OXGN_COOK_NDAPI static auto FromDescriptor(std::string_view bytes,
     const std::filesystem::path& source_path,

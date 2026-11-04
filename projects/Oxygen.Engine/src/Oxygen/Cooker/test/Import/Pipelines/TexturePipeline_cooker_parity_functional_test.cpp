@@ -17,6 +17,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
@@ -270,7 +271,8 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 } // namespace

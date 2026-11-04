@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
@@ -115,8 +116,9 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("physics.sidecar.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kPhysicsSidecarSchemaValidationFailed));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -157,7 +159,9 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("physics.sidecar.payload_parse_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kPhysicsSidecarPayloadParseFailed));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,

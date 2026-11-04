@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
@@ -112,9 +113,11 @@ namespace {
     const nlohmann::json& descriptor_doc) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "material.descriptor.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kMaterialDescriptorSchemaValidationFailed,
       .validation_failed_prefix = "Material descriptor validation failed: ",
-      .validator_failure_code = "material.descriptor.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kMaterialDescriptorSchemaValidatorFailure,
       .validator_failure_prefix
       = "Material descriptor schema validator failed: ",
     };
@@ -364,7 +367,7 @@ auto MaterialSource::RepairModelInputs(const std::string_view source_id,
   if (repaired) {
     diagnostics.push_back(ImportDiagnostic {
       .severity = ImportSeverity::kWarning,
-      .code = "material.emissive_factor_range",
+      .code = std::string(import_codes::kMaterialEmissiveFactorRange),
       .message = "Emission channels outside [0,65504] were clamped",
       .source_path = std::string(source_id),
       .object_path = name,
@@ -384,44 +387,46 @@ auto MaterialSource::Validate(const std::string_view source_id,
         return !std::isfinite(value) || value < 0.0F
           || value > data::pak::render::kMaxMaterialEmissiveFactor;
       })) {
-    error("material.emissive_factor_range",
+    error(std::string(import_codes::kMaterialEmissiveFactorRange),
       "Emission must contain finite channels in [0,65504]");
   }
   if (orm_policy == OrmPolicy::kForcePacked && !CanPackOrm()) {
-    error("material.orm_policy",
+    error(std::string(import_codes::kMaterialOrmPolicy),
       "ForcePacked requires metallic/roughness to share source and UV");
   }
   if (shader_requests.size() > kMaxShaderStages) {
-    error("material.shader_stage_count", "Shader stage count exceeds 32");
+    error(std::string(import_codes::kMaterialShaderStageCount),
+      "Shader stage count exceeds 32");
     return false;
   }
   std::array<bool, kMaxShaderStages> seen {};
   for (const auto& shader : shader_requests) {
     if (!IsShaderStage(shader.shader_type)) {
-      error("material.shader_stage_invalid", "Shader type is invalid");
+      error(std::string(import_codes::kMaterialShaderStageInvalid),
+        "Shader type is invalid");
       continue;
     }
     const auto index = static_cast<std::size_t>(shader.shader_type - 1U);
     if (seen.at(index)) {
-      error("material.shader_stage_duplicate",
+      error(std::string(import_codes::kMaterialShaderStageDuplicate),
         "Shader type is duplicated in request list");
       continue;
     }
     // The runtime reads only canonical paths and defines, and identifier
     // entry points.
     if (CanonicalShaderSourcePath(shader.source_path) != shader.source_path) {
-      error("material.shader_ref_invalid",
+      error(std::string(import_codes::kMaterialShaderRefInvalid),
         "Shader source_path must be a canonical path within the shaders "
         "directory");
       continue;
     }
     if (!IsShaderEntryPoint(shader.entry_point)) {
-      error("material.shader_ref_invalid",
+      error(std::string(import_codes::kMaterialShaderRefInvalid),
         "Shader entry_point must be an identifier");
       continue;
     }
     if (CanonicalShaderDefines(shader.defines) != shader.defines) {
-      error("material.shader_ref_invalid",
+      error(std::string(import_codes::kMaterialShaderRefInvalid),
         "Shader defines must be sorted, unique NAME or NAME=VALUE entries "
         "separated by commas");
       continue;
@@ -441,12 +446,13 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
     document = nlohmann::json::parse(bytes);
   } catch (const nlohmann::json::exception& failure) {
     AddError(diagnostics, source_path.string(),
-      "material.descriptor.request_invalid_json", failure.what());
+      std::string(import_codes::kMaterialDescriptorRequestInvalidJson),
+      failure.what());
     return std::nullopt;
   }
   if (!document.is_object()) {
     AddError(diagnostics, source_path.string(),
-      "material.descriptor.request_invalid_json",
+      std::string(import_codes::kMaterialDescriptorRequestInvalidJson),
       "Material descriptor must be a JSON object");
     return std::nullopt;
   }
@@ -466,7 +472,8 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       = ParseMaterialDomain(document.at("domain").get<std::string>());
     if (!value) {
       AddError(diagnostics, source_path.string(),
-        "material.descriptor.domain_invalid", "Material domain is invalid");
+        std::string(import_codes::kMaterialDescriptorDomainInvalid),
+        "Material domain is invalid");
       return std::nullopt;
     }
     material.domain = *value;
@@ -476,7 +483,7 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       = ParseAlphaMode(document.at("alpha_mode").get<std::string>());
     if (!value) {
       AddError(diagnostics, source_path.string(),
-        "material.descriptor.alpha_mode_invalid",
+        std::string(import_codes::kMaterialDescriptorAlphaModeInvalid),
         "Material alpha mode is invalid");
       return std::nullopt;
     }
@@ -487,7 +494,7 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       = ParseOrmPolicy(document.at("orm_policy").get<std::string>());
     if (!value) {
       AddError(diagnostics, source_path.string(),
-        "material.descriptor.orm_policy_invalid",
+        std::string(import_codes::kMaterialDescriptorOrmPolicyInvalid),
         "Material ORM policy is invalid");
       return std::nullopt;
     }
@@ -497,7 +504,7 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
     && !ApplyMaterialInputsFromJson(
       document.at("parameters"), material.inputs)) {
     AddError(diagnostics, source_path.string(),
-      "material.descriptor.parameters_invalid",
+      std::string(import_codes::kMaterialDescriptorParametersInvalid),
       "Material parameters payload has invalid shape");
     return std::nullopt;
   }
@@ -521,7 +528,7 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
             && !ParseFloatArray(
               transform.at("offset"), binding.uv_transform.offset))) {
           AddError(diagnostics, source_path.string(),
-            "material.descriptor.texture_uv_invalid",
+            std::string(import_codes::kMaterialDescriptorTextureUvInvalid),
             "Texture UV transform must contain two-component scale and offset",
             {},
             (nlohmann::json::json_pointer {} / "textures"
@@ -539,7 +546,7 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       const auto stage = ParseShaderType(shader.at("stage").get<std::string>());
       if (!stage) {
         AddError(diagnostics, source_path.string(),
-          "material.descriptor.shader_stage_invalid",
+          std::string(import_codes::kMaterialDescriptorShaderStageInvalid),
           "Shader stage is not recognized");
         return std::nullopt;
       }

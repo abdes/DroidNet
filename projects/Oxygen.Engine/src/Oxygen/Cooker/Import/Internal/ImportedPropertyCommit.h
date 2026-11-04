@@ -12,14 +12,11 @@
 #include <type_traits>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Data/Schema/PropertyRange.h>
 
 namespace oxygen::content::import::detail {
-
-//! The code of an imported property the scene schema rejects.
-inline constexpr std::string_view kImportedPropertyInvalidCode
-  = "scene.import.property_invalid";
 
 //! Commits the camera and light values a model import reads through the scene
 //! schema.
@@ -28,7 +25,7 @@ inline constexpr std::string_view kImportedPropertyInvalidCode
  a finite value outside a range the schema declares `commit: clamp` takes the
  nearest bound. Any other value is an optional input the importer skips: the
  property keeps its schema default and is recorded, and `Report` warns about
- each recorded property with `kImportedPropertyInvalidCode`.
+ each recorded property with `import_codes::kSceneImportPropertyInvalid`.
 */
 class ImportedPropertyCommit final {
 public:
@@ -37,7 +34,7 @@ public:
     requires std::is_arithmetic_v<T>
   [[nodiscard]] auto operator()(const std::string_view property,
     const data::schema::PropertyRange<T>& range, const T value,
-    const T schema_default) -> T
+    const std::type_identity_t<T> schema_default) -> T
   {
     if (const auto committed = range.Commit(value)) {
       return *committed;
@@ -62,7 +59,7 @@ public:
     for (const auto property : rejected_) {
       diagnostics.push_back(ImportDiagnostic {
         .severity = ImportSeverity::kWarning,
-        .code = std::string(kImportedPropertyInvalidCode),
+        .code = std::string(import_codes::kSceneImportPropertyInvalid),
         .message = "Imported property '" + std::string(property)
           + "' is not a valid value of the scene schema; it takes the "
             "schema default",

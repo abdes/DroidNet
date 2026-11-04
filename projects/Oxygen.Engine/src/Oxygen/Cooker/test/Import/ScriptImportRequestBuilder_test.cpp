@@ -11,6 +11,7 @@
 #include <type_traits>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -286,7 +287,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("script.sidecar.parse_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::import_codes::kScriptSidecarParseFailed));
 }
 
 //! The builder refuses a payload the import would refuse, at the same place.
@@ -302,7 +305,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("script.sidecar.slot_id_invalid"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::import_codes::kScriptSidecarSlotIdInvalid));
   ASSERT_EQ(errors.size(), 1U);
   EXPECT_EQ(errors.front().json_pointer, "/bindings/0/slot_id");
 }

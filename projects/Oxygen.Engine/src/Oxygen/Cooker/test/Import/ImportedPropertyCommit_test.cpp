@@ -12,6 +12,7 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportedPropertyCommit.h>
@@ -28,7 +29,7 @@ using oxygen::content::import::ImportDiagnostic;
 using oxygen::content::import::ImportSeverity;
 using oxygen::content::import::detail::CommitImportedLightColor;
 using oxygen::content::import::detail::ImportedPropertyCommit;
-using oxygen::content::import::detail::kImportedPropertyInvalidCode;
+using oxygen::content::import::import_codes::kSceneImportPropertyInvalid;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 
@@ -83,7 +84,7 @@ NOLINT_TEST(
   ASSERT_EQ(diagnostics.size(), 2U);
   for (const auto& diagnostic : diagnostics) {
     EXPECT_EQ(diagnostic.severity, ImportSeverity::kWarning);
-    EXPECT_EQ(diagnostic.code, kImportedPropertyInvalidCode);
+    EXPECT_EQ(diagnostic.code, kSceneImportPropertyInvalid);
     EXPECT_EQ(diagnostic.source_path, "model.gltf");
     EXPECT_EQ(diagnostic.object_path, "Camera");
   }

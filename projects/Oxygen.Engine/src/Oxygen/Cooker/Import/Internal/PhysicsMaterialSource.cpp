@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
@@ -52,10 +53,12 @@ namespace {
     -> bool
   {
     const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "physics.material.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kPhysicsMaterialSchemaValidationFailed,
       .validation_failed_prefix
       = "Physics material descriptor validation failed: ",
-      .validator_failure_code = "physics.material.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kPhysicsMaterialSchemaValidatorFailure,
       .validator_failure_prefix
       = "Physics material descriptor schema validator failed: ",
     };
@@ -79,12 +82,14 @@ auto PreparePhysicsMaterialDescriptor(const std::string_view bytes,
   try {
     document = json::parse(bytes);
   } catch (const json::exception& failure) {
-    AddError(diagnostics, source_path, "physics.material.request_invalid_json",
+    AddError(diagnostics, source_path,
+      std::string(import_codes::kPhysicsMaterialRequestInvalidJson),
       std::string("Descriptor payload is invalid JSON: ") + failure.what());
     return std::nullopt;
   }
   if (!document.is_object()) {
-    AddError(diagnostics, source_path, "physics.material.request_invalid_json",
+    AddError(diagnostics, source_path,
+      std::string(import_codes::kPhysicsMaterialRequestInvalidJson),
       "Descriptor payload must be a JSON object");
     return std::nullopt;
   }

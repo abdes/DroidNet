@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -210,7 +211,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceBytesFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 //! Empty source sets should fail with a cook diagnostic.
@@ -231,7 +233,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceSetFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 //! Nonzero depth slices with a non-3D target should fail.
@@ -256,7 +259,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDepthSliceNon3DFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 //! Duplicate array layers should fail assembly.
@@ -282,7 +286,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDuplicateArrayLayerFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 //! Unknown packing policy should emit a warning but still succeed.
@@ -307,7 +312,8 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectUnknownPackingPolicyWarns)
   ASSERT_HAS_VALUE(result.cooked);
   EXPECT_FALSE(result.used_placeholder);
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.packing_policy_unknown");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTexturePackingPolicyUnknown);
 }
 
 } // namespace

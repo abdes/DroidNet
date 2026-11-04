@@ -18,10 +18,12 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -145,7 +147,7 @@ namespace {
     EXPECT_TRUE(first->success);
     EXPECT_FALSE(second->success);
     EXPECT_TRUE(
-      HasDiagnosticCode(second->diagnostics, "import.identity_collision"));
+      HasDiagnosticCode(second->diagnostics, import_codes::kIdentityCollision));
     EXPECT_EQ(RecordedSource(kGroundIdentity),
       std::optional<std::string>("/Content/Examples/A/ground.omat.json"));
   }
@@ -193,8 +195,8 @@ namespace {
     // Assert
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, "import.source_outside_mount"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, mount_codes::kSourceOutsideMount.id));
   }
 
   //! One mount bound to different folders on two machines records the same
@@ -288,7 +290,8 @@ namespace {
       const auto loaded = Load(manifest, errors);
 
       EXPECT_FALSE(loaded.has_value()) << field;
-      EXPECT_THAT(errors, HasDiagnostic("path.absolute_committed")) << field;
+      EXPECT_THAT(errors, HasDiagnostic(mount_codes::kAbsoluteCommitted.id))
+        << field;
       ASSERT_EQ(errors.size(), 1U) << DiagnosticSummary(errors);
       EXPECT_EQ(errors.front().json_pointer, field);
     }
@@ -304,13 +307,13 @@ namespace {
       json::array({ MaterialJob("/Studio/Materials/Steel.omat.json") }));
     unbound["mounts"].push_back({ { "name", "Studio" } });
     const auto cases = std::array {
-      std::pair { std::string_view { "import.source_outside_mount" },
+      std::pair { mount_codes::kSourceOutsideMount.id,
         MaterialManifest(
           json::array({ MaterialJob("Elsewhere/ground.omat.json") })) },
-      std::pair { std::string_view { "import.source_outside_mount" },
+      std::pair { mount_codes::kSourceOutsideMount.id,
         MaterialManifest(
           json::array({ MaterialJob("/Nowhere/ground.omat.json") })) },
-      std::pair { std::string_view { "import.mount_unbound" }, unbound },
+      std::pair { mount_codes::kSourceMountUnbound.id, unbound },
     };
     for (const auto& [code, manifest] : cases) {
       auto errors = std::vector<ImportDiagnostic> {};
@@ -347,7 +350,7 @@ namespace {
 
     // Assert
     EXPECT_FALSE(batch.has_value());
-    EXPECT_THAT(errors, HasDiagnostic("mount.name_conflict"));
+    EXPECT_THAT(errors, HasDiagnostic(mount_codes::kNameConflict.id));
   }
 
   //! A source two manifests of one batch cook to one identity is cooked once,
@@ -408,7 +411,7 @@ namespace {
 
     // Assert
     EXPECT_FALSE(batch.has_value());
-    EXPECT_THAT(errors, HasDiagnostic("manifest.job_id_duplicate"));
+    EXPECT_THAT(errors, HasDiagnostic(manifest_codes::kJobIdDuplicate));
   }
 
   //! A derived file in an output folder records the authored source it
@@ -449,18 +452,18 @@ namespace {
       = (ProjectRoot() / "Content" / "Materials" / "ground.omat.json")
           .generic_string();
     const auto cases = std::array {
-      std::pair { std::string_view { "import.derived_from_not_derived" },
+      std::pair { mount_codes::kDerivedFromNotDerived.id,
         derived("/Content/Materials/ground.omat.json",
           "/Content/Materials/ground.omat.json") },
-      std::pair { std::string_view { "import.derived_from_invalid" },
+      std::pair { mount_codes::kDerivedFromInvalid.id,
         derived(".pipeline/Materials/ground.omat.json",
           "Content/Materials/ground.omat.json") },
-      std::pair { std::string_view { "import.derived_from_invalid" },
+      std::pair { mount_codes::kDerivedFromInvalid.id,
         derived(".pipeline/Materials/ground.omat.json",
           "/Nowhere/Materials/ground.omat.json") },
-      std::pair { std::string_view { "path.absolute_committed" },
+      std::pair { mount_codes::kAbsoluteCommitted.id,
         derived(".pipeline/Materials/ground.omat.json", absolute) },
-      std::pair { std::string_view { "import.source_outside_mount" },
+      std::pair { mount_codes::kSourceOutsideMount.id,
         MaterialManifest(json::array(
           { MaterialJob(".pipeline/Materials/ground.omat.json") })) },
     };

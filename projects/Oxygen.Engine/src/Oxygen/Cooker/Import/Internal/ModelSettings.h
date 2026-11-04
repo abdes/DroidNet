@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -48,8 +49,8 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
   if (remap.empty()) {
     return keys;
   }
-  const auto mounts
-    = LoadMountedCookedSources(session, request, "import.material_remap.");
+  const auto mounts = LoadMountedCookedSources(
+    session, request, import_codes::kMaterialRemapIndexLoadFailed);
   for (const auto& [name, target] : remap) {
     const auto object_path = "material_remap/" + name;
     const auto reference = ResolveJobReference(request, target);
@@ -75,7 +76,7 @@ using MaterialRemapKeys = std::map<std::string, data::AssetKey, std::less<>>;
     }
     session.AddDiagnostic({
       .severity = ImportSeverity::kWarning,
-      .code = "import.material_remap_target_missing",
+      .code = std::string(import_codes::kMaterialRemapTargetMissing),
       .message = DescribeLookup(*reference, found.error())
         + "; it does not exist or is not a material, so the source material '"
         + name + "' is produced instead",
@@ -144,7 +145,7 @@ struct ModelProductNames final {
     }
     diagnostics.push_back({
       .severity = ImportSeverity::kWarning,
-      .code = "import.setting_target_missing",
+      .code = std::string(import_codes::kSettingTargetMissing),
       .message = std::string(setting) + " names '" + key
         + "', which the source no longer has; the setting is kept and not "
           "applied",

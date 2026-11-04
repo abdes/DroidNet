@@ -14,6 +14,7 @@
 
 #include <meshoptimizer.h>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfMeshopt.h>
 
@@ -75,7 +76,7 @@ auto DecodeMeshoptBufferViews(cgltf_data& data,
     const auto fail = [&](const std::string_view reason) -> bool {
       diagnostics.push_back({
         .severity = ImportSeverity::kError,
-        .code = "gltf.meshopt_decode_failed",
+        .code = std::string(import_codes::kGltfMeshoptDecodeFailed),
         .message = "Buffer view " + std::to_string(index)
           + " is compressed with EXT_meshopt_compression and "
           + std::string(reason),

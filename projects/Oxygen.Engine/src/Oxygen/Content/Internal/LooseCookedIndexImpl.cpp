@@ -175,7 +175,7 @@ auto RequireCanonicalVirtualPath(const std::string_view virtual_path) -> void
     error.has_value()) {
     throw data::CookedFormatError(data::CookedDefect::kInvalidPath,
       std::string("Virtual path is not canonical: ")
-        + nostd::to_string(*error));
+        + std::string(nostd::to_string(*error)));
   }
 }
 

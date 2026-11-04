@@ -49,12 +49,12 @@ namespace {
   }
 
   auto AddIndexLoadFailure(ImportSession& session, const ImportRequest& request,
-    const std::string_view diagnostic_prefix, const std::filesystem::path& root,
+    const std::string_view index_load_failed, const std::filesystem::path& root,
     const std::string_view what) -> void
   {
     session.AddDiagnostic({
       .severity = ImportSeverity::kError,
-      .code = std::string(diagnostic_prefix) + "index_load_failed",
+      .code = std::string(index_load_failed),
       .message = "Failed loading cooked index: " + std::string(what),
       .source_path = request.source_path.string(),
       .object_path = root.string(),
@@ -64,7 +64,7 @@ namespace {
 } // namespace
 
 auto LoadMountedCookedSources(ImportSession& session,
-  const ImportRequest& request, const std::string_view diagnostic_prefix)
+  const ImportRequest& request, const std::string_view index_load_failed)
   -> std::vector<MountedCookedSource>
 {
   const auto& files = cooked::RealCookerStorage();
@@ -81,11 +81,11 @@ auto LoadMountedCookedSources(ImportSession& session,
       // there that cannot be read is reported.
       if (error.Defect() != data::CookedDefect::kAbsent) {
         AddIndexLoadFailure(
-          session, request, diagnostic_prefix, mount.root, error.what());
+          session, request, index_load_failed, mount.root, error.what());
       }
     } catch (const std::exception& error) {
       AddIndexLoadFailure(
-        session, request, diagnostic_prefix, mount.root, error.what());
+        session, request, index_load_failed, mount.root, error.what());
     }
     mounts.push_back(std::move(mount));
   }

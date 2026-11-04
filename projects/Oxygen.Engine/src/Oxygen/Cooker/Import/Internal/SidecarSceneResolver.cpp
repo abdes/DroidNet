@@ -293,7 +293,7 @@ auto ResolveTargetSceneState(ImportSession& session,
       std::string(diagnostics.target_scene_virtual_path_invalid_code),
       "Target scene virtual path is invalid: "
         + std::string(target_scene_virtual_path) + " ("
-        + content::to_string(*error) + ")");
+        + std::string(content::to_string(*error)) + ")");
     return std::nullopt;
   }
 

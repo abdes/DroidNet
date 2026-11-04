@@ -29,6 +29,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -101,7 +102,7 @@ namespace {
       if (stage_input.stop_token.stop_requested()) {
         diagnostics.push_back({
           .severity = ImportSeverity::kError,
-          .code = "import.canceled",
+          .code = std::string(import_codes::kCanceled),
           .message = "Import canceled",
           .source_path = std::string(stage_input.source_id),
           .object_path = {},
@@ -179,7 +180,7 @@ namespace {
     const auto type_mismatch
       = [&](const data::AssetType found, const std::string& detail) -> void {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_type_mismatch",
+        std::string(import_codes::kSceneDescriptorReferenceTypeMismatch),
         "Reference type mismatch; expected "
           + std::string(data::to_string(*expected_type)) + " but found "
           + std::string(data::to_string(found)) + ": " + detail,
@@ -218,7 +219,7 @@ namespace {
       break;
     case internal::AssetReferenceRefusal::kMissing:
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.reference_missing",
+        std::string(import_codes::kSceneDescriptorReferenceMissing),
         "Reference was not found: "
           + internal::DescribeLookup(*reference, refused),
         std::move(json_pointer));
@@ -290,7 +291,8 @@ namespace {
         = ReadListedDescriptor(context, resolved->key).bytes;
       if (!listed_bytes.has_value()) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.geometry_inventory_unavailable",
+          std::string(
+            import_codes::kSceneDescriptorGeometryInventoryUnavailable),
           "Cannot read geometry '" + path + "' for surface validation",
           geometry_pointer);
         return false;
@@ -310,7 +312,7 @@ namespace {
           resolved->key, loaders::LoadGeometryAsset(loader_context));
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.geometry_inventory_invalid",
+          std::string(import_codes::kSceneDescriptorGeometryInventoryInvalid),
           "Geometry '" + path + "' is invalid: " + error.what(),
           geometry_pointer);
         return false;
@@ -334,11 +336,12 @@ namespace {
     data::TextureTarget sky_sphere_cubemap;
   };
 
-  auto EnvironmentTextureDiagnosticPrefix(const EnvironmentTextureUse use)
+  auto EnvironmentTextureFormatInvalidCode(const EnvironmentTextureUse use)
     -> std::string_view
   {
-    return use == EnvironmentTextureUse::kCubemap ? "scene.descriptor.cubemap_"
-                                                  : "scene.descriptor.mask_";
+    return use == EnvironmentTextureUse::kCubemap
+      ? import_codes::kSceneDescriptorCubemapFormatInvalid
+      : import_codes::kSceneDescriptorMaskFormatInvalid;
   }
 
   //! Returns why `desc` cannot serve `use`, or nothing when it can.
@@ -382,13 +385,15 @@ namespace {
     std::string text, std::string json_pointer, const EnvironmentTextureUse use)
     -> co::Co<std::optional<data::TextureTarget>>
   {
-    const auto prefix = std::string(EnvironmentTextureDiagnosticPrefix(use));
     const auto reference
       = co_await internal::ResolveTextureReference(session, request, mounts,
         {
           .text = std::move(text),
           .json_pointer = json_pointer,
-          .diagnostic_prefix = "scene.descriptor.",
+          .descriptor_invalid_code
+          = import_codes::kSceneDescriptorTextureDescriptorInvalid,
+          .descriptor_missing_code
+          = import_codes::kSceneDescriptorTextureDescriptorMissing,
           .allow_missing = true,
         });
     if (!reference) {
@@ -400,7 +405,8 @@ namespace {
     if (const auto error
       = EnvironmentTextureFormatError(reference->descriptor, use)) {
       AddDiagnostic(*session, *request, ImportSeverity::kError,
-        prefix + "format_invalid", std::string(*error), json_pointer);
+        std::string(EnvironmentTextureFormatInvalidCode(use)),
+        std::string(*error), json_pointer);
       co_return std::nullopt;
     }
     co_return reference->target;
@@ -418,7 +424,7 @@ namespace {
     const auto packed = writer.ScopedAlignment(1);
     if (!serio::Store(writer, record)) {
       AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-        "scene.descriptor.post_process_invalid",
+        std::string(import_codes::kSceneDescriptorPostProcessInvalid),
         "Post-process values or record boundaries are invalid",
         "/environment/post_process_volume");
       return std::nullopt;
@@ -429,7 +435,7 @@ namespace {
             .compensation_ev = key.compensation_ev,
           })) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.exposure_curve_write_failed",
+          std::string(import_codes::kSceneDescriptorExposureCurveWriteFailed),
           "Could not serialize exposure compensation curve",
           "/environment/post_process_volume/auto_exposure_compensation_curve");
         return std::nullopt;
@@ -504,7 +510,7 @@ namespace {
       }
       if (!listed.bytes) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.instance_unreadable",
+          std::string(import_codes::kSceneDescriptorInstanceUnreadable),
           "Cannot read an instanced scene: " + data::to_string(key),
           std::string(json_pointer));
         return std::nullopt;
@@ -520,7 +526,7 @@ namespace {
         scenes.emplace(key, std::move(scene));
       } catch (const std::exception& error) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.instance_invalid",
+          std::string(import_codes::kSceneDescriptorInstanceInvalid),
           "An instanced scene is invalid; re-cook it: "
             + std::string(error.what()),
           std::string(json_pointer));
@@ -622,8 +628,8 @@ namespace {
         }
         const auto cycle = issue.code == data::CompositionIssueCode::kCycle;
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          cycle ? "scene.descriptor.instance_cycle"
-                : "scene.descriptor.instance_invalid",
+          cycle ? std::string(import_codes::kSceneDescriptorInstanceCycle)
+                : std::string(import_codes::kSceneDescriptorInstanceInvalid),
           cycle ? "An instanced scene instances a scene on its own path"
                 : "An instanced scene cannot be composed: "
               + std::string(data::to_string(issue.code)),
@@ -652,7 +658,8 @@ namespace {
         if (unresolved) {
           AddDiagnostic(context.session, context.request,
             ImportSeverity::kWarning,
-            "scene.descriptor.instance_override_unresolved",
+            std::string(
+              import_codes::kSceneDescriptorInstanceOverrideUnresolved),
             "The change names no node of the instanced scene, or a property "
             "that node does not have; it has no effect until it resolves",
             change.change.json_pointer);
@@ -671,7 +678,8 @@ namespace {
             if (geometry
               && geometry->FindSurface(change.change.part_id) == nullptr) {
               AddDiagnostic(context.session, context.request,
-                ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
+                ImportSeverity::kWarning,
+                std::string(import_codes::kSceneDescriptorSurfaceInvalid),
                 "The change targets a surface the geometry does not declare; "
                 "it has no effect until the geometry declares the surface "
                 "again",
@@ -693,7 +701,8 @@ namespace {
           || (!node->perspective_camera.has_value()
             && !node->orthographic_camera.has_value())) {
           AddDiagnostic(context.session, context.request,
-            ImportSeverity::kWarning, "scene.starting_camera.unresolved",
+            ImportSeverity::kWarning,
+            std::string(import_codes::kSceneStartingCameraUnresolved),
             "The starting camera names no camera of the instanced scene; the "
             "scene starts through its first camera",
             "/starting_camera");
@@ -762,7 +771,8 @@ namespace {
       const auto& geometry = *context.geometries.at(geometry_key);
       if (geometry.FindSurface(source.part_id) == nullptr) {
         AddDiagnostic(context.session, context.request,
-          ImportSeverity::kWarning, "scene.descriptor.surface_invalid",
+          ImportSeverity::kWarning,
+          std::string(import_codes::kSceneDescriptorSurfaceInvalid),
           "The override targets a surface the geometry does not declare; it "
           "has no effect until the geometry declares the surface again",
           source.json_pointer);
@@ -848,8 +858,8 @@ namespace {
       }
       if (resolved->key == scene_key) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.instance_cycle", "A scene cannot instance itself",
-          std::move(instance.json_pointer));
+          std::string(import_codes::kSceneDescriptorInstanceCycle),
+          "A scene cannot instance itself", std::move(instance.json_pointer));
         return std::nullopt;
       }
       for (const auto& change : instance.changes) {
@@ -872,7 +882,8 @@ namespace {
       }
       if (!starting_contexts.insert(resolved->key).second) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
-          "scene.descriptor.starting_input_context_duplicate",
+          std::string(
+            import_codes::kSceneDescriptorStartingInputContextDuplicate),
           "An input context can start only once",
           std::move(starting.json_pointer));
         return std::nullopt;
@@ -980,7 +991,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& descriptor = Request().scene_descriptor;
   if (!descriptor.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "scene.descriptor.request_invalid",
+      std::string(import_codes::kSceneDescriptorRequestInvalid),
       "SceneDescriptorImportJob requires request.scene_descriptor payload");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid scene descriptor request");
@@ -1013,7 +1024,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     .geometries = {},
   };
   context.mounts = internal::LoadMountedCookedSources(
-    session, Request(), "scene.descriptor.");
+    session, Request(), import_codes::kSceneDescriptorIndexLoadFailed);
 
   if (!CookedReader() || !LoadSurfaceInventories(context, *source)) {
     co_return co_await FinalizeWithTelemetry(session);

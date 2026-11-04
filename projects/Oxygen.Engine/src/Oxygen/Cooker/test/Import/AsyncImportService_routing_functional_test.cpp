@@ -16,6 +16,7 @@
 #include <utility>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -150,8 +151,9 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
   done.wait();
 
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(HasDiagnosticCode(
-    report.diagnostics, "material.descriptor.schema_validation_failed"));
+  EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+    oxygen::content::import::import_codes::
+      kMaterialDescriptorSchemaValidationFailed));
 
   StopService(service);
 }

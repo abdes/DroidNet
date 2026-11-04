@@ -19,10 +19,6 @@
 
 namespace oxygen::content::import::detail {
 
-//! The code of a source whose size passes the import's source limit.
-inline constexpr std::string_view kSourceTooLargeCode
-  = "import.source_too_large";
-
 //! The error diagnostic of `path`, which holds `size` bytes, refused because
 //! the import reads at most `limit` bytes from one source. An unknown `size`
 //! is read from the file system; the message names both sizes.

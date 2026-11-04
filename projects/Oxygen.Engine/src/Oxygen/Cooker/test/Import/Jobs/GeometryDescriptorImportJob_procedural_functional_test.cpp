@@ -25,6 +25,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -224,7 +225,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   EXPECT_FALSE(report->success);
   EXPECT_TRUE(std::ranges::any_of(report->diagnostics,
     [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "geometry.descriptor.bounds_invalid";
+      return diagnostic.code == import_codes::kGeometryDescriptorBoundsInvalid;
     }))
     << DiagnosticSummary(report->diagnostics);
 }
@@ -579,7 +580,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     EXPECT_EQ(report->geometry_written, 0U);
     EXPECT_FALSE(FindOutputByExtension(*report, ".ogeo").has_value());
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "geometry.procedural.generation_failed"))
+      report->diagnostics, import_codes::kGeometryProceduralGenerationFailed))
       << DiagnosticSummary(report->diagnostics);
   }
 }

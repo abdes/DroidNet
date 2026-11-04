@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -174,7 +175,9 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(ImportManifestTextureDescriptorTest,
@@ -215,7 +218,8 @@ NOLINT_TEST(ImportManifestTextureDescriptorTest,
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors,
-    HasDiagnostic("texture.descriptor.schema_validation_failed"));
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kTextureDescriptorSchemaValidationFailed));
 }
 
 } // namespace

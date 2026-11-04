@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
@@ -21,9 +22,10 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::content::import;
-using namespace oxygen::co;
-namespace co = oxygen::co;
+using oxygen::co::ThreadPool;
+using oxygen::content::import::ImportEventLoop;
+using oxygen::content::import::TextureImportDesc;
+using oxygen::content::import::TexturePipeline;
 using oxygen::cooker::test::RunPipelineOnce;
 
 namespace {
@@ -88,7 +90,8 @@ NOLINT_TEST_F(TexturePipelineTest, CollectWithPlaceholderPolicyReportsFailure)
   EXPECT_TRUE(result.used_placeholder);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 NOLINT_TEST_F(TexturePipelineTest, CollectWithStrictPolicyEmitsDiagnostic)
@@ -106,7 +109,8 @@ NOLINT_TEST_F(TexturePipelineTest, CollectWithStrictPolicyEmitsDiagnostic)
   EXPECT_FALSE(result.used_placeholder);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code,
+    oxygen::content::import::import_codes::kTextureCookFailed);
 }
 
 NOLINT_TEST_F(TexturePipelineTest, CollectWhenCancelledReturnsFailedResult)

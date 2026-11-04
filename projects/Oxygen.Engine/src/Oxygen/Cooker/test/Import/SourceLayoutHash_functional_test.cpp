@@ -23,6 +23,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
@@ -284,8 +285,8 @@ NOLINT_TEST_F(SourceLayoutWitnessTest, GltfNonTrianglePrimitiveIsDropped)
 
   EXPECT_TRUE(dropped.report.success)
     << DiagnosticSummary(dropped.report.diagnostics);
-  EXPECT_TRUE(
-    HasDiagnosticCode(dropped.report.diagnostics, "gltf.primitive.type"));
+  EXPECT_TRUE(HasDiagnosticCode(dropped.report.diagnostics,
+    oxygen::content::import::import_codes::kGltfPrimitiveType));
   ASSERT_NE(source_provenance_, nullptr);
   EXPECT_TRUE(source_provenance_->Geometries().empty());
 }

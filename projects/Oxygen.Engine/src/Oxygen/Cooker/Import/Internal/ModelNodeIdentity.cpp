@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
@@ -93,7 +94,7 @@ auto ModelNodeIdentity::ForRequest(const ImportRequest& request,
   }
   diagnostics.push_back({
     .severity = ImportSeverity::kWarning,
-    .code = "import.source_identity_missing",
+    .code = std::string(import_codes::kSourceIdentityMissing),
     .message = "The import has no source identity: its node IDs change on "
                "every import, and scenes cannot keep changes of its nodes",
     .source_path = std::string(source_id),
@@ -147,7 +148,7 @@ auto ModelNodeIdentity::ResolveContinuity(
       if (!visited.insert(at).second) {
         diagnostics.push_back({
           .severity = ImportSeverity::kError,
-          .code = "import.node_continuity_cycle",
+          .code = std::string(import_codes::kNodeContinuityCycle),
           .message = "The node continuity entries from '" + entry.anchor
             + "' form a cycle",
           .source_path = std::string(source_id),
@@ -170,7 +171,7 @@ auto ModelNodeIdentity::ResolveContinuity(
                       const std::string_view reason) -> void {
     diagnostics.push_back({
       .severity = ImportSeverity::kWarning,
-      .code = "import.node_continuity_conflict",
+      .code = std::string(import_codes::kNodeContinuityConflict),
       .message = "The node '" + entry.anchor + "' does not continue '"
         + entry.continues + "': " + std::string(reason),
       .source_path = std::string(source_id),
@@ -289,7 +290,7 @@ auto ModelNodeIdentity::TakePublishedNodes(const std::string_view source_id,
       }
       diagnostics.push_back({
         .severity = ImportSeverity::kInfo,
-        .code = "import.nodes_changed",
+        .code = std::string(import_codes::kNodesChanged),
         .message = std::move(message),
         .source_path = std::string(source_id),
         .object_path = {},

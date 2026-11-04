@@ -25,6 +25,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -154,14 +155,15 @@ auto BufferImportSubmitter::SubmitBuffers(
 
   if (reader_ == nullptr) {
     AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-      "buffer.container.reader_unavailable",
+      std::string(import_codes::kBufferContainerReaderUnavailable),
       "Async file reader is not available");
     co_return submission;
   }
 
   if (entries.empty()) {
     AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-      "buffer.container.no_buffers", "No valid buffer entries were produced");
+      std::string(import_codes::kBufferContainerNoBuffers),
+      "No valid buffer entries were produced");
     co_return submission;
   }
 
@@ -179,7 +181,7 @@ auto BufferImportSubmitter::SubmitBuffers(
     if (!internal::TryVirtualPathToRelPath(
           *request_, entry.source_id, relpath)) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.virtual_path_unmounted",
+        std::string(import_codes::kBufferContainerVirtualPathUnmounted),
         "Buffer virtual_path '" + entry.source_id
           + "' is outside the mount the container cooks into",
         nlohmann::json::json_pointer { entry.json_pointer } / "virtual_path");
@@ -202,7 +204,7 @@ auto BufferImportSubmitter::SubmitBuffers(
         session_->AddDiagnostic(std::move(*too_large));
       } else {
         AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-          "buffer.container.source_read_failed",
+          std::string(import_codes::kBufferContainerSourceReadFailed),
           "Failed reading buffer source '" + entry.source_path.string()
             + "': " + read_result.error().message(),
           nlohmann::json::json_pointer { entry.json_pointer } / "source");
@@ -213,14 +215,14 @@ auto BufferImportSubmitter::SubmitBuffers(
     const auto source_size = read_result.value().Size().get();
     if (source_size == 0U) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.source_empty",
+        std::string(import_codes::kBufferContainerSourceEmpty),
         "Buffer source '" + entry.source_path.string() + "' holds no bytes",
         nlohmann::json::json_pointer { entry.json_pointer } / "source");
       continue;
     }
     if (source_size > std::numeric_limits<uint32_t>::max()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.source_too_large",
+        std::string(import_codes::kBufferContainerSourceTooLarge),
         "Buffer source exceeds maximum supported size of 4 GiB",
         nlohmann::json::json_pointer { entry.json_pointer } / "source");
       continue;
@@ -277,7 +279,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       *session_->Storage(), session_->CookedRoot());
   } catch (const data::CookedFormatError& error) {
     AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-      "buffer.container.cooked_root_unreadable",
+      std::string(import_codes::kBufferContainerCookedRootUnreadable),
       "The cooked root '" + session_->CookedRoot().string()
         + "' buffer sidecars cannot be read: " + std::string(error.what()));
     co_return emitted_buffers;
@@ -298,7 +300,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       = submission.descriptor_relpath_by_source_id.find(result.source_id);
     if (relpath_it == submission.descriptor_relpath_by_source_id.end()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.internal_lookup_failed",
+        std::string(import_codes::kBufferContainerInternalLookupFailed),
         "Internal buffer entry lookup failed for '" + result.source_id + "'");
       continue;
     }
@@ -307,7 +309,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       = submission.descriptor_views_by_source_id.find(result.source_id);
     if (views_it == submission.descriptor_views_by_source_id.end()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.internal_lookup_failed",
+        std::string(import_codes::kBufferContainerInternalLookupFailed),
         "Internal buffer views lookup failed for '" + result.source_id + "'");
       continue;
     }
@@ -322,7 +324,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
       = session_->BufferEmitter().TryGetDescriptor(emitted_index);
     if (!descriptor.has_value()) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.descriptor_missing",
+        std::string(import_codes::kBufferContainerDescriptorMissing),
         "Missing buffer descriptor for emitted resource index of '"
           + result.source_id + "'");
       continue;
@@ -333,7 +335,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
     if (existing != canonical_identity_by_index.end()
       && existing->second != result.source_id) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.dedup_virtual_path_conflict",
+        std::string(import_codes::kBufferContainerDedupVirtualPathConflict),
         "Equivalent buffers deduped to one resource index must share one "
         "canonical virtual_path: '"
           + existing->second + "' and '" + result.source_id + "'");
@@ -349,7 +351,7 @@ auto BufferImportSubmitter::CollectAndEmit(BufferPipeline& pipeline,
           views_it->second);
     } catch (const std::exception& ex) {
       AddDiagnostic(*session_, *request_, ImportSeverity::kError,
-        "buffer.container.sidecar_emit_failed",
+        std::string(import_codes::kBufferContainerSidecarEmitFailed),
         "Failed to emit the buffer sidecar descriptor of '" + result.source_id
           + "': " + std::string(ex.what()));
     }

@@ -6,15 +6,14 @@
 
 // Covers: Import/Internal/Jobs/ScriptingSidecarImportJob.cpp
 
-#include <algorithm>
 #include <filesystem>
 #include <string_view>
 #include <utility>
 
 #include "ScriptImportTestSupport.h"
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Testing/GTest.h>
@@ -149,8 +148,8 @@ namespace {
 
     const auto report = Submit(std::move(request));
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.inflight_target_scene_ambiguous"));
+    EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+      import_codes::kScriptSidecarInflightTargetSceneAmbiguous));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobContextTest,

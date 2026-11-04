@@ -14,6 +14,7 @@
 
 #include "ScriptImportTestSupport.h"
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -269,8 +270,8 @@ namespace {
     }
     sidecar_done.wait();
     EXPECT_FALSE(sidecar_report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      sidecar_report.diagnostics, "script.sidecar.target_scene_missing"));
+    EXPECT_TRUE(HasDiagnosticCode(sidecar_report.diagnostics,
+      import_codes::kScriptSidecarTargetSceneMissing));
 
     const auto inspection = LoadInspection(cooked_root);
     const auto script_asset
@@ -466,8 +467,8 @@ namespace {
       .scene_virtual_path = scene_asset->virtual_path,
     }));
     ASSERT_FALSE(first_report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      first_report.diagnostics, "script.sidecar.script_ref_unresolved"));
+    EXPECT_TRUE(HasDiagnosticCode(first_report.diagnostics,
+      import_codes::kScriptSidecarScriptRefUnresolved));
 
     const auto script_source = cooked_root / "input" / "deferred.luau";
     WriteText(script_source, SpeedScriptSource("55"));

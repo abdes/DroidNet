@@ -22,6 +22,8 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -518,7 +520,8 @@ NOLINT_TEST(SourceMountKindTest, ManifestRefusesAnUnknownKind)
 
   EXPECT_FALSE(manifest.has_value());
   ASSERT_EQ(errors.size(), 1U) << DiagnosticSummary(errors);
-  EXPECT_EQ(errors.front().code, "mount.kind_unknown");
+  EXPECT_EQ(
+    errors.front().code, oxygen::content::import::mount_codes::kKindUnknown.id);
   EXPECT_EQ(errors.front().json_pointer, "/mounts/0/kind");
 }
 
@@ -811,9 +814,11 @@ NOLINT_TEST_F(SourceMountsTest, LocateReferenceRefusesASelfAbsolutePath)
     findings);
 
   EXPECT_FALSE(refused.has_value());
-  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
+  ASSERT_TRUE(HasDiagnosticCode(
+    findings, oxygen::content::import::import_codes::kReferenceInvalid))
     << DiagnosticSummary(findings);
-  EXPECT_NE(findings.front().message.find("vpath.reference_self_absolute"),
+  EXPECT_NE(findings.front().message.find(
+              oxygen::content::vpath_codes::kReferenceSelfAbsolute),
     std::string::npos);
   EXPECT_EQ(findings.front().json_pointer, "/source");
 }
@@ -874,9 +879,11 @@ NOLINT_TEST_F(
     findings);
 
   EXPECT_FALSE(refused.has_value());
-  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
+  ASSERT_TRUE(HasDiagnosticCode(
+    findings, oxygen::content::import::import_codes::kReferenceInvalid))
     << DiagnosticSummary(findings);
-  EXPECT_NE(findings.front().message.find("vpath.reference_outside_mount"),
+  EXPECT_NE(findings.front().message.find(
+              oxygen::content::vpath_codes::kReferenceOutsideMount),
     std::string::npos);
 
   findings.clear();
@@ -941,9 +948,11 @@ NOLINT_TEST_F(SourceMountsTest, LocateSourceRefusesAPathTheRulesRefuse)
     findings);
 
   EXPECT_FALSE(located.has_value());
-  ASSERT_TRUE(HasDiagnosticCode(findings, "import.reference_invalid"))
+  ASSERT_TRUE(HasDiagnosticCode(
+    findings, oxygen::content::import::import_codes::kReferenceInvalid))
     << DiagnosticSummary(findings);
-  EXPECT_NE(findings.front().message.find("vpath.segment.trailing_dot"),
+  EXPECT_NE(findings.front().message.find(
+              oxygen::content::vpath_codes::kSegmentTrailingDot),
     std::string::npos);
   EXPECT_EQ(findings.front().json_pointer, "/source");
 }

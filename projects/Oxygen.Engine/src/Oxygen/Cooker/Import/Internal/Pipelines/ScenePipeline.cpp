@@ -21,6 +21,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -84,7 +85,7 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.canceled",
+      .code = std::string(import_codes::kCanceled),
       .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
@@ -230,10 +231,11 @@ namespace {
 
     for (size_t index = 0; index < build.nodes.size(); ++index) {
       if (!data::pak::world::HasCanonicalNodeFlags(build.nodes.at(index))) {
-        diagnostics.push_back(MakeErrorDiagnostic("scene.node.flags_invalid",
-          "Scene node flags contain unsupported source modes or inherited "
-          "values",
-          source_id, "nodes[" + std::to_string(index) + "].flags"));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kSceneNodeFlagsInvalid),
+            "Scene node flags contain unsupported source modes or inherited "
+            "values",
+            source_id, "nodes[" + std::to_string(index) + "].flags"));
         return outcome;
       }
     }
@@ -266,10 +268,10 @@ namespace {
     };
     if (!valid_camera_owners(build.perspective_cameras)
       || !valid_camera_owners(build.orthographic_cameras)) {
-      diagnostics.push_back(
-        MakeErrorDiagnostic("scene.camera.invalid_ownership",
-          "Each camera must own a valid, distinct scene node", source_id,
-          "cameras"));
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSceneCameraInvalidOwnership),
+        "Each camera must own a valid, distinct scene node", source_id,
+        "cameras"));
       return outcome;
     }
     // The job checks an instanced starting camera against its instance.
@@ -278,27 +280,28 @@ namespace {
       = camera.node_path != data::pak::world::kNoNodePath;
     if (camera.node_index != data::pak::world::kNoStartingCamera
       && !instanced_camera && !camera_nodes.contains(camera.node_index)) {
-      diagnostics.push_back(
-        MakeErrorDiagnostic("scene.starting_camera.not_a_camera",
-          "The starting camera must be a node that owns a camera", source_id,
-          "starting_camera"));
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSceneStartingCameraNotACamera),
+        "The starting camera must be a node that owns a camera", source_id,
+        "starting_camera"));
       return outcome;
     }
     if (instanced_camera
       && !std::ranges::contains(build.instances, camera.node_index,
         &data::pak::world::SceneInstanceRecord::node_index)) {
-      diagnostics.push_back(
-        MakeErrorDiagnostic("scene.starting_camera.not_an_instance_root",
-          "A starting camera with a node path must name it below an instance "
-          "root",
-          source_id, "starting_camera"));
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSceneStartingCameraNotAnInstanceRoot),
+        "A starting camera with a node path must name it below an instance "
+        "root",
+        source_id, "starting_camera"));
       return outcome;
     }
     if (!HasValidStartState(build)) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.composition.invalid",
-        "Scene instances must be distinct scene nodes naming a scene, and "
-        "starting input contexts must be named once",
-        source_id, "instances"));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneCompositionInvalid),
+          "Scene instances must be distinct scene nodes naming a scene, and "
+          "starting input contexts must be named once",
+          source_id, "instances"));
       return outcome;
     }
     // Slots are indexed by wire value; an assigned slot has one owner.
@@ -325,11 +328,11 @@ namespace {
     if (!valid_lights(build.directional_lights)
       || !valid_lights(build.point_lights)
       || !valid_lights(build.spot_lights)) {
-      diagnostics.push_back(
-        MakeErrorDiagnostic("scene.light.invalid_parameters",
-          "Light values, per-node ownership or atmosphere assignments are "
-          "invalid",
-          source_id, "lights"));
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSceneLightInvalidParameters),
+        "Light values, per-node ownership or atmosphere assignments are "
+        "invalid",
+        source_id, "lights"));
       return outcome;
     }
     if (!std::ranges::all_of(build.local_fog_volumes,
@@ -337,7 +340,7 @@ namespace {
             return data::pak::world::HasValidLocalFogVolumeValues(volume);
           })) {
       diagnostics.push_back(MakeErrorDiagnostic(
-        "scene.local_fog_volume.invalid_parameters",
+        std::string(import_codes::kSceneLocalFogVolumeInvalidParameters),
         "Local fog volume values are invalid", source_id, "local_fog_volumes"));
       return outcome;
     }
@@ -388,7 +391,8 @@ namespace {
       = SerializeComponentRecords<OrthographicCameraRecord>(
         build.orthographic_cameras);
     if (!perspective_bytes || !orthographic_bytes) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.camera.serialize_failed",
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kSceneCameraSerializeFailed),
         "Camera projection, aspect policy or physical exposure is invalid",
         source_id,
         !perspective_bytes ? "cameras.perspective" : "cameras.orthographic"));
@@ -446,20 +450,23 @@ namespace {
     if (auto result = writer.WriteBlob(
           std::as_bytes(std::span<const SceneAssetDesc, 1>(&desc, 1)));
       !result.has_value()) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-        "Failed to write scene header", source_id, {}));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+          "Failed to write scene header", source_id, {}));
       return outcome;
     }
 
     if (auto result = writer.WriteBlob(nodes_bytes); !result.has_value()) {
-      diagnostics.push_back(MakeErrorDiagnostic(
-        "scene.serialize_failed", "Failed to write nodes", source_id, {}));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+          "Failed to write nodes", source_id, {}));
       return outcome;
     }
 
     if (auto result = writer.WriteBlob(strings.Bytes()); !result.has_value()) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-        "Failed to write string table", source_id, {}));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+          "Failed to write string table", source_id, {}));
       return outcome;
     }
 
@@ -468,14 +475,16 @@ namespace {
         component_directory.data(), component_directory.size());
       if (auto result = writer.WriteBlob(std::as_bytes(directory_span));
         !result.has_value()) {
-        diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-          "Failed to write component table directory", source_id, {}));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+            "Failed to write component table directory", source_id, {}));
         return outcome;
       }
 
       for (const auto& table : component_tables) {
         if (auto result = writer.WriteBlob(table.bytes); !result.has_value()) {
-          diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
+          diagnostics.push_back(MakeErrorDiagnostic(
+            std::string(import_codes::kSceneSerializeFailed),
             "Failed to write component table", source_id, {}));
           return outcome;
         }
@@ -491,33 +500,33 @@ namespace {
         = serio::CopyAt<SceneEnvironmentSystemRecordHeader>(
           std::as_bytes(std::span { system.record_bytes }));
       if (!header_read) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("scene.environment.record_too_small",
-            "Environment system record is too small", source_id, {}));
+        diagnostics.push_back(MakeErrorDiagnostic(
+          std::string(import_codes::kSceneEnvironmentRecordTooSmall),
+          "Environment system record is too small", source_id, {}));
         return outcome;
       }
       const auto& header = *header_read;
       if (header.record_size < sizeof(SceneEnvironmentSystemRecordHeader)) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("scene.environment.record_size_invalid",
-            "Environment system record size is invalid", source_id, {}));
+        diagnostics.push_back(MakeErrorDiagnostic(
+          std::string(import_codes::kSceneEnvironmentRecordSizeInvalid),
+          "Environment system record size is invalid", source_id, {}));
         return outcome;
       }
 
       if (system.record_bytes.size()
         < static_cast<size_t>(header.record_size)) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("scene.environment.record_size_mismatch",
-            "Environment system record size does not match payload", source_id,
-            {}));
+        diagnostics.push_back(MakeErrorDiagnostic(
+          std::string(import_codes::kSceneEnvironmentRecordSizeMismatch),
+          "Environment system record size does not match payload", source_id,
+          {}));
         return outcome;
       }
 
       if (!data::pak::world::IsValidEnvironmentRecordSize(header)) {
-        diagnostics.push_back(
-          MakeErrorDiagnostic("scene.environment.record_size_mismatch",
-            "Environment record does not match its declared type", source_id,
-            {}));
+        diagnostics.push_back(MakeErrorDiagnostic(
+          std::string(import_codes::kSceneEnvironmentRecordSizeMismatch),
+          "Environment record does not match its declared type", source_id,
+          {}));
         return outcome;
       }
       env_header.byte_size += header.record_size;
@@ -527,8 +536,9 @@ namespace {
     if (auto result = writer.WriteBlob(std::as_bytes(
           std::span<const SceneEnvironmentBlockHeader, 1>(&env_header, 1)));
       !result.has_value()) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-        "Failed to write environment header", source_id, {}));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+          "Failed to write environment header", source_id, {}));
       return outcome;
     }
 
@@ -537,16 +547,18 @@ namespace {
         = serio::CopyAt<SceneEnvironmentSystemRecordHeader>(
           std::as_bytes(std::span { system.record_bytes }));
       if (!header_read) {
-        diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-          "Failed to write environment record", source_id, {}));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+            "Failed to write environment record", source_id, {}));
         return outcome;
       }
       const auto record_size = static_cast<size_t>(header_read->record_size);
       if (auto result
         = writer.WriteBlob(std::span(system.record_bytes.data(), record_size));
         !result.has_value()) {
-        diagnostics.push_back(MakeErrorDiagnostic("scene.serialize_failed",
-          "Failed to write environment record", source_id, {}));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kSceneSerializeFailed),
+            "Failed to write environment record", source_id, {}));
         return outcome;
       }
     }
@@ -693,8 +705,9 @@ auto ScenePipeline::Worker() -> co::Co<>
     ModelNodePublication model_nodes;
 
     if (item.adapter_owner == nullptr || item.build_stage == nullptr) {
-      diagnostics.push_back(MakeErrorDiagnostic("scene.adapter_missing",
-        "Scene adapter stage is missing", item.source_id, {}));
+      diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kSceneAdapterMissing),
+          "Scene adapter stage is missing", item.source_id, {}));
     } else {
       const SceneStageInput stage_input {
         .source_id = item.source_id,
@@ -739,9 +752,10 @@ auto ScenePipeline::Worker() -> co::Co<>
           stage_outcome.result.build, item.environment_systems,
           item.environment_references, diagnostics, item.source_id);
       } else if (diagnostics.empty()) {
-        diagnostics.push_back(MakeErrorDiagnostic("scene.stage_failed",
-          "Scene adapter stage failed without diagnostics", item.source_id,
-          {}));
+        diagnostics.push_back(
+          MakeErrorDiagnostic(std::string(import_codes::kSceneStageFailed),
+            "Scene adapter stage failed without diagnostics", item.source_id,
+            {}));
       }
     }
 

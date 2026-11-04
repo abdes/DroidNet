@@ -24,6 +24,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
@@ -437,7 +438,7 @@ namespace {
     ASSERT_TRUE(plain.parse.success);
     ASSERT_TRUE(compressed.parse.success);
     EXPECT_FALSE(HasDiagnosticCode(
-      compressed.parse.diagnostics, "import.source_extension_required"));
+      compressed.parse.diagnostics, import_codes::kSourceExtensionRequired));
     ASSERT_EQ(plain.items.size(), 1U);
     ASSERT_EQ(compressed.items.size(), 1U);
     const auto& expected = plain.items.front().lods.front().source;
@@ -463,8 +464,8 @@ namespace {
     const auto read = ReadDocument(CompressedDocument(true));
 
     EXPECT_FALSE(read.parse.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(read.parse.diagnostics, "gltf.meshopt_decode_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      read.parse.diagnostics, import_codes::kGltfMeshoptDecodeFailed));
   }
 
 } // namespace

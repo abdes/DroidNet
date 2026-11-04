@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -254,7 +255,8 @@ NOLINT_TEST_P(AssetNamingTest, ClashIsReportedWithBothNames)
   const auto warnings = naming.CollisionWarnings("model.gltf");
 
   ASSERT_EQ(warnings.size(), 1U);
-  EXPECT_EQ(warnings.front().code, "import.name_collision");
+  EXPECT_EQ(warnings.front().code,
+    oxygen::content::import::import_codes::kNameCollision);
   EXPECT_EQ(warnings.front().severity,
     oxygen::content::import::ImportSeverity::kWarning);
   EXPECT_EQ(warnings.front().source_path, "model.gltf");

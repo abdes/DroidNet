@@ -21,6 +21,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -347,7 +348,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(oxygen::cooker::test::HasDiagnosticCode(
-      report->diagnostics, "buffer.container.source_empty"))
+      report->diagnostics, import_codes::kBufferContainerSourceEmpty))
       << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
   }
 
@@ -408,7 +409,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(oxygen::cooker::test::HasDiagnosticCode(
-      report->diagnostics, "import.cooked_root_busy"))
+      report->diagnostics, import_codes::kCookedRootBusy))
       << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
     EXPECT_FALSE(std::filesystem::exists(
       cooked_root / std::string(data::loose_cooked::kIndexFileName)));

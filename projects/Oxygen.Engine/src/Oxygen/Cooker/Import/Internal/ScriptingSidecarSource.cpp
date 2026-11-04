@@ -23,6 +23,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
@@ -268,8 +269,8 @@ namespace {
       const auto param_location = location / "params" / j;
       if (!ParseScriptParamRecord(
             binding.at("params").at(j), parsed_param, error)) {
-        errors.Add(
-          "script.sidecar.param_invalid", std::move(error), param_location);
+        errors.Add(std::string(import_codes::kScriptSidecarParamInvalid),
+          std::move(error), param_location);
         continue;
       }
       const auto duplicate = std::ranges::any_of(
@@ -277,7 +278,7 @@ namespace {
           return existing.key == parsed_param.key;
         });
       if (duplicate) {
-        errors.Add("script.sidecar.param_duplicate",
+        errors.Add(std::string(import_codes::kScriptSidecarParamDuplicate),
           "Parameter '" + parsed_param.key
             + "' is overridden twice in one slot",
           param_location / "key");
@@ -309,9 +310,11 @@ namespace {
   {
     constexpr auto kSchemaDiagConfig
       = internal::JsonSchemaValidationDiagnosticConfig {
-          .validation_failed_code = "script.sidecar.schema_validation_failed",
+          .validation_failed_code
+          = import_codes::kScriptSidecarSchemaValidationFailed,
           .validation_failed_prefix = "Schema validation failed: ",
-          .validator_failure_code = "script.sidecar.schema_validator_failure",
+          .validator_failure_code
+          = import_codes::kScriptSidecarSchemaValidatorFailure,
           .validator_failure_prefix
           = "Scripting schema validation engine failure: ",
         };
@@ -334,7 +337,7 @@ namespace {
     const auto slot_id
       = internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"));
     if (!slot_id.has_value()) {
-      errors.Add("script.sidecar.slot_id_invalid",
+      errors.Add(std::string(import_codes::kScriptSidecarSlotIdInvalid),
         "Binding row requires a non-nil UUID 'slot_id'", location / "slot_id");
       return std::nullopt;
     }
@@ -360,7 +363,7 @@ namespace {
     const auto location = JsonPointer {} / "instance_bindings" / index;
     auto path = internal::ParseNodePath(binding.at("node_path"));
     if (!path.has_value()) {
-      errors.Add("script.sidecar.node_path_invalid",
+      errors.Add(std::string(import_codes::kScriptSidecarNodePathInvalid),
         "Instance binding row requires a 'node_path' of non-nil node IDs",
         location / "node_path");
       return std::nullopt;
@@ -368,7 +371,7 @@ namespace {
     const auto slot_id
       = internal::ParseNonNilId<data::ScriptSlotId>(binding.at("slot_id"));
     if (!slot_id.has_value()) {
-      errors.Add("script.sidecar.slot_id_invalid",
+      errors.Add(std::string(import_codes::kScriptSidecarSlotIdInvalid),
         "Instance binding row requires a non-nil UUID 'slot_id'",
         location / "slot_id");
       return std::nullopt;
@@ -397,7 +400,8 @@ namespace {
       const auto& row = out.rows.at(i);
       if (previous.node_index == row.node_index
         && previous.slot_id == row.slot_id) {
-        errors.Add("script.sidecar.duplicate_slot_conflict",
+        errors.Add(
+          std::string(import_codes::kScriptSidecarDuplicateSlotConflict),
           "Duplicate sidecar binding identity ("
             + std::to_string(row.node_index) + "|"
             + data::to_string(row.slot_id) + ")",
@@ -413,7 +417,8 @@ namespace {
       const auto& row = out.instance_rows.at(i);
       if (std::tie(previous.node_index, previous.node_path, previous.slot_id)
         == std::tie(row.node_index, row.node_path, row.slot_id)) {
-        errors.Add("script.sidecar.duplicate_slot_conflict",
+        errors.Add(
+          std::string(import_codes::kScriptSidecarDuplicateSlotConflict),
           "Two instance binding rows change one slot of one instanced node",
           JsonPointer {} / "instance_bindings" / row.source_index);
       }
@@ -433,7 +438,7 @@ auto PrepareScriptingSidecarDocument(const std::string_view bytes,
   try {
     parsed = nlohmann::json::parse(bytes);
   } catch (const std::exception& ex) {
-    errors.Add("script.sidecar.parse_failed",
+    errors.Add(std::string(import_codes::kScriptSidecarParseFailed),
       "Failed to parse sidecar document as JSON: " + std::string(ex.what()));
     return std::nullopt;
   }

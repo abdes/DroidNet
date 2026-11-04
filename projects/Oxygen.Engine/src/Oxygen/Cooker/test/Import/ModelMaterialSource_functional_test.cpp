@@ -10,8 +10,6 @@
 
 #include <cstddef>
 #include <filesystem>
-#include <memory>
-#include <optional>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -21,6 +19,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
@@ -156,7 +155,7 @@ namespace {
     const auto prepared = adapter.PrepareMaterials(input);
     EXPECT_FALSE(prepared.success);
     ASSERT_EQ(prepared.diagnostics.size(), 1U);
-    EXPECT_EQ(prepared.diagnostics.front().code, "import.canceled");
+    EXPECT_EQ(prepared.diagnostics.front().code, import_codes::kCanceled);
     EXPECT_TRUE(prepared.sources.empty());
     EXPECT_EQ(naming.GetNameCount(ImportNameKind::kMaterial), 0U);
   }

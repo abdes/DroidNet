@@ -37,6 +37,7 @@
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
@@ -478,7 +479,7 @@ namespace {
       } catch (const std::exception& error) {
         scan.skipped.push_back({
           .severity = ImportSeverity::kWarning,
-          .code = "import.model_record_unreadable",
+          .code = std::string(model_record_codes::kUnreadable),
           .message = "Skipped " + path.generic_string()
             + ", which is not a valid model import record: " + error.what(),
           .source_path = path.generic_string(),
@@ -829,11 +830,11 @@ auto ModelImportRecord::IdentityOf(const MountTable& mounts,
 {
   const auto name = record_path.filename().string();
   if (!name.ends_with(kRecordSuffix) || name.size() == kRecordSuffix.size()) {
-    findings.push_back(
-      Diagnostic(ImportSeverity::kError, "import.model_record_misnamed",
-        "A model import record is named after its model, with the suffix "
-          + std::string(kRecordSuffix) + ": " + record_path.generic_string(),
-        record_path));
+    findings.push_back(Diagnostic(ImportSeverity::kError,
+      std::string(model_record_codes::kMisnamed),
+      "A model import record is named after its model, with the suffix "
+        + std::string(kRecordSuffix) + ": " + record_path.generic_string(),
+      record_path));
     return std::nullopt;
   }
   const auto located = mounts.MountPathOf(record_path, findings);
@@ -1057,12 +1058,12 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
     }
     location.exists = true;
     if (!same_source(record.content)) {
-      location.diagnostics.push_back(
-        Diagnostic(ImportSeverity::kInfo, "import.source_rebound",
-          "The model " + record.identity + " now imports from "
-            + file.generic_string() + " instead of "
-            + record.content.source.generic_string(),
-          file));
+      location.diagnostics.push_back(Diagnostic(ImportSeverity::kInfo,
+        std::string(import_codes::kSourceRebound),
+        "The model " + record.identity + " now imports from "
+          + file.generic_string() + " instead of "
+          + record.content.source.generic_string(),
+        file));
     }
     return location;
   }
@@ -1070,14 +1071,14 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
   // 2. Another model from the same file.
   for (const auto& record : records) {
     if (same_source(record.content)) {
-      location.diagnostics.push_back(
-        Diagnostic(ImportSeverity::kInfo, "import.source_has_model",
-          "The file is already the source of the model " + record.identity
-            + " (" + record.path.generic_string()
-            + "); this import makes another model. To reimport that model, "
-              "import with --record "
-            + record.path.generic_string(),
-          file));
+      location.diagnostics.push_back(Diagnostic(ImportSeverity::kInfo,
+        std::string(import_codes::kSourceHasModel),
+        "The file is already the source of the model " + record.identity + " ("
+          + record.path.generic_string()
+          + "); this import makes another model. To reimport that model, "
+            "import with --record "
+          + record.path.generic_string(),
+        file));
       return location;
     }
   }
@@ -1106,14 +1107,14 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
     const auto& record = *moved.front();
     location.record_path = record.path;
     location.exists = true;
-    location.diagnostics.push_back(
-      Diagnostic(ImportSeverity::kInfo, "import.source_relocated",
-        "The model " + record.identity + " lost its source "
-          + record.content.source.generic_string()
-          + ", and this file has its bytes: the import rebinds it to this "
-            "file and it keeps its identity; moving its record gives it "
-            "another",
-        file));
+    location.diagnostics.push_back(Diagnostic(ImportSeverity::kInfo,
+      std::string(import_codes::kSourceRelocated),
+      "The model " + record.identity + " lost its source "
+        + record.content.source.generic_string()
+        + ", and this file has its bytes: the import rebinds it to this "
+          "file and it keeps its identity; moving its record gives it "
+          "another",
+      file));
     return location;
   }
   if (moved.size() > 1U) {
@@ -1121,27 +1122,27 @@ auto ModelImportRecord::LocateRecord(const ModelImportRecordQuery& query)
     for (const auto* record : moved) {
       names += (names.empty() ? "" : ", ") + record->path.generic_string();
     }
-    location.diagnostics.push_back(
-      Diagnostic(ImportSeverity::kWarning, "import.source_relocation_ambiguous",
-        "Several records whose source is missing have this file's bytes; none "
-        "is taken: "
-          + names + ". Import with --record to choose one",
-        file));
+    location.diagnostics.push_back(Diagnostic(ImportSeverity::kWarning,
+      std::string(import_codes::kSourceRelocationAmbiguous),
+      "Several records whose source is missing have this file's bytes; none "
+      "is taken: "
+        + names + ". Import with --record to choose one",
+      file));
   }
 
   // 4. A new model, with what may explain it.
   for (const auto& record : records) {
     if (Exists(record.content.source) && same_bytes(record.content)) {
-      location.diagnostics.push_back(
-        Diagnostic(ImportSeverity::kInfo, "import.source_copy",
-          "The file is a copy of " + record.content.source.generic_string()
-            + ", the source of the model " + record.identity
-            + "; importing it as that model makes it that model's source",
-          file));
+      location.diagnostics.push_back(Diagnostic(ImportSeverity::kInfo,
+        std::string(import_codes::kSourceCopy),
+        "The file is a copy of " + record.content.source.generic_string()
+          + ", the source of the model " + record.identity
+          + "; importing it as that model makes it that model's source",
+        file));
     } else if (!Exists(record.content.source)
       && record.content.source.filename() == file.filename()) {
       location.diagnostics.push_back(Diagnostic(ImportSeverity::kWarning,
-        "import.source_relocation_candidate",
+        std::string(import_codes::kSourceRelocationCandidate),
         "The model " + record.identity + " lost its source "
           + record.content.source.generic_string()
           + " and may be this file, moved and changed. To rebind it: "

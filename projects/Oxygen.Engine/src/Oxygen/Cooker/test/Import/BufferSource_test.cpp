@@ -14,6 +14,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -98,7 +100,7 @@ namespace {
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
       container.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "buffer.container.virtual_path_duplicate"));
+      diagnostics, import_codes::kBufferContainerVirtualPathDuplicate));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/1/virtual_path");
   }
@@ -132,8 +134,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
       container.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "buffer.container.virtual_path_duplicate"))
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kBufferContainerVirtualPathDuplicate))
       << DiagnosticSummary(diagnostics);
   }
 
@@ -148,9 +150,10 @@ namespace {
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
       container.Identity(), Mounts(), diagnostics));
     ASSERT_FALSE(diagnostics.empty());
-    EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
+    EXPECT_EQ(diagnostics.front().code, import_codes::kReferenceInvalid);
     EXPECT_THAT(diagnostics.front().message,
-      ::testing::HasSubstr("vpath.reference_self_absolute"));
+      ::testing::HasSubstr(
+        std::string(oxygen::content::vpath_codes::kReferenceSelfAbsolute)));
     EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/0/virtual_path");
   }
 
@@ -165,9 +168,10 @@ namespace {
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
       container.Identity(), Mounts(), diagnostics));
     ASSERT_FALSE(diagnostics.empty());
-    EXPECT_EQ(diagnostics.front().code, "import.reference_invalid");
+    EXPECT_EQ(diagnostics.front().code, import_codes::kReferenceInvalid);
     EXPECT_THAT(diagnostics.front().message,
-      ::testing::HasSubstr("vpath.reference_outside_mount"));
+      ::testing::HasSubstr(
+        std::string(oxygen::content::vpath_codes::kReferenceOutsideMount)));
   }
 
   NOLINT_TEST_F(BufferSourceTest, RejectsInvalidDeclarationWithSourceLocation)
@@ -181,7 +185,7 @@ namespace {
       container.Identity(), Mounts(), diagnostics,
       Json::json_pointer { "/lod/buffers" }));
     EXPECT_TRUE(HasDiagnosticCode(
-      diagnostics, "buffer.container.schema_validation_failed"));
+      diagnostics, import_codes::kBufferContainerSchemaValidationFailed));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().source_path, "geometry.json");
     EXPECT_TRUE(diagnostics.front().json_pointer.starts_with("/lod/buffers/0"));
@@ -208,8 +212,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       Json::object(), "geometry.json", kContainer, Mounts(), diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "buffer.container.buffers_missing"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kBufferContainerBuffersMissing));
   }
 
   NOLINT_TEST_F(BufferSourceTest, RetainsDuplicateViewDiagnostic)
@@ -227,7 +231,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations, "geometry.json",
       container.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasDiagnosticCode(diagnostics, "buffer.view.name_duplicate"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, import_codes::kBufferViewNameDuplicate));
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/0/views/1/name");
   }
@@ -259,9 +264,10 @@ namespace {
     const auto mounts = ContentAndOtherMountTable(TempDir());
     EXPECT_FALSE(BufferSource::FromDeclarations(declarations,
       "Content/geometry.json", container.Identity(), *mounts, diagnostics));
-    ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
+    ASSERT_TRUE(HasDiagnosticCode(diagnostics, import_codes::kReferenceInvalid))
       << DiagnosticSummary(diagnostics);
-    EXPECT_NE(diagnostics.front().message.find("vpath.reference_outside_mount"),
+    EXPECT_NE(diagnostics.front().message.find(
+                oxygen::content::vpath_codes::kReferenceOutsideMount),
       std::string::npos);
   }
 } // namespace

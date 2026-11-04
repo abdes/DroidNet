@@ -18,6 +18,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -25,6 +26,7 @@
 
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
@@ -232,7 +234,7 @@ protected:
   }
 
   static auto Count(const std::vector<ImportDiagnostic>& diagnostics,
-    const std::string& code) -> size_t
+    const std::string_view code) -> size_t
   {
     return static_cast<size_t>(
       std::ranges::count(diagnostics, code, &ImportDiagnostic::code));
@@ -279,7 +281,9 @@ NOLINT_TEST_F(FbxLodGroupsTest, LodGroupIsOneGeometryWithALodPerChild)
     << "LOD1 keeps its level's translation";
   EXPECT_EQ(imported.renderable_count, 1U);
   EXPECT_EQ(imported.node_count, 2U) << "the root and the group's node";
-  EXPECT_EQ(Count(imported.diagnostics, "fbx.lod.level_skipped"), 0U);
+  EXPECT_EQ(Count(imported.diagnostics,
+              oxygen::content::import::import_codes::kFbxLodLevelSkipped),
+    0U);
 }
 
 /*!
@@ -366,7 +370,9 @@ NOLINT_TEST_F(FbxLodGroupsTest, LevelsAfterAnUnusableOneAreReportedAndSkipped)
   ASSERT_TRUE(imported.success);
   ASSERT_EQ(imported.geometries.size(), 1U);
   EXPECT_EQ(imported.geometries.front().lod_count, 1U);
-  EXPECT_EQ(Count(imported.diagnostics, "fbx.lod.level_skipped"), 2U);
+  EXPECT_EQ(Count(imported.diagnostics,
+              oxygen::content::import::import_codes::kFbxLodLevelSkipped),
+    2U);
   EXPECT_EQ(imported.renderable_count, 1U);
   EXPECT_EQ(imported.node_count, 2U);
 }

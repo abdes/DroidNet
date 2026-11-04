@@ -29,7 +29,9 @@ namespace internal {
     //! The reference as written in the job's authored file.
     std::string text;
     std::string json_pointer;
-    std::string diagnostic_prefix;
+    //! The codes of a descriptor that cannot be used, and of one that is gone.
+    std::string_view descriptor_invalid_code;
+    std::string_view descriptor_missing_code;
     //! A texture whose descriptor no longer exists, for example after it was
     //! deleted, is reported as a warning and resolved as missing instead of
     //! failing the import.

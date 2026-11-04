@@ -19,6 +19,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -68,9 +69,11 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics) -> bool
   {
     const auto config = JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "texture.descriptor.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kTextureDescriptorSchemaValidationFailed,
       .validation_failed_prefix = "Texture descriptor validation failed: ",
-      .validator_failure_code = "texture.descriptor.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kTextureDescriptorSchemaValidatorFailure,
       .validator_failure_prefix
       = "Texture descriptor schema validator failed: ",
     };
@@ -233,7 +236,7 @@ auto TextureDescriptorImportSettings::Prepare(const std::string_view bytes,
   } catch (const json::exception& failure) {
     diagnostics.push_back(ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "texture.descriptor.invalid_json",
+      .code = std::string(import_codes::kTextureDescriptorInvalidJson),
       .message = failure.what(),
       .source_path = path.string(),
       .object_path = {},

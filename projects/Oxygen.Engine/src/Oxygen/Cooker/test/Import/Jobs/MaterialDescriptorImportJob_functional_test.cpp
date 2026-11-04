@@ -17,9 +17,11 @@
 #include <vector>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -101,7 +103,7 @@ namespace {
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->materials_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "import.asset_virtual_path_missing"));
+      report->diagnostics, request_codes::kVirtualPathMissing));
   }
 
   //! A source cooking its material again replaces it; another source cooking
@@ -130,7 +132,7 @@ namespace {
     EXPECT_TRUE(again->success) << "a source re-cooking its asset replaces it";
     EXPECT_FALSE(other->success);
     EXPECT_TRUE(
-      HasDiagnosticCode(other->diagnostics, "import.identity_collision"));
+      HasDiagnosticCode(other->diagnostics, import_codes::kIdentityCollision));
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
       = index.FindAssetKeyByVirtualPath("/Cooked/Materials/woodfloor007.omat");
@@ -192,8 +194,8 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->materials_written, 1U);
-    EXPECT_FALSE(HasDiagnosticCode(
-      report->diagnostics, "material.descriptor.texture_descriptor_missing"));
+    EXPECT_FALSE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kMaterialDescriptorTextureDescriptorMissing));
 
     ASSERT_TRUE(HasCookedFile(cooked_root, "Materials/woodfloor007.omat"));
     const auto bytes
@@ -239,8 +241,8 @@ namespace {
     })"));
 
     ASSERT_HAS_VALUE(report);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "material.descriptor.texture_descriptor_missing"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kMaterialDescriptorTextureDescriptorMissing));
   }
 
   //! A deleted texture leaves its slot unbound with a warning, so the material
@@ -266,7 +268,7 @@ namespace {
     const auto missing = std::ranges::find_if(
       report->diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
         return diagnostic.code
-          == "material.descriptor.texture_descriptor_missing";
+          == import_codes::kMaterialDescriptorTextureDescriptorMissing;
       });
     ASSERT_NE(missing, report->diagnostics.end());
     EXPECT_EQ(missing->severity, ImportSeverity::kWarning);

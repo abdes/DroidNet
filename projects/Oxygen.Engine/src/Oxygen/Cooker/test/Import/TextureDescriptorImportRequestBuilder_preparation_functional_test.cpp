@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportSettings.h>
@@ -33,8 +34,9 @@ NOLINT_TEST(TextureDescriptorPreparationTest, KeepsNativeSchemaDiagnostics)
   EXPECT_FALSE(settings.Prepare(
     R"({"source":"image.png","decode":{"unexpected":true}})", diagnostics));
   ASSERT_FALSE(diagnostics.empty());
-  EXPECT_EQ(
-    diagnostics.front().code, "texture.descriptor.schema_validation_failed");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::
+      kTextureDescriptorSchemaValidationFailed);
   EXPECT_EQ(diagnostics.front().source_path, "texture.json");
 }
 
@@ -49,7 +51,8 @@ NOLINT_TEST(
   EXPECT_FALSE(
     settings.Prepare(R"({"source":"image.png"} trailing)", diagnostics));
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "texture.descriptor.invalid_json");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kTextureDescriptorInvalidJson);
 }
 
 NOLINT_TEST(TextureDescriptorPreparationTest,

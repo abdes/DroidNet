@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
@@ -65,9 +66,11 @@ namespace {
     const nlohmann::json& descriptor_doc) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "geometry.descriptor.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kGeometryDescriptorSchemaValidationFailed,
       .validation_failed_prefix = "Geometry descriptor validation failed: ",
-      .validator_failure_code = "geometry.descriptor.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kGeometryDescriptorSchemaValidatorFailure,
       .validator_failure_prefix
       = "Geometry descriptor schema validator failed: ",
     };
@@ -214,7 +217,7 @@ namespace {
           surface_doc.at("surface_id").get<std::string>());
         if (!id || std::ranges::find(declared, id.value()) == declared.end()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.descriptor.surface_unknown",
+            std::string(import_codes::kGeometryDescriptorSurfaceUnknown),
             "Surface defaults name a surface no submesh declares",
             surface_pointer / "surface_id");
           return false;
@@ -223,7 +226,7 @@ namespace {
               source.surfaces, id.value(), &AuthoredSurfaceDefaults::surface_id)
           != source.surfaces.end()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.descriptor.surface_duplicate",
+            std::string(import_codes::kGeometryDescriptorSurfaceDuplicate),
             "Surface defaults name a surface more than once",
             surface_pointer / "surface_id");
           return false;
@@ -242,7 +245,7 @@ namespace {
       source.lod_policy = ReadLodPolicy(document.at("lod_policy"));
       if (!source.lod_policy.has_value()) {
         AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-          "geometry.descriptor.lod_policy_invalid",
+          std::string(import_codes::kGeometryDescriptorLodPolicyInvalid),
           "LOD policy distance thresholds must not decrease, its "
           "screen-space error lists must not increase and must have equal "
           "lengths",
@@ -312,7 +315,7 @@ namespace {
         if (!BuildProceduralParamBlob(
               lod_doc, procedural.name, procedural.parameters)) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.procedural.params_invalid",
+            std::string(import_codes::kGeometryProceduralParamsInvalid),
             "Failed encoding procedural parameter blob",
             lod_pointer / "procedural" / "params");
           return std::nullopt;
@@ -329,7 +332,7 @@ namespace {
           submesh_doc.at("surface_id").get<std::string>());
         if (!surface || surface.value().IsNil()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.descriptor.surface_id_invalid",
+            std::string(import_codes::kGeometryDescriptorSurfaceIdInvalid),
             "Submesh requires a non-nil canonical surface identity",
             submesh_pointer / "surface_id");
           return std::nullopt;
@@ -347,7 +350,7 @@ namespace {
         if (lod.bounds.has_value() && submesh.bounds.has_value()
           && !lod.bounds->Contains(*submesh.bounds)) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.descriptor.submesh_bounds_invalid",
+            std::string(import_codes::kGeometryDescriptorSubmeshBoundsInvalid),
             "Submesh bounds must be ordered and lie inside the LOD bounds",
             submesh_pointer / "bounds");
           return std::nullopt;
@@ -366,7 +369,7 @@ namespace {
           if (std::holds_alternative<GeometrySource::Procedural>(lod.mesh)
             && view.view_ref != data::kWholeBufferViewName) {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-              "geometry.procedural.view_ref_invalid",
+              std::string(import_codes::kGeometryProceduralViewRefInvalid),
               "Procedural submesh view_ref must be '__all__'",
               view_pointer / "view_ref");
             return std::nullopt;
@@ -374,7 +377,7 @@ namespace {
           if (submesh.bounds.has_value() && view.bounds.has_value()
             && !submesh.bounds->Contains(*view.bounds)) {
             AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-              "geometry.descriptor.view_bounds_invalid",
+              std::string(import_codes::kGeometryDescriptorViewBoundsInvalid),
               "Mesh view bounds must be ordered and lie inside the submesh "
               "bounds",
               view_pointer / "bounds");
@@ -441,7 +444,8 @@ auto GeometrySource::FromDescriptor(const std::string_view bytes,
     return ReadSource(document, source_path, anchor, mounts, diagnostics);
   } catch (const json::exception& error) {
     AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-      "geometry.descriptor.request_invalid_json", error.what());
+      std::string(import_codes::kGeometryDescriptorRequestInvalidJson),
+      error.what());
     return std::nullopt;
   }
 }

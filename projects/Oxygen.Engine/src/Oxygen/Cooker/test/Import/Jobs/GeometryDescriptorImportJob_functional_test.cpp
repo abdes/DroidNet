@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
@@ -78,8 +79,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     }));
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
-  EXPECT_TRUE(
-    HasDiagnosticCode(report->diagnostics, "geometry.material.missing"));
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryMaterialMissing));
 }
 
 //! Only an index lists an asset: a material file no index lists, even in the

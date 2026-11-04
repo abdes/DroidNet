@@ -280,7 +280,9 @@ NOLINT_TEST(
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.bindings_not_allowed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kBindingsNotAllowed));
 }
 
 NOLINT_TEST(ImportManifestScriptSidecarTest,

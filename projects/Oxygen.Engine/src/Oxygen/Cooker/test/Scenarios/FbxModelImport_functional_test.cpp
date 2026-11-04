@@ -15,6 +15,7 @@
 #include <string_view>
 #include <utility>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -127,7 +128,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(result.report.geometry_written, 1U);
   EXPECT_TRUE(std::ranges::any_of(
     result.report.diagnostics, [](const auto& diagnostic) -> bool {
-      return diagnostic.code == "fbx.units_unknown"
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kFbxUnitsUnknown
         && diagnostic.severity
         == oxygen::content::import::ImportSeverity::kWarning;
     }));

@@ -19,6 +19,7 @@
 #include "SceneBuildTestSupport.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -98,7 +99,8 @@ NOLINT_TEST_F(ScenePipelineTest, RejectsUnsupportedNodeFlagSourceModes)
   EXPECT_FALSE(result.cooked.has_value());
   EXPECT_TRUE(std::ranges::any_of(
     result.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-      return diagnostic.code == "scene.node.flags_invalid";
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kSceneNodeFlagsInvalid;
     }));
 }
 

@@ -15,6 +15,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -215,7 +216,7 @@ auto NamingService::CollisionWarnings(const std::string_view source_path) const
     for (const auto& [taken, assigned] : registry.collisions) {
       warnings.push_back({
         .severity = ImportSeverity::kWarning,
-        .code = "import.name_collision",
+        .code = std::string(import_codes::kNameCollision),
         .message = fmt::format(
           "another {} of the source is named '{}', so this one is named "
           "'{}'; the two swap names, and the references to them, if the "

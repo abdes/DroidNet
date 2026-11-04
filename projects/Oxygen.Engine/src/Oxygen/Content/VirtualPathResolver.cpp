@@ -91,7 +91,7 @@ auto VirtualPathResolver::ResolveAssetKey(
 {
   if (const auto error = ValidateVirtualPath(virtual_path); error.has_value()) {
     throw std::invalid_argument(std::string("Virtual path is not canonical: ")
-      + nostd::to_string(*error));
+      + std::string(nostd::to_string(*error)));
   }
 
   const internal::VirtualPathResolutionCallbacks callbacks {

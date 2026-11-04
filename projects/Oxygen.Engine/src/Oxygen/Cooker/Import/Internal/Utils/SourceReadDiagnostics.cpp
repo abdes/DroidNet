@@ -12,6 +12,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/SourceReadDiagnostics.h>
 #include <Oxygen/Serio/Error.h>
@@ -34,7 +35,7 @@ auto MakeSourceTooLargeDiagnostic(const std::filesystem::path& path,
   const auto held = size ? std::to_string(*size) + " bytes" : "more bytes";
   return ImportDiagnostic {
     .severity = ImportSeverity::kError,
-    .code = std::string(kSourceTooLargeCode),
+    .code = std::string(import_codes::kSourceTooLarge),
     .message = "Source '" + path.string() + "' holds " + held
       + ", more than the import reads from one source ("
       + std::to_string(limit.get()) + " bytes, max_source_bytes)",

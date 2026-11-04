@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -88,8 +89,8 @@ namespace {
     EXPECT_FALSE(Prepare("{ \"buffers\": [ ", diagnostics));
 
     ASSERT_EQ(diagnostics.size(), 1U) << DiagnosticSummary(diagnostics);
-    EXPECT_EQ(
-      diagnostics.front().code, "buffer.container.request_invalid_json");
+    EXPECT_EQ(diagnostics.front().code,
+      import_codes::kBufferContainerRequestInvalidJson);
     EXPECT_EQ(diagnostics.front().source_path, "geometry.buffers.json");
     EXPECT_TRUE(diagnostics.front().json_pointer.empty());
   }
@@ -100,8 +101,8 @@ namespace {
 
     EXPECT_FALSE(Prepare("// note\n{ \"buffers\": [] }", diagnostics));
 
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "buffer.container.request_invalid_json"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kBufferContainerRequestInvalidJson));
   }
 
   NOLINT_TEST_F(BufferContainerPreparationTest, RefusesANonObjectRoot)
@@ -111,8 +112,8 @@ namespace {
     EXPECT_FALSE(Prepare("[]", diagnostics));
 
     ASSERT_EQ(diagnostics.size(), 1U) << DiagnosticSummary(diagnostics);
-    EXPECT_EQ(
-      diagnostics.front().code, "buffer.container.request_invalid_json");
+    EXPECT_EQ(diagnostics.front().code,
+      import_codes::kBufferContainerRequestInvalidJson);
     EXPECT_TRUE(diagnostics.front().json_pointer.empty());
   }
 
@@ -123,8 +124,8 @@ namespace {
     EXPECT_FALSE(Prepare("{}", diagnostics));
 
     ASSERT_FALSE(diagnostics.empty());
-    EXPECT_EQ(
-      diagnostics.front().code, "buffer.container.schema_validation_failed");
+    EXPECT_EQ(diagnostics.front().code,
+      import_codes::kBufferContainerSchemaValidationFailed);
     EXPECT_TRUE(diagnostics.front().json_pointer.empty());
   }
 
@@ -141,7 +142,8 @@ namespace {
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_TRUE(std::ranges::any_of(diagnostics,
       [](const ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "buffer.container.schema_validation_failed"
+        return diagnostic.code
+          == import_codes::kBufferContainerSchemaValidationFailed
           && diagnostic.json_pointer == "/buffers/0/element_stride";
       }))
       << DiagnosticSummary(diagnostics);
@@ -161,7 +163,8 @@ namespace {
 
     auto pointers = std::vector<std::string> {};
     for (const auto& diagnostic : diagnostics) {
-      EXPECT_EQ(diagnostic.code, "buffer.container.schema_validation_failed");
+      EXPECT_EQ(
+        diagnostic.code, import_codes::kBufferContainerSchemaValidationFailed);
       pointers.push_back(diagnostic.json_pointer + diagnostic.message);
     }
     std::ranges::sort(pointers);
@@ -180,8 +183,8 @@ namespace {
     EXPECT_FALSE(Prepare(container.Text(), diagnostics));
 
     ASSERT_FALSE(diagnostics.empty());
-    EXPECT_EQ(
-      diagnostics.front().code, "buffer.container.virtual_path_duplicate");
+    EXPECT_EQ(diagnostics.front().code,
+      import_codes::kBufferContainerVirtualPathDuplicate);
     EXPECT_EQ(diagnostics.front().json_pointer, "/buffers/1/virtual_path");
   }
 } // namespace

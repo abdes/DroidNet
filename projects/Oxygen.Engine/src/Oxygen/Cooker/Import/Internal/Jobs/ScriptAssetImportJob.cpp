@@ -11,6 +11,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -78,7 +79,7 @@ auto ScriptAssetImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (Request().options.scripting.import_kind
     != ScriptingImportKind::kScriptAsset) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "script.request.invalid_import_kind",
+      std::string(import_codes::kScriptRequestInvalidImportKind),
       "ScriptAssetImportJob requires "
       "options.scripting.import_kind=kScriptAsset");
     ReportPhaseProgress(
@@ -141,7 +142,8 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
   auto* const reader = FileReader().get();
   if (reader == nullptr) {
     AddDiagnostic(session, req, ImportSeverity::kError,
-      "script.asset.reader_unavailable", "Async file reader is not available");
+      std::string(import_codes::kScriptAssetReaderUnavailable),
+      "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
       .bytes = {},
@@ -155,7 +157,7 @@ auto ScriptAssetImportJob::LoadSource(ImportSession& session)
       session.AddDiagnostic(std::move(*too_large));
     } else {
       AddDiagnostic(session, req, ImportSeverity::kError,
-        "script.asset.source_read_failed",
+        std::string(import_codes::kScriptAssetSourceReadFailed),
         "Failed to read source file '" + req.source_path.string()
           + "': " + read.error().message());
     }

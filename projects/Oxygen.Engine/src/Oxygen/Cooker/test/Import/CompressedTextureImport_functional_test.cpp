@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
@@ -48,8 +49,7 @@ namespace {
   constexpr auto kSize = uint32_t { 8U };
   constexpr auto kModelSurfaceIdentity
     = std::string_view { "0196f2a0-5b4c-7d3e-8f10-2a3b4c5d6e80" };
-  constexpr auto kPlaceholderUsed
-    = std::string_view { "texture.placeholder_used" };
+  constexpr auto kPlaceholderUsed = import_codes::kTexturePlaceholderUsed;
 
   //! An opaque mid-grey 8x8 RGBA8 image.
   [[nodiscard]] auto Grey() -> std::vector<std::byte>

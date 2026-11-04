@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
@@ -172,7 +173,7 @@ namespace {
           EXPECT_FALSE(result.success);
           EXPECT_FALSE(result.cooked.has_value());
           EXPECT_TRUE(HasDiagnosticCode(
-            result.diagnostics, "material.emissive_factor_range"));
+            result.diagnostics, import_codes::kMaterialEmissiveFactorRange));
         }
         pipeline.Close();
         co_return co::kJoin;
@@ -280,7 +281,8 @@ namespace {
         });
 
     EXPECT_FALSE(result.success);
-    EXPECT_TRUE(HasDiagnosticCode(result.diagnostics, "material.orm_policy"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMaterialOrmPolicy));
   }
 
   //=== UV Transform Tests

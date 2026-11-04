@@ -39,6 +39,7 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -408,7 +409,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(WorldMatrix(baked.scene, 4), WorldMatrix(retained.scene, 4));
   EXPECT_TRUE(std::ranges::any_of(
     baked.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-      return diagnostic.code == "mesh.transform_bake_retained"
+      return diagnostic.code
+        == oxygen::content::import::import_codes::kMeshTransformBakeRetained
         && diagnostic.severity == ImportSeverity::kInfo;
     }));
   ExpectEquivalentWorldGeometry(retained, baked);
@@ -496,7 +498,8 @@ NOLINT_TEST_F(MeshTransformBakeTest, GltfRetainsAnimatedAndMorphNodeTransforms)
       retained.scene.renderables.at(0).geometry_key);
     EXPECT_TRUE(std::ranges::any_of(
       baked.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "mesh.transform_bake_retained"
+        return diagnostic.code
+          == oxygen::content::import::import_codes::kMeshTransformBakeRetained
           && diagnostic.severity == ImportSeverity::kInfo;
       }));
     ExpectEquivalentWorldGeometry(retained, baked);

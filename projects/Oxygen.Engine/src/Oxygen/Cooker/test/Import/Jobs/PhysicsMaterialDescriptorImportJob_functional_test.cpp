@@ -18,6 +18,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
@@ -133,8 +135,8 @@ namespace {
     const auto report = Import(std::move(request));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.material.schema_validation_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kPhysicsMaterialSchemaValidationFailed));
   }
 
   //! A physics material request cooked at `virtual_path`, its descriptor
@@ -186,8 +188,8 @@ namespace {
       nlohmann::json { { "name", "ground" } }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, "vpath.segment.too_long"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, oxygen::content::vpath_codes::kSegmentTooLong));
   }
 
   NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
@@ -205,8 +207,8 @@ namespace {
         }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "physics.material.schema_validation_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kPhysicsMaterialSchemaValidationFailed));
   }
 
 } // namespace

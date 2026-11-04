@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -76,7 +77,7 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& payload = Request().buffer_container;
   if (!payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "buffer.container.request_invalid",
+      std::string(import_codes::kBufferContainerRequestInvalid),
       "BufferContainerImportJob requires request.buffer_container");
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Invalid buffer-container request");
@@ -112,7 +113,7 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
   if (submission.submitted_count == 0U) {
     if (!session.HasErrors()) {
       AddDiagnostic(session, Request(), ImportSeverity::kError,
-        "buffer.container.no_submissions",
+        std::string(import_codes::kBufferContainerNoSubmissions),
         "No buffer work items were submitted");
     }
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,

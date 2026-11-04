@@ -30,8 +30,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
@@ -671,7 +673,7 @@ namespace {
     EXPECT_EQ(model.scenes, expected);
     auto dropped = std::vector<std::string> {};
     for (const auto& diagnostic : result.diagnostics) {
-      if (diagnostic.code == "import.source_feature_dropped"
+      if (diagnostic.code == import_codes::kSourceFeatureDropped
         && diagnostic.object_path.starts_with("/scenes/")) {
         EXPECT_EQ(diagnostic.severity, ImportSeverity::kWarning);
         dropped.push_back(diagnostic.object_path);
@@ -789,7 +791,7 @@ namespace {
     EXPECT_FALSE(result.observations.front().exists);
     EXPECT_TRUE(std::ranges::any_of(
       result.diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "analysis.source_missing";
+        return diagnostic.code == import_codes::kAnalysisSourceMissing;
       }));
   }
 
@@ -809,7 +811,7 @@ namespace {
     ASSERT_EQ(report.jobs.size(), 1U);
     EXPECT_TRUE(std::ranges::any_of(
       report.jobs.front().diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "analysis.source_not_file";
+        return diagnostic.code == import_codes::kAnalysisSourceNotFile;
       }));
   }
 
@@ -916,7 +918,7 @@ namespace {
     EXPECT_TRUE(required("Glass"));
     EXPECT_TRUE(std::ranges::any_of(
       result.diagnostics, [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "import.setting_target_missing"
+        return diagnostic.code == import_codes::kSettingTargetMissing
           && diagnostic.object_path == "material_remap/Chrome";
       }));
     EXPECT_FALSE(std::ranges::any_of(
@@ -1161,9 +1163,10 @@ namespace {
     const auto& diagnostics = report.jobs.front().diagnostics;
     EXPECT_TRUE(std::ranges::any_of(diagnostics,
       [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "import.reference_invalid"
+        return diagnostic.code == import_codes::kReferenceInvalid
           && diagnostic.json_pointer == "/bindings/colliders/0/shape_ref"
-          && diagnostic.message.contains("vpath.reference_self_absolute");
+          && diagnostic.message.contains(
+            oxygen::content::vpath_codes::kReferenceSelfAbsolute);
       }))
       << report.ToJson();
   }
@@ -1229,7 +1232,8 @@ namespace {
     EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
     EXPECT_TRUE(std::ranges::any_of(cook,
       [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "physics.material.schema_validation_failed"
+        return diagnostic.code
+          == import_codes::kPhysicsMaterialSchemaValidationFailed
           && diagnostic.json_pointer == "/static_friction";
       }))
       << report.ToJson();
@@ -1258,7 +1262,7 @@ namespace {
     EXPECT_TRUE(RefusesAsTheCook(report, cook)) << report.ToJson();
     EXPECT_TRUE(std::ranges::any_of(cook,
       [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "input.schema.validation_failed"
+        return diagnostic.code == import_codes::kInputSchemaValidationFailed
           && diagnostic.json_pointer == "/actions";
       }))
       << report.ToJson();

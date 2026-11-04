@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
@@ -31,12 +32,12 @@ using oxygen::content::import::MountScope;
 using oxygen::content::import::MountState;
 using oxygen::content::import::MountTable;
 using oxygen::content::import::PhysicsImportSettings;
+using oxygen::content::import::import_codes::kReferenceInvalid;
+using oxygen::content::import::import_codes::kReferenceUnmounted;
 using oxygen::content::import::internal::AssetReferenceRefusal;
 using oxygen::content::import::internal::AssetReferenceRefused;
 using oxygen::content::import::internal::BuildMountedCookedRoots;
 using oxygen::content::import::internal::DescribeLookup;
-using oxygen::content::import::internal::kReferenceInvalidCode;
-using oxygen::content::import::internal::kReferenceUnmountedCode;
 using oxygen::content::import::internal::RefuseReference;
 using oxygen::content::import::internal::RefuseUnmountedReference;
 using oxygen::content::import::internal::ResolvedReference;
@@ -113,10 +114,11 @@ NOLINT_TEST(JobReferenceTest, InvalidReferenceDiagnosticNamesTheField)
   const auto diagnostic = RefuseReference(request, "../../Brick.otex",
     VirtualPathError::kReferenceOutsideMount, "/textures/base_color");
 
-  EXPECT_EQ(diagnostic.code, kReferenceInvalidCode);
+  EXPECT_EQ(diagnostic.code, kReferenceInvalid);
   EXPECT_EQ(diagnostic.json_pointer, "/textures/base_color");
   EXPECT_TRUE(diagnostic.object_path.empty());
-  EXPECT_NE(diagnostic.message.find("vpath.reference_outside_mount"),
+  EXPECT_NE(diagnostic.message.find(
+              oxygen::content::vpath_codes::kReferenceOutsideMount),
     std::string::npos);
 }
 
@@ -132,7 +134,7 @@ NOLINT_TEST(JobReferenceTest, UnmountedReferenceDiagnosticNamesBothForms)
   const auto diagnostic
     = RefuseUnmountedReference(request, reference, "/material_ref");
 
-  EXPECT_EQ(diagnostic.code, kReferenceUnmountedCode);
+  EXPECT_EQ(diagnostic.code, kReferenceUnmounted);
   EXPECT_NE(diagnostic.message.find("/Props/Crate.omat"), std::string::npos);
 }
 

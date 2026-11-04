@@ -12,6 +12,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ModelNodeIdentity.h>
@@ -103,7 +104,8 @@ NOLINT_TEST(ModelNodeIdentityTest, ReportsAMissingSourceIdentity)
   static_cast<void>(
     ModelNodeIdentity::ForRequest(ImportRequest {}, "model.glb", diagnostics));
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "import.source_identity_missing");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kSourceIdentityMissing);
 
   auto request = ImportRequest {};
   request.surface_provenance
@@ -177,7 +179,10 @@ NOLINT_TEST(ModelNodeIdentityTest, ConflictingContinuityIsDropped)
 
   EXPECT_THAT(Codes(diagnostics),
     testing::ElementsAre(
-      "import.node_continuity_conflict", "import.node_continuity_conflict"));
+      std::string(
+        oxygen::content::import::import_codes::kNodeContinuityConflict),
+      std::string(
+        oxygen::content::import::import_codes::kNodeContinuityConflict)));
   EXPECT_EQ(identity.IdOf("Door_New"), plain.IdOf("Door_New"));
   EXPECT_EQ(identity.IdOf("Mirror_A"), plain.IdOf("Mirror"));
   EXPECT_EQ(identity.IdOf("Mirror_B"), plain.IdOf("Mirror_B"));
@@ -196,7 +201,8 @@ NOLINT_TEST(ModelNodeIdentityTest, AContinuityCycleIsAnError)
     std::vector<std::string> { "A" }, "car.glb", diagnostics));
 
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "import.node_continuity_cycle");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kNodeContinuityCycle);
   EXPECT_EQ(diagnostics.front().severity,
     oxygen::content::import::ImportSeverity::kError);
 }
@@ -229,7 +235,8 @@ NOLINT_TEST(ModelNodeIdentityTest, PublishedNodesReportWhatChanged)
   const auto next = second.TakePublishedNodes("car.glb", diagnostics);
 
   ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_EQ(diagnostics.front().code, "import.nodes_changed");
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kNodesChanged);
   EXPECT_EQ(diagnostics.front().severity,
     oxygen::content::import::ImportSeverity::kInfo);
   EXPECT_THAT(diagnostics.front().message,

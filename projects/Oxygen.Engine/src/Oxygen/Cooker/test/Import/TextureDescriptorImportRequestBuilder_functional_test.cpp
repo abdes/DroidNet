@@ -11,6 +11,8 @@
 #include <optional>
 #include <vector>
 
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/TextureDescriptorImportRequestBuilder.h>
@@ -75,8 +77,9 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   EXPECT_FALSE(settings.Prepare(
     R"({"source":"image.png","virtual_path":"/Content/Textures/Retained.otex"})",
     diagnostics));
-  EXPECT_TRUE(HasDiagnosticCode(
-    diagnostics, "texture.descriptor.schema_validation_failed"))
+  EXPECT_TRUE(HasDiagnosticCode(diagnostics,
+    oxygen::content::import::import_codes::
+      kTextureDescriptorSchemaValidationFailed))
     << DiagnosticSummary(diagnostics);
 }
 
@@ -145,8 +148,9 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("texture.descriptor.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kTextureDescriptorSchemaValidationFailed));
 }
 
 NOLINT_TEST(
@@ -237,10 +241,12 @@ NOLINT_TEST(TextureDescriptorPreparationTest, RefusesAnAbsoluteOwnMountSource)
     R"({"source":"/Content/Images/brick.png"})", diagnostics);
 
   EXPECT_FALSE(prepared.has_value());
-  ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
+  ASSERT_TRUE(HasDiagnosticCode(
+    diagnostics, oxygen::content::import::import_codes::kReferenceInvalid))
     << DiagnosticSummary(diagnostics);
   EXPECT_THAT(DiagnosticSummary(diagnostics),
-    ::testing::HasSubstr("vpath.reference_self_absolute"));
+    ::testing::HasSubstr(
+      std::string(oxygen::content::vpath_codes::kReferenceSelfAbsolute)));
 }
 
 //! A `source` that is an absolute mount path to another mount is located in
@@ -279,10 +285,12 @@ NOLINT_TEST(
     = settings.Prepare(R"({"source":"../../Other/brick.png"})", diagnostics);
 
   EXPECT_FALSE(prepared.has_value());
-  ASSERT_TRUE(HasDiagnosticCode(diagnostics, "import.reference_invalid"))
+  ASSERT_TRUE(HasDiagnosticCode(
+    diagnostics, oxygen::content::import::import_codes::kReferenceInvalid))
     << DiagnosticSummary(diagnostics);
   EXPECT_THAT(DiagnosticSummary(diagnostics),
-    ::testing::HasSubstr("vpath.reference_outside_mount"));
+    ::testing::HasSubstr(
+      std::string(oxygen::content::vpath_codes::kReferenceOutsideMount)));
 }
 
 NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,

@@ -15,6 +15,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -185,26 +186,26 @@ namespace {
 
   NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesInvalidJson)
   {
-    ExpectRefusal(
-      Prepare("{ invalid }"), "physics.sidecar.payload_parse_failed", "");
+    ExpectRefusal(Prepare("{ invalid }"),
+      import_codes::kPhysicsSidecarPayloadParseFailed, "");
   }
 
   NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesJsonWithComments)
   {
     ExpectRefusal(Prepare("{ /* note */ \"bindings\": {} }"),
-      "physics.sidecar.payload_parse_failed", "");
+      import_codes::kPhysicsSidecarPayloadParseFailed, "");
   }
 
   NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesNonObjectRoot)
   {
     ExpectRefusal(
-      Prepare("[]"), "physics.sidecar.schema_validation_failed", "");
+      Prepare("[]"), import_codes::kPhysicsSidecarSchemaValidationFailed, "");
   }
 
   NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesMissingBindings)
   {
     ExpectRefusal(
-      Prepare("{}"), "physics.sidecar.schema_validation_failed", "");
+      Prepare("{}"), import_codes::kPhysicsSidecarSchemaValidationFailed, "");
   }
 
   NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesMissingRequiredField)
@@ -214,7 +215,8 @@ namespace {
           .AppendBinding("colliders", json { { "node_index", 0 } })
           .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.schema_validation_failed",
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarSchemaValidationFailed,
       "/bindings/colliders/0");
   }
 
@@ -230,7 +232,7 @@ namespace {
 
     EXPECT_FALSE(prepared.document.has_value());
     EXPECT_THAT(
-      PointersOf(prepared, "physics.sidecar.schema_validation_failed"),
+      PointersOf(prepared, import_codes::kPhysicsSidecarSchemaValidationFailed),
       ::testing::IsSupersetOf({ std::string("/bindings/colliders/0"),
         std::string("/bindings/colliders/1") }));
   }
@@ -242,7 +244,7 @@ namespace {
                         .AppendBinding("colliders", Collider(0))
                         .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/colliders/1");
   }
 
@@ -253,7 +255,7 @@ namespace {
     soft_body["edge_compliance"] = 1.0e39;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/soft_bodies/0/edge_compliance");
   }
 
@@ -263,7 +265,7 @@ namespace {
     soft_body["pressure_coefficient"] = -1.0e39;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/soft_bodies/0/pressure_coefficient");
   }
 
@@ -273,7 +275,7 @@ namespace {
     soft_body["solver_iteration_count"] = 0;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/soft_bodies/0/solver_iteration_count");
   }
 
@@ -284,7 +286,8 @@ namespace {
                           Vehicle(0, json::array({ Wheel(1, 0, "left") })))
                         .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.schema_validation_failed",
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarSchemaValidationFailed,
       "/bindings/vehicles/0/wheels");
   }
 
@@ -297,7 +300,7 @@ namespace {
               0, json::array({ Wheel(0, 0, "left"), Wheel(2, 0, "right") })))
           .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/vehicles/0/wheels/0/node_index");
   }
 
@@ -310,7 +313,7 @@ namespace {
               0, json::array({ Wheel(1, 0, "left"), Wheel(1, 0, "right") })))
           .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/vehicles/0/wheels/1/node_index");
   }
 
@@ -323,7 +326,7 @@ namespace {
               0, json::array({ Wheel(1, 0, "left"), Wheel(2, 0, "left") })))
           .Text();
 
-    ExpectRefusal(Prepare(text), "physics.sidecar.payload_invalid",
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/vehicles/0/wheels/1");
   }
 

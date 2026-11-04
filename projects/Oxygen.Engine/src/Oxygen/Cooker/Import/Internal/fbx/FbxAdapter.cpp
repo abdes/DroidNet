@@ -40,6 +40,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportLimits.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -298,7 +299,7 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "import.canceled",
+      .code = std::string(import_codes::kCanceled),
       .message = "Import canceled",
       .source_path = std::string(source_id),
       .object_path = {},
@@ -549,10 +550,11 @@ namespace {
     constexpr float kMinWeight = 1.0e-4F;
 
     if (weights.size() != joints.size()) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.skinning_buffers",
-        "Skinning buffers have different sizes; the mesh imports as static "
-        "geometry in its bind pose",
-        source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshSkinningBuffers),
+          "Skinning buffers have different sizes; the mesh imports as static "
+          "geometry in its bind pose",
+          source_id, object_path));
       weights.clear();
       joints.clear();
       return;
@@ -638,14 +640,16 @@ namespace {
     std::string_view object_path) -> std::optional<TriangleMeshBuffers>
   {
     if (mesh.num_indices == 0 || mesh.num_faces == 0) {
-      diagnostics.push_back(MakeWarningDiagnostic(
-        "mesh.no_faces", "FBX mesh contains no faces", source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshNoFaces),
+          "FBX mesh contains no faces", source_id, object_path));
       return std::nullopt;
     }
 
     if (!HasAttribute(mesh.vertex_position)) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.missing_positions",
-        "FBX mesh missing vertex positions", source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshMissingPositions),
+          "FBX mesh missing vertex positions", source_id, object_path));
       return std::nullopt;
     }
 
@@ -731,7 +735,8 @@ namespace {
         face_surfaces.at(face_i) = ItemAt(mesh.face_material, face_i);
       }
     } else {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.face_material_missing",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMeshFaceMaterialMissing),
         "FBX face material list missing; defaulting to single material",
         source_id, object_path));
     }
@@ -740,9 +745,10 @@ namespace {
       const auto face
         = base::CheckedAt(std::span(mesh.faces.data, mesh.faces.count), face_i);
       if (face.num_indices < 3) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_face",
-          "FBX mesh contains face with fewer than 3 indices; skipping",
-          source_id, object_path));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kMeshInvalidFace),
+            "FBX mesh contains face with fewer than 3 indices; skipping",
+            source_id, object_path));
         continue;
       }
 
@@ -778,7 +784,8 @@ namespace {
       const auto tri_count = ufbx_triangulate_face(
         tri_indices.data(), tri_indices.size(), &mesh, face);
       if (tri_count == 0) {
-        diagnostics.push_back(MakeWarningDiagnostic("mesh.triangulate_failed",
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kMeshTriangulateFailed),
           "FBX face triangulation produced no triangles; skipping face",
           source_id, object_path));
         continue;
@@ -806,10 +813,11 @@ namespace {
         triangulated_faces);
     }
     if (out_of_range_faces > 0) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.index_oob",
-        "FBX mesh has " + std::to_string(out_of_range_faces)
-          + " faces that reference out-of-range indices; they are dropped",
-        source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshIndexOob),
+          "FBX mesh has " + std::to_string(out_of_range_faces)
+            + " faces that reference out-of-range indices; they are dropped",
+          source_id, object_path));
     }
 
     if (const auto* skin_deformer = FindSkinDeformer(mesh);
@@ -880,42 +888,48 @@ namespace {
     }
 
     if (out.ranges.empty()) {
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.no_ranges",
-        "FBX mesh has no usable triangles", source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshNoRanges),
+          "FBX mesh has no usable triangles", source_id, object_path));
       return std::nullopt;
     }
 
     if (!out.normals.empty() && out.normals.size() != out.positions.size()) {
       out.normals.clear();
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.normals.mismatch",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMeshNormalsMismatch),
         "FBX normals count does not match positions", source_id, object_path));
     }
     if (!out.texcoords.empty()
       && out.texcoords.size() != out.positions.size()) {
       out.texcoords.clear();
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.texcoords.mismatch",
-        "FBX texcoords count does not match positions", source_id,
-        object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshTexcoordsMismatch),
+          "FBX texcoords count does not match positions", source_id,
+          object_path));
     }
     if (!out.tangents.empty() && out.tangents.size() != out.positions.size()) {
       out.tangents.clear();
       out.bitangents.clear();
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.tangents.mismatch",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMeshTangentsMismatch),
         "FBX tangents count does not match positions", source_id, object_path));
     }
     if (!out.colors.empty() && out.colors.size() != out.positions.size()) {
       out.colors.clear();
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.colors.mismatch",
-        "FBX colors count does not match positions", source_id, object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshColorsMismatch),
+          "FBX colors count does not match positions", source_id, object_path));
     }
 
     if (!out.joint_indices.empty()
       && out.joint_indices.size() != out.positions.size()) {
       out.joint_indices.clear();
       out.joint_weights.clear();
-      diagnostics.push_back(MakeWarningDiagnostic("mesh.skinning.mismatch",
-        "FBX skinning buffers count does not match positions", source_id,
-        object_path));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshSkinningMismatch),
+          "FBX skinning buffers count does not match positions", source_id,
+          object_path));
     }
 
     // The geometry in Oxygen axes, matching its nodes (see LocalTransform). A
@@ -1246,8 +1260,9 @@ namespace {
         static_cast<const std::byte*>(identity.file_texture->content.data),
         identity.file_texture->content.size);
       if (bytes.empty()) {
-        diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.empty",
-          "FBX embedded texture payload is empty", source_id, ""));
+        diagnostics.push_back(
+          MakeWarningDiagnostic(std::string(import_codes::kFbxTextureEmpty),
+            "FBX embedded texture payload is empty", source_id, ""));
         return make_placeholder();
       }
       return ResolvedTextureSource {
@@ -1272,8 +1287,9 @@ namespace {
     }
 
     if (identity.resolved_path.empty()) {
-      diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.path_missing",
-        "FBX texture has no resolved file path", source_id, ""));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kFbxTexturePathMissing),
+          "FBX texture has no resolved file path", source_id, ""));
       return make_placeholder();
     }
 
@@ -1432,7 +1448,7 @@ namespace {
   {
     return ImportDiagnostic {
       .severity = ImportSeverity::kError,
-      .code = "fbx.parse_failed",
+      .code = std::string(import_codes::kFbxParseFailed),
       .message = std::string(error_message),
       .source_path = std::string(source_id),
       .object_path = {},
@@ -1557,10 +1573,11 @@ namespace {
   {
     if (input.request.options.coordinate.up_axis == SourceUpAxis::kFromFile
       && !ufbx_coordinate_axes_valid(scene.settings.axes)) {
-      diagnostics.push_back(MakeWarningDiagnostic("fbx.axis_unknown",
-        "FBX axis metadata is incomplete; the source is read as right-handed "
-        "Y up, FBX's default (set up_axis to choose)",
-        input.source_id_prefix, input.object_path_prefix));
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kFbxAxisUnknown),
+          "FBX axis metadata is incomplete; the source is read as right-handed "
+          "Y up, FBX's default (set up_axis to choose)",
+          input.source_id_prefix, input.object_path_prefix));
     }
   }
 
@@ -1581,7 +1598,8 @@ namespace {
       && !(coordinate_policy.unit_scale > 0.0F)) {
       DLOG_F(ERROR, "FBX invalid custom unit scale: source_id='{}' scale={} ",
         input.source_id_prefix, coordinate_policy.unit_scale);
-      diagnostics.push_back(MakeErrorDiagnostic("fbx.invalid_custom_unit_scale",
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kFbxInvalidCustomUnitScale),
         "unit_scale must be > 0 when using custom unit normalization",
         input.source_id_prefix, input.object_path_prefix));
       return {};
@@ -1639,7 +1657,7 @@ namespace {
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
-        "mesh.source_layout_unavailable",
+        std::string(import_codes::kMeshSourceLayoutUnavailable),
         "FBX source layout could not be captured before coordinate conversion",
         input.source_id_prefix, input.object_path_prefix));
       return {};
@@ -1664,7 +1682,8 @@ namespace {
       && !(coordinate_policy.unit_scale > 0.0F)) {
       DLOG_F(ERROR, "FBX invalid custom unit scale: source_id='{}' scale={} ",
         input.source_id_prefix, coordinate_policy.unit_scale);
-      diagnostics.push_back(MakeErrorDiagnostic("fbx.invalid_custom_unit_scale",
+      diagnostics.push_back(MakeErrorDiagnostic(
+        std::string(import_codes::kFbxInvalidCustomUnitScale),
         "unit_scale must be > 0 when using custom unit normalization",
         input.source_id_prefix, input.object_path_prefix));
       return {};
@@ -1711,7 +1730,7 @@ namespace {
     if (mode == ModelParseMode::kGeometry
       && loaded.source_layout_witnesses.size() != scene->meshes.count) {
       diagnostics.push_back(MakeErrorDiagnostic(
-        "mesh.source_layout_unavailable",
+        std::string(import_codes::kMeshSourceLayoutUnavailable),
         "FBX source layout could not be captured before coordinate conversion",
         input.source_id_prefix, input.object_path_prefix));
       return {};
@@ -1913,7 +1932,7 @@ namespace {
       for (const auto node : skipped) {
         const auto problem = problems.find(node);
         result.notes.push_back({
-          .code = "fbx.lod.level_skipped",
+          .code = std::string(import_codes::kFbxLodLevelSkipped),
           .message = "LOD level '"
             + std::string(ToStringView(ItemAt(scene.nodes, node)->name))
             + "' of '" + lods.name + "' is not imported: "
@@ -1945,7 +1964,7 @@ namespace {
     const auto ignore
       = [&](const ufbx_node& node, const std::string& message) -> void {
       result.notes.push_back({
-        .code = "fbx.lod_group.ignored",
+        .code = std::string(import_codes::kFbxLodGroupIgnored),
         .message = message,
         .node = index_of(&node),
       });
@@ -2246,7 +2265,7 @@ namespace {
         // nothing is lost, so the import only notes it.
         result.diagnostics.push_back(ImportDiagnostic {
           .severity = ImportSeverity::kInfo,
-          .code = "mesh.transform_bake_retained",
+          .code = std::string(import_codes::kMeshTransformBakeRetained),
           .message = "Retained authored node transform: "
             + bake_plan.retained_reasons.at(index),
           .source_path = std::string(input.source_id_prefix),
@@ -2429,16 +2448,18 @@ namespace {
           // LOD0 is the geometry; a coarser level that cannot be built is
           // left out of it.
           if (lod_index == 0) {
-            result.diagnostics.push_back(MakeWarningDiagnostic("mesh.dropped",
-              "FBX mesh cannot be built; the mesh is dropped",
-              input.source_id_prefix, mesh_name));
+            result.diagnostics.push_back(
+              MakeWarningDiagnostic(std::string(import_codes::kMeshDropped),
+                "FBX mesh cannot be built; the mesh is dropped",
+                input.source_id_prefix, mesh_name));
             built = false;
             break;
           }
-          result.diagnostics.push_back(MakeWarningDiagnostic("mesh.lod_dropped",
-            "FBX LOD " + std::to_string(lod_index)
-              + " cannot be built; the level is dropped",
-            input.source_id_prefix, mesh_name));
+          result.diagnostics.push_back(
+            MakeWarningDiagnostic(std::string(import_codes::kMeshLodDropped),
+              "FBX LOD " + std::to_string(lod_index)
+                + " cannot be built; the level is dropped",
+              input.source_id_prefix, mesh_name));
           continue;
         }
         if (lod_index != 0) {
@@ -2645,8 +2666,9 @@ auto FbxAdapter::Parse(const std::filesystem::path& source_path,
     DLOG_F(ERROR, "FBX parse failed: path='{}' diagnostics={}",
       source_path.string(), result.diagnostics.size());
     if (result.diagnostics.empty()) {
-      result.diagnostics.push_back(MakeErrorDiagnostic("fbx.parse_failed",
-        "FBX parse failed without diagnostics", input.source_id_prefix, ""));
+      result.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kFbxParseFailed),
+          "FBX parse failed without diagnostics", input.source_id_prefix, ""));
     }
     impl_->source = {};
     result.success = false;
@@ -2671,8 +2693,9 @@ auto FbxAdapter::Parse(const std::span<const std::byte> source_bytes,
     DLOG_F(ERROR, "FBX parse failed (memory): diagnostics={}",
       result.diagnostics.size());
     if (result.diagnostics.empty()) {
-      result.diagnostics.push_back(MakeErrorDiagnostic("fbx.parse_failed",
-        "FBX parse failed without diagnostics", input.source_id_prefix, ""));
+      result.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kFbxParseFailed),
+          "FBX parse failed without diagnostics", input.source_id_prefix, ""));
     }
     impl_->source = {};
     result.success = false;
@@ -2692,9 +2715,10 @@ auto FbxAdapter::PrepareGeometry(const AdapterInput& input) const
   if (!impl_->source.scene) {
     auto result = ModelGeometryPreparation {};
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "fbx adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "fbx adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
   return PrepareGeometryNames(*impl_->source.scene, input);
@@ -2706,9 +2730,10 @@ auto FbxAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
   if (!impl_->source.scene) {
     WorkItemStreamResult result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "FBX adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -2716,10 +2741,10 @@ auto FbxAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
     != impl_->source.scene->meshes.count) {
     auto result = WorkItemStreamResult {};
     result.success = false;
-    result.diagnostics.push_back(
-      MakeErrorDiagnostic("mesh.source_layout_unavailable",
-        "Geometry production requires a geometry-mode parse",
-        input.source_id_prefix, input.object_path_prefix));
+    result.diagnostics.push_back(MakeErrorDiagnostic(
+      std::string(import_codes::kMeshSourceLayoutUnavailable),
+      "Geometry production requires a geometry-mode parse",
+      input.source_id_prefix, input.object_path_prefix));
     return result;
   }
 
@@ -2734,9 +2759,10 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
   if (!impl_->source.scene) {
     ModelMaterialPreparation result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "FBX adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -3086,9 +3112,10 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   if (!impl_->source.scene) {
     ModelTexturePreparation result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "FBX adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 
@@ -3220,12 +3247,12 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   if (!green_up && has_normal_maps) {
     const auto application
       = ToStringView(scene.metadata.original_application.name);
-    result.diagnostics.push_back(
-      MakeWarningDiagnostic("fbx.normal_map_convention_assumed",
-        "FBX authored by '" + std::string(application)
-          + "', an application whose normal map convention is unknown; its "
-            "normal maps are taken green-up (OpenGL)",
-        input.source_id_prefix, input.object_path_prefix));
+    result.diagnostics.push_back(MakeWarningDiagnostic(
+      std::string(import_codes::kFbxNormalMapConventionAssumed),
+      "FBX authored by '" + std::string(application)
+        + "', an application whose normal map convention is unknown; its "
+          "normal maps are taken green-up (OpenGL)",
+      input.source_id_prefix, input.object_path_prefix));
   }
 
   result.sources.reserve(work_items.size());
@@ -3320,14 +3347,16 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   if (!impl_->source.scene) {
-    diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id, {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "FBX adapter has no parsed scene", input.source_id, {}));
     return result;
   }
 
   if (input.request == nullptr) {
-    diagnostics.push_back(MakeErrorDiagnostic("scene.request_missing",
-      "Scene stage input is missing request data", input.source_id, {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kSceneRequestMissing),
+        "Scene stage input is missing request data", input.source_id, {}));
     return result;
   }
 
@@ -3344,9 +3373,10 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   if (input.geometry_keys.size() > impl_->emitted_variants.size()) {
-    diagnostics.push_back(MakeErrorDiagnostic("scene.geometry_key_missing",
-      "Geometry key count does not match the emitted geometry", input.source_id,
-      {}));
+    diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kSceneGeometryKeyMissing),
+        "Geometry key count does not match the emitted geometry",
+        input.source_id, {}));
   }
   // A node whose mesh was dropped keeps its place but shows no geometry.
   const auto geometry_keys = GeometryKeysByVariant(
@@ -3535,11 +3565,11 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         && transforms::IsIdentityRotation(parent_rotation);
 
       if (!can_reparent) {
-        diagnostics.push_back(
-          MakeWarningDiagnostic("scene.pruning.reparent_skipped",
-            "Skipped reparenting due to non-uniform or rotated parent; "
-            "preserving world transform",
-            input.source_id, node.base_name));
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kScenePruningReparentSkipped),
+          "Skipped reparenting due to non-uniform or rotated parent; "
+          "preserving world transform",
+          input.source_id, node.base_name));
         new_parent_index = new_index;
         node.local_matrix = node.world_matrix;
       } else {
@@ -3548,7 +3578,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
-          diagnostics.push_back(MakeWarningDiagnostic("scene.pruning.singular",
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kScenePruningSingular),
             "Node keeps its local transform: its parent transform is singular",
             input.source_id, node.base_name));
         }
@@ -3614,7 +3645,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const bool used_fallback = transforms::DecomposeTransformOrFallback(
       node.local_matrix, translation, rotation, scale);
     if (used_fallback) {
-      diagnostics.push_back(MakeWarningDiagnostic("scene.transform_sanitized",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kSceneTransformSanitized),
         "Node '" + name
           + "' transform sanitized: non-finite values reset to identity TRS; "
             "invalid rotation set to identity.",
@@ -3709,7 +3741,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         camera.aspect_mode = CameraAspectMode::kFixed;
         build.orthographic_cameras.push_back(camera);
       } else {
-        diagnostics.push_back(MakeWarningDiagnostic("scene.camera.unsupported",
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSceneCameraUnsupported),
           "Unsupported camera projection type", input.source_id, name));
       }
       commit.Report(input.source_id, name, diagnostics);
@@ -3775,12 +3808,12 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         // Oxygen has no area or volume lights: the light keeps its colour,
         // intensity and position, and loses its shape.
         if (light.type != UFBX_LIGHT_POINT) {
-          diagnostics.push_back(
-            MakeWarningDiagnostic("fbx.light.unsupported_type",
-              std::string(light.type == UFBX_LIGHT_AREA ? "Area" : "Volume")
-                + " light imported as a point light; its shape and size are "
-                  "not imported",
-              input.source_id, name));
+          diagnostics.push_back(MakeWarningDiagnostic(
+            std::string(import_codes::kFbxLightUnsupportedType),
+            std::string(light.type == UFBX_LIGHT_AREA ? "Area" : "Volume")
+              + " light imported as a point light; its shape and size are "
+                "not imported",
+            input.source_id, name));
         }
         break;
       }
@@ -3811,7 +3844,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         break;
       }
       default:
-        diagnostics.push_back(MakeWarningDiagnostic("scene.light.unsupported",
+        diagnostics.push_back(MakeWarningDiagnostic(
+          std::string(import_codes::kSceneLightUnsupported),
           "Unsupported light type", input.source_id, name));
         break;
       }
@@ -3833,9 +3867,10 @@ auto FbxAdapter::BuildWorkItems(SceneWorkTag /*unused*/,
   if (!impl_->source.scene) {
     WorkItemStreamResult result;
     result.success = false;
-    result.diagnostics.push_back(MakeErrorDiagnostic("fbx.scene.not_parsed",
-      "FBX adapter has no parsed scene", input.source_id_prefix,
-      input.object_path_prefix));
+    result.diagnostics.push_back(
+      MakeErrorDiagnostic(std::string(import_codes::kFbxSceneNotParsed),
+        "FBX adapter has no parsed scene", input.source_id_prefix,
+        input.object_path_prefix));
     return result;
   }
 

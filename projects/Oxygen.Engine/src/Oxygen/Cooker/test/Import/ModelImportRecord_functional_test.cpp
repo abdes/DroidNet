@@ -31,6 +31,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -279,7 +280,7 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordLivesAtItsIdentityAndRoundTrips)
   EXPECT_FALSE(document.contains("source_fingerprint"));
   EXPECT_EQ(
     RefusalOf([&] { return ModelImportRecord::Read(misnamed, mounts_); }).code,
-    "import.model_record_misnamed");
+    oxygen::content::import::model_record_codes::kMisnamed);
 }
 
 //! Save names a source elsewhere in the model's mount relative to the record,
@@ -310,7 +311,8 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAnAbsoluteSource)
   const auto refusal
     = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
 
-  EXPECT_EQ(refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(
+    refusal.code, oxygen::content::import::model_record_codes::kInvalid);
   EXPECT_THAT(refusal.message, testing::HasSubstr("source:"));
 }
 
@@ -338,7 +340,9 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsHoldNoJobStructure)
       });
     });
 
-    EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
+    EXPECT_EQ(
+      refusal.code, oxygen::content::import::model_record_codes::kInvalid)
+      << key;
     EXPECT_EQ(refusal.json_pointer, "/settings/" + key);
   }
 }
@@ -357,7 +361,9 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesSettingsTheSchemaRefuses)
     const auto refusal
       = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
 
-    EXPECT_EQ(refusal.code, "import.model_record_invalid") << key;
+    EXPECT_EQ(
+      refusal.code, oxygen::content::import::model_record_codes::kInvalid)
+      << key;
   }
 }
 
@@ -378,9 +384,11 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesAMalformedRecord)
   const auto broken_refusal
     = RefusalOf([&] { return ModelImportRecord::Read(broken, mounts_); });
 
-  EXPECT_EQ(twice_refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(
+    twice_refusal.code, oxygen::content::import::model_record_codes::kInvalid);
   EXPECT_EQ(twice_refusal.json_pointer, "/node_continuity");
-  EXPECT_EQ(broken_refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(
+    broken_refusal.code, oxygen::content::import::model_record_codes::kInvalid);
 }
 
 //! A record's source is a glTF, GLB or FBX file.
@@ -394,7 +402,8 @@ NOLINT_TEST_F(ModelImportRecordTest, ReadRefusesASourceOfAnotherFormat)
   const auto refusal
     = RefusalOf([&] { return ModelImportRecord::Read(record, mounts_); });
 
-  EXPECT_EQ(refusal.code, "import.model_record_invalid");
+  EXPECT_EQ(
+    refusal.code, oxygen::content::import::model_record_codes::kInvalid);
   EXPECT_EQ(refusal.json_pointer, "/source");
 }
 
@@ -408,7 +417,8 @@ NOLINT_TEST_F(ModelImportRecordTest, TwoRecordsWithOneSourceIdentityAreRefused)
 
   const auto refusal = RefusalOf([&] { return SaveRecord(copy, source_); });
 
-  EXPECT_EQ(refusal.code, "import.model_record_duplicate");
+  EXPECT_EQ(
+    refusal.code, oxygen::content::import::model_record_codes::kDuplicate);
   EXPECT_EQ(FileDigest(record_), before);
   EXPECT_EQ(FileDigest(copy), before);
 }
@@ -511,9 +521,9 @@ NOLINT_TEST_F(ModelImportRecordTest, RecordCannotBeWrittenOutsideAMount)
   const auto misnamed = TempDir() / "Models" / "other.gltf.json";
 
   EXPECT_EQ(RefusalOf([&] { return SaveRecord(outside, source_); }).code,
-    "import.source_outside_mount");
+    oxygen::content::import::mount_codes::kSourceOutsideMount.id);
   EXPECT_EQ(RefusalOf([&] { return SaveRecord(misnamed, source_); }).code,
-    "import.model_record_misnamed");
+    oxygen::content::import::model_record_codes::kMisnamed);
 
   EXPECT_FALSE(std::filesystem::exists(outside));
   EXPECT_FALSE(std::filesystem::exists(misnamed));
@@ -586,7 +596,8 @@ NOLINT_TEST_F(ModelImportRecordTest, MissingSourceOnReplayIsSourceMissing)
     return ModelImportRecord::Prepare(record_, Generations(), mounts_);
   });
 
-  EXPECT_EQ(refusal.code, "import.source_missing");
+  EXPECT_EQ(
+    refusal.code, oxygen::content::import::model_record_codes::kSourceMissing);
   EXPECT_EQ(refusal.json_pointer, "/source");
   EXPECT_THAT(refusal.message, testing::HasSubstr("rebinds it"));
 }
@@ -677,7 +688,7 @@ NOLINT_TEST_F(
   second->ValidateCandidate(stale);
   first->Publish(accepted);
   EXPECT_EQ(RefusalOf([&] { second->Publish(stale); }).code,
-    "import.model_record_changed");
+    oxygen::content::import::model_record_codes::kChanged);
   EXPECT_EQ(ModelImportRecord::SelectedGeneration(record_, Generations()),
     accepted.cooked_root);
   EXPECT_TRUE(
@@ -692,7 +703,7 @@ NOLINT_TEST_F(ModelImportRecordTest, SettingsChangeInvalidatesPendingCandidate)
   settings_.normals_policy = "recalculate";
   SaveRecord(record_, source_);
   EXPECT_EQ(RefusalOf([&] { attempt->Publish(report); }).code,
-    "import.model_record_changed");
+    oxygen::content::import::model_record_codes::kChanged);
   EXPECT_FALSE(ModelImportRecord::SelectedGeneration(record_, Generations()));
 }
 
@@ -830,7 +841,8 @@ NOLINT_TEST_F(ModelImportRecordTest, ChangedPublishedIndexRequiresRecook)
     return ModelImportRecord::SelectedGeneration(record_, Generations());
   });
 
-  EXPECT_EQ(refusal.code, "import.generation_invalid");
+  EXPECT_EQ(refusal.code,
+    oxygen::content::import::model_record_codes::kGenerationInvalid);
   EXPECT_EQ(refusal.json_pointer, "/index_sha256");
 }
 
@@ -852,8 +864,10 @@ NOLINT_TEST_F(ModelImportRecordTest, SelectionRefusesAGenerationItCannotTrust)
     return ModelImportRecord::SelectedGeneration(record_, Generations());
   });
 
-  EXPECT_EQ(missing.code, "import.generation_missing");
-  EXPECT_EQ(malformed.code, "import.generation_invalid");
+  EXPECT_EQ(missing.code,
+    oxygen::content::import::model_record_codes::kGenerationMissing);
+  EXPECT_EQ(malformed.code,
+    oxygen::content::import::model_record_codes::kGenerationInvalid);
 }
 
 //! A real import from the record commits the nodes it emitted and the bytes
@@ -893,7 +907,8 @@ NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
     {
       ImportDiagnostic {
         .severity = ImportSeverity::kWarning,
-        .code = "import.model_record_unreadable",
+        .code
+        = std::string(oxygen::content::import::model_record_codes::kUnreadable),
         .message = "Skipped an outdated record",
         .source_path = {},
         .object_path = {},
@@ -916,8 +931,10 @@ NOLINT_TEST_F(ModelImportRecordTest, LookupNotesReachTheImportsDiagnostics)
   const auto report = future.get();
 
   ASSERT_TRUE(report.success);
-  EXPECT_EQ(std::ranges::count(report.diagnostics,
-              "import.model_record_unreadable", &ImportDiagnostic::code),
+  EXPECT_EQ(
+    std::ranges::count(report.diagnostics,
+      std::string(oxygen::content::import::model_record_codes::kUnreadable),
+      &ImportDiagnostic::code),
     1);
 }
 
@@ -1008,7 +1025,8 @@ NOLINT_TEST_F(ModelImportRecordTest, AnUnreadableRecordIsSkippedWithAWarning)
   EXPECT_TRUE(location.exists);
   ASSERT_EQ(location.diagnostics.size(), 1U);
   const auto& skipped = location.diagnostics.front();
-  EXPECT_EQ(skipped.code, "import.model_record_unreadable");
+  EXPECT_EQ(
+    skipped.code, oxygen::content::import::model_record_codes::kUnreadable);
   EXPECT_EQ(skipped.severity, ImportSeverity::kWarning);
   EXPECT_NE(
     skipped.message.find(outdated.filename().string()), std::string::npos);
@@ -1033,7 +1051,9 @@ NOLINT_TEST_F(ModelImportRecordTest, AMovedSourceWithItsVirtualPathIsRebound)
   SaveRecord(location.record_path, moved);
 
   EXPECT_EQ(location.record_path, record_);
-  EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_rebound"));
+  EXPECT_THAT(Codes(location),
+    testing::ElementsAre(
+      std::string(oxygen::content::import::import_codes::kSourceRebound)));
   const auto content = ModelImportRecord::Read(record_, mounts_);
   EXPECT_TRUE(std::filesystem::equivalent(content.source, moved));
   EXPECT_EQ(content.source_identity, identity_);
@@ -1059,7 +1079,9 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(location.record_path, record_);
   EXPECT_TRUE(location.exists);
-  EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_relocated"));
+  EXPECT_THAT(Codes(location),
+    testing::ElementsAre(
+      std::string(oxygen::content::import::import_codes::kSourceRelocated)));
   EXPECT_FALSE(
     std::filesystem::exists(RecordOf("/Content/Props/renamed.gltf")));
   const auto content = ModelImportRecord::Read(record_, mounts_);
@@ -1082,7 +1104,9 @@ NOLINT_TEST_F(
   });
 
   EXPECT_EQ(location.record_path, record_);
-  EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_rebound"));
+  EXPECT_THAT(Codes(location),
+    testing::ElementsAre(
+      std::string(oxygen::content::import::import_codes::kSourceRebound)));
   EXPECT_TRUE(std::filesystem::exists(source_));
 }
 
@@ -1102,7 +1126,9 @@ NOLINT_TEST_F(ModelImportRecordTest, ACopyUnderANewVirtualPathIsANewModel)
 
   EXPECT_FALSE(location.exists);
   EXPECT_EQ(location.record_path, RecordOf("/Content/Models/copy.gltf"));
-  EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_copy"));
+  EXPECT_THAT(Codes(location),
+    testing::ElementsAre(
+      std::string(oxygen::content::import::import_codes::kSourceCopy)));
 }
 
 //! The same file under another identity is another model from that file.
@@ -1117,7 +1143,9 @@ NOLINT_TEST_F(
   SaveRecord(location.record_path, source_);
 
   EXPECT_FALSE(location.exists);
-  EXPECT_THAT(Codes(location), testing::ElementsAre("import.source_has_model"));
+  EXPECT_THAT(Codes(location),
+    testing::ElementsAre(
+      std::string(oxygen::content::import::import_codes::kSourceHasModel)));
   EXPECT_TRUE(std::filesystem::equivalent(
     ModelImportRecord::Read(location.record_path, mounts_).source, source_));
 }
@@ -1142,8 +1170,9 @@ NOLINT_TEST_F(ModelImportRecordTest, AnAmbiguousRelocationTakesNoRecord)
   });
 
   EXPECT_FALSE(location.exists);
-  EXPECT_THAT(
-    Codes(location), testing::Contains("import.source_relocation_ambiguous"));
+  EXPECT_THAT(Codes(location),
+    testing::Contains(std::string(
+      oxygen::content::import::import_codes::kSourceRelocationAmbiguous)));
 }
 
 //! A record that lost its source to a file of the same name, changed, is
@@ -1164,7 +1193,8 @@ NOLINT_TEST_F(ModelImportRecordTest, AChangedMovedSourceIsARelocationCandidate)
 
   EXPECT_FALSE(location.exists);
   ASSERT_THAT(Codes(location),
-    testing::ElementsAre("import.source_relocation_candidate"));
+    testing::ElementsAre(std::string(
+      oxygen::content::import::import_codes::kSourceRelocationCandidate)));
   EXPECT_THAT(location.diagnostics.front().message,
     testing::HasSubstr("--record " + record_.generic_string()));
 }

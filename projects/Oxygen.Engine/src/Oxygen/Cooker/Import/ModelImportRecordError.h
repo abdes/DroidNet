@@ -18,6 +18,8 @@ namespace oxygen::content::import {
 //! The stable codes a model import record refuses with, besides the codes of
 //! the mount table and the virtual path rules that locate it and its source.
 namespace model_record_codes {
+  //! A record file is not named after the source it records.
+  inline constexpr std::string_view kMisnamed = "import.model_record_misnamed";
   //! The record breaks its schema or a rule the schema cannot state: its
   //! settings, provenance, nodes, digests or source format.
   inline constexpr std::string_view kInvalid = "import.model_record_invalid";

@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
@@ -133,8 +134,8 @@ NOLINT_TEST_F(
     EXPECT_FALSE(result.supported);
     EXPECT_TRUE(result.external_files.empty());
     ASSERT_FALSE(result.diagnostics.empty());
-    EXPECT_EQ(
-      result.diagnostics.back().code, "import.source.nonlocal_dependency");
+    EXPECT_EQ(result.diagnostics.back().code,
+      oxygen::content::import::import_codes::kSourceNonlocalDependency);
     ValidateReport(result);
   }
 }
@@ -185,7 +186,8 @@ NOLINT_TEST_F(SceneSourceInspectionTest, LocalLightsAreSupportedContent)
     EXPECT_GT(result.node_count, 0U);
     EXPECT_TRUE(std::ranges::none_of(
       result.diagnostics, [](const auto& diagnostic) -> bool {
-        return diagnostic.code == "import.source_feature_dropped";
+        return diagnostic.code
+          == oxygen::content::import::import_codes::kSourceFeatureDropped;
       }));
     ValidateReport(result);
   }
@@ -202,7 +204,8 @@ NOLINT_TEST_F(SceneSourceInspectionTest,
   EXPECT_FALSE(cancelled.parsed);
   EXPECT_FALSE(cancelled.supported);
   ASSERT_FALSE(cancelled.diagnostics.empty());
-  EXPECT_EQ(cancelled.diagnostics.front().code, "import.canceled");
+  EXPECT_EQ(cancelled.diagnostics.front().code,
+    oxygen::content::import::import_codes::kCanceled);
   ValidateReport(cancelled);
   const auto unknown = InspectSceneSource("unknown.obj");
   EXPECT_FALSE(unknown.parsed);

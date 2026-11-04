@@ -24,8 +24,10 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/ModelImportRecord.h>
+#include <Oxygen/Cooker/Import/ModelImportRecordError.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
@@ -206,7 +208,8 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
   std::vector<ImportDiagnostic> refused;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, refused).has_value());
-  EXPECT_THAT(refused, HasDiagnostic("import.asset_virtual_path_missing"));
+  EXPECT_THAT(refused,
+    HasDiagnostic(oxygen::content::import::request_codes::kVirtualPathMissing));
 }
 
 //! The record supplies the identity, the provenance and what node continuity
@@ -368,7 +371,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, JobsCarryNoIdentityOfTheirOwn)
                 { "type", "model" },
                 { "virtual_path", "/Content/missing.gltf" },
               }),
-    HasDiagnostic("import.model_record_unreadable"));
+    HasDiagnostic(oxygen::content::import::model_record_codes::kUnreadable));
 }
 
 //! The model import settings a record holds reach the import: up axis,

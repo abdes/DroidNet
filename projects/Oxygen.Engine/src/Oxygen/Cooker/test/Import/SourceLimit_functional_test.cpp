@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -57,10 +58,8 @@ namespace {
   constexpr auto kLimit = serio::ByteCount { 4096 };
   constexpr auto kModelSurfaceIdentity
     = std::string_view { "0196f2a0-5b4c-7d3e-8f10-2a3b4c5d6e80" };
-  constexpr auto kPlaceholderUsed
-    = std::string_view { "texture.placeholder_used" };
-  constexpr auto kFoundByName
-    = std::string_view { "import.texture.found_by_name" };
+  constexpr auto kPlaceholderUsed = import_codes::kTexturePlaceholderUsed;
+  constexpr auto kFoundByName = import_codes::kTextureFoundByName;
 
   //! `count` bytes of a recognizable pattern.
   auto Bytes(const std::size_t count) -> std::vector<std::byte>
@@ -176,7 +175,7 @@ namespace {
       make_error_code(serio::Error::kNotFound), path, kLimit);
 
     ASSERT_HAS_VALUE(too_large);
-    EXPECT_EQ(too_large->code, detail::kSourceTooLargeCode);
+    EXPECT_EQ(too_large->code, import_codes::kSourceTooLarge);
     EXPECT_EQ(too_large->severity, ImportSeverity::kError);
     EXPECT_THAT(too_large->message, ::testing::HasSubstr(path.string()));
     EXPECT_THAT(too_large->message,
@@ -266,7 +265,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, detail::kSourceTooLargeCode))
+      HasDiagnosticCode(report->diagnostics, import_codes::kSourceTooLarge))
       << DiagnosticSummary(report->diagnostics);
   }
 
@@ -287,7 +286,7 @@ namespace {
 
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, detail::kSourceTooLargeCode))
+      HasDiagnosticCode(report->diagnostics, import_codes::kSourceTooLarge))
       << DiagnosticSummary(report->diagnostics);
     EXPECT_FALSE(HasDiagnosticCode(report->diagnostics, kPlaceholderUsed))
       << DiagnosticSummary(report->diagnostics);

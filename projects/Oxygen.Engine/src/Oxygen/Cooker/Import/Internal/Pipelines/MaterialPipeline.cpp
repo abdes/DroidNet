@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -269,7 +270,8 @@ namespace {
     float alpha_cutoff = inputs.alpha_cutoff;
     if (alpha_mode == MaterialAlphaMode::kMasked
       && (alpha_cutoff < 0.0F || alpha_cutoff > 1.0F)) {
-      diagnostics.push_back(MakeWarningDiagnostic("material.alpha_cutoff_range",
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMaterialAlphaCutoffRange),
         "Alpha cutoff outside [0,1] was clamped", source_id, object_path));
     }
     alpha_cutoff = Normalize01(alpha_cutoff);
@@ -666,9 +668,10 @@ auto MaterialPipeline::Worker() -> co::Co<>
     }
 
     if (build_outcome.bytes.empty()) {
-      output.diagnostics.push_back(MakeErrorDiagnostic(
-        "material.serialize_failed", "Material descriptor serialization failed",
-        item.source_id, item.material.name));
+      output.diagnostics.push_back(
+        MakeErrorDiagnostic(std::string(import_codes::kMaterialSerializeFailed),
+          "Material descriptor serialization failed", item.source_id,
+          item.material.name));
       output.telemetry.cook_duration
         = MakeDuration(cook_start, std::chrono::steady_clock::now());
       NotifyFinished();

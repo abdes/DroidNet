@@ -28,6 +28,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
@@ -80,9 +81,11 @@ namespace {
     SourceContext& context, const nlohmann::json& descriptor_doc) -> bool
   {
     const auto config = internal::JsonSchemaValidationDiagnosticConfig {
-      .validation_failed_code = "scene.descriptor.schema_validation_failed",
+      .validation_failed_code
+      = import_codes::kSceneDescriptorSchemaValidationFailed,
       .validation_failed_prefix = "Scene descriptor validation failed: ",
-      .validator_failure_code = "scene.descriptor.schema_validator_failure",
+      .validator_failure_code
+      = import_codes::kSceneDescriptorSchemaValidatorFailure,
       .validator_failure_prefix = "Scene descriptor schema validator failed: ",
     };
 
@@ -107,7 +110,7 @@ namespace {
     }
 
     AddDiagnostic(context, ImportSeverity::kError,
-      "scene.descriptor.recook_required",
+      std::string(import_codes::kSceneDescriptorRecookRequired),
       "Scene descriptor version " + std::to_string(kSceneDescriptorVersion)
         + " is required; update the authored descriptor and re-cook the scene "
           "content.");
@@ -125,8 +128,8 @@ namespace {
    the value the record holds, which is the schema's default. A present one
    must be a finite value inside the generated range of its field, or a
    declared member of its enum. A violation is reported as
-   `kScenePropertyOutOfRangeCode` at the property's path and keeps the
-   record's value; the shared validity flag then reads false.
+   `import_codes::kSceneDescriptorPropertyOutOfRange` at the property's path and
+   keeps the record's value; the shared validity flag then reads false.
   */
   class PropertyReader final {
   public:
@@ -312,7 +315,7 @@ namespace {
       const std::string_view key, const json::json_pointer& path) const -> void
     {
       AddDiagnostic(*context_, ImportSeverity::kError,
-        std::string(kScenePropertyOutOfRangeCode),
+        std::string(import_codes::kSceneDescriptorPropertyOutOfRange),
         "Property '" + std::string(key)
           + "' is not a finite value in the range, or a member, that the scene "
             "schema declares",
@@ -345,7 +348,7 @@ namespace {
         return *policy;
       }
       AddDiagnostic(context, ImportSeverity::kError,
-        "scene.descriptor.lod_policy_invalid",
+        std::string(import_codes::kSceneDescriptorLodPolicyInvalid),
         "LOD policy thresholds must be finite, distances must not decrease and "
         "screen-space errors must not increase",
         pointer);
@@ -361,7 +364,7 @@ namespace {
       break;
     }
     AddDiagnostic(context, ImportSeverity::kError,
-      "scene.descriptor.override_unsupported",
+      std::string(import_codes::kSceneDescriptorOverrideUnsupported),
       "The override value type is not supported", pointer);
     return std::nullopt;
   }
@@ -378,7 +381,7 @@ namespace {
         = data::schema::FindOverrideProperty("geometry", part_kind, key);
       if (property == nullptr) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.override_unknown",
+          std::string(import_codes::kSceneDescriptorOverrideUnknown),
           "The scene schema declares no override with this key", value_path);
         return false;
       }
@@ -421,7 +424,7 @@ namespace {
         = data::SurfaceId::FromString(part.at("id").get<std::string>());
       if (!surface || surface->IsNil() || !surfaces.insert(*surface).second) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.surface_id_invalid",
+          std::string(import_codes::kSceneDescriptorSurfaceIdInvalid),
           "A surface override requires a non-nil surface identity, named once",
           part_path / "id");
         return false;
@@ -444,7 +447,7 @@ namespace {
     auto path = ParseNodePath(document);
     if (!path.has_value()) {
       AddDiagnostic(context, ImportSeverity::kError,
-        "scene.descriptor.node_path_invalid",
+        std::string(import_codes::kSceneDescriptorNodePathInvalid),
         "A node path element must be a non-nil node ID",
         pointer / path.error());
       return std::nullopt;
@@ -502,7 +505,7 @@ namespace {
       : std::nullopt;
     if (!encoded.has_value()) {
       AddDiagnostic(context, ImportSeverity::kError,
-        "scene.descriptor.instance_override_invalid",
+        std::string(import_codes::kSceneDescriptorInstanceOverrideInvalid),
         "The value is not a valid value of the property the scene schema "
         "declares",
         pointer);
@@ -528,7 +531,7 @@ namespace {
           = data::schema::FindOverrideProperty(component_kind, part_kind, key);
         if (property == nullptr) {
           AddDiagnostic(context, ImportSeverity::kError,
-            "scene.descriptor.override_unknown",
+            std::string(import_codes::kSceneDescriptorOverrideUnknown),
             "The scene schema declares no changeable property with this "
             "component and key",
             value_path);
@@ -569,7 +572,7 @@ namespace {
       // Surfaces are the only part kind.
       if (part.at("kind").get<std::string>() != "surface") {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.part_kind_unknown",
+          std::string(import_codes::kSceneDescriptorPartKindUnknown),
           "The scene schema declares no part of this kind", part_path / "kind");
         return false;
       }
@@ -579,14 +582,14 @@ namespace {
         part.at("layout_revision").get<std::string>());
       if (!surface.has_value() || surface.value().IsNil()) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.surface_id_invalid",
+          std::string(import_codes::kSceneDescriptorSurfaceIdInvalid),
           "A surface change requires a non-nil surface identity",
           part_path / "id");
         return false;
       }
       if (!revision.has_value()) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.layout_revision_invalid",
+          std::string(import_codes::kSceneDescriptorLayoutRevisionInvalid),
           "A surface change requires the layout revision it was made for",
           part_path / "layout_revision");
         return false;
@@ -630,7 +633,7 @@ namespace {
               change.path, change.change.property->id, change.change.part_id)
             .second) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.instance_override_duplicate",
+          std::string(import_codes::kSceneDescriptorInstanceOverrideDuplicate),
           "Another change of this instance names the same node, property and "
           "part",
           json::json_pointer { change.change.json_pointer });
@@ -949,7 +952,7 @@ namespace {
     if (!resolved
       && resolved.error() != scene::ExposureSettingsError::kMissingCameraEv) {
       AddDiagnostic(context, ImportSeverity::kError,
-        "scene.descriptor.exposure_invalid",
+        std::string(import_codes::kSceneDescriptorExposureInvalid),
         "Exposure settings rejected: "
           + std::string(scene::to_string(resolved.error())),
         json::json_pointer { "/environment/post_process_volume" });
@@ -1107,13 +1110,13 @@ namespace {
       const auto node_id = ParseNonNilId<data::NodeId>(node_doc.at("id"));
       if (!node_id.has_value()) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.node_id_invalid",
+          std::string(import_codes::kSceneDescriptorNodeIdInvalid),
           "A node ID must be a non-nil UUID", node_path / "id");
         return std::nullopt;
       }
       if (!node_ids.insert(*node_id).second) {
         AddDiagnostic(context, ImportSeverity::kError,
-          "scene.descriptor.node_id_duplicate",
+          std::string(import_codes::kSceneDescriptorNodeIdDuplicate),
           "Another node of the scene has this ID", node_path / "id");
         return std::nullopt;
       }
@@ -1127,7 +1130,7 @@ namespace {
         const auto parent_index = node_doc.at("parent").get<uint32_t>();
         if (parent_index >= node_count) {
           AddDiagnostic(context, ImportSeverity::kError,
-            "scene.descriptor.node_parent_out_of_range",
+            std::string(import_codes::kSceneDescriptorNodeParentOutOfRange),
             "Node parent index is out of range", node_path / "parent");
           return std::nullopt;
         }
@@ -1167,7 +1170,7 @@ namespace {
       const auto& camera_doc = descriptor_doc.at("starting_camera");
       const auto camera = camera_doc.at("node").get<uint32_t>();
       if (!ValidateNodeIndex(context, camera, node_count,
-            "scene.descriptor.starting_camera_out_of_range",
+            std::string(import_codes::kSceneDescriptorStartingCameraOutOfRange),
             "Starting camera node index is out of range",
             json::json_pointer { "/starting_camera/node" })) {
         return std::nullopt;
@@ -1209,7 +1212,8 @@ namespace {
           .overrides = {},
         };
         if (!ValidateNodeIndex(context, renderable.node_index, node_count,
-              "scene.descriptor.renderable_node_index_out_of_range",
+              std::string(
+                import_codes::kSceneDescriptorRenderableNodeIndexOutOfRange),
               "Renderable node index is out of range", pointer / "node")) {
           return std::nullopt;
         }
@@ -1233,7 +1237,8 @@ namespace {
             = json::json_pointer {} / "cameras" / "perspective" / i;
           const auto node_index = camera_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
-                "scene.descriptor.camera_node_index_out_of_range",
+                std::string(
+                  import_codes::kSceneDescriptorCameraNodeIndexOutOfRange),
                 "Perspective camera node index is out of range",
                 pointer / "node")) {
             return std::nullopt;
@@ -1280,7 +1285,8 @@ namespace {
             = json::json_pointer {} / "cameras" / "orthographic" / i;
           const auto node_index = camera_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
-                "scene.descriptor.camera_node_index_out_of_range",
+                std::string(
+                  import_codes::kSceneDescriptorCameraNodeIndexOutOfRange),
                 "Orthographic camera node index is out of range",
                 pointer / "node")) {
             return std::nullopt;
@@ -1331,7 +1337,8 @@ namespace {
             = json::json_pointer {} / "lights" / "directional" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
-                "scene.descriptor.light_node_index_out_of_range",
+                std::string(
+                  import_codes::kSceneDescriptorLightNodeIndexOutOfRange),
                 "Directional light node index is out of range",
                 pointer / "node")) {
             return std::nullopt;
@@ -1405,7 +1412,8 @@ namespace {
           const auto pointer = json::json_pointer {} / "lights" / "point" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
-                "scene.descriptor.light_node_index_out_of_range",
+                std::string(
+                  import_codes::kSceneDescriptorLightNodeIndexOutOfRange),
                 "Point light node index is out of range", pointer / "node")) {
             return std::nullopt;
           }
@@ -1438,7 +1446,8 @@ namespace {
           const auto pointer = json::json_pointer {} / "lights" / "spot" / i;
           const auto node_index = light_doc.at("node").get<uint32_t>();
           if (!ValidateNodeIndex(context, node_index, node_count,
-                "scene.descriptor.light_node_index_out_of_range",
+                std::string(
+                  import_codes::kSceneDescriptorLightNodeIndexOutOfRange),
                 "Spot light node index is out of range", pointer / "node")) {
             return std::nullopt;
           }
@@ -1506,7 +1515,8 @@ namespace {
         const auto pointer = json::json_pointer {} / "local_fog_volumes" / i;
         const auto node_index = volume_doc.at("node").get<uint32_t>();
         if (!ValidateNodeIndex(context, node_index, node_count,
-              "scene.descriptor.local_fog_node_index_out_of_range",
+              std::string(
+                import_codes::kSceneDescriptorLocalFogNodeIndexOutOfRange),
               "Local fog volume node index is out of range",
               pointer / "node")) {
           return std::nullopt;
@@ -1597,7 +1607,7 @@ auto SceneSource::FromDescriptor(const std::string_view bytes,
     const auto document = json::parse(bytes);
     if (!document.is_object()) {
       AddDiagnostic(context, ImportSeverity::kError,
-        "scene.descriptor.request_invalid_json",
+        std::string(import_codes::kSceneDescriptorRequestInvalidJson),
         "Scene descriptor must be a JSON object");
       return std::nullopt;
     }
@@ -1608,7 +1618,8 @@ auto SceneSource::FromDescriptor(const std::string_view bytes,
     return PrepareSceneSource(context, document);
   } catch (const json::exception& error) {
     AddDiagnostic(context, ImportSeverity::kError,
-      "scene.descriptor.request_invalid_json", error.what());
+      std::string(import_codes::kSceneDescriptorRequestInvalidJson),
+      error.what());
     return std::nullopt;
   }
 }

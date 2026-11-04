@@ -17,6 +17,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -141,7 +142,7 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto& payload = Request().physics_material_descriptor;
   if (!payload.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.material.request_invalid",
+      std::string(import_codes::kPhysicsMaterialRequestInvalid),
       "PhysicsMaterialDescriptorImportJob requires request "
       "physics_material_descriptor payload");
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,

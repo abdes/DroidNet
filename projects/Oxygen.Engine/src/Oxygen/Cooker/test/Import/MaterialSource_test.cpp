@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
@@ -94,8 +95,8 @@ namespace {
         .Text(),
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "material.shader_stage_duplicate"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kMaterialShaderStageDuplicate));
   }
 
   NOLINT_TEST(MaterialSourceTest, PreparationRejectsShadersTheRuntimeRefuses)
@@ -118,8 +119,8 @@ namespace {
           .Text(),
         "material.json", "", diagnostics);
       EXPECT_FALSE(result);
-      EXPECT_TRUE(
-        HasDiagnosticCode(diagnostics, "material.shader_ref_invalid"));
+      EXPECT_TRUE(HasDiagnosticCode(
+        diagnostics, import_codes::kMaterialShaderRefInvalid));
     }
   }
 
@@ -152,9 +153,10 @@ namespace {
         .Text(),
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(HasDiagnosticCode(
-                  diagnostics, "material.descriptor.schema_validation_failed")
-      || HasDiagnosticCode(diagnostics, "material.emissive_factor_range"));
+    EXPECT_TRUE(HasDiagnosticCode(diagnostics,
+                  import_codes::kMaterialDescriptorSchemaValidationFailed)
+      || HasDiagnosticCode(
+        diagnostics, import_codes::kMaterialEmissiveFactorRange));
   }
 
   NOLINT_TEST(MaterialSourceTest, ForcePackedRequiresTheSameTextureAndUv)
@@ -169,7 +171,8 @@ namespace {
         .Text(),
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(HasDiagnosticCode(diagnostics, "material.orm_policy"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, import_codes::kMaterialOrmPolicy));
   }
 
   NOLINT_TEST(
@@ -180,8 +183,8 @@ namespace {
     source.inputs.emissive_factor[0] = std::numeric_limits<float>::infinity();
     std::vector<ImportDiagnostic> diagnostics;
     EXPECT_FALSE(source.Validate("model.gltf", diagnostics));
-    EXPECT_TRUE(
-      HasDiagnosticCode(diagnostics, "material.emissive_factor_range"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kMaterialEmissiveFactorRange));
   }
 } // namespace
 } // namespace oxygen::content::import::test

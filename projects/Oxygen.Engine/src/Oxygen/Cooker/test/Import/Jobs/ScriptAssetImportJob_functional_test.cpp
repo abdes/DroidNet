@@ -23,6 +23,7 @@
 
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
@@ -252,7 +253,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.asset.external_source_unmounted"));
+      report.diagnostics, import_codes::kScriptAssetExternalSourceUnmounted));
     EXPECT_FALSE(HasCookedFile(cooked_root, "unmounted.oscript"));
   }
 
@@ -273,7 +274,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.asset.compiler_unavailable"));
+      report.diagnostics, import_codes::kScriptAssetCompilerUnavailable));
   }
 
   NOLINT_TEST_F(ScriptAssetImportJobTest,
@@ -635,8 +636,8 @@ return Orbit
     }));
 
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "script.asset.source_read_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, import_codes::kScriptAssetSourceReadFailed));
   }
 
   NOLINT_TEST_F(ScriptAssetImportJobTest,

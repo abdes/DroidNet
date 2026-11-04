@@ -18,6 +18,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
@@ -523,7 +524,7 @@ return Script
     }));
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.schema_validation_failed"));
+      report.diagnostics, import_codes::kScriptSidecarSchemaValidationFailed));
   }
 
   INSTANTIATE_TEST_SUITE_P(InvalidParams, ScriptingSidecarRejectedParamTest,

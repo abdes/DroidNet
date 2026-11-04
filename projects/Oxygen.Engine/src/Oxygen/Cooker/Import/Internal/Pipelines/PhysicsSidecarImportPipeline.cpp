@@ -67,6 +67,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -105,20 +106,20 @@ namespace {
   using core::meta::physics::PhysicsBackend;
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
 
-  //! The prefix of the sidecar's codes, such as `index_load_failed`.
-  constexpr auto kPhysicsSidecarCodePrefix = "physics.sidecar.";
-
   const auto kPhysicsSidecarResolverDiagnostics
     = detail::SidecarSceneResolverDiagnostics {
         .inflight_target_scene_ambiguous_code
-        = "physics.sidecar.inflight_target_scene_ambiguous",
-        .target_scene_invalid_code = "physics.sidecar.target_scene_invalid",
-        .target_scene_not_scene_code = "physics.sidecar.target_scene_not_scene",
+        = import_codes::kPhysicsSidecarInflightTargetSceneAmbiguous,
+        .target_scene_invalid_code
+        = import_codes::kPhysicsSidecarTargetSceneInvalid,
+        .target_scene_not_scene_code
+        = import_codes::kPhysicsSidecarTargetSceneNotScene,
         .target_scene_read_failed_code
-        = "physics.sidecar.target_scene_read_failed",
+        = import_codes::kPhysicsSidecarTargetSceneReadFailed,
         .target_scene_virtual_path_invalid_code
-        = "physics.sidecar.target_scene_virtual_path_invalid",
-        .target_scene_missing_code = "physics.sidecar.target_scene_missing",
+        = import_codes::kPhysicsSidecarTargetSceneVirtualPathInvalid,
+        .target_scene_missing_code
+        = import_codes::kPhysicsSidecarTargetSceneMissing,
       };
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
@@ -314,7 +315,7 @@ namespace {
     const auto target_it = ctx.target_assets->find(found->key);
     if (target_it == ctx.target_assets->end()) {
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-        "physics.sidecar.reference_source_mismatch",
+        std::string(import_codes::kPhysicsSidecarReferenceSourceMismatch),
         "Resolved reference is not in the target scene source domain: " + named,
         location);
       return std::nullopt;
@@ -338,7 +339,7 @@ namespace {
       return true;
     }
     AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-      "physics.sidecar.node_ref_out_of_bounds",
+      std::string(import_codes::kPhysicsSidecarNodeRefOutOfBounds),
       "Node index is out of bounds for target scene", location);
     return false;
   }
@@ -356,19 +357,20 @@ namespace {
         continue;
       }
 
-      const auto shape_key
-        = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
-          base_path / "shape_ref", data::AssetType::kCollisionShape,
-          ReferenceCodes {
-            .unresolved = "physics.sidecar.shape_ref_unresolved",
-            .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
-          });
+      const auto shape_key = ResolveAssetKeyForVirtualPath(ctx,
+        binding.shape_ref, base_path / "shape_ref",
+        data::AssetType::kCollisionShape,
+        ReferenceCodes {
+          .unresolved = import_codes::kPhysicsSidecarShapeRefUnresolved,
+          .wrong_type = import_codes::kPhysicsSidecarShapeRefNotCollisionShape,
+        });
       const auto material_key
         = ResolveAssetKeyForVirtualPath(ctx, binding.material_ref,
           base_path / "material_ref", data::AssetType::kPhysicsMaterial,
           ReferenceCodes {
-            .unresolved = "physics.sidecar.material_ref_unresolved",
-            .wrong_type = "physics.sidecar.material_ref_not_physics_material",
+            .unresolved = import_codes::kPhysicsSidecarMaterialRefUnresolved,
+            .wrong_type
+            = import_codes::kPhysicsSidecarMaterialRefNotPhysicsMaterial,
           });
       if (shape_key.has_value()) {
         binding.record.shape_asset_key = *shape_key;
@@ -392,13 +394,13 @@ namespace {
         continue;
       }
 
-      const auto shape_key
-        = ResolveAssetKeyForVirtualPath(ctx, binding.shape_ref,
-          base_path / "shape_ref", data::AssetType::kCollisionShape,
-          ReferenceCodes {
-            .unresolved = "physics.sidecar.shape_ref_unresolved",
-            .wrong_type = "physics.sidecar.shape_ref_not_collision_shape",
-          });
+      const auto shape_key = ResolveAssetKeyForVirtualPath(ctx,
+        binding.shape_ref, base_path / "shape_ref",
+        data::AssetType::kCollisionShape,
+        ReferenceCodes {
+          .unresolved = import_codes::kPhysicsSidecarShapeRefUnresolved,
+          .wrong_type = import_codes::kPhysicsSidecarShapeRefNotCollisionShape,
+        });
       if (shape_key.has_value()) {
         binding.record.shape_asset_key = *shape_key;
       }
@@ -420,8 +422,9 @@ namespace {
         = ResolveAssetKeyForVirtualPath(ctx, *binding.inner_shape_ref,
           base_path / "inner_shape_ref", data::AssetType::kCollisionShape,
           ReferenceCodes {
-            .unresolved = "physics.sidecar.inner_shape_ref_unresolved",
-            .wrong_type = "physics.sidecar.inner_shape_ref_not_collision_shape",
+            .unresolved = import_codes::kPhysicsSidecarInnerShapeRefUnresolved,
+            .wrong_type
+            = import_codes::kPhysicsSidecarInnerShapeRefNotCollisionShape,
           });
       if (inner_shape_key.has_value()) {
         binding.record.inner_shape_asset_key = *inner_shape_key;
@@ -450,7 +453,7 @@ namespace {
       = SoftBodyFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
       AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
-        "physics.sidecar.backend_unsupported",
+        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
         "Requested physics backend is not supported for soft-body topology "
         "cooking: "
           + std::string(BackendName(requested_backend)));
@@ -469,8 +472,8 @@ namespace {
         = ResolveAssetKeyForVirtualPath(ctx, records.at(i).source_mesh_ref,
           base_path / "source_mesh_ref", data::AssetType::kGeometry,
           ReferenceCodes {
-            .unresolved = "physics.sidecar.source_mesh_ref_unresolved",
-            .wrong_type = "physics.sidecar.source_mesh_ref_not_geometry",
+            .unresolved = import_codes::kPhysicsSidecarSourceMeshRefUnresolved,
+            .wrong_type = import_codes::kPhysicsSidecarSourceMeshRefNotGeometry,
           });
       if (!source_mesh_key.has_value()) {
         continue;
@@ -479,7 +482,7 @@ namespace {
       const auto source_mesh_entry = ctx.target_assets->find(*source_mesh_key);
       if (source_mesh_entry == ctx.target_assets->end()) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-          "physics.sidecar.source_mesh_ref_unresolved",
+          std::string(import_codes::kPhysicsSidecarSourceMeshRefUnresolved),
           "Resolved source mesh has no descriptor in target cooked root",
           base_path / "source_mesh_ref");
         continue;
@@ -492,12 +495,15 @@ namespace {
         (void)ResolveAssetKeyForVirtualPath(ctx, *collision_mesh_ref,
           base_path / "collision_mesh_ref", data::AssetType::kGeometry,
           ReferenceCodes {
-            .unresolved = "physics.sidecar.collision_mesh_ref_unresolved",
-            .wrong_type = "physics.sidecar.collision_mesh_ref_not_geometry",
+            .unresolved
+            = import_codes::kPhysicsSidecarCollisionMeshRefUnresolved,
+            .wrong_type
+            = import_codes::kPhysicsSidecarCollisionMeshRefNotGeometry,
           });
         if (requested_backend == PhysicsBackend::kJolt) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError, "physics.sidecar.payload_invalid",
+            ImportSeverity::kError,
+            std::string(import_codes::kPhysicsSidecarPayloadInvalid),
             "soft_bodies.collision_mesh_ref is not supported for jolt backend",
             base_path / "collision_mesh_ref");
           continue;
@@ -510,7 +516,8 @@ namespace {
         if (!authored_backend.has_value()
           || *authored_backend != requested_backend) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
+            ImportSeverity::kError,
+            std::string(import_codes::kPhysicsSidecarBackendMismatch),
             "soft-body backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             base_path / "backend" / "target");
@@ -528,7 +535,7 @@ namespace {
     const auto expected_format_opt = JointFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
       AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
-        "physics.sidecar.backend_unsupported",
+        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
         "Requested physics backend is not supported for joint constraint "
         "cooking: "
           + std::string(BackendName(requested_backend)));
@@ -555,7 +562,8 @@ namespace {
         if (!authored_backend.has_value()
           || *authored_backend != requested_backend) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
+            ImportSeverity::kError,
+            std::string(import_codes::kPhysicsSidecarBackendMismatch),
             "joint backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             base_path / "backend" / "target");
@@ -574,7 +582,7 @@ namespace {
     const auto expected_format_opt = VehicleFormatForBackend(requested_backend);
     if (!expected_format_opt.has_value()) {
       AddDiagnostic(*ctx.session, *ctx.request, ImportSeverity::kError,
-        "physics.sidecar.backend_unsupported",
+        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
         "Requested physics backend is not supported for vehicle constraint "
         "cooking: "
           + std::string(BackendName(requested_backend)));
@@ -605,7 +613,8 @@ namespace {
         if (wheel.backend_target != PhysicsBackend::kNone
           && wheel.backend_target != requested_backend) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError, "physics.sidecar.backend_mismatch",
+            ImportSeverity::kError,
+            std::string(import_codes::kPhysicsSidecarBackendMismatch),
             "vehicle wheel backend.target must match requested import backend "
               + std::string(BackendName(requested_backend)),
             wheel_path / "backend" / "target");
@@ -624,7 +633,7 @@ namespace {
 
       if (slice_count < 2U) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-          "physics.sidecar.payload_invalid",
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "Vehicle wheel bindings must resolve to at least two valid wheels",
           base_path / "wheels");
         wheel_records.resize(wheel_offset);
@@ -633,7 +642,7 @@ namespace {
 
       if (wheel_offset > std::numeric_limits<uint32_t>::max()) {
         AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-          "physics.sidecar.payload_invalid",
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "Vehicle wheel table offset exceeds uint32 range", base_path);
         wheel_records.resize(wheel_offset);
         continue;
@@ -917,7 +926,9 @@ namespace {
   //! Why a soft body's topology failed to cook: a diagnostic code and the
   //! reason it reports.
   struct SoftBodyCookError final {
-    std::string_view code = "physics.sidecar.resource_serialize_failed";
+    std::string code {
+      import_codes::kPhysicsSidecarResourceSerializeFailed,
+    };
     std::string reason;
   };
 
@@ -1467,7 +1478,8 @@ namespace {
         || face.mVertex[1] == face.mVertex[2]
         || face.mVertex[2] == face.mVertex[0]) {
         error = {
-          .code = "physics.sidecar.soft_body_surface_not_manifold",
+          .code = std::string(
+            import_codes::kPhysicsSidecarSoftBodySurfaceNotManifold),
           .reason = "a face collapses once its vertices are welded",
         };
         return false;
@@ -1477,7 +1489,8 @@ namespace {
         const auto to = face.mVertex[(k + 1U) % 3U];
         if (++directed[{ from, to }] > 1U) {
           error = {
-            .code = "physics.sidecar.soft_body_surface_not_manifold",
+            .code = std::string(
+              import_codes::kPhysicsSidecarSoftBodySurfaceNotManifold),
             .reason = "an edge borders more than two faces, or two faces "
                       "that wind the same way",
           };
@@ -1490,7 +1503,8 @@ namespace {
       for (const auto& [edge, count] : directed) {
         if (!directed.contains({ edge.second, edge.first })) {
           error = {
-            .code = "physics.sidecar.soft_body_surface_not_closed",
+            .code = std::string(
+              import_codes::kPhysicsSidecarSoftBodySurfaceNotClosed),
             .reason = "pressure needs a closed surface, and an edge borders "
                       "one face",
           };
@@ -1504,7 +1518,8 @@ namespace {
     }
     if (components != 1U) {
       error = {
-        .code = "physics.sidecar.soft_body_surface_disconnected",
+        .code
+        = std::string(import_codes::kPhysicsSidecarSoftBodySurfaceDisconnected),
         .reason
         = "the surface has " + std::to_string(components) + " separate parts",
       };
@@ -1527,7 +1542,7 @@ namespace {
       if (source >= mesh.welded_of_source.size()
         || mesh.welded_of_source.at(source) == kNotOnSurface) {
         error = {
-          .code = "physics.sidecar.soft_body_pin_invalid",
+          .code = std::string(import_codes::kPhysicsSidecarSoftBodyPinInvalid),
           .reason = std::string(field) + " names vertex "
             + std::to_string(source)
             + ", which no face of the source mesh uses",
@@ -1947,7 +1962,7 @@ namespace {
       return true;
     } catch (const std::exception& ex) {
       AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-        "physics.sidecar.resource_emit_failed",
+        std::string(import_codes::kPhysicsSidecarResourceEmitFailed),
         "Failed emitting backend-cooked physics payload: "
           + std::string(ex.what()),
         location);
@@ -1993,7 +2008,7 @@ namespace {
       auto cook_error = std::string {};
       if (!CookJointConstraintBlob(records.at(i), blob_bytes, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "physics.sidecar.resource_serialize_failed",
+          std::string(import_codes::kPhysicsSidecarResourceSerializeFailed),
           "Failed to cook joint constraint resource: " + cook_error,
           nlohmann::json::json_pointer {} / "bindings" / "joints" / i);
         continue;
@@ -2017,7 +2032,7 @@ namespace {
       auto cook_error = std::string {};
       if (!CookVehicleConstraintBlob(records.at(i), blob_bytes, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "physics.sidecar.resource_serialize_failed",
+          std::string(import_codes::kPhysicsSidecarResourceSerializeFailed),
           "Failed to cook vehicle constraint resource: " + cook_error,
           nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i);
         continue;
@@ -2287,20 +2302,20 @@ namespace {
   {
     if (!request.physics.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.request.invalid_import_kind",
+        std::string(import_codes::kPhysicsRequestInvalidImportKind),
         "Physics sidecar import requires ImportRequest::physics payload");
       return false;
     }
     if (request.physics->target_scene_virtual_path.empty()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.request.target_scene_virtual_path_missing",
+        std::string(import_codes::kPhysicsRequestTargetSceneVirtualPathMissing),
         "Physics sidecar import requires target_scene_virtual_path");
       return false;
     }
     if (!internal::IsCanonicalVirtualPath(
           request.physics->target_scene_virtual_path)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.sidecar.target_scene_virtual_path_invalid",
+        std::string(import_codes::kPhysicsSidecarTargetSceneVirtualPathInvalid),
         "Target scene virtual path must be canonical");
       return false;
     }
@@ -2316,7 +2331,7 @@ namespace {
       = detail::FindSceneContent(mounts, resolved_scene_state.scene_key);
     if (target_content == nullptr) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.sidecar.target_scene_missing",
+        std::string(import_codes::kPhysicsSidecarTargetSceneMissing),
         "Resolved target scene key is not present in cooked scene context");
       return false;
     }
@@ -2325,7 +2340,7 @@ namespace {
     const auto requested_backend = ResolveRequestedPhysicsBackend(request);
     if (requested_backend == PhysicsBackend::kNone) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.sidecar.backend_unsupported",
+        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
         "Requested physics backend 'none' is not valid for sidecar cooking");
       return false;
     }
@@ -2505,7 +2520,7 @@ namespace {
         ResolveRequestedPhysicsBackend(request), serialize_error);
     if (!descriptor_bytes.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.sidecar.descriptor_serialize_failed",
+        std::string(import_codes::kPhysicsSidecarDescriptorSerializeFailed),
         std::move(serialize_error));
       return false;
     }
@@ -2518,7 +2533,7 @@ namespace {
         std::span<const std::byte>(*descriptor_bytes), std::move(references));
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "physics.sidecar.descriptor_emit_failed",
+        std::string(import_codes::kPhysicsSidecarDescriptorEmitFailed),
         "Failed to emit physics sidecar descriptor: " + std::string(ex.what()));
       return false;
     }
@@ -2665,7 +2680,7 @@ auto PhysicsSidecarImportPipeline::Worker() -> co::Co<>
       if (item.session != nullptr) {
         const auto& request = item.session->Request();
         AddDiagnostic(*item.session, request, ImportSeverity::kError,
-          "physics.sidecar.pipeline_exception",
+          std::string(import_codes::kPhysicsSidecarPipelineException),
           std::string { "Unhandled physics sidecar pipeline exception: " }
             + ex.what());
       }
@@ -2709,7 +2724,7 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   auto mounts = internal::LoadMountedCookedSources(
-    *session, request, kPhysicsSidecarCodePrefix);
+    *session, request, import_codes::kPhysicsSidecarIndexLoadFailed);
   if (session->HasErrors()) {
     co_return false;
   }

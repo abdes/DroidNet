@@ -27,6 +27,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -158,8 +159,8 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->scenes_written, 0U);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kSceneDescriptorCameraNodeIndexOutOfRange));
   }
 
   //! Writes a cooked texture sidecar naming source texture `index`.
@@ -248,7 +249,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.starting_camera.not_a_camera"));
+      report->diagnostics, import_codes::kSceneStartingCameraNotACamera));
   }
 
   //! A scene that instances itself, directly or through another scene, fails.
@@ -287,7 +288,7 @@ namespace {
       ASSERT_HAS_VALUE(report);
       EXPECT_FALSE(report->success) << instanced;
       EXPECT_TRUE(HasDiagnosticCode(
-        report->diagnostics, "scene.descriptor.instance_cycle"))
+        report->diagnostics, import_codes::kSceneDescriptorInstanceCycle))
         << instanced;
     }
   }
@@ -334,10 +335,10 @@ namespace {
 
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kSceneDescriptorInstanceOverrideUnresolved));
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.instance_override_unresolved"));
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.starting_camera.unresolved"));
+      report->diagnostics, import_codes::kSceneStartingCameraUnresolved));
     const auto scene = data::SceneAsset(
       data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/Level.oscene")));
     EXPECT_FALSE(scene.GetStartingCamera().has_value());
@@ -414,7 +415,7 @@ namespace {
     ASSERT_HAS_VALUE(srgb);
     EXPECT_FALSE(srgb->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      srgb->diagnostics, "scene.descriptor.mask_format_invalid"));
+      srgb->diagnostics, import_codes::kSceneDescriptorMaskFormatInvalid));
     // A descriptor that names no table row is a root its index cannot vouch
     // for: opening it refuses the root.
     MaterializeMeteringMask(root, Format::kRGBA8UNorm, true);
@@ -422,7 +423,7 @@ namespace {
     ASSERT_HAS_VALUE(absent);
     EXPECT_FALSE(absent->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      absent->diagnostics, "scene.descriptor.index_load_failed"));
+      absent->diagnostics, import_codes::kSceneDescriptorIndexLoadFailed));
 
     // A deleted mask, a root that keeps the texture but no longer describes
     // it, leaves the scene without one, with a warning.
@@ -433,8 +434,8 @@ namespace {
     const auto deleted = Import(MakeRequest(root, mask_scene));
     ASSERT_HAS_VALUE(deleted);
     EXPECT_TRUE(deleted->success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      deleted->diagnostics, "scene.descriptor.texture_descriptor_missing"));
+    EXPECT_TRUE(HasDiagnosticCode(deleted->diagnostics,
+      import_codes::kSceneDescriptorTextureDescriptorMissing));
     const auto unmasked = data::SceneAsset(
       data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/MaskScene.oscene")))
                             .TryGetPostProcessVolumeEnvironment();
@@ -593,7 +594,7 @@ namespace {
       EXPECT_FALSE(report->success);
       EXPECT_EQ(report->scenes_written, 0U);
       EXPECT_TRUE(HasDiagnosticCode(
-        report->diagnostics, "scene.descriptor.exposure_invalid"));
+        report->diagnostics, import_codes::kSceneDescriptorExposureInvalid));
     }
   }
 
@@ -766,8 +767,8 @@ namespace {
     const auto report = Import(std::move(request));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.reference_type_mismatch"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      import_codes::kSceneDescriptorReferenceTypeMismatch));
   }
 
   NOLINT_TEST_F(
@@ -830,7 +831,7 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->scenes_written, 1U);
     EXPECT_FALSE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.reference_missing"));
+      report->diagnostics, import_codes::kSceneDescriptorReferenceMissing));
 
     EXPECT_TRUE(HasCookedFile(cooked_root, "Scenes/DemoScene.oscene"));
 
@@ -883,7 +884,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.reference_missing"));
+      report->diagnostics, import_codes::kSceneDescriptorReferenceMissing));
   }
 
   NOLINT_TEST_F(SceneDescriptorImportJobTest,
@@ -1025,7 +1026,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.recook_required"));
+      report->diagnostics, import_codes::kSceneDescriptorRecookRequired));
   }
 
   NOLINT_TEST_F(
@@ -1338,7 +1339,7 @@ namespace {
     EXPECT_FALSE(report->success);
     EXPECT_EQ(report->scenes_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "scene.descriptor.recook_required"));
+      report->diagnostics, import_codes::kSceneDescriptorRecookRequired));
   }
 
   //! Packs a procedural geometry with one surface and a material under
@@ -1469,7 +1470,7 @@ namespace {
     EXPECT_TRUE(report->success);
     const auto warning = std::ranges::find_if(
       report->diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
-        return diagnostic.code == "scene.descriptor.surface_invalid";
+        return diagnostic.code == import_codes::kSceneDescriptorSurfaceInvalid;
       });
     ASSERT_NE(warning, report->diagnostics.end());
     EXPECT_EQ(warning->severity, ImportSeverity::kWarning);

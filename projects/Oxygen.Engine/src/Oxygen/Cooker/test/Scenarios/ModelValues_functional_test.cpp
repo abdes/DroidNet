@@ -53,6 +53,7 @@
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/Validate.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -776,13 +777,17 @@ NOLINT_TEST_F(ModelValuesTest, GltfSettingsShapeTheCookedModel)
   options.import_cameras = false;
   const auto second = RunImport(request);
   ASSERT_TRUE(second.report.success);
-  EXPECT_TRUE(Warns(
-    second.report, "import.setting_target_missing", "geometry_defaults/Gone"));
-  EXPECT_TRUE(Warns(second.report, "import.setting_target_missing",
+  EXPECT_TRUE(Warns(second.report,
+    oxygen::content::import::import_codes::kSettingTargetMissing,
+    "geometry_defaults/Gone"));
+  EXPECT_TRUE(Warns(second.report,
+    oxygen::content::import::import_codes::kSettingTargetMissing,
     "texture_overrides/Gone.base_color"));
-  EXPECT_TRUE(Warns(second.report, "import.setting_target_missing",
+  EXPECT_TRUE(Warns(second.report,
+    oxygen::content::import::import_codes::kSettingTargetMissing,
     anchor + "/" + oxygen::data::to_string(gone)));
-  EXPECT_TRUE(Warns(second.report, "import.setting_not_applicable", "up_axis"));
+  EXPECT_TRUE(Warns(second.report,
+    oxygen::content::import::import_codes::kSettingNotApplicable, "up_axis"));
   LoadAndVerify(second.report, [&](const CookedModel& model) -> void {
     const auto& policy = model.geometry->DefaultLodPolicy();
     ASSERT_HAS_VALUE(policy);
@@ -858,16 +863,19 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
 
   const auto [second, second_path] = import_model("second",
     {
-      { "Scalar",
+      {
+        "Scalar",
         oxygen::cooker::test::SpellReference(
           oxygen::cooker::test::ModelVirtualPath(
             root / "second" / "second.gltf"),
-          existing.front().virtual_path) },
+          existing.front().virtual_path),
+      },
       { "Ghost", "Ghost.omat" },
     });
   ASSERT_TRUE(second.success);
   EXPECT_TRUE(
-    Warns(second, "import.setting_target_missing", "material_remap/Ghost"));
+    Warns(second, oxygen::content::import::import_codes::kSettingTargetMissing,
+      "material_remap/Ghost"));
   EXPECT_TRUE(entries_under(second_path, AssetType::kMaterial).empty());
   const auto geometries = entries_under(second_path, AssetType::kGeometry);
   ASSERT_EQ(geometries.size(), 1U);
@@ -885,8 +893,9 @@ NOLINT_TEST_F(ModelValuesTest, GltfMaterialRemapBindsTheExistingMaterial)
   const auto [third, third_path]
     = import_model("third", { { "Scalar", "Missing.omat" } });
   ASSERT_TRUE(third.success);
-  EXPECT_TRUE(Warns(
-    third, "import.material_remap_target_missing", "material_remap/Scalar"));
+  EXPECT_TRUE(Warns(third,
+    oxygen::content::import::import_codes::kMaterialRemapTargetMissing,
+    "material_remap/Scalar"));
   EXPECT_EQ(entries_under(third_path, AssetType::kMaterial).size(), 1U);
 }
 
@@ -1126,7 +1135,9 @@ NOLINT_TEST_F(ModelValuesTest, FbxSettingsShapeTheCookedModel)
     request.options.light_intensity_scale = 3.0F;
     const auto imported = RunImport(std::move(request));
     ASSERT_TRUE(imported.report.success);
-    EXPECT_EQ(Reports(imported.report, "fbx.axis_unknown"), item.axis_unknown);
+    EXPECT_EQ(Reports(imported.report,
+                oxygen::content::import::import_codes::kFbxAxisUnknown),
+      item.axis_unknown);
     LoadAndVerify(imported.report, [&](const CookedModel& model) -> void {
       // The source's (0,1,0) corner, in Oxygen axes.
       EXPECT_TRUE(std::ranges::any_of(

@@ -39,10 +39,10 @@ struct MountedCookedSource final {
 
 //! Load the cooked roots a job reads (`BuildMountedCookedRoots`), loose
 //! cooked roots and paks, lowest precedence first. A root whose content fails
-//! to open reports `<diagnostic_prefix>index_load_failed` and is kept without
+//! to open reports `index_load_failed` and is kept without
 //! content.
 [[nodiscard]] auto LoadMountedCookedSources(ImportSession& session,
-  const ImportRequest& request, std::string_view diagnostic_prefix)
+  const ImportRequest& request, std::string_view index_load_failed)
   -> std::vector<MountedCookedSource>;
 
 //! An asset a reference names, found in the mounted cooked roots.

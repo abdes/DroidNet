@@ -20,6 +20,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedTempDir.h>
@@ -406,7 +407,7 @@ namespace {
     const auto outcome = Parse(Manifest(json::array({ sidecar })));
 
     // Assert
-    const auto found = Only(outcome, "path.absolute_committed");
+    const auto found = Only(outcome, mount_codes::kAbsoluteCommitted.id);
     ASSERT_HAS_VALUE(found);
     EXPECT_EQ(found->json_pointer, "/jobs/0/output");
   }

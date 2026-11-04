@@ -22,6 +22,7 @@
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
@@ -566,9 +567,9 @@ namespace {
     EXPECT_EQ(NormalMapFlip(max), false);
     EXPECT_EQ(NormalMapFlip(maya), true);
     EXPECT_FALSE(oxygen::cooker::test::HasDiagnosticCode(
-      max.diagnostics, "fbx.normal_map_convention_assumed"));
+      max.diagnostics, import_codes::kFbxNormalMapConventionAssumed));
     EXPECT_FALSE(oxygen::cooker::test::HasDiagnosticCode(
-      maya.diagnostics, "fbx.normal_map_convention_assumed"));
+      maya.diagnostics, import_codes::kFbxNormalMapConventionAssumed));
   }
 
   //! An FBX from an application Oxygen does not know has its normal maps taken
@@ -581,7 +582,7 @@ namespace {
     ASSERT_TRUE(prepared.success);
     EXPECT_EQ(NormalMapFlip(prepared), true);
     EXPECT_TRUE(oxygen::cooker::test::HasDiagnosticCode(
-      prepared.diagnostics, "fbx.normal_map_convention_assumed"))
+      prepared.diagnostics, import_codes::kFbxNormalMapConventionAssumed))
       << oxygen::cooker::test::DiagnosticSummary(prepared.diagnostics);
   }
 

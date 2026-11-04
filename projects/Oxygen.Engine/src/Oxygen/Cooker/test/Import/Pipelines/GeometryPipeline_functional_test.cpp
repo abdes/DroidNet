@@ -32,6 +32,7 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -501,8 +502,8 @@ namespace {
 
     EXPECT_TRUE(result.success);
     EXPECT_TRUE(result.cooked.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.missing_inverse_bind"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshMissingInverseBind));
   }
 
   NOLINT_TEST_F(GeometryPipelineTest, CollectWithProceduralMeshReturnsFailure)
@@ -518,8 +519,8 @@ namespace {
 
     ASSERT_FALSE(result.success);
     EXPECT_FALSE(result.cooked.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.procedural_unsupported"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshProceduralUnsupported));
   }
 
   NOLINT_TEST_F(GeometryPipelineTest, FinalizeDescriptorPatchesIndices)
@@ -604,8 +605,8 @@ namespace {
           });
 
       ASSERT_TRUE(result.success);
-      EXPECT_EQ(
-        HasDiagnosticCode(result.diagnostics, "mesh.missing_tangent_prereq"),
+      EXPECT_EQ(HasDiagnosticCode(
+                  result.diagnostics, import_codes::kMeshMissingTangentPrereq),
         normal_mapped)
         << "normal mapped: " << normal_mapped;
     }
@@ -632,8 +633,8 @@ namespace {
 
     EXPECT_FALSE(result.success);
     EXPECT_FALSE(result.cooked.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.missing_positions"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshMissingPositions));
   }
 
   NOLINT_TEST_F(
@@ -651,7 +652,8 @@ namespace {
 
     EXPECT_FALSE(result.success);
     EXPECT_FALSE(result.cooked.has_value());
-    EXPECT_TRUE(HasDiagnosticCode(result.diagnostics, "mesh.buffer_too_large"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshBufferTooLarge));
   }
 
   NOLINT_TEST_F(
@@ -669,7 +671,8 @@ namespace {
 
     EXPECT_FALSE(result.success);
     EXPECT_FALSE(result.cooked.has_value());
-    EXPECT_TRUE(HasDiagnosticCode(result.diagnostics, "mesh.buffer_too_large"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshBufferTooLarge));
   }
 
   NOLINT_TEST_F(GeometryPipelineTest, CollectWithTooManyLodsReturnsFailure)
@@ -686,8 +689,8 @@ namespace {
 
     EXPECT_FALSE(result.success);
     EXPECT_FALSE(result.cooked.has_value());
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.invalid_lod_count"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshInvalidLodCount));
   }
 
   //=== Mesh View Split Tests
@@ -882,8 +885,8 @@ namespace {
     const auto result = Cook(std::move(item));
 
     ASSERT_TRUE(result.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshTangentsUnusable));
     ASSERT_HAS_VALUE(result.cooked);
     for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
       EXPECT_EQ(vertex.tangent, space::move::Right);
@@ -903,8 +906,8 @@ namespace {
     const auto result = Cook(std::move(item));
 
     ASSERT_TRUE(result.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshTangentsUnusable));
     ASSERT_HAS_VALUE(result.cooked);
     for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
       EXPECT_EQ(vertex.tangent, space::move::Back);
@@ -932,8 +935,8 @@ namespace {
     const auto result = Cook(std::move(item));
 
     ASSERT_TRUE(result.success);
-    EXPECT_FALSE(
-      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    EXPECT_FALSE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshTangentsUnusable));
     ASSERT_HAS_VALUE(result.cooked);
     for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
       EXPECT_NEAR(glm::dot(vertex.tangent, space::move::Right), 1.0F, 1e-6F);
@@ -959,8 +962,8 @@ namespace {
     const auto result = Cook(std::move(item));
 
     ASSERT_TRUE(result.success);
-    EXPECT_FALSE(
-      HasDiagnosticCode(result.diagnostics, "mesh.tangents_unusable"));
+    EXPECT_FALSE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMeshTangentsUnusable));
     ASSERT_HAS_VALUE(result.cooked);
     for (const auto& vertex : ReadCookedViews(*result.cooked).vertices) {
       EXPECT_NEAR(glm::dot(vertex.tangent, tangent), 1.0F, 1e-6F);
@@ -1265,8 +1268,8 @@ namespace {
 
     ASSERT_TRUE(result.success);
     ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
-    EXPECT_FALSE(
-      HasDiagnosticCode(result.diagnostics, "import.lod_generation.stopped"));
+    EXPECT_FALSE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kLodGenerationStopped));
     const auto& cooked = result.cooked.value();
     ASSERT_EQ(cooked.lods.size(), 4U);
     for (size_t lod = 1U; lod < cooked.lods.size(); ++lod) {
@@ -1315,8 +1318,8 @@ namespace {
     ASSERT_TRUE(result.success);
     ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
     EXPECT_EQ(result.cooked.value().lods.size(), 2U);
-    EXPECT_TRUE(
-      HasDiagnosticCode(result.diagnostics, "import.lod_generation.skipped"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kLodGenerationSkipped));
   }
 
   //! A geometry that cannot be reduced cooks its LOD 0 alone and reports
@@ -1330,7 +1333,8 @@ namespace {
     ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
     EXPECT_EQ(result.cooked.value().lods.size(), 1U);
     const auto stopped = std::ranges::find(result.diagnostics,
-      "import.lod_generation.stopped", &ImportDiagnostic::code);
+      std::string(import_codes::kLodGenerationStopped),
+      &ImportDiagnostic::code);
     ASSERT_NE(stopped, result.diagnostics.end());
     EXPECT_THAT(stopped->message,
       ::testing::HasSubstr("LOD 1 kept 1 triangles, more than the 0"));
@@ -1412,8 +1416,8 @@ namespace {
 
     ASSERT_TRUE(result.success);
     ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
-    EXPECT_FALSE(
-      HasDiagnosticCode(result.diagnostics, "import.lod_generation.stopped"));
+    EXPECT_FALSE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kLodGenerationStopped));
     const auto& cooked = result.cooked.value();
     ASSERT_EQ(cooked.lods.size(), 4U);
     // Faceted: the corners of a vertex take their faces' normals, so LOD 0

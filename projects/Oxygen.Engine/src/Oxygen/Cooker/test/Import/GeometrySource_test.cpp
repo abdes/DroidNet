@@ -21,6 +21,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/GeometryDefaults.h>
 #include <Oxygen/Cooker/Import/Internal/GeometrySource.h>
@@ -149,7 +150,8 @@ namespace {
       "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "geometry.descriptor.submesh_bounds_invalid";
+        return diagnostic.code
+          == import_codes::kGeometryDescriptorSubmeshBoundsInvalid;
       }));
   }
 
@@ -175,7 +177,8 @@ namespace {
       "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "geometry.descriptor.view_bounds_invalid";
+        return diagnostic.code
+          == import_codes::kGeometryDescriptorViewBoundsInvalid;
       }));
   }
 
@@ -265,7 +268,8 @@ namespace {
       "geometry.json", document.Identity(), Mounts(), diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "geometry.descriptor.surface_id_invalid";
+        return diagnostic.code
+          == import_codes::kGeometryDescriptorSurfaceIdInvalid;
       }));
   }
 
@@ -323,7 +327,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
       "geometry.json", document.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_unknown"));
+    EXPECT_TRUE(
+      HasCode(diagnostics, import_codes::kGeometryDescriptorSurfaceUnknown));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsRepeatedSurfaceDefaults)
@@ -337,7 +342,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
       "geometry.json", document.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.surface_duplicate"));
+    EXPECT_TRUE(
+      HasCode(diagnostics, import_codes::kGeometryDescriptorSurfaceDuplicate));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsDecreasingLodThresholds)
@@ -349,7 +355,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
       "geometry.json", document.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+    EXPECT_TRUE(
+      HasCode(diagnostics, import_codes::kGeometryDescriptorLodPolicyInvalid));
   }
 
   NOLINT_TEST_F(GeometrySourceTest, RejectsIncreasingScreenSpaceErrors)
@@ -361,7 +368,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
       "geometry.json", document.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+    EXPECT_TRUE(
+      HasCode(diagnostics, import_codes::kGeometryDescriptorLodPolicyInvalid));
   }
 
   NOLINT_TEST_F(
@@ -374,7 +382,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(document.Text(),
       "geometry.json", document.Identity(), Mounts(), diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "geometry.descriptor.lod_policy_invalid"));
+    EXPECT_TRUE(
+      HasCode(diagnostics, import_codes::kGeometryDescriptorLodPolicyInvalid));
   }
 
   //! Absent values take the scene schema's defaults.

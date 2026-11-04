@@ -16,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -31,7 +32,6 @@ namespace {
   constexpr auto kSlotB = "00000000-0000-4000-8000-00000000000b";
   constexpr auto kNodeId = "00000000-0000-4000-8000-0000000000c1";
   constexpr auto kNilId = "00000000-0000-0000-0000-000000000000";
-  constexpr auto kSchemaFailed = "script.sidecar.schema_validation_failed";
 
   auto Row(const std::string_view slot = kSlotA, const uint32_t node = 0)
     -> json
@@ -158,7 +158,8 @@ namespace {
     const auto prepared = Prepare("{ not json", diagnostics);
 
     EXPECT_FALSE(prepared.has_value());
-    EXPECT_TRUE(HasErrorAt(diagnostics, "script.sidecar.parse_failed", ""))
+    EXPECT_TRUE(
+      HasErrorAt(diagnostics, import_codes::kScriptSidecarParseFailed, ""))
       << DiagnosticSummary(diagnostics);
   }
 
@@ -168,87 +169,100 @@ namespace {
     const auto prepared = Prepare("// note\n{\"bindings\":[]}", diagnostics);
 
     EXPECT_FALSE(prepared.has_value());
-    EXPECT_TRUE(HasDiagnosticCode(diagnostics, "script.sidecar.parse_failed"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, import_codes::kScriptSidecarParseFailed));
   }
 
   NOLINT_TEST(
     ScriptingSidecarPreparationTest, RefusesARootThatIsNeitherObjectNorArray)
   {
-    ExpectRefused(json(5), kSchemaFailed, "");
+    ExpectRefused(
+      json(5), import_codes::kScriptSidecarSchemaValidationFailed, "");
   }
 
   NOLINT_TEST(
     ScriptingSidecarPreparationTest, RefusesMissingOrMalformedBindings)
   {
-    ExpectRefused(json::object(), kSchemaFailed, "");
-    ExpectRefused(json { { "bindings", 1 } }, kSchemaFailed, "/bindings");
+    ExpectRefused(
+      json::object(), import_codes::kScriptSidecarSchemaValidationFailed, "");
+    ExpectRefused(json { { "bindings", 1 } },
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAMalformedRowAtItsPointer)
   {
-    ExpectRefused(json::array({ Row(), 3 }), kSchemaFailed, "/bindings/1");
+    ExpectRefused(json::array({ Row(), 3 }),
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings/1");
 
     auto no_node = Row();
     no_node.erase("node_index");
-    ExpectRefused(json::array({ no_node }), kSchemaFailed, "/bindings/0");
+    ExpectRefused(json::array({ no_node }),
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings/0");
 
     auto no_script = Row();
     no_script.erase("script_virtual_path");
-    ExpectRefused(
-      json::array({ Row(kSlotB), no_script }), kSchemaFailed, "/bindings/1");
+    ExpectRefused(json::array({ Row(kSlotB), no_script }),
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings/1");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAnInvalidSlotId)
   {
     ExpectRefused(json::array({ Row("not-a-uuid") }),
-      "script.sidecar.slot_id_invalid", "/bindings/0/slot_id");
+      import_codes::kScriptSidecarSlotIdInvalid, "/bindings/0/slot_id");
     ExpectRefused(json::array({ Row(kNilId) }),
-      "script.sidecar.slot_id_invalid", "/bindings/0/slot_id");
+      import_codes::kScriptSidecarSlotIdInvalid, "/bindings/0/slot_id");
 
     auto no_slot = Row();
     no_slot.erase("slot_id");
-    ExpectRefused(json::array({ no_slot }), kSchemaFailed, "/bindings/0");
+    ExpectRefused(json::array({ no_slot }),
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings/0");
 
     auto number_slot = Row();
     number_slot["slot_id"] = 7;
-    ExpectRefused(
-      json::array({ number_slot }), kSchemaFailed, "/bindings/0/slot_id");
+    ExpectRefused(json::array({ number_slot }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/bindings/0/slot_id");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAnInvalidExecutionOrder)
   {
     auto fractional = Row();
     fractional["execution_order"] = 1.5;
-    ExpectRefused(json::array({ fractional }), kSchemaFailed,
+    ExpectRefused(json::array({ fractional }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
       "/bindings/0/execution_order");
 
     auto huge = Row();
     huge["execution_order"] = 4294967296LL;
-    ExpectRefused(
-      json::array({ huge }), kSchemaFailed, "/bindings/0/execution_order");
+    ExpectRefused(json::array({ huge }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/bindings/0/execution_order");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesMalformedParams)
   {
     auto not_array = Row();
     not_array["params"] = 1;
-    ExpectRefused(
-      json::array({ not_array }), kSchemaFailed, "/bindings/0/params");
+    ExpectRefused(json::array({ not_array }),
+      import_codes::kScriptSidecarSchemaValidationFailed, "/bindings/0/params");
 
     auto bad_type = Row();
     bad_type["params"] = json::array({ Param("a", "quaternion", 1) });
-    ExpectRefused(
-      json::array({ bad_type }), kSchemaFailed, "/bindings/0/params/0/type");
+    ExpectRefused(json::array({ bad_type }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/bindings/0/params/0/type");
 
     auto bad_value = Row();
     bad_value["params"]
       = json::array({ Param("ok", "bool", true), Param("a", "int32", "x") });
-    ExpectRefused(
-      json::array({ bad_value }), kSchemaFailed, "/bindings/0/params/1/value");
+    ExpectRefused(json::array({ bad_value }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/bindings/0/params/1/value");
 
     auto out_of_range = Row();
     out_of_range["params"] = json::array({ Param("a", "int32", 2147483648LL) });
-    ExpectRefused(json::array({ out_of_range }), kSchemaFailed,
+    ExpectRefused(json::array({ out_of_range }),
+      import_codes::kScriptSidecarSchemaValidationFailed,
       "/bindings/0/params/0/value");
   }
 
@@ -260,8 +274,8 @@ namespace {
         json { { "node", 2 }, { "path", json::array({ kNilId }) } }),
     });
 
-    ExpectRefused(json::array({ bad_path }), "script.sidecar.param_invalid",
-      "/bindings/0/params/0");
+    ExpectRefused(json::array({ bad_path }),
+      import_codes::kScriptSidecarParamInvalid, "/bindings/0/params/0");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesAKeyOverriddenTwice)
@@ -270,15 +284,15 @@ namespace {
     twice["params"]
       = json::array({ Param("a", "float", 1.0), Param("a", "float", 2.0) });
 
-    ExpectRefused(json::array({ twice }), "script.sidecar.param_duplicate",
-      "/bindings/0/params/1/key");
+    ExpectRefused(json::array({ twice }),
+      import_codes::kScriptSidecarParamDuplicate, "/bindings/0/params/1/key");
   }
 
   NOLINT_TEST(ScriptingSidecarPreparationTest, RefusesMalformedInstanceBindings)
   {
     ExpectRefused(
       json { { "bindings", json::array() }, { "instance_bindings", 1 } },
-      kSchemaFailed, "/instance_bindings");
+      import_codes::kScriptSidecarSchemaValidationFailed, "/instance_bindings");
 
     const auto valid = json {
       { "node_index", 1 },
@@ -294,21 +308,26 @@ namespace {
 
     auto no_node = valid;
     no_node.erase("node_index");
-    ExpectRefused(with_rows(no_node), kSchemaFailed, "/instance_bindings/0");
+    ExpectRefused(with_rows(no_node),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/instance_bindings/0");
 
     auto no_path = valid;
     no_path["node_path"] = json::array();
-    ExpectRefused(
-      with_rows(no_path), kSchemaFailed, "/instance_bindings/0/node_path");
+    ExpectRefused(with_rows(no_path),
+      import_codes::kScriptSidecarSchemaValidationFailed,
+      "/instance_bindings/0/node_path");
 
     auto nil_path = valid;
     nil_path["node_path"] = json::array({ kNilId });
-    ExpectRefused(with_rows(nil_path), "script.sidecar.node_path_invalid",
+    ExpectRefused(with_rows(nil_path),
+      import_codes::kScriptSidecarNodePathInvalid,
       "/instance_bindings/0/node_path");
 
     auto bad_slot = valid;
     bad_slot["slot_id"] = "x";
-    ExpectRefused(with_rows(bad_slot), "script.sidecar.slot_id_invalid",
+    ExpectRefused(with_rows(bad_slot),
+      import_codes::kScriptSidecarSlotIdInvalid,
       "/instance_bindings/0/slot_id");
   }
 
@@ -321,10 +340,11 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     // The sort does not say which of the two rows is the duplicate.
-    EXPECT_TRUE(HasErrorAt(diagnostics,
-                  "script.sidecar.duplicate_slot_conflict", "/bindings/0")
-      || HasErrorAt(
-        diagnostics, "script.sidecar.duplicate_slot_conflict", "/bindings/2"))
+    EXPECT_TRUE(
+      HasErrorAt(diagnostics, import_codes::kScriptSidecarDuplicateSlotConflict,
+        "/bindings/0")
+      || HasErrorAt(diagnostics,
+        import_codes::kScriptSidecarDuplicateSlotConflict, "/bindings/2"))
       << DiagnosticSummary(diagnostics);
   }
 
@@ -348,9 +368,10 @@ namespace {
 
     EXPECT_FALSE(prepared.has_value());
     EXPECT_TRUE(
-      HasErrorAt(diagnostics, "script.sidecar.duplicate_slot_conflict",
+      HasErrorAt(diagnostics, import_codes::kScriptSidecarDuplicateSlotConflict,
         "/instance_bindings/0")
-      || HasErrorAt(diagnostics, "script.sidecar.duplicate_slot_conflict",
+      || HasErrorAt(diagnostics,
+        import_codes::kScriptSidecarDuplicateSlotConflict,
         "/instance_bindings/1"))
       << DiagnosticSummary(diagnostics);
   }

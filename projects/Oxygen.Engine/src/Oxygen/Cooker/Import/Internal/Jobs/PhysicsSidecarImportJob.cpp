@@ -13,6 +13,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -79,7 +80,7 @@ auto PhysicsSidecarImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   if (!Request().physics.has_value()) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
-      "physics.request.missing_settings",
+      std::string(import_codes::kPhysicsRequestMissingSettings),
       "PhysicsSidecarImportJob requires ImportRequest::physics to be set");
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Invalid physics request");
     co_return co_await FinalizeWithTelemetry(session);
@@ -143,7 +144,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
       std::as_bytes(std::span(inline_bindings.data(), inline_bindings.size())));
     if (!bytes.has_value()) {
       AddDiagnostic(session, req, ImportSeverity::kError,
-        "physics.sidecar.source_read_failed",
+        std::string(import_codes::kPhysicsSidecarSourceReadFailed),
         "Failed to hold the inline bindings: " + bytes.error().message());
       co_return LoadedSource {
         .success = false,
@@ -158,7 +159,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
 
   if (req.source_path.empty()) {
     AddDiagnostic(session, req, ImportSeverity::kError,
-      "physics.sidecar.source_missing",
+      std::string(import_codes::kPhysicsSidecarSourceMissing),
       "Physics sidecar import requires source_path or inline bindings");
     co_return LoadedSource {
       .success = false,
@@ -169,7 +170,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
   auto* const reader = FileReader().get();
   if (reader == nullptr) {
     AddDiagnostic(session, req, ImportSeverity::kError,
-      "physics.sidecar.reader_unavailable",
+      std::string(import_codes::kPhysicsSidecarReaderUnavailable),
       "Async file reader is not available");
     co_return LoadedSource {
       .success = false,
@@ -184,7 +185,7 @@ auto PhysicsSidecarImportJob::LoadSource(ImportSession& session)
       session.AddDiagnostic(std::move(*too_large));
     } else {
       AddDiagnostic(session, req, ImportSeverity::kError,
-        "physics.sidecar.source_read_failed",
+        std::string(import_codes::kPhysicsSidecarSourceReadFailed),
         "Failed to read source file '" + req.source_path.string()
           + "': " + read.error().message());
     }

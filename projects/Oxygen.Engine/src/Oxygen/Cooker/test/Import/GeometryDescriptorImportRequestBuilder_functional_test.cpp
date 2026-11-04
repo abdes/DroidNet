@@ -16,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/GeometryDescriptorImportSettings.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -131,8 +132,9 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
     settings, "/Content/Geometry/Cube.ogeo", *mounts, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("geometry.descriptor.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kGeometryDescriptorSchemaValidationFailed));
 }
 
 NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest, RejectsMissingFile)

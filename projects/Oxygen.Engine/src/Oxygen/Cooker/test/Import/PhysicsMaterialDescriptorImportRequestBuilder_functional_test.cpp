@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/PhysicsMaterialDescriptorImportRequestBuilder.h>
@@ -104,8 +105,9 @@ NOLINT_TEST(PhysicsMaterialDescriptorImportRequestBuilderTest,
   const auto request = BuildPhysicsMaterialDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("physics.material.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kPhysicsMaterialSchemaValidationFailed));
 }
 
 NOLINT_TEST(

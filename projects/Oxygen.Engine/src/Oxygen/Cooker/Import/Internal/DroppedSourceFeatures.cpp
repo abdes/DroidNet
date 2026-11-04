@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
@@ -61,7 +62,7 @@ namespace {
     if (present) {
       diagnostics.push_back({
         .severity = ImportSeverity::kWarning,
-        .code = "import.source_feature_dropped",
+        .code = std::string(import_codes::kSourceFeatureDropped),
         .message = std::move(message),
         .source_path = std::string(source_path),
         .object_path = std::string(object_path),
@@ -138,7 +139,7 @@ namespace {
       if (!read(extension)) {
         diagnostics.push_back({
           .severity = ImportSeverity::kWarning,
-          .code = "import.source_extension_required",
+          .code = std::string(import_codes::kSourceExtensionRequired),
           .message = "The source requires glTF extension '"
             + std::string(extension)
             + "', which import does not read; content that depends on it "
@@ -309,7 +310,7 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
     || !HasAuthoredProperty(settings.props, "UnitScaleFactor")) {
     diagnostics.push_back({
       .severity = ImportSeverity::kWarning,
-      .code = "fbx.units_unknown",
+      .code = std::string(import_codes::kFbxUnitsUnknown),
       .message = "The FBX file states no unit scale; import assumes "
                  "centimetres.",
       .source_path = std::string(source_path),

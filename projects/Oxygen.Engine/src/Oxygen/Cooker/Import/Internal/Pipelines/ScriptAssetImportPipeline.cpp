@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -110,7 +111,7 @@ namespace {
     const auto& scripting = request.options.scripting;
     if (scripting.import_kind != ScriptingImportKind::kScriptAsset) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.request.invalid_import_kind",
+        std::string(import_codes::kScriptRequestInvalidImportKind),
         "Script asset pipeline requires "
         "options.scripting.import_kind=kScriptAsset");
       return false;
@@ -121,7 +122,7 @@ namespace {
         = (scripting.compile_mode == ScriptCompileMode::kDebug) ? "debug"
                                                                 : "optimized";
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.compiler_unavailable",
+        std::string(import_codes::kScriptAssetCompilerUnavailable),
         "compile_scripts=true requested, but no script compiler callback is "
         "wired in Cooker/Import for mode='"
           + std::string { mode } + "'");
@@ -205,14 +206,14 @@ namespace {
     if (reader == nullptr || storage == nullptr || driver == nullptr
       || registry == nullptr) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.io_unavailable",
+        std::string(import_codes::kScriptAssetIoUnavailable),
         "Script embedded emission requires file reader/storage/index registry");
       co_return false;
     }
     auto* const table_registry = session.TableRegistry().get();
     if (table_registry == nullptr) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.table_registry_unavailable",
+        std::string(import_codes::kScriptAssetTableRegistryUnavailable),
         "Script embedded emission requires ResourceTableRegistry");
       co_return false;
     }
@@ -228,7 +229,7 @@ namespace {
     const auto table_exists_result = co_await reader->Exists(table_path);
     if (!table_exists_result.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.scripts_table_exists_check_failed",
+        std::string(import_codes::kScriptAssetScriptsTableExistsCheckFailed),
         "Failed checking scripts.table existence '" + table_path.string()
           + "': " + table_exists_result.error().message());
       co_return false;
@@ -236,7 +237,7 @@ namespace {
     const auto data_exists_result = co_await reader->Exists(data_path);
     if (!data_exists_result.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.scripts_data_exists_check_failed",
+        std::string(import_codes::kScriptAssetScriptsDataExistsCheckFailed),
         "Failed checking scripts.data existence '" + data_path.string()
           + "': " + data_exists_result.error().message());
       co_return false;
@@ -246,7 +247,7 @@ namespace {
     const auto data_exists = data_exists_result.value();
     if (table_exists != data_exists) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.scripts_pair_mismatch",
+        std::string(import_codes::kScriptAssetScriptsPairMismatch),
         "scripts.table and scripts.data must either both exist or both be "
         "absent");
       co_return false;
@@ -262,7 +263,7 @@ namespace {
           session.AddDiagnostic(std::move(*too_large));
         } else {
           script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.asset.scripts_table_read_failed",
+            std::string(import_codes::kScriptAssetScriptsTableReadFailed),
             "Failed to read existing scripts.table '" + table_path.string()
               + "': " + table_read.error().message());
         }
@@ -275,7 +276,7 @@ namespace {
           session.AddDiagnostic(std::move(*too_large));
         } else {
           script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.asset.scripts_data_read_failed",
+            std::string(import_codes::kScriptAssetScriptsDataReadFailed),
             "Failed to read existing scripts.data '" + data_path.string()
               + "': " + data_read.error().message());
         }
@@ -285,7 +286,7 @@ namespace {
       const auto table_bytes = table_read.value().Bytes();
       if ((table_bytes.size() % sizeof(ScriptResourceDesc)) != 0U) {
         script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.asset.scripts_table_size_invalid",
+          std::string(import_codes::kScriptAssetScriptsTableSizeInvalid),
           "Existing scripts.table size is not divisible by ScriptResourceDesc "
           "size");
         co_return false;
@@ -310,19 +311,19 @@ namespace {
     }
     if (table_entries.size() >= std::numeric_limits<uint32_t>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.resource_index_overflow",
+        std::string(import_codes::kScriptAssetResourceIndexOverflow),
         "scripts.table reached maximum ScriptResourceDesc entry count");
       co_return false;
     }
     if (data_blob.size() > std::numeric_limits<OffsetT>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.data_offset_overflow",
+        std::string(import_codes::kScriptAssetDataOffsetOverflow),
         "scripts.data offset overflow while appending script payload");
       co_return false;
     }
     if (source_bytes.size() > std::numeric_limits<DataBlobSizeT>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.payload_too_large",
+        std::string(import_codes::kScriptAssetPayloadTooLarge),
         "Script payload exceeds DataBlobSizeT limits");
       co_return false;
     }
@@ -346,7 +347,7 @@ namespace {
       *driver, table_path, std::as_bytes(std::span(table_entries)));
     if (!table_write.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.scripts_table_write_failed",
+        std::string(import_codes::kScriptAssetScriptsTableWriteFailed),
         "Failed to write scripts.table '" + table_path.string()
           + "': " + table_write.error().message());
       co_return false;
@@ -356,7 +357,7 @@ namespace {
       *driver, data_path, std::span<const std::byte>(data_blob));
     if (!data_write.has_value()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.scripts_data_write_failed",
+        std::string(import_codes::kScriptAssetScriptsDataWriteFailed),
         "Failed to write scripts.data '" + data_path.string()
           + "': " + data_write.error().message());
       co_return false;
@@ -376,7 +377,8 @@ namespace {
         session.CookedRoot(), FileKind::kScriptsData, data_relpath);
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.index_registration_failed", ex.what());
+        std::string(import_codes::kScriptAssetIndexRegistrationFailed),
+        ex.what());
       co_return false;
     }
 
@@ -408,20 +410,21 @@ namespace {
     if (!compile_result.success) {
       if (compile_result.diagnostics.empty()) {
         script_import::AddDiagnostic(session, req, ImportSeverity::kError,
-          "script.asset.compile_failed",
+          std::string(import_codes::kScriptAssetCompileFailed),
           "Script compile failed with no diagnostic");
       }
       for (const auto& diagnostic : compile_result.diagnostics) {
         script_import::AddDiagnostic(session, req,
           ToImportSeverity(diagnostic.severity),
-          "script." + scripting::to_string(diagnostic.code),
+          std::string(import_codes::kScriptCodePrefix)
+            + scripting::to_string(diagnostic.code),
           scripting::FormatSummary(diagnostic));
       }
       return std::nullopt;
     }
     if (compile_result.bytecode.empty()) {
       script_import::AddDiagnostic(session, req, ImportSeverity::kError,
-        "script.asset.compile_failed",
+        std::string(import_codes::kScriptAssetCompileFailed),
         "Script compiler produced empty bytecode output");
       return std::nullopt;
     }
@@ -437,7 +440,7 @@ namespace {
       = script_import::BuildExternalSourcePath(request);
     if (!external_source_path) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.asset.external_source_unmounted",
+        std::string(import_codes::kScriptAssetExternalSourceUnmounted),
         "An external script stores its source's mount path, but the source "
         "lies in no source mount");
       return false;
@@ -473,8 +476,8 @@ namespace {
         std::move(context.references).Build());
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, session.Request(),
-        ImportSeverity::kError, "script.asset.descriptor_emit_failed",
-        ex.what());
+        ImportSeverity::kError,
+        std::string(import_codes::kScriptAssetDescriptorEmitFailed), ex.what());
       return false;
     }
     return true;
@@ -623,7 +626,8 @@ auto ScriptAssetImportPipeline::Worker() -> co::Co<>
       if (item.session != nullptr) {
         const auto& request = item.session->Request();
         detail::script_import::AddDiagnostic(*item.session, request,
-          ImportSeverity::kError, "script.asset.pipeline_exception",
+          ImportSeverity::kError,
+          std::string(import_codes::kScriptAssetPipelineException),
           std::string { "Unhandled script asset pipeline exception: " }
             + ex.what());
       }

@@ -27,6 +27,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
@@ -88,9 +89,11 @@ namespace {
   {
     constexpr auto kSchemaDiagConfig
       = internal::JsonSchemaValidationDiagnosticConfig {
-          .validation_failed_code = "physics.sidecar.schema_validation_failed",
+          .validation_failed_code
+          = import_codes::kPhysicsSidecarSchemaValidationFailed,
           .validation_failed_prefix = "Schema validation failed: ",
-          .validator_failure_code = "physics.sidecar.schema_validator_failure",
+          .validator_failure_code
+          = import_codes::kPhysicsSidecarSchemaValidatorFailure,
           .validator_failure_prefix
           = "Physics schema validation engine failure: ",
         };
@@ -866,7 +869,8 @@ namespace {
       auto record = RecordT {};
       auto error = std::string {};
       if (!parse_fn(array.at(i), record, error)) {
-        reporter.ErrorAt("physics.sidecar.schema_contract_mismatch",
+        reporter.ErrorAt(
+          std::string(import_codes::kPhysicsSidecarSchemaContractMismatch),
           std::move(error), location);
         continue;
       }
@@ -882,7 +886,8 @@ namespace {
       const auto [it, inserted]
         = seen.emplace(oxygen::base::CheckedAt(node_indices, i), i);
       if (!inserted) {
-        reporter.ErrorAt("physics.sidecar.payload_invalid",
+        reporter.ErrorAt(
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "Duplicate singleton binding for node "
             + std::to_string(oxygen::base::CheckedAt(node_indices, i)) + " in "
             + std::string(category),
@@ -976,7 +981,8 @@ namespace {
       const auto valid
         = std::isfinite(value) && (rule.allow_negative || value >= 0.0F);
       if (!valid) {
-        reporter.ErrorAt("physics.sidecar.payload_invalid",
+        reporter.ErrorAt(
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "soft_bodies." + std::string(rule.field) + " must be finite"
             + (rule.allow_negative ? "" : " and >= 0"),
           base_path / std::string(rule.field));
@@ -984,7 +990,7 @@ namespace {
       }
     }
     if (source.record.solver_iteration_count == 0U) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "soft_bodies.solver_iteration_count must be greater than zero",
         base_path / "solver_iteration_count");
       return false;
@@ -992,13 +998,13 @@ namespace {
     constexpr auto kMaxVertices
       = static_cast<size_t>(std::numeric_limits<uint32_t>::max());
     if (source.pinned_vertices.size() > kMaxVertices) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "soft_bodies.pinned_vertices exceeds uint32 range",
         base_path / "pinned_vertices");
       return false;
     }
     if (source.kinematic_vertices.size() > kMaxVertices) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "soft_bodies.kinematic_vertices exceeds uint32 range",
         base_path / "kinematic_vertices");
       return false;
@@ -1031,13 +1037,13 @@ namespace {
     std::unordered_set<uint32_t>& wheel_roles, const Reporter& reporter) -> void
   {
     if (wheel.node_index == vehicle.record.node_index) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "Vehicle wheel node_index must differ from chassis node_index",
         wheel_path / "node_index");
       return;
     }
     if (!wheel_nodes.insert(wheel.node_index).second) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "Vehicle wheels must reference distinct node_index values",
         wheel_path / "node_index");
       return;
@@ -1046,7 +1052,7 @@ namespace {
     const auto role_key = (static_cast<uint32_t>(wheel.axle_index) << 16U)
       | static_cast<uint32_t>(wheel.side);
     if (!wheel_roles.insert(role_key).second) {
-      reporter.ErrorAt("physics.sidecar.payload_invalid",
+      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
         "Vehicle wheel role (axle_index + side) must be unique", wheel_path);
       return;
     }
@@ -1060,13 +1066,15 @@ namespace {
       const auto base_path
         = nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i;
       if (vehicle.wheels.size() < 2U) {
-        reporter.ErrorAt("physics.sidecar.payload_invalid",
+        reporter.ErrorAt(
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "Vehicle must declare at least two wheels", base_path / "wheels");
         continue;
       }
       if (vehicle.wheels.size()
         > static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
-        reporter.ErrorAt("physics.sidecar.payload_invalid",
+        reporter.ErrorAt(
+          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
           "Vehicle wheel count exceeds uint32 range", base_path / "wheels");
         continue;
       }
@@ -1144,7 +1152,7 @@ auto PreparePhysicsSidecarDocument(const std::string_view bytes,
   try {
     doc = nlohmann::json::parse(bytes);
   } catch (const std::exception& ex) {
-    reporter.Error("physics.sidecar.payload_parse_failed",
+    reporter.Error(std::string(import_codes::kPhysicsSidecarPayloadParseFailed),
       "Failed to parse sidecar document as JSON: " + std::string(ex.what()));
     return std::nullopt;
   }
@@ -1157,7 +1165,8 @@ auto PreparePhysicsSidecarDocument(const std::string_view bytes,
   try {
     ParseBindings(doc, parsed, reporter);
   } catch (const std::exception& ex) {
-    reporter.Error("physics.sidecar.schema_contract_mismatch",
+    reporter.Error(
+      std::string(import_codes::kPhysicsSidecarSchemaContractMismatch),
       "Schema validated sidecar document failed invariant extraction: "
         + std::string(ex.what()));
     return std::nullopt;

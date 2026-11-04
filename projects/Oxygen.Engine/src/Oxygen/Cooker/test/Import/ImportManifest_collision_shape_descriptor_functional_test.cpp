@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -167,7 +168,9 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
@@ -209,8 +212,9 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   auto request_errors = std::vector<ImportDiagnostic> {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    request_errors, HasDiagnostic("physics.shape.schema_validation_failed"));
+  EXPECT_THAT(request_errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kPhysicsShapeSchemaValidationFailed));
 }
 
 } // namespace

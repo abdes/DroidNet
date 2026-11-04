@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
@@ -166,7 +167,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
@@ -211,7 +214,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors,
-    HasDiagnostic("material.descriptor.schema_validation_failed"));
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kMaterialDescriptorSchemaValidationFailed));
 }
 
 //! The cooked layout is fixed: a manifest that still sets `layout`, at the top,
@@ -254,7 +258,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsLayoutField)
 
     // Assert
     EXPECT_FALSE(manifest.has_value()) << document.dump();
-    EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+    EXPECT_THAT(errors,
+      HasDiagnostic(
+        oxygen::content::import::manifest_codes::kSchemaValidationFailed));
     EXPECT_THAT(DiagnosticSummary(errors), ::testing::HasSubstr("layout"));
   }
 }
@@ -322,7 +328,9 @@ NOLINT_TEST(
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("import.manifest.virtual_path_missing"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kVirtualPathMissing));
 }
 
 //! A model job is a container: it names the model's identity, under which its
@@ -351,8 +359,9 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, ModelJobRequiresItsIdentity)
     EXPECT_FALSE(
       ImportManifest::Load(manifest_path, {}, refused_errors).has_value())
       << type;
-    EXPECT_THAT(
-      refused_errors, HasDiagnostic("import.manifest.virtual_path_missing"))
+    EXPECT_THAT(refused_errors,
+      HasDiagnostic(
+        oxygen::content::import::manifest_codes::kVirtualPathMissing))
       << type;
 
     job["virtual_path"] = "/Cooked/Vehicles/Ship.src";

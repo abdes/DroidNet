@@ -145,7 +145,9 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(
@@ -172,7 +174,9 @@ NOLINT_TEST(
   auto errors = std::vector<ImportDiagnostic> {};
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(ImportManifestPhysicsSidecarTest,

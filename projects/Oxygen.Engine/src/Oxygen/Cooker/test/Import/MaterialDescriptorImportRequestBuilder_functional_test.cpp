@@ -14,6 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/Import/MaterialDescriptorImportRequestBuilder.h>
@@ -118,8 +119,9 @@ NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest,
   const auto request = BuildMaterialDescriptorRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_THAT(
-    errors, HasDiagnostic("material.descriptor.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(oxygen::content::import::import_codes::
+        kMaterialDescriptorSchemaValidationFailed));
 }
 
 NOLINT_TEST(MaterialDescriptorImportRequestBuilderTest, RejectsMissingFile)

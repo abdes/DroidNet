@@ -16,6 +16,8 @@
 
 #include "ScriptImportTestSupport.h"
 
+#include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
@@ -140,7 +142,7 @@ namespace {
     }));
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.script_ref_not_script_asset"));
+      report.diagnostics, import_codes::kScriptSidecarScriptRefNotScriptAsset));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -227,8 +229,8 @@ namespace {
     const auto report = Submit(std::move(request));
 
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.request.target_scene_virtual_path_missing"));
+    EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+      import_codes::kScriptRequestTargetSceneVirtualPathMissing));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -255,8 +257,8 @@ namespace {
       .scene_virtual_path = "Scenes/not_canonical.oscene",
     }));
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.target_scene_virtual_path_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(report.diagnostics,
+      import_codes::kScriptSidecarTargetSceneVirtualPathInvalid));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -293,7 +295,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.script_ref_unresolved"));
+      report.diagnostics, import_codes::kScriptSidecarScriptRefUnresolved));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -311,7 +313,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.source_read_failed"));
+      report.diagnostics, import_codes::kScriptSidecarSourceReadFailed));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest, RejectsMalformedJson)
@@ -328,8 +330,8 @@ namespace {
     }));
 
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "script.sidecar.parse_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, import_codes::kScriptSidecarParseFailed));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -357,7 +359,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.target_scene_missing"));
+      report.diagnostics, import_codes::kScriptSidecarTargetSceneMissing));
   }
 
   NOLINT_TEST_F(
@@ -404,7 +406,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.duplicate_slot_conflict"));
+      report.diagnostics, import_codes::kScriptSidecarDuplicateSlotConflict));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest, RejectsMalformedSlotId)
@@ -431,8 +433,8 @@ namespace {
     }));
 
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "script.sidecar.slot_id_invalid"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, import_codes::kScriptSidecarSlotIdInvalid));
   }
 
   NOLINT_TEST_F(
@@ -468,7 +470,7 @@ namespace {
 
     EXPECT_FALSE(report.success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.sidecar.node_ref_unresolved"));
+      report.diagnostics, import_codes::kScriptSidecarNodeRefUnresolved));
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobValidationTest,
@@ -501,9 +503,10 @@ namespace {
     }));
     EXPECT_FALSE(report.success);
     const auto refused = std::ranges::find(report.diagnostics,
-      std::string_view { "import.reference_invalid" }, &ImportDiagnostic::code);
+      import_codes::kReferenceInvalid, &ImportDiagnostic::code);
     ASSERT_NE(refused, report.diagnostics.end());
-    EXPECT_NE(refused->message.find("vpath.reference_outside_mount"),
+    EXPECT_NE(refused->message.find(
+                oxygen::content::vpath_codes::kReferenceOutsideMount),
       std::string::npos);
     EXPECT_EQ(refused->json_pointer, "/bindings/0/script_virtual_path");
   }
@@ -533,9 +536,10 @@ namespace {
     }));
     EXPECT_FALSE(report.success);
     const auto refused = std::ranges::find(report.diagnostics,
-      std::string_view { "import.reference_invalid" }, &ImportDiagnostic::code);
+      import_codes::kReferenceInvalid, &ImportDiagnostic::code);
     ASSERT_NE(refused, report.diagnostics.end());
-    EXPECT_NE(refused->message.find("vpath.reference_self_absolute"),
+    EXPECT_NE(refused->message.find(
+                oxygen::content::vpath_codes::kReferenceSelfAbsolute),
       std::string::npos);
   }
 

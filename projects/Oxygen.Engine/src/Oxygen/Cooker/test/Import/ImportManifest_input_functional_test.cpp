@@ -94,7 +94,9 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
@@ -381,7 +383,9 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutVirtualPath)
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("import.manifest.virtual_path_missing"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kVirtualPathMissing));
 }
 
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
@@ -406,7 +410,9 @@ NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithoutId)
   std::vector<ImportDiagnostic> errors;
   const auto manifest = ImportManifest::Load(manifest_path, {}, errors);
   EXPECT_FALSE(manifest.has_value());
-  EXPECT_THAT(errors, HasDiagnostic("manifest.schema_validation_failed"));
+  EXPECT_THAT(errors,
+    HasDiagnostic(
+      oxygen::content::import::manifest_codes::kSchemaValidationFailed));
 }
 
 } // namespace

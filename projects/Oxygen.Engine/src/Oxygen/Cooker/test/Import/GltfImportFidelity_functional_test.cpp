@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -94,9 +95,11 @@ namespace {
 
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
-    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics, "mesh.uv_sets_dropped"))
+    EXPECT_TRUE(
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetsDropped))
       << DiagnosticSummary(report->diagnostics);
-    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics, "mesh.uv_set_conflict"))
+    EXPECT_TRUE(
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetConflict))
       << DiagnosticSummary(report->diagnostics);
   }
 

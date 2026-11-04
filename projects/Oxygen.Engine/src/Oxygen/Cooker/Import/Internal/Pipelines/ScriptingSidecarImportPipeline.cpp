@@ -37,6 +37,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
@@ -74,19 +75,20 @@ namespace {
   using SidecarResolvedSceneState = detail::ResolvedSceneState;
 
   //! The prefix of the sidecar's codes, such as `index_load_failed`.
-  constexpr auto kScriptSidecarCodePrefix = "script.sidecar.";
-
   const auto kScriptSidecarResolverDiagnostics
     = detail::SidecarSceneResolverDiagnostics {
         .inflight_target_scene_ambiguous_code
-        = "script.sidecar.inflight_target_scene_ambiguous",
-        .target_scene_invalid_code = "script.sidecar.target_scene_invalid",
-        .target_scene_not_scene_code = "script.sidecar.target_scene_not_scene",
+        = import_codes::kScriptSidecarInflightTargetSceneAmbiguous,
+        .target_scene_invalid_code
+        = import_codes::kScriptSidecarTargetSceneInvalid,
+        .target_scene_not_scene_code
+        = import_codes::kScriptSidecarTargetSceneNotScene,
         .target_scene_read_failed_code
-        = "script.sidecar.target_scene_read_failed",
+        = import_codes::kScriptSidecarTargetSceneReadFailed,
         .target_scene_virtual_path_invalid_code
-        = "script.sidecar.target_scene_virtual_path_invalid",
-        .target_scene_missing_code = "script.sidecar.target_scene_missing",
+        = import_codes::kScriptSidecarTargetSceneVirtualPathInvalid,
+        .target_scene_missing_code
+        = import_codes::kScriptSidecarTargetSceneMissing,
       };
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
@@ -684,14 +686,14 @@ namespace {
         = detail::ReadCookedDescriptor(*mounted->context, mounted->entry->key);
       if (!read.has_value()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_declarations_unreadable",
+          std::string(import_codes::kScriptSidecarScriptDeclarationsUnreadable),
           "Failed to read the script descriptor", location);
         continue;
       }
       auto decoded = DecodeScriptDeclarations(read.value());
       if (!decoded) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
-          "script.sidecar.script_declarations_unreadable",
+          std::string(import_codes::kScriptSidecarScriptDeclarationsUnreadable),
           "Script descriptor is invalid or not in the current format; recook "
           "the script",
           location);
@@ -846,13 +848,13 @@ namespace {
       }
       if (serialized.slots.size() > std::numeric_limits<uint32_t>::max()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
+          std::string(import_codes::kScriptSidecarSlotCountOverflow),
           "Scripting slot count exceeded uint32 limits");
         return std::nullopt;
       }
       if (slots.size() > std::numeric_limits<uint32_t>::max()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
+          std::string(import_codes::kScriptSidecarSlotCountOverflow),
           "One scene node has too many script slots");
         return std::nullopt;
       }
@@ -860,7 +862,7 @@ namespace {
       if (slots.size()
         > std::numeric_limits<uint32_t>::max() - serialized.slots.size()) {
         AddDiagnostic(session, request, ImportSeverity::kError,
-          "script.sidecar.slot_count_overflow",
+          std::string(import_codes::kScriptSidecarSlotCountOverflow),
           "Scene has too many script slots");
         return std::nullopt;
       }
@@ -877,13 +879,13 @@ namespace {
           * sizeof(script::ScriptParamRecord);
         if (param_offset > std::numeric_limits<OffsetT>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.sidecar.param_offset_overflow",
+            std::string(import_codes::kScriptSidecarParamOffsetOverflow),
             "Script param offset exceeded OffsetT limits");
           return std::nullopt;
         }
         if (slot_payload.params.size() > std::numeric_limits<uint32_t>::max()) {
           AddDiagnostic(session, request, ImportSeverity::kError,
-            "script.sidecar.param_count_overflow",
+            std::string(import_codes::kScriptSidecarParamCountOverflow),
             "Script param count exceeded uint32 limits");
           return std::nullopt;
         }
@@ -930,7 +932,7 @@ namespace {
         const auto location = JsonPointer {} / "bindings" / row.source_index;
         if (row.node_index >= node_count_) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.node_ref_unresolved",
+            std::string(import_codes::kScriptSidecarNodeRefUnresolved),
             "Node index is out of bounds for target scene",
             location / "node_index");
           continue;
@@ -950,8 +952,9 @@ namespace {
           ReportRefusedReference(*script_reference, found.error(),
             {
               .subject = "The script",
-              .missing = "script.sidecar.script_ref_unresolved",
-              .type_mismatch = "script.sidecar.script_ref_not_script_asset",
+              .missing = import_codes::kScriptSidecarScriptRefUnresolved,
+              .type_mismatch
+              = import_codes::kScriptSidecarScriptRefNotScriptAsset,
             },
             location / "script_virtual_path");
           continue;
@@ -961,7 +964,8 @@ namespace {
         const auto declared = declarations_->find(resolved_script_key);
         if (declared == declarations_->end()) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.script_declarations_unreadable",
+            std::string(
+              import_codes::kScriptSidecarScriptDeclarationsUnreadable),
             "Script parameter declarations are unavailable",
             location / "script_virtual_path");
           continue;
@@ -1019,7 +1023,7 @@ namespace {
       const auto node_index = param.record.value.as_node.node_index;
       if (node_index >= node_count_) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_node_out_of_range",
+          std::string(import_codes::kScriptSidecarParamNodeOutOfRange),
           "Node index " + std::to_string(node_index) + " of parameter '" + key
             + "' is out of bounds for target scene",
           value_location);
@@ -1027,7 +1031,7 @@ namespace {
       }
       if (!param.node_path.empty() && !IsInstanceRoot(node_index)) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.instance_root_invalid",
+          std::string(import_codes::kScriptSidecarInstanceRootInvalid),
           "Parameter '" + key
             + "' names a node path below a node that instances no scene",
           value_location);
@@ -1059,7 +1063,7 @@ namespace {
           = JsonPointer {} / "instance_bindings" / row.source_index;
         if (row.node_index >= node_count_ || !IsInstanceRoot(row.node_index)) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.instance_root_invalid",
+            std::string(import_codes::kScriptSidecarInstanceRootInvalid),
             "The row's node is not an instance root of the target scene",
             location / "node_index");
           valid = false;
@@ -1154,7 +1158,7 @@ namespace {
           &data::CompositionIssue::code);
         if (changes_kind) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-            "script.sidecar.instance_override_invalid",
+            std::string(import_codes::kScriptSidecarInstanceOverrideInvalid),
             "The value has another kind than the slot's value of the "
             "parameter",
             location);
@@ -1163,7 +1167,7 @@ namespace {
         }
         if (!composed.unresolved.empty()) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
-            "script.sidecar.instance_override_unresolved",
+            std::string(import_codes::kScriptSidecarInstanceOverrideUnresolved),
             "The change names no node of the instanced scene, or a slot that "
             "node does not have; it has no effect until it resolves",
             location);
@@ -1175,7 +1179,7 @@ namespace {
         const auto declared = declarations_->find(slot->script);
         if (declared == declarations_->end()) {
           AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kWarning,
-            "script.sidecar.instance_script_unavailable",
+            std::string(import_codes::kScriptSidecarInstanceScriptUnavailable),
             "The script of the slot the change reaches is not in the mounted "
             "cooked content; the change is checked when the scene is "
             "instantiated",
@@ -1219,14 +1223,14 @@ namespace {
         = std::ranges::find(declared, key, &SidecarParam::key);
       if (declaration == declared.end()) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_undeclared",
+          std::string(import_codes::kScriptSidecarParamUndeclared),
           "Script '" + script_name + "' declares no parameter '" + key + "'",
           param_location / "key");
         return nullptr;
       }
       if (declaration->record.type != param.record.type) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_type_mismatch",
+          std::string(import_codes::kScriptSidecarParamTypeMismatch),
           "Parameter '" + key + "' is declared "
             + std::string(script::to_string(declaration->record.type))
             + " but the override is "
@@ -1257,7 +1261,7 @@ namespace {
         && changed_type != declared_type;
       if (other_asset_type) {
         AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
-          "script.sidecar.param_asset_kind_mismatch",
+          std::string(import_codes::kScriptSidecarParamAssetKindMismatch),
           "Parameter '" + param.key + "' expects a "
             + std::string(data::to_string(declared_type))
             + " asset but the change's asset is a "
@@ -1353,8 +1357,8 @@ namespace {
         ReportRefusedReference(*reference, found.error(),
           {
             .subject = "The asset of parameter '" + key + "'",
-            .missing = "script.sidecar.param_asset_unresolved",
-            .type_mismatch = "script.sidecar.param_asset_kind_mismatch",
+            .missing = import_codes::kScriptSidecarParamAssetUnresolved,
+            .type_mismatch = import_codes::kScriptSidecarParamAssetKindMismatch,
           },
           value_location);
         return std::nullopt;
@@ -1425,7 +1429,8 @@ namespace {
     auto patcher = SceneDescriptorPatcher(scene_state, scene, scripts);
     if (!patcher.Patch(patched_scene_bytes, patch_error)) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.scene_patch_failed", std::move(patch_error));
+        std::string(import_codes::kScriptSidecarScenePatchFailed),
+        std::move(patch_error));
       return std::nullopt;
     }
 
@@ -1517,7 +1522,7 @@ namespace {
         std::move(references).Build());
     } catch (const std::exception& ex) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.scene_emit_failed", ex.what());
+        std::string(import_codes::kScriptSidecarSceneEmitFailed), ex.what());
       co_return false;
     }
 
@@ -1535,7 +1540,7 @@ namespace {
     const auto& scripting = request.options.scripting;
     if (scripting.import_kind != ScriptingImportKind::kScriptingSidecar) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.request.invalid_import_kind",
+        std::string(import_codes::kScriptRequestInvalidImportKind),
         "Scripting sidecar import requires "
         "options.scripting.import_kind=kScriptingSidecar");
       return false;
@@ -1543,7 +1548,7 @@ namespace {
 
     if (scripting.target_scene_virtual_path.empty()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.request.target_scene_virtual_path_missing",
+        std::string(import_codes::kScriptRequestTargetSceneVirtualPathMissing),
         "Scripting sidecar import requires target_scene_virtual_path");
       return false;
     }
@@ -1562,7 +1567,7 @@ namespace {
     };
     if (handles.storage == nullptr || handles.index_registry == nullptr) {
       AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.sidecar.io_unavailable",
+        std::string(import_codes::kScriptSidecarIoUnavailable),
         "Scripting sidecar emission requires a storage and an index "
         "registry");
       return std::nullopt;
@@ -1754,7 +1759,7 @@ auto ScriptingSidecarImportPipeline::Worker() -> co::Co<>
       if (item.session != nullptr) {
         const auto& request = item.session->Request();
         AddDiagnostic(*item.session, request, ImportSeverity::kError,
-          "script.sidecar.pipeline_exception",
+          std::string(import_codes::kScriptSidecarPipelineException),
           std::string { "Unhandled scripting sidecar pipeline exception: " }
             + ex.what());
       }
@@ -1808,7 +1813,7 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   auto cooked_contexts = internal::LoadMountedCookedSources(
-    *session, req, kScriptSidecarCodePrefix);
+    *session, req, import_codes::kScriptSidecarIndexLoadFailed);
   if (session->HasErrors()) {
     co_return false;
   }

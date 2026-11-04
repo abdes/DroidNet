@@ -19,6 +19,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferViews.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
@@ -64,8 +65,8 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
 
   const auto& views_json = buffer_doc.at("views");
   if (!views_json.is_array()) {
-    AddIssue(issues, "buffer.view.shape_invalid", "'views' must be an array",
-      views_pointer);
+    AddIssue(issues, std::string(import_codes::kBufferViewShapeInvalid),
+      "'views' must be an array", views_pointer);
     return specs;
   }
 
@@ -76,12 +77,12 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
     const auto item_path = views_pointer / i;
     const auto& view_json = views_json.at(i);
     if (!view_json.is_object()) {
-      AddIssue(issues, "buffer.view.shape_invalid",
+      AddIssue(issues, std::string(import_codes::kBufferViewShapeInvalid),
         "Each view entry must be a JSON object", item_path);
       continue;
     }
     if (!view_json.contains("name") || !view_json.at("name").is_string()) {
-      AddIssue(issues, "buffer.view.name_missing",
+      AddIssue(issues, std::string(import_codes::kBufferViewNameMissing),
         "Each view entry must define a string 'name'", item_path / "name");
       continue;
     }
@@ -89,14 +90,15 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
     auto spec = BufferDescriptorViewSpec {};
     spec.name = view_json.at("name").get<std::string>();
     if (spec.name == data::kWholeBufferViewName) {
-      AddIssue(issues, "buffer.view.explicit_all_disallowed",
+      AddIssue(issues,
+        std::string(import_codes::kBufferViewExplicitAllDisallowed),
         "View name '__all__' is reserved and must not be declared explicitly",
         item_path / "name");
       continue;
     }
 
     if (!seen_names.insert(spec.name).second) {
-      AddIssue(issues, "buffer.view.name_duplicate",
+      AddIssue(issues, std::string(import_codes::kBufferViewNameDuplicate),
         "Duplicate buffer view name in one descriptor", item_path / "name");
       continue;
     }
@@ -111,7 +113,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
         out_value = view_json.at(key_str).get<uint64_t>();
         return true;
       } catch (const std::exception&) {
-        AddIssue(issues, "buffer.view.value_invalid",
+        AddIssue(issues, std::string(import_codes::kBufferViewValueInvalid),
           "View field must be a non-negative integer",
           item_path / std::string(key));
         return false;
@@ -136,7 +138,7 @@ auto ParseBufferViewSpecs(const nlohmann::json& buffer_doc,
 
     if (has_partial_byte || has_partial_element
       || (has_byte_pair == has_element_pair)) {
-      AddIssue(issues, "buffer.view.range_shape_invalid",
+      AddIssue(issues, std::string(import_codes::kBufferViewRangeShapeInvalid),
         "View must define exactly one range pair: "
         "(byte_offset, byte_length) or (element_offset, element_count)",
         item_path);
@@ -162,7 +164,7 @@ auto NormalizeBufferViews(
 
   const auto element_stride = data::BufferElementStride(descriptor);
   if (element_stride == 0) {
-    AddIssue(issues, "buffer.view.element_stride_invalid",
+    AddIssue(issues, std::string(import_codes::kBufferViewElementStrideInvalid),
       "Cannot compute effective element stride from buffer descriptor",
       views_pointer);
     return {};
@@ -177,13 +179,13 @@ auto NormalizeBufferViews(
       const auto byte_end = byte_offset + byte_length;
       const auto size_bytes = static_cast<uint64_t>(descriptor.size_bytes);
       if (byte_end < byte_offset || byte_end > size_bytes) {
-        AddIssue(issues, "buffer.view.range_out_of_bounds",
+        AddIssue(issues, std::string(import_codes::kBufferViewRangeOutOfBounds),
           "Byte range exceeds buffer size", views_pointer);
         continue;
       }
       if ((byte_offset % element_stride) != 0
         || (byte_length % element_stride) != 0) {
-        AddIssue(issues, "buffer.view.range_unaligned",
+        AddIssue(issues, std::string(import_codes::kBufferViewRangeUnaligned),
           "Byte ranges must align to effective element stride", views_pointer);
         continue;
       }
@@ -201,7 +203,7 @@ auto NormalizeBufferViews(
       const auto element_count = *spec.element_count;
       if (WillMultiplyOverflow(element_offset, element_stride)
         || WillMultiplyOverflow(element_count, element_stride)) {
-        AddIssue(issues, "buffer.view.range_overflow",
+        AddIssue(issues, std::string(import_codes::kBufferViewRangeOverflow),
           "Element range overflows when converted to bytes", views_pointer);
         continue;
       }
@@ -211,7 +213,7 @@ auto NormalizeBufferViews(
       const auto byte_end = byte_offset + byte_length;
       const auto size_bytes = static_cast<uint64_t>(descriptor.size_bytes);
       if (byte_end < byte_offset || byte_end > size_bytes) {
-        AddIssue(issues, "buffer.view.range_out_of_bounds",
+        AddIssue(issues, std::string(import_codes::kBufferViewRangeOutOfBounds),
           "Element range exceeds buffer size", views_pointer);
         continue;
       }
@@ -224,7 +226,7 @@ auto NormalizeBufferViews(
       continue;
     }
 
-    AddIssue(issues, "buffer.view.range_shape_invalid",
+    AddIssue(issues, std::string(import_codes::kBufferViewRangeShapeInvalid),
       "View must define exactly one range pair", views_pointer);
   }
 
