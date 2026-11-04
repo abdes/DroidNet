@@ -42,7 +42,7 @@
         },
         {
           "action": "ToggleMetalShadowAction",
-          "slot": "Alpha2",
+          "slot": "2",
           "triggers": [
             {
               "type": "pressed",
@@ -52,7 +52,7 @@
         },
         {
           "action": "CycleShadeMaterialAction",
-          "slot": "Alpha3",
+          "slot": "3",
           "triggers": [
             {
               "type": "pressed",
@@ -62,7 +62,7 @@
         },
         {
           "action": "CycleLodPolicyAction",
-          "slot": "Alpha4",
+          "slot": "4",
           "triggers": [
             {
               "type": "pressed",
@@ -72,7 +72,7 @@
         },
         {
           "action": "ResetOverridesAction",
-          "slot": "Alpha0",
+          "slot": "0",
           "triggers": [
             {
               "type": "pressed",

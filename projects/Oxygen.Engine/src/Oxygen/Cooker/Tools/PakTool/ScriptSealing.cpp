@@ -632,9 +632,19 @@ namespace {
     const ScriptTables& tables) -> Result<void, ScriptSealingError>
   {
     // The writer holds the staged root's writer lease while it lives; the
-    // lease file goes with it.
+    // lease file goes with it. Opening it drops a data file's bytes past its
+    // committed length, so the grown tables are written only once it is open.
     try {
       auto writer = import::LooseCookedWriter(staged_root, *io.storage);
+      if (!PersistScriptTables(io, staged_root, tables)) {
+        return Result<void, ScriptSealingError>::Err(ScriptSealingError {
+          .error_code = "paktool.script_seal.script_tables_write_failed",
+          .error_message
+          = "Failed to persist staged scripts.table/scripts.data.",
+          .source_path = staged_root,
+          .resolved_path = staged_root,
+        });
+      }
       for (const auto& asset : content.Assets()) {
         const auto sealed_asset = sealed.find(asset.key);
         if (sealed_asset == sealed.end()) {
@@ -802,18 +812,6 @@ namespace {
         SealedLooseSourceResult {});
     }
 
-    if (!PersistScriptTables(io, staged_root, *tables)) {
-      cleanup_staged_root();
-      return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
-        ScriptSealingError {
-          .error_code = "paktool.script_seal.script_tables_write_failed",
-          .error_message
-          = "Failed to persist staged scripts.table/scripts.data.",
-          .source_path = source.path,
-          .resolved_path = staged_root,
-        });
-    }
-
     if (const auto refreshed = RefreshStagedLooseCookedIndex(
           io, staged_root, *content, *index, sealed_descriptors, *tables);
       !refreshed) {
@@ -889,6 +887,11 @@ auto CleanupStagedFiles(cooked::CookerStorage& storage,
     if (const auto removed = storage.Remove(file); !removed) {
       LOG_F(WARNING, "PakTool failed to remove staged file '{}' [{}]",
         file.string(), removed.error().message());
+    }
+    // A lease taken on the staged root leaves its emptied folder there.
+    if (file.filename() == loose_layout::kIndexFileName) {
+      folders.push_back(file.parent_path()
+        / std::string(data::loose_cooked::kLeasesFolderName));
     }
     // Every folder up to and including the sealed sources folder is staging.
     for (auto folder = file.parent_path(); folder.has_relative_path();

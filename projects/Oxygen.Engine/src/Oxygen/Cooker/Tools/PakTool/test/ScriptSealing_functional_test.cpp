@@ -60,6 +60,7 @@ using oxygen::data::CookedSource;
 using oxygen::data::CookedSourceKind;
 using oxygen::data::kNoResourceReference;
 using oxygen::data::SourceKey;
+using oxygen::data::loose_cooked::FileKind;
 using oxygen::data::pak::scripting::ScriptAssetDesc;
 using oxygen::data::pak::scripting::ScriptAssetFlags;
 using oxygen::data::pak::scripting::ScriptEncoding;
@@ -169,6 +170,90 @@ private:
   oxygen::testing::ScopedTempDir temp_;
   std::filesystem::path root_;
 };
+
+//! A root that already commits an embedded script keeps its bytes, and the
+//! external script sealed beside it lands inside the grown data file.
+NOLINT_TEST_P(PakToolScriptSealingTest, SealingGrowsCommittedScriptData)
+{
+  const auto content_root = Root() / "Examples" / "Content";
+  const auto cooked_root = Root() / "derived" / "mixed";
+  constexpr auto kExternal
+    = std::string_view { "return { external = true }\n" };
+  constexpr auto kEmbedded
+    = std::string_view { "return { embedded = true }\n" };
+  WriteTextFile(content_root / "external.lua", kExternal);
+
+  auto embedded = ScriptResourceDesc {};
+  embedded.size_bytes = static_cast<uint32_t>(kEmbedded.size());
+  embedded.content_hash
+    = oxygen::base::ComputeSha256(std::as_bytes(std::span(kEmbedded)));
+  const auto committed_rows = std::array { ScriptResourceDesc {}, embedded };
+  const auto committed_bytes = std::as_bytes(std::span(committed_rows));
+  const auto table_relpath = std::string("Resources/scripts.table");
+  const auto data_relpath = std::string("Resources/scripts.data");
+  WriteTextFile(cooked_root / data_relpath, kEmbedded);
+  oxygen::cooker::test::WriteBytes(
+    cooked_root / table_relpath, committed_bytes);
+
+  auto script = ScriptBuilder { "external" };
+  script.Flags(ScriptAssetFlags::kAllowExternalSource)
+    .ExternalSource("/Content/external.lua");
+  auto writer = LooseCookedWriter(
+    cooked_root, oxygen::content::cooked::RealCookerStorage());
+  const auto virtual_path = std::string("/Cooked/external.oscript");
+  writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
+    AssetType::kScript, virtual_path, "external.oscript", script.Bytes(),
+    script.References(),
+    oxygen::content::import::LooseCookedProducer {
+      .source = "/Content/external.lua",
+      .completes = {},
+    });
+  writer.RegisterExternalFile(FileKind::kScriptsTable, table_relpath,
+    oxygen::content::import::LooseCookedFileDigest {
+      .size = committed_bytes.size(),
+      .sha256 = oxygen::base::ComputeSha256(committed_bytes),
+    });
+  writer.RegisterExternalDataFile(FileKind::kScriptsData, data_relpath);
+  static_cast<void>(writer.Finish());
+
+  auto request = PakBuildRequest {};
+  request.mode = BuildMode::kFull;
+  request.sources = {
+    CookedSource {
+      .kind = CookedSourceKind::kLooseCooked,
+      .path = cooked_root,
+    },
+  };
+  auto& storage = oxygen::content::cooked::RealCookerStorage();
+  auto staged = StagedSourceStorage(storage);
+  const auto sealed
+    = SealLooseCookedSourcesForPakBuild(request, Root() / "staging",
+      SourceMountFolders { { "Content", content_root } }, staged);
+  ASSERT_HAS_VALUE(sealed) << sealed.error().error_code << ": "
+                           << sealed.error().error_message;
+
+  const auto& staged_root = sealed->build_request.sources.at(0).path;
+  const auto table_bytes
+    = oxygen::cooker::test::ReadBytes(staged_root / table_relpath);
+  const auto data_bytes
+    = oxygen::cooker::test::ReadBytes(staged_root / data_relpath);
+  ASSERT_EQ(table_bytes.size(), 3U * sizeof(ScriptResourceDesc));
+  EXPECT_EQ(data_bytes.size(), kEmbedded.size() + kExternal.size());
+  const auto sealed_row = oxygen::serio::CopyAt<ScriptResourceDesc>(
+    std::span(table_bytes).subspan(2U * sizeof(ScriptResourceDesc)));
+  ASSERT_HAS_VALUE(sealed_row);
+  EXPECT_EQ(sealed_row->data_offset, kEmbedded.size());
+  EXPECT_EQ(sealed_row->size_bytes, kExternal.size());
+
+  // A lease taken while the pak builds leaves its folder in the staged root;
+  // cleaning up takes the whole staging tree.
+  std::filesystem::create_directories(oxygen::base::ToNativePath(
+    staged_root / std::string(oxygen::data::loose_cooked::kLeasesFolderName)));
+  const auto staged_parent = staged_root.parent_path();
+  CleanupStagedFiles(storage, sealed->staged_files);
+  EXPECT_FALSE(
+    std::filesystem::exists(oxygen::base::ToNativePath(staged_parent)));
+}
 
 NOLINT_TEST_P(PakToolScriptSealingTest,
   ExternalScriptAssetIsSealedIntoEmbeddedSourceInStagedRoot)
