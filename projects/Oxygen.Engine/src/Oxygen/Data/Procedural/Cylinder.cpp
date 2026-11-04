@@ -6,7 +6,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -49,10 +48,14 @@ auto oxygen::data::MakeCylinderMeshAsset(
   const unsigned int segments, const float height, const float radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  constexpr auto kIndicesPerSegment = 12U;
   const auto half_height = height / 2.0F;
   if (segments < 3
-    || segments > std::numeric_limits<uint32_t>::max() / kIndicesPerSegment
+    || !procedural::SolidFitsMeshBuffers({
+      .segments = segments,
+      // The side and each cap's rim hold the segment's vertices.
+      .vertices_per_segment = 4U,
+      .indices_per_segment = 12U,
+    })
     || !std::isfinite(height) || !std::isfinite(radius) || half_height <= 0.0F
     || radius <= 0.0F) {
     return std::nullopt;

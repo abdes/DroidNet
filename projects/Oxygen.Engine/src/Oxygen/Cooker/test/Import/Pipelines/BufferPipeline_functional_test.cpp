@@ -208,6 +208,43 @@ namespace {
     EXPECT_FALSE(ok_result.cooked.data.Empty());
   }
 
+  //! A collector running beside the submitter needs no count: it ends when the
+  //! closed pipeline's workers have finished and its results are collected.
+  NOLINT_TEST_F(BufferPipelineTest, CollectNextDrainsPastTheQueueCapacity)
+  {
+    constexpr int kCount = 4;
+    auto collected = std::vector<std::string> {};
+
+    oxygen::co::Run(loop_, [&] -> Co<> {
+      auto pipeline = BufferPipeline(pool_,
+        BufferPipeline::Config {
+          .queue_capacity = 1,
+          .worker_count = 1,
+        });
+      OXCO_WITH_NURSERY(nursery)
+      {
+        pipeline.Start(nursery);
+        nursery.Start([&] -> Co<> {
+          for (int i = 0; i < kCount; ++i) {
+            co_await pipeline.Submit(MakeWorkItem("buffer" + std::to_string(i),
+              std::vector<std::byte>(16U, static_cast<std::byte>(i))));
+          }
+          pipeline.Close();
+        });
+        nursery.Start([&] -> Co<> {
+          while (auto result = co_await pipeline.CollectNext()) {
+            collected.push_back(result->source_id);
+          }
+        });
+        co_return kJoin;
+      };
+    });
+
+    ASSERT_EQ(collected.size(), static_cast<size_t>(kCount));
+    EXPECT_EQ(collected.front(), "buffer0");
+    EXPECT_EQ(collected.back(), "buffer3");
+  }
+
   NOLINT_TEST_F(BufferPipelineTest, CollectMultipleSubmissionsCollectsAll)
   {
     constexpr int kCount = 8;

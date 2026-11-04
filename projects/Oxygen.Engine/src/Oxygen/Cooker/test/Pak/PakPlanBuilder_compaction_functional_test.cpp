@@ -243,6 +243,38 @@ NOLINT_TEST(PakCompactionTest, BufferWithoutGeometryWarnsWithItsSidecar)
   EXPECT_THAT(planned.diagnostics, ::testing::Not(HasDiagnostic(kDroppedCode)));
 }
 
+//! Identical buffers share a row, so a dropped row warns for each sidecar that
+//! names it, not for one of them.
+NOLINT_TEST(PakCompactionTest, DroppedBufferWarnsForEverySidecarOfItsRow)
+{
+  // Arrange
+  auto workspace = PakWorkspace {};
+  auto content = ContentRoot();
+  const auto crate_buffer = content.AddBuffer(Payload(1U));
+  AddCrate(content, crate_buffer);
+  const auto shared = content.AddBuffer(Payload(2U));
+  content.DescribeBuffer("Buffers/Crate.obuf", crate_buffer)
+    .DescribeBuffer("Buffers/First.obuf", shared)
+    .DescribeBuffer("Buffers/Second.obuf", shared);
+  const auto request = workspace.FullRequest({ workspace.Add(content) });
+
+  // Act
+  const auto planned = pak::PakPlanBuilder {}.Build(request);
+
+  // Assert
+  ASSERT_THAT(planned.diagnostics, HasNoErrors());
+  const auto warnings = WithCode(planned.diagnostics, kSidecarBufferCode);
+  ASSERT_EQ(warnings.size(), 2U);
+  const auto names_of = [&warnings](const std::string_view name) -> bool {
+    return std::ranges::any_of(
+      warnings, [name](const pak::PakDiagnostic& warning) -> bool {
+        return warning.path.filename() == name;
+      });
+  };
+  EXPECT_TRUE(names_of("First.obuf"));
+  EXPECT_TRUE(names_of("Second.obuf"));
+}
+
 //! A patch over a compacted base packs only the resources its changed assets
 //! bind: a resource an unchanged asset binds, and a keyed texture the base
 //! holds, stay with the base.

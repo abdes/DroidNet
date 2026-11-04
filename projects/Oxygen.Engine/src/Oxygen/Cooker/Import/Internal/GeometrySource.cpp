@@ -176,22 +176,6 @@ namespace {
     return true;
   }
 
-  auto BuildSubmitterBufferChunks(const json& descriptor_doc) -> json
-  {
-    if (!descriptor_doc.contains("buffers")) {
-      return json {};
-    }
-
-    auto chunks = json::array();
-    for (const auto& authored : descriptor_doc.at("buffers")) {
-      auto chunk = authored;
-      chunk.update({ { "source", authored.at("uri") } });
-      chunk.erase("uri");
-      chunks.push_back(std::move(chunk));
-    }
-    return chunks;
-  }
-
   auto ReadBounds(const json& document) -> GeometrySource::Bounds
   {
     auto bounds = GeometrySource::Bounds {};
@@ -267,9 +251,8 @@ namespace {
       source.bounds = ReadBounds(document.at("bounds"));
     }
     if (document.contains("buffers")) {
-      auto buffers
-        = BufferSource::FromDeclarations(BuildSubmitterBufferChunks(document),
-          source_path, anchor, mounts, diagnostics);
+      auto buffers = BufferSource::FromDeclarations(
+        document.at("buffers"), source_path, anchor, mounts, diagnostics);
       if (!buffers.has_value()) {
         return std::nullopt;
       }

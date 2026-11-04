@@ -195,6 +195,16 @@ auto BufferSource::FromDeclarations(const nlohmann::json& buffer_chunks,
       continue;
     }
     entry.source_id = *product;
+    if (oxygen::content::MountRootOf(entry.source_id)
+      != oxygen::content::MountRootOf(anchor)) {
+      AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
+        std::string(import_codes::kBufferContainerVirtualPathUnmounted),
+        "Buffer virtual_path '" + entry.source_id
+          + "' is outside the mount of the '" + std::string(anchor)
+          + "' that declares it",
+        product_field);
+      continue;
+    }
     if (!seen_source_ids.insert(entry.source_id).second) {
       AddDiagnostic(diagnostics, descriptor_path, ImportSeverity::kError,
         std::string(import_codes::kBufferContainerVirtualPathDuplicate),

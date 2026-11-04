@@ -218,7 +218,7 @@ public sealed class ImportReplacementTests
 
         // The first cook reads retired.bin, so the record's fingerprint makes the model its owner.
         var geometry = System.Text.Json.Nodes.JsonNode.Parse(workspace.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
-        geometry["buffers"]![0]!["uri"] = "../Models/Model/retired.bin";
+        geometry["buffers"]![0]!["source"] = "../Models/Model/retired.bin";
         workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
     }
 

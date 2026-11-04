@@ -18,6 +18,17 @@
 
 namespace oxygen::data {
 
+//! Checks a buffer row by the rules every reader of the row applies.
+/*!
+ The row must declare usage flags the format defines, with at most one update
+ frequency, and either an element format a buffer can hold (one texel per
+ element) with no stride, or a stride; its size is whole elements.
+
+ @throw CookedFormatError When the row breaks a rule.
+*/
+OXGN_DATA_API auto CheckBufferRow(const pak::core::BufferResourceDesc& desc)
+  -> void;
+
 //! Buffer resource as described in the PAK file resource table.
 /*!
  Represents a buffer resource referenced by assets in the PAK file. This is not
@@ -57,13 +68,8 @@ public:
   //! Constructs a BufferResource that owns `data`, the buffer its loader read
   //! the payload into.
   /*!
-   The row must declare usage flags the format defines, with at most one
-   update frequency, and either an element format a buffer can hold (one
-   texel per element) with no stride, or a stride; its size is whole
-   elements, and `data` holds it.
-
-   @throw CookedFormatError When the row breaks a rule, or `data` holds another
-     size.
+   @throw CookedFormatError When the row breaks a rule of `CheckBufferRow`, or
+     `data` holds another size than the row names.
   */
   OXGN_DATA_API BufferResource(
     pak::core::BufferResourceDesc desc, serio::ByteBuffer data);

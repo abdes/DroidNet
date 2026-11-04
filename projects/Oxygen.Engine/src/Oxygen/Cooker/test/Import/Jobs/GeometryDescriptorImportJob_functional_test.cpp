@@ -48,8 +48,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto vb_source = source_dir / "cube.vertices.buffer.bin";
   const auto ib_source = source_dir / "cube.indices.buffer.bin";
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
@@ -59,8 +59,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     = MakeStandardGeometry("/Cooked/Geometry/CubeMissingMaterial.ogeo",
       "/Cooked/Materials/missing.omat", kVb, kIb);
   geometry
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
+    .AppendBuffer(MakeBuffer(vb_source.filename().generic_string(), 1U,
+                    kVertexStride, true),
+      kVb)
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true), kIb);
   WriteText(descriptor_path, geometry.Text());
@@ -96,8 +97,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
   const auto vb_source = source_dir / "cube.vertices.buffer.bin";
   const auto ib_source = source_dir / "cube.indices.buffer.bin";
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
@@ -106,8 +107,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest, UnindexedMaterialFileIsNoAsset)
   auto geometry = MakeStandardGeometry(
     "/Cooked/Geometry/Unindexed.ogeo", "/Cooked/Materials/new.omat", kVb, kIb);
   geometry
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true), kVb)
+    .AppendBuffer(MakeBuffer(vb_source.filename().generic_string(), 1U,
+                    kVertexStride, true),
+      kVb)
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true), kIb);
   WriteText(descriptor_path, geometry.Text());
@@ -175,21 +177,14 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   CookDefaultMaterial(cooked_root);
 
-  auto vb_bytes = std::array<std::byte, 96> {};
-  auto ib_bytes = std::array<std::byte, 12> {};
-  auto joint_index_bytes = std::array<std::byte, 48> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
+  // Four influences for each of the three vertices, of the three joints.
+  const auto joint_index_bytes
+    = IndexBytes({ 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 2U });
   auto joint_weight_bytes = std::array<std::byte, 48> {};
   auto inverse_bind_bytes = std::array<std::byte, 192> {};
   auto joint_remap_bytes = std::array<std::byte, 12> {};
-  for (size_t i = 0; i < vb_bytes.size(); ++i) {
-    vb_bytes.at(i) = static_cast<std::byte>((i + 1U) & 0xFFU);
-  }
-  for (size_t i = 0; i < ib_bytes.size(); ++i) {
-    ib_bytes.at(i) = static_cast<std::byte>(((i * 3U) + 7U) & 0xFFU);
-  }
-  for (size_t i = 0; i < joint_index_bytes.size(); ++i) {
-    joint_index_bytes.at(i) = static_cast<std::byte>(((i * 5U) + 11U) & 0xFFU);
-  }
   for (size_t i = 0; i < joint_weight_bytes.size(); ++i) {
     joint_weight_bytes.at(i) = static_cast<std::byte>(((i * 7U) + 13U) & 0xFFU);
   }
@@ -221,8 +216,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
     .Reference("/lods/0/skinning/joint_remap_ref", buffer("joint_remap"))
     .Set("/lods/0/skinning/joint_count", 3U)
     .Set("/lods/0/skinning/influences_per_vertex", 4U)
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
+    .AppendBuffer(MakeBuffer(vb_source.filename().generic_string(), 1U,
+                    kVertexStride, true),
       buffer("vb"))
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),

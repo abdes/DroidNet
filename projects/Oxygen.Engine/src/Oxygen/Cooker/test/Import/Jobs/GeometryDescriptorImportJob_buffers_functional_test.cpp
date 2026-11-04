@@ -14,7 +14,9 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "GeometryDescriptorImportJobTestSupport.h"
 #include <nlohmann/json.hpp>
@@ -30,6 +32,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ResourceDescriptor.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -68,7 +71,7 @@ namespace {
     std::filesystem::path buffer_manifest_path;
     std::filesystem::path geometry_path;
     std::filesystem::path vb_source;
-    std::array<std::byte, 96> vb_bytes {};
+    std::vector<std::byte> vb_bytes;
     json buffer_descriptor;
     json geometry_descriptor;
   };
@@ -86,104 +89,7 @@ namespace {
 
     CookDefaultMaterial(cooked_root);
 
-    const auto vb_bytes = std::array<std::byte, 96> {
-      std::byte { 0x00 },
-      std::byte { 0x01 },
-      std::byte { 0x02 },
-      std::byte { 0x03 },
-      std::byte { 0x04 },
-      std::byte { 0x05 },
-      std::byte { 0x06 },
-      std::byte { 0x07 },
-      std::byte { 0x08 },
-      std::byte { 0x09 },
-      std::byte { 0x0A },
-      std::byte { 0x0B },
-      std::byte { 0x0C },
-      std::byte { 0x0D },
-      std::byte { 0x0E },
-      std::byte { 0x0F },
-      std::byte { 0x10 },
-      std::byte { 0x11 },
-      std::byte { 0x12 },
-      std::byte { 0x13 },
-      std::byte { 0x14 },
-      std::byte { 0x15 },
-      std::byte { 0x16 },
-      std::byte { 0x17 },
-      std::byte { 0x18 },
-      std::byte { 0x19 },
-      std::byte { 0x1A },
-      std::byte { 0x1B },
-      std::byte { 0x1C },
-      std::byte { 0x1D },
-      std::byte { 0x1E },
-      std::byte { 0x1F },
-      std::byte { 0x20 },
-      std::byte { 0x21 },
-      std::byte { 0x22 },
-      std::byte { 0x23 },
-      std::byte { 0x24 },
-      std::byte { 0x25 },
-      std::byte { 0x26 },
-      std::byte { 0x27 },
-      std::byte { 0x28 },
-      std::byte { 0x29 },
-      std::byte { 0x2A },
-      std::byte { 0x2B },
-      std::byte { 0x2C },
-      std::byte { 0x2D },
-      std::byte { 0x2E },
-      std::byte { 0x2F },
-      std::byte { 0x30 },
-      std::byte { 0x31 },
-      std::byte { 0x32 },
-      std::byte { 0x33 },
-      std::byte { 0x34 },
-      std::byte { 0x35 },
-      std::byte { 0x36 },
-      std::byte { 0x37 },
-      std::byte { 0x38 },
-      std::byte { 0x39 },
-      std::byte { 0x3A },
-      std::byte { 0x3B },
-      std::byte { 0x3C },
-      std::byte { 0x3D },
-      std::byte { 0x3E },
-      std::byte { 0x3F },
-      std::byte { 0x40 },
-      std::byte { 0x41 },
-      std::byte { 0x42 },
-      std::byte { 0x43 },
-      std::byte { 0x44 },
-      std::byte { 0x45 },
-      std::byte { 0x46 },
-      std::byte { 0x47 },
-      std::byte { 0x48 },
-      std::byte { 0x49 },
-      std::byte { 0x4A },
-      std::byte { 0x4B },
-      std::byte { 0x4C },
-      std::byte { 0x4D },
-      std::byte { 0x4E },
-      std::byte { 0x4F },
-      std::byte { 0x50 },
-      std::byte { 0x51 },
-      std::byte { 0x52 },
-      std::byte { 0x53 },
-      std::byte { 0x54 },
-      std::byte { 0x55 },
-      std::byte { 0x56 },
-      std::byte { 0x57 },
-      std::byte { 0x58 },
-      std::byte { 0x59 },
-      std::byte { 0x5A },
-      std::byte { 0x5B },
-      std::byte { 0x5C },
-      std::byte { 0x5D },
-      std::byte { 0x5E },
-      std::byte { 0x5F },
-    };
+    const auto vb_bytes = VertexBytes();
     const auto ib_bytes = std::array<std::byte, 12> {
       std::byte { 0x00 },
       std::byte { 0x00 },
@@ -205,8 +111,8 @@ namespace {
       "/Cooked/Resources/inline.buffers",
     };
     container.Set("/name", "SharedBuffers")
-      .AppendBuffer(
-        MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
+      .AppendBuffer(MakeContainerBuffer(
+                      vb_source.filename().generic_string(), 1U, kVertexStride),
         "/Cooked/Resources/Buffers/shared_vertices.obuf")
       .AppendBuffer(
         MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
@@ -263,104 +169,7 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   CookDefaultMaterial(cooked_root);
 
-  const auto vb_bytes = std::array<std::byte, 96> {
-    std::byte { 0x00 },
-    std::byte { 0x01 },
-    std::byte { 0x02 },
-    std::byte { 0x03 },
-    std::byte { 0x04 },
-    std::byte { 0x05 },
-    std::byte { 0x06 },
-    std::byte { 0x07 },
-    std::byte { 0x08 },
-    std::byte { 0x09 },
-    std::byte { 0x0A },
-    std::byte { 0x0B },
-    std::byte { 0x0C },
-    std::byte { 0x0D },
-    std::byte { 0x0E },
-    std::byte { 0x0F },
-    std::byte { 0x10 },
-    std::byte { 0x11 },
-    std::byte { 0x12 },
-    std::byte { 0x13 },
-    std::byte { 0x14 },
-    std::byte { 0x15 },
-    std::byte { 0x16 },
-    std::byte { 0x17 },
-    std::byte { 0x18 },
-    std::byte { 0x19 },
-    std::byte { 0x1A },
-    std::byte { 0x1B },
-    std::byte { 0x1C },
-    std::byte { 0x1D },
-    std::byte { 0x1E },
-    std::byte { 0x1F },
-    std::byte { 0x20 },
-    std::byte { 0x21 },
-    std::byte { 0x22 },
-    std::byte { 0x23 },
-    std::byte { 0x24 },
-    std::byte { 0x25 },
-    std::byte { 0x26 },
-    std::byte { 0x27 },
-    std::byte { 0x28 },
-    std::byte { 0x29 },
-    std::byte { 0x2A },
-    std::byte { 0x2B },
-    std::byte { 0x2C },
-    std::byte { 0x2D },
-    std::byte { 0x2E },
-    std::byte { 0x2F },
-    std::byte { 0x30 },
-    std::byte { 0x31 },
-    std::byte { 0x32 },
-    std::byte { 0x33 },
-    std::byte { 0x34 },
-    std::byte { 0x35 },
-    std::byte { 0x36 },
-    std::byte { 0x37 },
-    std::byte { 0x38 },
-    std::byte { 0x39 },
-    std::byte { 0x3A },
-    std::byte { 0x3B },
-    std::byte { 0x3C },
-    std::byte { 0x3D },
-    std::byte { 0x3E },
-    std::byte { 0x3F },
-    std::byte { 0x40 },
-    std::byte { 0x41 },
-    std::byte { 0x42 },
-    std::byte { 0x43 },
-    std::byte { 0x44 },
-    std::byte { 0x45 },
-    std::byte { 0x46 },
-    std::byte { 0x47 },
-    std::byte { 0x48 },
-    std::byte { 0x49 },
-    std::byte { 0x4A },
-    std::byte { 0x4B },
-    std::byte { 0x4C },
-    std::byte { 0x4D },
-    std::byte { 0x4E },
-    std::byte { 0x4F },
-    std::byte { 0x50 },
-    std::byte { 0x51 },
-    std::byte { 0x52 },
-    std::byte { 0x53 },
-    std::byte { 0x54 },
-    std::byte { 0x55 },
-    std::byte { 0x56 },
-    std::byte { 0x57 },
-    std::byte { 0x58 },
-    std::byte { 0x59 },
-    std::byte { 0x5A },
-    std::byte { 0x5B },
-    std::byte { 0x5C },
-    std::byte { 0x5D },
-    std::byte { 0x5E },
-    std::byte { 0x5F },
-  };
+  const auto vb_bytes = VertexBytes();
   const auto ib_bytes = std::array<std::byte, 12> {
     std::byte { 0x00 },
     std::byte { 0x00 },
@@ -383,8 +192,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/Cooked/Resources/Buffers/cube_vertices.obuf",
     "/Cooked/Resources/Buffers/cube_indices.obuf");
   descriptor_doc
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
+    .AppendBuffer(MakeBuffer(vb_source.filename().generic_string(), 1U,
+                    kVertexStride, true),
       "/Cooked/Resources/Buffers/cube_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
@@ -569,8 +378,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   CookDefaultMaterial(cooked_root);
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
@@ -578,8 +387,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/Cooked/Resources/inline.buffers",
   };
   container.Set("/name", "ContextSharedBuffers")
-    .AppendBuffer(
-      MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
+    .AppendBuffer(MakeContainerBuffer(
+                    vb_source.filename().generic_string(), 1U, kVertexStride),
       "/Cooked/Resources/Buffers/context_vertices.obuf")
     .AppendBuffer(
       MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
@@ -638,8 +447,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   CookDefaultMaterial(cooked_root);
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
@@ -647,8 +456,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/Cooked/Resources/inline.buffers",
   };
   container.Set("/name", "AmbiguousBuffers")
-    .AppendBuffer(
-      MakeContainerBuffer(vb_source.filename().generic_string(), 1U, 32U),
+    .AppendBuffer(MakeContainerBuffer(
+                    vb_source.filename().generic_string(), 1U, kVertexStride),
       "/Cooked/Resources/Buffers/ambiguous_vertices.obuf")
     .AppendBuffer(
       MakeContainerBuffer(ib_source.filename().generic_string(), 2U, 4U),
@@ -744,8 +553,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   CookDefaultMaterial(cooked_root);
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {};
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
   WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
   WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
 
@@ -754,8 +563,8 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     "/Cooked/Resources/Buffers/cube_vertices.obuf",
     "/Cooked/Resources/Buffers/cube_indices.obuf", "lod_missing");
   descriptor_doc
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
+    .AppendBuffer(MakeBuffer(vb_source.filename().generic_string(), 1U,
+                    kVertexStride, true),
       "/Cooked/Resources/Buffers/cube_vertices.obuf")
     .AppendBuffer(
       MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
@@ -780,64 +589,123 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
     report->diagnostics, import_codes::kGeometryBufferViewMissing));
 }
 
+namespace {
+
+  constexpr auto kMaterial = "/Cooked/Materials/default.omat";
+  constexpr auto kVertices = "/Cooked/Resources/Buffers/vertices.obuf";
+  constexpr auto kIndices = "/Cooked/Resources/Buffers/indices.obuf";
+
+  //! The buffers a geometry declares, by default a triangle it can draw.
+  struct LocalMesh final {
+    std::vector<std::byte> vertices = VertexBytes();
+    std::vector<std::byte> indices = IndexBytes({ 0U, 1U, 2U });
+    uint32_t vertex_stride = kVertexStride;
+    uint32_t index_stride = sizeof(uint32_t);
+    //! The view the LOD draws; `lod0` is the first three elements.
+    std::string_view view = "lod0";
+    std::string_view name = "Mesh";
+  };
+
+  [[nodiscard]] auto CookLocalMesh(AsyncImportService& service,
+    const std::filesystem::path& root, const LocalMesh& mesh)
+    -> std::optional<ImportReport>
+  {
+    const auto source_dir = root / "Sources";
+    const auto vb_source = source_dir / "vertices.bin";
+    const auto ib_source = source_dir / "indices.bin";
+    const auto descriptor_path = source_dir / "mesh.geometry.json";
+    WriteBytes(vb_source, std::span<const std::byte>(mesh.vertices));
+    WriteBytes(ib_source, std::span<const std::byte>(mesh.indices));
+
+    const auto with_views = mesh.view == "lod0";
+    auto geometry = MakeStandardGeometry(
+      "/Cooked/Geometry/" + std::string { mesh.name } + ".ogeo", kMaterial,
+      kVertices, kIndices, mesh.view);
+    geometry
+      .AppendBuffer(
+        MakeBuffer("vertices.bin", 1U, mesh.vertex_stride, with_views),
+        kVertices)
+      .AppendBuffer(
+        MakeBuffer("indices.bin", 2U, mesh.index_stride, with_views), kIndices);
+    WriteText(descriptor_path, geometry.Text());
+    return SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = descriptor_path,
+        .cooked_root = root / ".cooked",
+        .descriptor_doc = geometry.Json(),
+      }));
+  }
+
+  //! Runs `CookLocalMesh` in a new root, with the default material cooked.
+  [[nodiscard]] auto CookLocalMesh(const LocalMesh& mesh)
+    -> std::optional<ImportReport>
+  {
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "local_mesh";
+    std::filesystem::create_directories(root / "Sources");
+    CookDefaultMaterial(root / ".cooked");
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    return CookLocalMesh(service, root, mesh);
+  }
+
+  //! A service whose buffer pipeline holds one item in each queue, on one
+  //! worker: more buffers than that only pass if results are collected while
+  //! buffers are submitted.
+  [[nodiscard]] auto SingleSlotBufferConfig() -> AsyncImportService::Config
+  {
+    auto config = AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    };
+    config.concurrency.buffer.workers = 1U;
+    config.concurrency.buffer.queue_capacity = 1U;
+    return config;
+  }
+
+} // namespace
+
+//! The format holds one row for equal bytes, whichever products name them, and
+//! each product keeps its own sidecar: two geometries may share index bytes.
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
-  EquivalentLocalBuffersAcrossGeometryJobsWithDifferentVirtualPathsFail)
+  EqualBuffersAcrossGeometryJobsShareOneRow)
 {
   const ScopedTempDir temp;
-  const auto root = temp.Path() / "cross_job_dedup_virtual_path_conflict";
-  std::filesystem::create_directories(root);
+  const auto root = temp.Path() / "shared_row_across_jobs";
   const auto source_dir = root / "Sources";
   const auto cooked_root = root / ".cooked";
-  const auto descriptor_a_path = source_dir / "shared_a.geometry.json";
-  const auto descriptor_b_path = source_dir / "shared_b.geometry.json";
-  const auto vb_source = source_dir / "shared.vertices.buffer.bin";
-  const auto ib_source = source_dir / "shared.indices.buffer.bin";
-
+  std::filesystem::create_directories(source_dir);
   CookDefaultMaterial(cooked_root);
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
+  WriteBytes(source_dir / "vertices.bin", std::span<const std::byte>(vb_bytes));
+  WriteBytes(source_dir / "indices.bin", std::span<const std::byte>(ib_bytes));
 
-  const auto vb_bytes = std::array<std::byte, 96> {};
-  const auto ib_bytes = std::array<std::byte, 12> {
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x01 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x02 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
+  const auto cook
+    = [&](AsyncImportService& service,
+        const std::string_view name) -> std::optional<ImportReport> {
+    const auto vertices
+      = "/Cooked/Resources/Buffers/" + std::string { name } + "_vertices.obuf";
+    const auto indices
+      = "/Cooked/Resources/Buffers/" + std::string { name } + "_indices.obuf";
+    auto geometry = MakeStandardGeometry(
+      "/Cooked/Geometry/" + std::string { name } + ".ogeo", kMaterial, vertices,
+      indices);
+    geometry
+      .AppendBuffer(
+        MakeBuffer("vertices.bin", 1U, kVertexStride, true), vertices)
+      .AppendBuffer(MakeBuffer("indices.bin", 2U, 4U, true), indices);
+    const auto path = source_dir / (std::string { name } + ".geometry.json");
+    WriteText(path, geometry.Text());
+    return SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = path,
+        .cooked_root = cooked_root,
+        .descriptor_doc = geometry.Json(),
+      }));
   };
-  WriteBytes(vb_source, std::span<const std::byte>(vb_bytes));
-  WriteBytes(ib_source, std::span<const std::byte>(ib_bytes));
-
-  auto descriptor_a = MakeStandardGeometry("/Cooked/Geometry/SharedA.ogeo",
-    "/Cooked/Materials/default.omat",
-    "/Cooked/Resources/Buffers/shared_vertices.obuf",
-    "/Cooked/Resources/Buffers/shared_indices.obuf");
-  descriptor_a
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/Cooked/Resources/Buffers/shared_vertices.obuf")
-    .AppendBuffer(
-      MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/Cooked/Resources/Buffers/shared_indices.obuf");
-  WriteText(descriptor_a_path, descriptor_a.Text());
-
-  auto descriptor_b = MakeStandardGeometry("/Cooked/Geometry/SharedB.ogeo",
-    "/Cooked/Materials/default.omat",
-    "/Cooked/Resources/Buffers/alt_vertices.obuf",
-    "/Cooked/Resources/Buffers/alt_indices.obuf");
-  descriptor_b
-    .AppendBuffer(
-      MakeBuffer(vb_source.filename().generic_string(), 1U, 32U, true),
-      "/Cooked/Resources/Buffers/alt_vertices.obuf")
-    .AppendBuffer(
-      MakeBuffer(ib_source.filename().generic_string(), 2U, 4U, true),
-      "/Cooked/Resources/Buffers/alt_indices.obuf");
-  WriteText(descriptor_b_path, descriptor_b.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -845,85 +713,452 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
 
-  const auto report_a = SubmitAndWait(service,
-    MakeGeometryRequest({
-      .source_path = descriptor_a_path,
-      .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_a.Json(),
-    }));
-  ASSERT_HAS_VALUE(report_a);
-  ASSERT_TRUE(report_a->success);
+  const auto first = cook(service, "First");
+  ASSERT_HAS_VALUE(first);
+  ASSERT_TRUE(first->success) << DiagnosticSummary(first->diagnostics);
+  const auto table_size = std::filesystem::file_size(
+    oxygen::cooker::test::CookedFile(cooked_root, "Resources/buffers.table"));
 
-  const auto report_b = SubmitAndWait(service,
-    MakeGeometryRequest({
-      .source_path = descriptor_b_path,
-      .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_b.Json(),
-    }));
-  ASSERT_HAS_VALUE(report_b);
-  EXPECT_FALSE(report_b->success);
-  EXPECT_TRUE(HasDiagnosticCode(report_b->diagnostics,
-    import_codes::kBufferContainerDedupVirtualPathConflict));
+  const auto second = cook(service, "Second");
+  ASSERT_HAS_VALUE(second);
+  ASSERT_TRUE(second->success) << DiagnosticSummary(second->diagnostics);
+
+  EXPECT_EQ(std::filesystem::file_size(oxygen::cooker::test::CookedFile(
+              cooked_root, "Resources/buffers.table")),
+    table_size);
+  EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+    cooked_root, "Resources/Buffers/First_indices.obuf"));
+  EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+    cooked_root, "Resources/Buffers/Second_indices.obuf"));
 }
 
+//! Equal buffers declared twice in one descriptor share a row the same way.
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
-  EquivalentLocalBuffersWithDifferentVirtualPathsFailWithConflictDiagnostic)
+  EqualBuffersInOneDescriptorKeepBothSidecars)
 {
   const ScopedTempDir temp;
-  const auto root = temp.Path() / "dedup_virtual_path_conflict";
-  std::filesystem::create_directories(root);
+  const auto root = temp.Path() / "shared_row_in_job";
   const auto source_dir = root / "Sources";
   const auto cooked_root = root / ".cooked";
-  const auto descriptor_path = source_dir / "dedup_conflict.geometry.json";
-  const auto shared_source = source_dir / "shared.buffer.bin";
-
+  std::filesystem::create_directories(source_dir);
   CookDefaultMaterial(cooked_root);
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
+  WriteBytes(source_dir / "vertices.bin", std::span<const std::byte>(vb_bytes));
+  WriteBytes(source_dir / "indices.bin", std::span<const std::byte>(ib_bytes));
 
-  const auto shared_bytes = std::array<std::byte, 12> {
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x01 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x02 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-    std::byte { 0x00 },
-  };
-  WriteBytes(shared_source, std::span<const std::byte>(shared_bytes));
-
-  auto descriptor_doc = MakeStandardGeometry(
-    "/Cooked/Geometry/DedupConflict.ogeo", "/Cooked/Materials/default.omat",
-    "/Cooked/Resources/Buffers/conflict_vb.obuf",
-    "/Cooked/Resources/Buffers/conflict_ib.obuf");
-  descriptor_doc
+  constexpr auto kAlias = "/Cooked/Resources/Buffers/alias_indices.obuf";
+  auto geometry = MakeStandardGeometry(
+    "/Cooked/Geometry/Aliased.ogeo", kMaterial, kVertices, kIndices);
+  geometry
     .AppendBuffer(
-      MakeBuffer(shared_source.filename().generic_string(), 3U, 4U, true),
-      "/Cooked/Resources/Buffers/conflict_vb.obuf")
-    .AppendBuffer(
-      MakeBuffer(shared_source.filename().generic_string(), 3U, 4U, true),
-      "/Cooked/Resources/Buffers/conflict_ib.obuf");
-  WriteText(descriptor_path, descriptor_doc.Text());
+      MakeBuffer("vertices.bin", 1U, kVertexStride, true), kVertices)
+    .AppendBuffer(MakeBuffer("indices.bin", 2U, 4U, true), kIndices)
+    .AppendBuffer(MakeBuffer("indices.bin", 2U, 4U, true), kAlias);
+  const auto path = source_dir / "aliased.geometry.json";
+  WriteText(path, geometry.Text());
 
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
   });
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
-
   const auto report = SubmitAndWait(service,
     MakeGeometryRequest({
-      .source_path = descriptor_path,
+      .source_path = path,
       .cooked_root = cooked_root,
-      .descriptor_doc = descriptor_doc.Json(),
+      .descriptor_doc = geometry.Json(),
     }));
+
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+    cooked_root, "Resources/Buffers/indices.obuf"));
+  EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+    cooked_root, "Resources/Buffers/alias_indices.obuf"));
+}
+
+//! More buffers than the bounded queues hold pass through a geometry job.
+NOLINT_TEST(
+  GeometryDescriptorImportJobBuffersTest, BuffersPastTheQueueCapacityAllCook)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "past_capacity";
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  std::filesystem::create_directories(source_dir);
+  CookDefaultMaterial(cooked_root);
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
+  const auto first_extra = IndexBytes({ 2U, 1U, 0U });
+  const auto second_extra = IndexBytes({ 1U, 2U, 0U });
+  WriteBytes(source_dir / "vertices.bin", std::span<const std::byte>(vb_bytes));
+  WriteBytes(source_dir / "indices.bin", std::span<const std::byte>(ib_bytes));
+  WriteBytes(source_dir / "a.bin", std::span<const std::byte>(first_extra));
+  WriteBytes(source_dir / "b.bin", std::span<const std::byte>(second_extra));
+
+  auto geometry = MakeStandardGeometry(
+    "/Cooked/Geometry/Many.ogeo", kMaterial, kVertices, kIndices);
+  geometry
+    .AppendBuffer(
+      MakeBuffer("vertices.bin", 1U, kVertexStride, true), kVertices)
+    .AppendBuffer(MakeBuffer("indices.bin", 2U, 4U, true), kIndices)
+    .AppendBuffer(
+      MakeBuffer("a.bin", 2U, 4U, false), "/Cooked/Resources/Buffers/a.obuf")
+    .AppendBuffer(
+      MakeBuffer("b.bin", 2U, 4U, false), "/Cooked/Resources/Buffers/b.obuf");
+  const auto path = source_dir / "many.geometry.json";
+  WriteText(path, geometry.Text());
+
+  auto service = AsyncImportService(SingleSlotBufferConfig());
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = geometry.Json(),
+    }));
+
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+    cooked_root, "Resources/Buffers/b.obuf"));
+}
+
+//! A 16-bit index buffer is as good as a 32-bit one: the runtime reads both.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, SixteenBitIndicesCook)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .indices = {
+      std::byte { 0U },
+      std::byte { 0U },
+      std::byte { 1U },
+      std::byte { 0U },
+      std::byte { 2U },
+      std::byte { 0U },
+    },
+    .index_stride = sizeof(uint16_t),
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+}
+
+//! The stride says what an element is, so `__all__` of a buffer of bytes would
+//! claim a vertex per byte.
+NOLINT_TEST(
+  GeometryDescriptorImportJobBuffersTest, ByteStrideVerticesAreRefused)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .vertex_stride = 1U,
+    .view = data::kWholeBufferViewName,
+  });
+
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
-  EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
-    import_codes::kBufferContainerDedupVirtualPathConflict));
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferLayoutInvalid));
+}
+
+NOLINT_TEST(
+  GeometryDescriptorImportJobBuffersTest, OtherVertexRecordsAreRefused)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .vertices = std::vector<std::byte>(96U),
+    .vertex_stride = 32U,
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferLayoutInvalid));
+}
+
+//! No reader takes a buffer of part of an element, so no cook writes one.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, PartialVerticesAreRefused)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .vertices = std::vector<std::byte>((3U * kVertexStride) + 1U),
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kBufferContainerRowInvalid));
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, OtherIndexWidthsAreRefused)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .indices = IndexBytes({ 0U, 0U, 1U, 0U, 2U, 0U }),
+    .index_stride = sizeof(uint64_t),
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferLayoutInvalid));
+}
+
+//! The runtime refuses this mesh when it binds it; the cook names it first.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, IndexPastItsViewIsRefused)
+{
+  const auto report = CookLocalMesh(LocalMesh {
+    .indices = IndexBytes({ 0U, 1U, 99U }),
+  });
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferViewInvalid));
+}
+
+//! The indices of a buffer an earlier job cooked are read from the root.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
+  IndexPastItsViewInAnEarlierCookIsRefused)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "bad_cooked_indices";
+  const auto source_dir = root / "Sources";
+  const auto cooked_root = root / ".cooked";
+  std::filesystem::create_directories(source_dir);
+  CookDefaultMaterial(cooked_root);
+  const auto vb_bytes = VertexBytes();
+  const auto ib_bytes = IndexBytes({ 0U, 1U, 99U });
+  WriteBytes(source_dir / "vertices.bin", std::span<const std::byte>(vb_bytes));
+  WriteBytes(source_dir / "indices.bin", std::span<const std::byte>(ib_bytes));
+
+  auto container = oxygen::cooker::test::BufferContainer {
+    "/Cooked/Resources/inline.buffers",
+  };
+  container
+    .AppendBuffer(
+      MakeContainerBuffer("vertices.bin", 1U, kVertexStride), kVertices)
+    .AppendBuffer(MakeContainerBuffer("indices.bin", 2U, 4U), kIndices);
+  const auto container_path = source_dir / "mesh.buffers.json";
+  WriteText(container_path, container.Text());
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+  const auto cooked = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      { .source = container_path, .cooked = cooked_root }, container.Json()));
+  ASSERT_HAS_VALUE(cooked);
+  ASSERT_TRUE(cooked->success) << DiagnosticSummary(cooked->diagnostics);
+
+  const auto geometry = MakeStandardGeometry(
+    "/Cooked/Geometry/Bad.ogeo", kMaterial, kVertices, kIndices);
+  const auto geometry_path = source_dir / "bad.geometry.json";
+  WriteText(geometry_path, geometry.Text());
+  const auto report = SubmitAndWait(service,
+    MakeGeometryRequest({
+      .source_path = geometry_path,
+      .cooked_root = cooked_root,
+      .descriptor_doc = geometry.Json(),
+    }));
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometryBufferViewInvalid));
+}
+
+namespace {
+
+  //! The skin streams of a three-vertex mesh of three joints, by default ones
+  //! it can bind.
+  struct LocalSkin final {
+    std::vector<std::byte> joint_indices
+      = IndexBytes({ 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 2U });
+    std::vector<std::byte> joint_weights = std::vector<std::byte>(48U);
+    std::vector<std::byte> inverse_bind = std::vector<std::byte>(192U);
+    std::vector<std::byte> joint_remap = std::vector<std::byte>(12U);
+  };
+
+  [[nodiscard]] auto CookSkinnedMesh(const LocalSkin& skin)
+    -> std::optional<ImportReport>
+  {
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "skinned_mesh";
+    const auto source_dir = root / "Sources";
+    const auto cooked_root = root / ".cooked";
+    std::filesystem::create_directories(source_dir);
+    CookDefaultMaterial(cooked_root);
+    const auto vb_bytes = VertexBytes();
+    const auto ib_bytes = IndexBytes({ 0U, 1U, 2U });
+    WriteBytes(
+      source_dir / "vertices.bin", std::span<const std::byte>(vb_bytes));
+    WriteBytes(
+      source_dir / "indices.bin", std::span<const std::byte>(ib_bytes));
+    WriteBytes(source_dir / "joint_index.bin",
+      std::span<const std::byte>(skin.joint_indices));
+    WriteBytes(source_dir / "joint_weight.bin",
+      std::span<const std::byte>(skin.joint_weights));
+    WriteBytes(source_dir / "inverse_bind.bin",
+      std::span<const std::byte>(skin.inverse_bind));
+    WriteBytes(source_dir / "joint_remap.bin",
+      std::span<const std::byte>(skin.joint_remap));
+
+    const auto buffer = [](const std::string_view leaf) -> std::string {
+      return "/Cooked/Resources/Buffers/" + std::string { leaf } + ".obuf";
+    };
+    auto geometry = MakeStandardGeometry(
+      "/Cooked/Geometry/Skinned.ogeo", kMaterial, kVertices, kIndices);
+    geometry.Set("/lods/0/mesh_type", "skinned")
+      .Reference("/lods/0/skinning/joint_index_ref", buffer("joint_index"))
+      .Reference("/lods/0/skinning/joint_weight_ref", buffer("joint_weight"))
+      .Reference("/lods/0/skinning/inverse_bind_ref", buffer("inverse_bind"))
+      .Reference("/lods/0/skinning/joint_remap_ref", buffer("joint_remap"))
+      .Set("/lods/0/skinning/joint_count", 3U)
+      .Set("/lods/0/skinning/influences_per_vertex", 4U)
+      .AppendBuffer(
+        MakeBuffer("vertices.bin", 1U, kVertexStride, true), kVertices)
+      .AppendBuffer(MakeBuffer("indices.bin", 2U, 4U, true), kIndices)
+      .AppendBuffer(
+        MakeBuffer("joint_index.bin", 8U, 16U, false), buffer("joint_index"))
+      .AppendBuffer(
+        MakeBuffer("joint_weight.bin", 8U, 16U, false), buffer("joint_weight"))
+      .AppendBuffer(
+        MakeBuffer("inverse_bind.bin", 8U, 64U, false), buffer("inverse_bind"))
+      .AppendBuffer(
+        MakeBuffer("joint_remap.bin", 8U, 4U, false), buffer("joint_remap"));
+    const auto path = source_dir / "skinned.geometry.json";
+    WriteText(path, geometry.Text());
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    [[maybe_unused]] auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    return SubmitAndWait(service,
+      MakeGeometryRequest({
+        .source_path = path,
+        .cooked_root = cooked_root,
+        .descriptor_doc = geometry.Json(),
+      }));
+  }
+
+} // namespace
+
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, BindableSkinStreamsCook)
+{
+  const auto report = CookSkinnedMesh(LocalSkin {});
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+}
+
+//! Every skin stream must serve every vertex or joint the mesh names.
+NOLINT_TEST(
+  GeometryDescriptorImportJobBuffersTest, UndersizedSkinStreamsAreRefused)
+{
+  auto too_few_indices = LocalSkin {};
+  too_few_indices.joint_indices = IndexBytes({ 0U, 1U, 2U, 0U });
+  auto too_few_weights = LocalSkin {};
+  too_few_weights.joint_weights = std::vector<std::byte>(32U);
+  auto too_few_matrices = LocalSkin {};
+  too_few_matrices.inverse_bind = std::vector<std::byte>(128U);
+  auto too_few_remaps = LocalSkin {};
+  too_few_remaps.joint_remap = std::vector<std::byte>(8U);
+
+  for (const auto& skin :
+    { too_few_indices, too_few_weights, too_few_matrices, too_few_remaps }) {
+    const auto report = CookSkinnedMesh(skin);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, import_codes::kGeometrySkinningBuffersInvalid));
+  }
+}
+
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, JointPastTheMeshIsRefused)
+{
+  auto skin = LocalSkin {};
+  skin.joint_indices
+    = IndexBytes({ 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 2U, 0U, 1U, 3U });
+
+  const auto report = CookSkinnedMesh(skin);
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kGeometrySkinningBuffersInvalid));
+}
+
+//! More buffers than the bounded queues hold pass through a container job.
+NOLINT_TEST(
+  BufferContainerImportJobBoundedQueuesTest, BuffersPastTheQueueCapacityAllCook)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "container_past_capacity";
+  const auto source_dir = root / "Sources";
+  std::filesystem::create_directories(source_dir);
+
+  auto container = oxygen::cooker::test::BufferContainer {
+    "/Cooked/Resources/inline.buffers",
+  };
+  for (uint32_t i = 0; i < 4U; ++i) {
+    const auto leaf = "b" + std::to_string(i);
+    const auto bytes = IndexBytes({ i, i + 1U, i + 2U });
+    WriteBytes(source_dir / (leaf + ".bin"), std::span<const std::byte>(bytes));
+    container.AppendBuffer(MakeContainerBuffer(leaf + ".bin", 2U, 4U),
+      "/Cooked/Resources/Buffers/" + leaf + ".obuf");
+  }
+  const auto path = source_dir / "many.buffers.json";
+  WriteText(path, container.Text());
+
+  auto service = AsyncImportService(SingleSlotBufferConfig());
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+  const auto report = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      { .source = path, .cooked = root / ".cooked" }, container.Json()));
+
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  for (uint32_t i = 0; i < 4U; ++i) {
+    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
+      root / ".cooked", "Resources/Buffers/b" + std::to_string(i) + ".obuf"));
+  }
+}
+
+//! A row no reader takes is refused where it is declared.
+NOLINT_TEST(
+  BufferContainerImportJobBoundedQueuesTest, RowNoReaderTakesIsRefused)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "container_bad_row";
+  const auto source_dir = root / "Sources";
+  std::filesystem::create_directories(source_dir);
+  const auto bytes = IndexBytes({ 0U, 1U, 2U });
+  WriteBytes(source_dir / "a.bin", std::span<const std::byte>(bytes));
+
+  // Two update frequencies.
+  auto container = oxygen::cooker::test::BufferContainer {
+    "/Cooked/Resources/inline.buffers",
+  };
+  container.AppendBuffer(MakeContainerBuffer("a.bin", 0x180U, 4U),
+    "/Cooked/Resources/Buffers/a.obuf");
+  const auto path = source_dir / "bad.buffers.json";
+  WriteText(path, container.Text());
+
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+  const auto report = SubmitAndWait(service,
+    MakeBufferContainerRequest(
+      { .source = path, .cooked = root / ".cooked" }, container.Json()));
+
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
+  EXPECT_TRUE(HasDiagnosticCode(
+    report->diagnostics, import_codes::kBufferContainerRowInvalid));
 }
 
 } // namespace oxygen::content::import::test

@@ -202,7 +202,7 @@ internal static class AuthoredReferenceFormat
     private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
     {
         var nodes = path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal) && descriptor["buffers"] is JsonArray buffers
-            ? buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"])
+            ? buffers.OfType<JsonObject>().Select(static buffer => buffer["source"])
             : [];
         return [.. nodes.OfType<JsonValue>().Where(static node => node.TryGetValue<string>(out var value) && !string.IsNullOrWhiteSpace(value))];
     }

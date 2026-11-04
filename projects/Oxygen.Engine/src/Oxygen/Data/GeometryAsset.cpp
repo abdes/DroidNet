@@ -25,7 +25,6 @@
 
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/CookedFormatError.h>
@@ -33,6 +32,7 @@
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/LodPolicyValidation.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MeshBufferRules.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Data/SurfaceId.h>
@@ -52,24 +52,6 @@ using oxygen::data::detail::ReferencedBufferStorage;
 
 namespace {
 
-//! The type of the indices `buffer` holds, which its format names, or its
-//! stride for a buffer without one. The buffer holds whole elements of either.
-auto IndexTypeOf(const BufferResource& buffer) -> IndexType
-{
-  const auto format = buffer.GetElementFormat();
-  const auto unformatted = format == oxygen::Format::kUnknown;
-  const auto stride = buffer.GetElementStride();
-  const auto narrow
-    = format == oxygen::Format::kR16UInt || (unformatted && stride == 2U);
-  const auto wide
-    = format == oxygen::Format::kR32UInt || (unformatted && stride == 4U);
-  if (!narrow && !wide) {
-    throw CookedFormatError(CookedDefect::kInvalidValue,
-      "The index buffer does not hold 16-bit or 32-bit indices");
-  }
-  return narrow ? IndexType::kUInt16 : IndexType::kUInt32;
-}
-
 //! Checks that `buffer` holds whole vertices, aligned for them.
 auto CheckVertexBuffer(const BufferResource& buffer) -> void
 {
@@ -84,36 +66,18 @@ auto CheckVertexBuffer(const BufferResource& buffer) -> void
   }
 }
 
-//! Checks that buffers of `vertex_count` vertices and of `indices` hold the
-//! ranges of `view`, and that each of its indices, which count from its
-//! first vertex, names one of its vertices.
+//! Checks `view` against buffers of `vertex_count` vertices and of `indices`.
 auto CheckView(const MeshView& view, const std::size_t vertex_count,
   const IndexBufferView& indices) -> void
 {
-  // Subtracting from the buffer sizes, which a range cannot exceed, does not
-  // wrap as adding a range's start and count can.
-  const auto holds_vertices = view.FirstVertex() <= vertex_count
-    && view.VertexCount() <= vertex_count - view.FirstVertex();
-  const auto holds_indices = view.FirstIndex() <= indices.Count()
-    && view.IndexCount() <= indices.Count() - view.FirstIndex();
-  if (!holds_vertices || !holds_indices) {
-    throw CookedFormatError(CookedDefect::kOutOfBounds,
-      fmt::format("The mesh view of {} vertices from {} and {} indices from {} "
-                  "is past its buffers of {} vertices and {} indices",
-        view.VertexCount(), view.FirstVertex(), view.IndexCount(),
-        view.FirstIndex(), vertex_count, indices.Count()));
-  }
-  const auto drawn
-    = indices.SliceElements(view.FirstIndex(), view.IndexCount());
-  const auto in_view = std::ranges::all_of(
-    drawn.Widened(), [&view](const std::uint32_t index) -> bool {
-      return index < view.VertexCount();
-    });
-  if (!in_view) {
-    throw CookedFormatError(CookedDefect::kOutOfBounds,
-      fmt::format("An index of the mesh view is past its {} vertices",
-        view.VertexCount()));
-  }
+  oxygen::data::CheckMeshViewRange(
+    oxygen::data::MeshViewRange {
+      .first_vertex = view.FirstVertex(),
+      .vertex_count = view.VertexCount(),
+      .first_index = view.FirstIndex(),
+      .index_count = view.IndexCount(),
+    },
+    vertex_count, indices);
 }
 
 } // namespace
@@ -211,7 +175,8 @@ auto Mesh::SetBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
       "The mesh is bound without its vertex or its index buffer");
   }
   CheckVertexBuffer(*vertex_buffer);
-  const auto index_type = IndexTypeOf(*index_buffer);
+  const auto index_type = IndexTypeOf(
+    index_buffer->GetElementFormat(), index_buffer->GetElementStride());
   const auto vertex_count = vertex_buffer->GetData().size() / sizeof(Vertex);
   const auto indices = IndexBufferView {
     .bytes = std::as_bytes(index_buffer->GetData()),

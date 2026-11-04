@@ -6,7 +6,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -49,15 +48,13 @@ auto oxygen::data::MakePlaneMeshAsset(
   unsigned int x_segments, unsigned int y_segments, float size)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  constexpr auto max_count = std::numeric_limits<uint32_t>::max();
-  constexpr auto kIndicesPerCell = 6U;
   const auto half_size = size / 2.0F;
   if (x_segments < 1 || y_segments < 1 || !std::isfinite(size)
     || half_size <= 0.0F
-    || static_cast<uint64_t>(x_segments) + 1U
-      > max_count / (static_cast<uint64_t>(y_segments) + 1U)
-    || static_cast<uint64_t>(x_segments) * y_segments
-      > max_count / kIndicesPerCell) {
+    || !procedural::GridFitsMeshBuffers({
+      .columns = x_segments,
+      .rows = y_segments,
+    })) {
     return std::nullopt;
   }
 

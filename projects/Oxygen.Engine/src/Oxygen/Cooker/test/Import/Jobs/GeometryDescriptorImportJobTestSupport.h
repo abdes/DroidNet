@@ -10,7 +10,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <latch>
+#include <initializer_list>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
@@ -35,6 +36,7 @@
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -99,13 +101,39 @@ inline auto MakeGeometryRequest(GeometryRequestInput input) -> ImportRequest
   return request;
 }
 
-//! A buffer entry reading `uri`; `with_view` adds the one view of three
+//! The stride of a vertex buffer a mesh can bind.
+inline constexpr uint32_t kVertexStride = sizeof(data::Vertex);
+
+//! The bytes of `count` whole vertices, each byte differing from the last.
+inline auto VertexBytes(const std::size_t count = 3U) -> std::vector<std::byte>
+{
+  auto bytes = std::vector<std::byte>(count * sizeof(data::Vertex));
+  for (std::size_t i = 0; i < bytes.size(); ++i) {
+    bytes.at(i) = static_cast<std::byte>((i + 1U) & 0xFFU);
+  }
+  return bytes;
+}
+
+//! The bytes of 32-bit values: indices or joint indices.
+inline auto IndexBytes(const std::initializer_list<uint32_t> values)
+  -> std::vector<std::byte>
+{
+  auto bytes = std::vector<std::byte> {};
+  bytes.reserve(values.size() * sizeof(uint32_t));
+  for (const auto value : values) {
+    std::ranges::copy(
+      std::as_bytes(std::span(&value, 1U)), std::back_inserter(bytes));
+  }
+  return bytes;
+}
+
+//! A buffer entry reading `source`; `with_view` adds the one view of three
 //! elements the standard LOD draws.
-inline auto MakeBuffer(const std::string& uri, const uint32_t usage_flags,
+inline auto MakeBuffer(const std::string& source, const uint32_t usage_flags,
   const uint32_t element_stride, const bool with_view) -> json
 {
   auto buffer = json {
-    { "uri", uri },
+    { "source", source },
     { "usage_flags", usage_flags },
     { "element_stride", element_stride },
   };

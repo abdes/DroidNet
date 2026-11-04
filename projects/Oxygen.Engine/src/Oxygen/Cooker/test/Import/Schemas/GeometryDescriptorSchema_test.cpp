@@ -202,8 +202,65 @@ auto BufferMesh() -> GeometryDescriptor
     .Set("/lods/0/submeshes/0/material_ref", "../Materials/Red.omat")
     .Set("/lods/0/submeshes/0/views/0/view_ref", "surface")
     .AppendBuffer(
-      { { "uri", "raw/vertices.bin" } }, "/Content/Geometry/Vertices.obuf");
+      { { "source", "raw/vertices.bin" } }, "/Content/Geometry/Vertices.obuf");
   return geometry;
+}
+
+//! A geometry declares buffers by the container's one definition, so a view of
+//! both range forms is refused here, under the geometry's own schema.
+NOLINT_TEST(GeometryDescriptorSchemaTest, BufferDeclarationsFollowTheContainer)
+{
+  auto doc = BufferMesh();
+  doc.Set("/buffers/0/views",
+    json::array({
+      {
+        { "name", "both" },
+        { "byte_offset", 0 },
+        { "byte_length", 12 },
+        { "element_offset", 0 },
+        { "element_count", 3 },
+      },
+    }));
+  EXPECT_THAT(ValidateJson(Schema(), doc.Json()), Not(IsEmpty()));
+
+  auto old_key = BufferMesh();
+  old_key.Set("/buffers/0/uri", "raw/vertices.bin");
+  EXPECT_THAT(ValidateJson(Schema(), old_key.Json()), Not(IsEmpty()));
+}
+
+//! Skin counts size what the descriptor names: the code reads both.
+NOLINT_TEST(GeometryDescriptorSchemaTest, RequiresSkinCounts)
+{
+  const auto skinned = [] -> GeometryDescriptor {
+    auto doc = BufferMesh();
+    doc.Set("/lods/0/mesh_type", "skinned")
+      .Set("/lods/0/skinning/joint_index_ref", "Joints.obuf")
+      .Set("/lods/0/skinning/joint_weight_ref", "Weights.obuf")
+      .Set("/lods/0/skinning/inverse_bind_ref", "InverseBind.obuf")
+      .Set("/lods/0/skinning/joint_remap_ref", "Remap.obuf");
+    return doc;
+  };
+
+  auto complete = skinned();
+  complete.Set("/lods/0/skinning/joint_count", 3)
+    .Set("/lods/0/skinning/influences_per_vertex", 4);
+  EXPECT_THAT(ValidateJson(Schema(), complete.Json()), IsEmpty());
+
+  auto no_joint_count = skinned();
+  no_joint_count.Set("/lods/0/skinning/influences_per_vertex", 4);
+  EXPECT_THAT(ValidateJson(Schema(), no_joint_count.Json()), Not(IsEmpty()));
+
+  auto no_influences = skinned();
+  no_influences.Set("/lods/0/skinning/joint_count", 3);
+  EXPECT_THAT(ValidateJson(Schema(), no_influences.Json()), Not(IsEmpty()));
+}
+
+//! Bounds are stored as 32-bit floats: a larger number has no value there.
+NOLINT_TEST(GeometryDescriptorSchemaTest, RejectsBoundsPastFloat)
+{
+  auto doc = BufferMesh();
+  doc.Set("/bounds/max/0", 1e100);
+  EXPECT_THAT(ValidateJson(Schema(), doc.Json()), Not(IsEmpty()));
 }
 
 //! References are absolute in another mount or relative to the descriptor.

@@ -41,12 +41,16 @@ inline constexpr std::string_view kImportManifestSchemaFileName
 inline constexpr std::string_view kSurfaceProvenanceSchemaFileName
   = "oxygen.surface-provenance.schema.json";
 
+//! The file the geometry descriptor references for its buffer declarations.
+inline constexpr std::string_view kBufferContainerSchemaFileName
+  = "oxygen.buffer-container.schema.json";
+
 //! A validator for an embedded import schema.
 /*!
  The schema's references to `oxygen.name.schema.json`,
  `oxygen.reference.schema.json`, `oxygen.lod-policy.schema.json`,
- `oxygen.import-manifest.schema.json` and
- `oxygen.surface-provenance.schema.json` resolve to the embedded schemas.
+ `oxygen.import-manifest.schema.json`, `oxygen.surface-provenance.schema.json`
+ and `oxygen.buffer-container.schema.json` resolve to the embedded schemas.
 
  @throw std::invalid_argument when the schema references any other file.
 */
@@ -67,6 +71,8 @@ inline auto MakeJsonSchemaValidator(const nlohmann::json& schema)
         loaded = nlohmann::json::parse(kImportManifestSchema);
       } else if (file == kSurfaceProvenanceSchemaFileName) {
         loaded = nlohmann::json::parse(kSurfaceProvenanceSchema);
+      } else if (file == kBufferContainerSchemaFileName) {
+        loaded = nlohmann::json::parse(kBufferContainerSchema);
       } else {
         throw std::invalid_argument(
           "unknown schema reference: " + uri.location());

@@ -97,8 +97,6 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kAnalysisSourceNotFile = "analysis.source_not_file";
   //! What a buffer container job found.
   inline constexpr std::string_view kBufferContainerBuffersMissing = "buffer.container.buffers_missing";
-  inline constexpr std::string_view kBufferContainerCookedRootUnreadable = "buffer.container.cooked_root_unreadable";
-  inline constexpr std::string_view kBufferContainerDedupVirtualPathConflict = "buffer.container.dedup_virtual_path_conflict";
   inline constexpr std::string_view kBufferContainerDescriptorMissing = "buffer.container.descriptor_missing";
   inline constexpr std::string_view kBufferContainerInternalLookupFailed = "buffer.container.internal_lookup_failed";
   inline constexpr std::string_view kBufferContainerNoBuffers = "buffer.container.no_buffers";
@@ -106,6 +104,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kBufferContainerReaderUnavailable = "buffer.container.reader_unavailable";
   inline constexpr std::string_view kBufferContainerRequestInvalid = "buffer.container.request_invalid";
   inline constexpr std::string_view kBufferContainerRequestInvalidJson = "buffer.container.request_invalid_json";
+  inline constexpr std::string_view kBufferContainerRowInvalid = "buffer.container.row_invalid";
   inline constexpr std::string_view kBufferContainerSchemaValidationFailed = "buffer.container.schema_validation_failed";
   inline constexpr std::string_view kBufferContainerSchemaValidatorFailure = "buffer.container.schema_validator_failure";
   inline constexpr std::string_view kBufferContainerSidecarEmitFailed = "buffer.container.sidecar_emit_failed";
@@ -141,7 +140,9 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kFbxUnitsUnknown = "fbx.units_unknown";
   //! What a geometry descriptor job found.
   inline constexpr std::string_view kGeometryAssetMissing = "geometry.asset.missing";
+  inline constexpr std::string_view kGeometryBufferContentsReadFailed = "geometry.buffer.contents_read_failed";
   inline constexpr std::string_view kGeometryBufferForeignRoot = "geometry.buffer.foreign_root";
+  inline constexpr std::string_view kGeometryBufferLayoutInvalid = "geometry.buffer.layout_invalid";
   inline constexpr std::string_view kGeometryBufferNoSubmissions = "geometry.buffer.no_submissions";
   inline constexpr std::string_view kGeometryBufferReaderUnavailable = "geometry.buffer.reader_unavailable";
   inline constexpr std::string_view kGeometryBufferSidecarAmbiguous = "geometry.buffer.sidecar_ambiguous";
@@ -149,6 +150,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kGeometryBufferSidecarMissing = "geometry.buffer.sidecar_missing";
   inline constexpr std::string_view kGeometryBufferSidecarReadFailed = "geometry.buffer.sidecar_read_failed";
   inline constexpr std::string_view kGeometryBufferUsageMismatch = "geometry.buffer.usage_mismatch";
+  inline constexpr std::string_view kGeometryBufferViewInvalid = "geometry.buffer.view_invalid";
   inline constexpr std::string_view kGeometryBufferViewMissing = "geometry.buffer.view_missing";
   inline constexpr std::string_view kGeometryBufferViewOverflow = "geometry.buffer.view_overflow";
   inline constexpr std::string_view kGeometryDescriptorBoundsInvalid = "geometry.descriptor.bounds_invalid";
@@ -170,6 +172,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kGeometryProceduralMeshTooLarge = "geometry.procedural.mesh_too_large";
   inline constexpr std::string_view kGeometryProceduralParamsInvalid = "geometry.procedural.params_invalid";
   inline constexpr std::string_view kGeometryProceduralViewRefInvalid = "geometry.procedural.view_ref_invalid";
+  inline constexpr std::string_view kGeometrySkinningBuffersInvalid = "geometry.skinning.buffers_invalid";
   inline constexpr std::string_view kGeometrySkinningSkeletonMissing = "geometry.skinning.skeleton_missing";
   //! What the glTF adapter found.
   inline constexpr std::string_view kGltfImageDataUri = "gltf.image.data_uri";

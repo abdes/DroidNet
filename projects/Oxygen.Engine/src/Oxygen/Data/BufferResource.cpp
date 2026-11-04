@@ -99,6 +99,17 @@ auto CheckStructured(const oxygen::data::pak::core::BufferResourceDesc& desc)
 
 } // namespace
 
+auto oxygen::data::CheckBufferRow(const pak::core::BufferResourceDesc& desc)
+  -> void
+{
+  CheckUsage(desc.usage_flags);
+  if (desc.element_format != 0U) {
+    CheckFormatted(desc);
+  } else {
+    CheckStructured(desc);
+  }
+}
+
 /*!
  Creates a BufferResource instance from a PAK descriptor and the buffer that
  holds its payload, which it owns.
@@ -129,12 +140,7 @@ BufferResource::BufferResource(
   : desc_(desc)
   , data_(std::move(data))
 {
-  CheckUsage(desc_.usage_flags);
-  if (desc_.element_format != 0U) {
-    CheckFormatted(desc_);
-  } else {
-    CheckStructured(desc_);
-  }
+  CheckBufferRow(desc_);
   if (data_.Bytes().size() != desc_.size_bytes) {
     throw CookedFormatError(CookedDefect::kSizeMismatch,
       fmt::format("buffer row names {} bytes, its payload holds {}",

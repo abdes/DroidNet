@@ -7,12 +7,12 @@
 #pragma once
 
 #include <cstddef>
-#include <filesystem>
+#include <memory>
 #include <span>
 #include <stop_token>
 #include <string>
-#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -29,41 +29,69 @@ class ImportSession;
 
 namespace oxygen::content::import::detail {
 
-//! Reusable submitter for buffer descriptor chunks.
+//! Cooks the buffers of a container or a geometry descriptor.
 /*!
- Validates `buffers[]` chunks and runtime constraints, submits work to
- `BufferPipeline`, then collects and emits resulting buffer sidecars.
+ Reads each source, validates its row and views, sends it through a
+ `BufferPipeline` and emits each result with its sidecar. Submission and
+ collection run together, so any number of buffers passes through the bounded
+ queues.
+
+ Buffers with equal rows and bytes share one table row, whatever their virtual
+ paths; each virtual path has its own sidecar, with its own views.
 */
 class BufferImportSubmitter final {
 public:
   struct EmittedBuffer final {
     std::string source_id;
-    std::string descriptor_relpath;
     data::pak::core::ResourceIndexT resource_index
       = data::pak::core::kNoResourceIndex;
     data::pak::core::BufferResourceDesc descriptor {};
     std::vector<data::BufferResourceView> views;
+    //! The bytes, when asked for by `keep_contents_of`; else null.
+    std::shared_ptr<const std::vector<std::byte>> contents;
   };
 
-  struct Submission final {
+  struct CookedBuffers final {
     size_t submitted_count = 0;
-    std::unordered_map<std::string, std::string>
-      descriptor_relpath_by_source_id;
-    std::unordered_map<std::string, std::vector<data::BufferResourceView>>
-      descriptor_views_by_source_id;
+    std::vector<EmittedBuffer> emitted;
   };
 
   BufferImportSubmitter(ImportSession& session, const ImportRequest& request,
     observer_ptr<IAsyncFileReader> reader, std::stop_token stop_token);
 
-  [[nodiscard]] auto SubmitBuffers(
-    std::span<const internal::BufferSource> entries, BufferPipeline& pipeline)
-    -> co::Co<Submission>;
-
-  [[nodiscard]] auto CollectAndEmit(BufferPipeline& pipeline,
-    const Submission& submission) -> co::Co<std::vector<EmittedBuffer>>;
+  //! Cooks `entries` through `pipeline`, whose workers run, and closes it.
+  /*!
+   @param keep_contents_of The `source_id`s whose bytes the caller reads once
+     they are emitted.
+  */
+  [[nodiscard]] auto CookBuffers(
+    std::span<const internal::BufferSource> entries,
+    const std::unordered_set<std::string>& keep_contents_of,
+    BufferPipeline& pipeline) -> co::Co<CookedBuffers>;
 
 private:
+  //! What a buffer's result needs from its submission, by `source_id`.
+  struct Submitted final {
+    std::unordered_map<std::string, std::vector<data::BufferResourceView>>
+      views;
+    std::unordered_map<std::string,
+      std::shared_ptr<const std::vector<std::byte>>>
+      contents;
+  };
+
+  // Both run inside `CookBuffers`, which owns what they are given by reference.
+  [[nodiscard]] auto SubmitBuffers(
+    std::span<const internal::BufferSource> entries,
+    const std::unordered_set<std::string>& keep_contents_of,
+    BufferPipeline& pipeline, Submitted& submitted, CookedBuffers& cooked)
+    -> co::Co<>;
+
+  [[nodiscard]] auto CollectAndEmit(BufferPipeline& pipeline,
+    const Submitted& submitted, CookedBuffers& cooked) -> co::Co<>;
+
+  auto Emit(BufferPipeline::WorkResult result, const Submitted& submitted,
+    CookedBuffers& cooked) -> void;
+
   observer_ptr<ImportSession> session_;
   observer_ptr<const ImportRequest> request_;
   observer_ptr<IAsyncFileReader> reader_;

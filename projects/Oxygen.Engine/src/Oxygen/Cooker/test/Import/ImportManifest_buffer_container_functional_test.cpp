@@ -47,7 +47,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       "buffers": [
         {
           "source": "mesh_vertices.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/character_vertices.obuf",
+          "virtual_path": "../Resources/Buffers/character_vertices.obuf",
           "element_stride": 32
         }
       ]
@@ -104,7 +104,7 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
       "buffers": [
         {
           "source": "lego.buffer.bin",
-          "virtual_path": "/Cooked/Resources/Buffers/lego_shared.obuf",
+          "virtual_path": "../Resources/Buffers/lego_shared.obuf",
           "element_stride": 16
         }
       ]

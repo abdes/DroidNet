@@ -68,7 +68,7 @@ namespace {
       .Set(
         "/bounds", nlohmann::json::parse(R"({"min":[-1,-1,-1],"max":[1,1,1]})"))
       .AppendBuffer(
-        { { "uri", "raw/vertices.bin" } }, "/Content/Buffers/vertices.obuf")
+        { { "source", "raw/vertices.bin" } }, "/Content/Buffers/vertices.obuf")
       .Remove("/lods/0/procedural")
       .Set("/lods/0/mesh_type", "standard")
       .Set("/lods/0/bounds",

@@ -20,7 +20,7 @@ internal static class DependencyScenario
     internal static void WriteAuthoredGeometry(CookWorkspace workspace, bool withBuffer)
     {
         // A procedural cube authored in the project, with one surface.
-        var buffers = withBuffer ? ""","buffers":[{"uri":"mesh.bin","virtual_path":"/Content/Buffers/Mesh.obuf"}]""" : string.Empty;
+        var buffers = withBuffer ? ""","buffers":[{"source":"mesh.bin","virtual_path":"/Content/Buffers/Mesh.obuf"}]""" : string.Empty;
         if (withBuffer)
         {
             workspace.WriteText("Content/Geometry/mesh.bin", "saved buffer bytes");

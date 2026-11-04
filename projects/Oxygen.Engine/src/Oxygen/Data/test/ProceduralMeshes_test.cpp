@@ -401,6 +401,29 @@ NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
     << "(3,3) should be the minimum valid sphere";
 }
 
+//! A shape whose buffers the format cannot hold is refused before anything is
+//! allocated: 20000 by 20000 cells need 29 GB of vertices, past the 4 GiB limit
+//! of a buffer, though their counts fit 32 bits.
+NOLINT_TEST_F(ProceduralMeshTest, ShapesPastTheBufferLimitAreRefused)
+{
+  constexpr auto kPastLimit = 20000U;
+  constexpr auto kMaxSegments = 0xFFFFFFFFU;
+
+  EXPECT_FALSE(
+    oxygen::data::MakeSphereMeshAsset(kPastLimit, kPastLimit).has_value());
+  EXPECT_FALSE(
+    oxygen::data::MakeSphereMeshAsset(kMaxSegments, kMaxSegments).has_value());
+  EXPECT_FALSE(
+    oxygen::data::MakePlaneMeshAsset(kPastLimit, kPastLimit, 1.0F).has_value());
+  EXPECT_FALSE(
+    oxygen::data::MakeTorusMeshAsset(kPastLimit, kPastLimit, 1.0F, 0.25F)
+      .has_value());
+  EXPECT_FALSE(
+    oxygen::data::MakeCylinderMeshAsset(kMaxSegments, 1.0F, 0.5F).has_value());
+  EXPECT_FALSE(
+    oxygen::data::MakeConeMeshAsset(kMaxSegments, 1.0F, 0.5F).has_value());
+}
+
 //! Verifies icosphere topology growth follows expected refinement factors:
 //! each level splits every triangle in four; the seam and poles add vertices
 //! beyond the 10 * 4^level + 2 shared positions.

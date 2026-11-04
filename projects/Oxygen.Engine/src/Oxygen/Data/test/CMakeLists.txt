@@ -54,6 +54,7 @@ m_gtest_program(
     "Mesh_test.cpp"
     "MeshBoundingSphere_test.cpp"
     "MeshBuffers_test.cpp"
+    "MeshBufferRules_test.cpp"
     "MeshBuilder_test.cpp"
     "MeshView_test.cpp"
     "ProceduralConformance_test.cpp"

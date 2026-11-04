@@ -402,7 +402,7 @@ namespace {
     };
     body.Set("/bounds", bounds)
       .AppendBuffer(
-        { { "uri", "vertices.bin" } }, "/Content/Buffers/local.obuf")
+        { { "source", "vertices.bin" } }, "/Content/Buffers/local.obuf")
       .Set("/lods/0/mesh_type", "standard")
       .Remove("/lods/0/procedural")
       .Set("/lods/0/bounds", bounds)

@@ -67,6 +67,7 @@ auto BufferPipeline::Start(co::Nursery& nursery) -> void
   started_ = true;
 
   const auto worker_count = std::max(1U, config_.worker_count);
+  running_workers_ = worker_count;
   for (uint32_t i = 0; i < worker_count; ++i) {
     nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
@@ -99,7 +100,7 @@ auto BufferPipeline::TrySubmit(WorkItem item) -> bool
 
 auto BufferPipeline::Collect() -> co::Co<WorkResult>
 {
-  auto maybe_result = co_await output_channel_.Receive();
+  auto maybe_result = co_await CollectNext();
   if (!maybe_result.has_value()) {
     co_return WorkResult {
       .source_id = {},
@@ -108,6 +109,15 @@ auto BufferPipeline::Collect() -> co::Co<WorkResult>
       .success = false,
     };
   }
+  co_return std::move(*maybe_result);
+}
+
+auto BufferPipeline::CollectNext() -> co::Co<std::optional<WorkResult>>
+{
+  auto maybe_result = co_await output_channel_.Receive();
+  if (!maybe_result.has_value()) {
+    co_return std::nullopt;
+  }
 
   pending_.fetch_sub(1, std::memory_order_acq_rel);
   if (maybe_result->success) {
@@ -115,7 +125,7 @@ auto BufferPipeline::Collect() -> co::Co<WorkResult>
   } else {
     failed_.fetch_add(1, std::memory_order_acq_rel);
   }
-  co_return std::move(*maybe_result);
+  co_return maybe_result;
 }
 
 auto BufferPipeline::Close() -> void { input_channel_.Close(); }
@@ -196,6 +206,11 @@ auto BufferPipeline::Worker() -> co::Co<>
     co_await output_channel_.Send(std::move(result));
   }
 
+  // No worker is left to send: the results queued so far stay collectable.
+  --running_workers_;
+  if (running_workers_ == 0U) {
+    output_channel_.Close();
+  }
   co_return;
 }
 

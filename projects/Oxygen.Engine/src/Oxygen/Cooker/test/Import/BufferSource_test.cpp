@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/BufferSource.cpp
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -22,6 +23,7 @@
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
 
@@ -70,7 +72,7 @@ namespace {
       "usage_flags":1,"element_stride":16,"alignment":32,
       "views":[{"name":"triangle","element_offset":0,"element_count":3}]
     })"),
-      "/OtherMount/Buffers/vertices.obuf");
+      "/Content/Buffers/vertices.obuf");
     const auto declarations = DeclarationsOf(container);
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(declarations,
@@ -81,12 +83,97 @@ namespace {
     const auto& source = sources->front();
     EXPECT_EQ(source.source_path,
       std::filesystem::weakly_canonical(TempDir() / "authored/vertices.bin"));
-    EXPECT_EQ(source.source_id, "/OtherMount/Buffers/vertices.obuf");
+    EXPECT_EQ(source.source_id, "/Content/Buffers/vertices.obuf");
     EXPECT_EQ(source.element_stride, 16U);
     EXPECT_EQ(source.alignment, 32U);
     ASSERT_EQ(source.view_specs.size(), 1U);
     EXPECT_EQ(source.view_specs.front().name, "triangle");
     EXPECT_EQ(source.view_specs.front().element_count, 3U);
+  }
+
+  //! A product lives in the mount of the container that declares it.
+  NOLINT_TEST_F(BufferSourceTest, RejectsProductInAnotherMount)
+  {
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer(
+      { { "source", "vertices.bin" }, { "element_stride", 16 } },
+      "/OtherMount/Buffers/vertices.obuf");
+    const auto declarations = DeclarationsOf(container);
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    const auto sources = BufferSource::FromDeclarations(declarations,
+      "authored/geometry.json", container.Identity(), Mounts(), diagnostics);
+
+    EXPECT_FALSE(sources.has_value());
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, import_codes::kBufferContainerVirtualPathUnmounted));
+  }
+
+  //! Each number the schema admits fits the type the code reads it into, so
+  //! nothing is silently narrowed: 2^32 + 1 is not a stride of 1.
+  NOLINT_TEST_F(BufferSourceTest, RejectsValuesPastTheirDestinationTypes)
+  {
+    constexpr auto kPastU32 = uint64_t { 4294967297U };
+    const auto refused = [this](const Json& buffer) -> bool {
+      auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+      container.AppendBuffer(buffer, "/Content/Buffers/a.obuf");
+      auto diagnostics = std::vector<ImportDiagnostic> {};
+      const auto sources = BufferSource::FromContainer(container.Text(),
+        "geometry.json", container.Identity(), Mounts(), diagnostics);
+      return !sources.has_value()
+        && HasDiagnosticCode(
+          diagnostics, import_codes::kBufferContainerSchemaValidationFailed);
+    };
+
+    EXPECT_TRUE(refused({
+      { "source", "a.bin" },
+      { "element_stride", kPastU32 },
+    }));
+    EXPECT_TRUE(refused({
+      { "source", "a.bin" },
+      { "usage_flags", 1024 },
+    }));
+    EXPECT_TRUE(refused({
+      { "source", "a.bin" },
+      { "alignment", 8192 },
+    }));
+    EXPECT_TRUE(refused({
+      { "source", "a.bin" },
+      { "alignment", 3 },
+    }));
+    EXPECT_TRUE(refused({
+      { "source", "a.bin" },
+      {
+        "views",
+        Json::array({
+          {
+            { "name", "v" },
+            { "element_offset", kPastU32 },
+            { "element_count", 1 },
+          },
+        }),
+      },
+    }));
+  }
+
+  //! The largest alignment is the one a pak gives every payload.
+  NOLINT_TEST_F(BufferSourceTest, AcceptsAlignmentsUpToThePakPayloadAlignment)
+  {
+    auto container = BufferContainer { "/Content/Geometry/geometry.buffers" };
+    container.AppendBuffer(
+      {
+        { "source", "a.bin" },
+        { "alignment", data::pak::core::kPakPayloadAlignment },
+      },
+      "/Content/Buffers/a.obuf");
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+
+    const auto sources = BufferSource::FromContainer(container.Text(),
+      "authored/geometry.json", container.Identity(), Mounts(), diagnostics);
+
+    ASSERT_HAS_VALUE(sources) << DiagnosticSummary(diagnostics);
+    EXPECT_EQ(
+      sources->front().alignment, data::pak::core::kPakPayloadAlignment);
   }
 
   NOLINT_TEST_F(BufferSourceTest, RejectsDuplicateOutputIdentity)

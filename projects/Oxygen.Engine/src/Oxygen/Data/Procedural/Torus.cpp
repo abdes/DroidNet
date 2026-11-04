@@ -59,8 +59,6 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
   unsigned int minor_segments, float major_radius, float minor_radius)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  constexpr auto max_count = std::numeric_limits<uint32_t>::max();
-  constexpr auto kIndicesPerCell = 6U;
   const auto outer_radius = static_cast<double>(major_radius) + minor_radius;
   if (major_segments < 3 || minor_segments < 3 || !std::isfinite(major_radius)
     || !std::isfinite(minor_radius) || major_radius <= 0.0F
@@ -68,13 +66,14 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
     || outer_radius > std::numeric_limits<float>::max()
     || major_radius + minor_radius <= major_radius
     || major_radius - minor_radius >= major_radius
-    || static_cast<uint64_t>(major_segments) + 1U
-      > max_count / (static_cast<uint64_t>(minor_segments) + 1U)
-    || static_cast<uint64_t>(major_segments) * minor_segments
-      > max_count / kIndicesPerCell) {
+    || !procedural::GridFitsMeshBuffers({
+      .columns = major_segments,
+      .rows = minor_segments,
+    })) {
     return std::nullopt;
   }
 
+  constexpr auto kIndicesPerCell = 6U;
   constexpr double kTwoPi = 2.0 * std::numbers::pi_v<double>;
   const auto stride = minor_segments + 1U;
   std::vector<Vertex> vertices;

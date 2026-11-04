@@ -563,16 +563,16 @@ Example (`woodfloor_tile.geometry.json`):
   },
   "buffers": [
     {
-      "uri": "woodfloor_tile.vb",
+      "source": "woodfloor_tile.vb",
       "virtual_path": "woodfloor_tile.vb.obuf",
       "usage_flags": 1,
-      "element_stride": 48,
+      "element_stride": 72,
       "views": [
         { "name": "all_verts", "element_offset": 0, "element_count": 2048 }
       ]
     },
     {
-      "uri": "woodfloor_tile.ib",
+      "source": "woodfloor_tile.ib",
       "virtual_path": "woodfloor_tile.ib.obuf",
       "usage_flags": 2,
       "element_format": 5,
@@ -613,7 +613,7 @@ Top-level validation rules:
    References): relative to the descriptor's folder within its mount, absolute
    only across mounts. The job resolves each against its identity before the
    lookup. Buffer `virtual_path` names the cooked product relative to the
-   descriptor; buffer `uri` is a file reference.
+   descriptor; buffer `source` is a file reference.
 4. `name` values follow the segment rule of virtual paths, through the shared
    `oxygen.name.schema.json#/definitions/segment`. The cooker checks what the
    pattern cannot (NFC, unassigned code points, the 255-byte segment) on the
@@ -636,7 +636,7 @@ Describes one buffer file to cook inline within the geometry job.
 
 | Field            | Required | Type                 | Description                                                                   |
 | ---------------- | -------- | -------------------- | ----------------------------------------------------------------------------- |
-| `uri`            | Yes      | `string` (non-empty) | File reference to the raw buffer data                                         |
+| `source`         | Yes      | `string` (non-empty) | File reference to the raw buffer data                                         |
 | `virtual_path`   | Yes      | `reference (.obuf)`  | Product reference, relative to the descriptor, of the cooked `.obuf` sidecar  |
 | `usage_flags`    | No       | `integer ≥ 0`        | `BufferResource::UsageFlags` bitmask                                          |
 | `element_stride` | No       | `integer ≥ 0`        | Fixed per-element byte stride (mutually exclusive with `element_format`)      |
@@ -800,12 +800,12 @@ and the helper `PrepareGeometryDescriptor`.
 
 ### 8.1 Pre-Descriptor Stages (in `ExecuteAsync`)
 
-| Step | Function                   | Action                                                                                                                                                                                                         |
-| ---- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | `Re-ParseDescriptor`       | Re-parses `request.geometry_descriptor->descriptor_json` into `nlohmann::json`                                                                                                                                 |
-| 2    | `ValidateDescriptorSchema` | Re-validates against `kGeometryDescriptorSchema`; adds diagnostics on failure                                                                                                                                  |
-| 3    | `LoadMountedInspections`   | Loads `container.index.bin` for `cooked_root` and all `cooked_context_roots`; de-duplicates paths                                                                                                              |
-| 4    | `CookInlineBuffers`        | If `descriptor_doc` contains `"buffers"`: constructs `BufferPipeline` (using `Concurrency().buffer`), runs `BufferImportSubmitter` → `SubmitBufferChunks` → `CollectAndEmit`; caches results in `buffer_cache` |
+| Step | Function                   | Action                                                                                                                                                                            |
+| ---- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | `Re-ParseDescriptor`       | Re-parses `request.geometry_descriptor->descriptor_json` into `nlohmann::json`                                                                                                    |
+| 2    | `ValidateDescriptorSchema` | Re-validates against `kGeometryDescriptorSchema`; adds diagnostics on failure                                                                                                     |
+| 3    | `LoadMountedInspections`   | Loads `container.index.bin` for `cooked_root` and all `cooked_context_roots`; de-duplicates paths                                                                                 |
+| 4    | `CookInlineBuffers`        | If `descriptor_doc` contains `"buffers"`: constructs `BufferPipeline` (using `Concurrency().buffer`), runs `BufferImportSubmitter::CookBuffers`; caches results in `buffer_cache` |
 
 ### 8.2 `PrepareGeometryDescriptor` Stages
 

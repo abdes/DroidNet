@@ -18,7 +18,7 @@
       "type": "array",
       "minItems": 1,
       "items": {
-        "$ref": "#/definitions/buffer_descriptor"
+        "$ref": "oxygen.buffer-container.schema.json#/definitions/buffer_descriptor"
       }
     },
     "lods": {
@@ -46,7 +46,9 @@
     "vec3": {
       "type": "array",
       "items": {
-        "type": "number"
+        "type": "number",
+        "minimum": -3.4028234663852886e38,
+        "maximum": 3.4028234663852886e38
       },
       "minItems": 3,
       "maxItems": 3
@@ -80,188 +82,6 @@
               }
             }
           ]
-        }
-      ]
-    },
-    "buffer_view_descriptor": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "$ref": "oxygen.name.schema.json#/definitions/segment"
-        },
-        "byte_offset": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "byte_length": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "element_offset": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "element_count": {
-          "type": "integer",
-          "minimum": 1
-        }
-      },
-      "required": ["name"],
-      "allOf": [
-        {
-          "not": {
-            "properties": {
-              "name": {
-                "const": "__all__"
-              }
-            },
-            "required": ["name"]
-          }
-        },
-        {
-          "anyOf": [
-            {
-              "required": ["byte_offset", "byte_length"]
-            },
-            {
-              "required": ["element_offset", "element_count"]
-            }
-          ]
-        },
-        {
-          "if": {
-            "required": ["byte_offset"]
-          },
-          "then": {
-            "required": ["byte_length"]
-          }
-        },
-        {
-          "if": {
-            "required": ["byte_length"]
-          },
-          "then": {
-            "required": ["byte_offset"]
-          }
-        },
-        {
-          "if": {
-            "required": ["element_offset"]
-          },
-          "then": {
-            "required": ["element_count"]
-          }
-        },
-        {
-          "if": {
-            "required": ["element_count"]
-          },
-          "then": {
-            "required": ["element_offset"]
-          }
-        }
-      ]
-    },
-    "buffer_descriptor": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "uri": {
-          "type": "string",
-          "minLength": 1
-        },
-        "virtual_path": {
-          "allOf": [
-            { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
-            { "pattern": "\\.obuf$" }
-          ]
-        },
-        "usage_flags": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "element_stride": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "element_format": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 255
-        },
-        "alignment": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "views": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/definitions/buffer_view_descriptor"
-          },
-          "uniqueItems": true
-        }
-      },
-      "required": ["uri", "virtual_path"],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "element_format": {
-                "type": "integer",
-                "minimum": 1
-              }
-            },
-            "required": ["element_format"]
-          },
-          "then": {
-            "properties": {
-              "element_stride": {
-                "type": "integer",
-                "const": 0
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "element_stride": {
-                "type": "integer",
-                "minimum": 1
-              }
-            },
-            "required": ["element_stride"]
-          },
-          "then": {
-            "properties": {
-              "element_format": {
-                "type": "integer",
-                "maximum": 0
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "element_stride": {
-                "type": "integer",
-                "const": 0
-              }
-            },
-            "required": ["element_stride"]
-          },
-          "then": {
-            "properties": {
-              "element_format": {
-                "type": "integer",
-                "minimum": 1
-              }
-            },
-            "required": ["element_format"]
-          }
         }
       ]
     },
@@ -327,14 +147,17 @@
         },
         "flags": {
           "type": "integer",
-          "minimum": 0
+          "minimum": 0,
+          "maximum": 4294967295
         }
       },
       "required": [
         "joint_index_ref",
         "joint_weight_ref",
         "inverse_bind_ref",
-        "joint_remap_ref"
+        "joint_remap_ref",
+        "joint_count",
+        "influences_per_vertex"
       ]
     },
     "sphere_params": {

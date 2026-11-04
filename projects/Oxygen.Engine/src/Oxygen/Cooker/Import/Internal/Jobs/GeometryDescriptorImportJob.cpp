@@ -11,12 +11,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -26,6 +29,7 @@
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -45,10 +49,14 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MeshBufferRules.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -72,6 +80,10 @@ namespace {
       = data::pak::core::kNoResourceIndex;
     data::pak::core::BufferResourceDesc descriptor {};
     std::unordered_map<std::string, data::BufferResourceView> views;
+    //! Where the bytes of a buffer an earlier cook emitted are stored.
+    std::optional<cooked::StoredBytes> stored;
+    //! The bytes, once read or when this job cooked the buffer.
+    std::shared_ptr<const std::vector<std::byte>> contents;
   };
 
   //! Borrowed for the duration of one job execution, which owns both.
@@ -147,6 +159,8 @@ namespace {
           .resource_index = emitted.resource_index,
           .descriptor = emitted.descriptor,
           .views = BuildViewMap(emitted.views),
+          .stored = std::nullopt,
+          .contents = emitted.contents,
         });
     }
   }
@@ -274,10 +288,26 @@ namespace {
         co_return std::nullopt;
       }
 
+      const auto* buffer_table = matched.content.has_value()
+        ? &matched.content->ResourceTable(cooked::TableKind::kBuffer)
+        : nullptr;
+      CHECK_NOTNULL_F(buffer_table, "A matched cooked root has a buffer table");
+      auto stored = std::optional<cooked::StoredBytes> {};
+      try {
+        stored = buffer_table->PayloadStored(decoded->index);
+      } catch (const std::out_of_range& error) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          std::string(import_codes::kGeometryBufferSidecarInvalid),
+          error.what(), pointer);
+        co_return std::nullopt;
+      }
+
       auto resolved = ResolvedBufferSidecar {
         .resource_index = decoded->index,
         .descriptor = decoded->descriptor,
         .views = BuildViewMap(decoded->views),
+        .stored = std::move(stored),
+        .contents = nullptr,
       };
       context.buffer_cache.insert_or_assign(reference->resolved, resolved);
       co_return resolved;
@@ -294,6 +324,88 @@ namespace {
           }),
       pointer);
     co_return std::nullopt;
+  }
+
+  //! The sidecar `text` names, with the bytes of its buffer.
+  /*!
+   A buffer this job cooked holds the bytes `ContentsTheLinkReads` kept; one an
+   earlier cook emitted is read once from the cooked root.
+  */
+  // The caller awaits each resolution inline while it owns `context`.
+  auto ResolveBufferWithContents(GeometryExecutionContext& context,
+    const std::string_view text, const JsonPointer& pointer)
+    -> co::Co<std::optional<ResolvedBufferSidecar>>
+  {
+    auto sidecar = co_await ResolveBufferSidecar(context, text, pointer);
+    if (!sidecar.has_value() || sidecar->contents != nullptr) {
+      co_return sidecar;
+    }
+    const auto failed = [&](const std::string& why) -> void {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        std::string(import_codes::kGeometryBufferContentsReadFailed),
+        "Failed reading the bytes of buffer '" + std::string(text)
+          + "': " + why,
+        pointer);
+    };
+    if (!sidecar->stored.has_value()) {
+      failed("this job did not keep them");
+      co_return std::nullopt;
+    }
+    const auto& stored = *sidecar->stored;
+    const auto size = stored.range.count.get();
+    if (size != sidecar->descriptor.size_bytes || size == 0U) {
+      failed("the cooked root stores " + std::to_string(size)
+        + " bytes for a sidecar of "
+        + std::to_string(sidecar->descriptor.size_bytes));
+      co_return std::nullopt;
+    }
+    const auto read_start = std::chrono::steady_clock::now();
+    const auto bytes = co_await context.reader->ReadFile(stored.file,
+      ReadOptions { .offset = stored.range.offset.get(), .max_bytes = size });
+    context.session.AddLoadDuration(
+      MakeDuration(read_start, std::chrono::steady_clock::now()));
+    if (!bytes.has_value()) {
+      failed(bytes.error().message());
+      co_return std::nullopt;
+    }
+    const auto read = bytes.value().Bytes();
+    if (read.size() != size) {
+      failed("the cooked root holds " + std::to_string(read.size()) + " of its "
+        + std::to_string(size) + " bytes");
+      co_return std::nullopt;
+    }
+    sidecar->contents = std::make_shared<const std::vector<std::byte>>(
+      read.begin(), read.end());
+    const auto reference = internal::ResolveJobReference(context.request, text);
+    if (reference.has_value()) {
+      context.buffer_cache.insert_or_assign(reference->resolved, *sidecar);
+    }
+    co_return sidecar;
+  }
+
+  //! The products whose bytes the link reads: index and joint index buffers.
+  auto ContentsTheLinkReads(const ImportRequest& request,
+    const internal::GeometrySource& source) -> std::unordered_set<std::string>
+  {
+    auto products = std::unordered_set<std::string> {};
+    const auto add = [&](const std::string_view text) -> void {
+      // A refused reference is reported when the link resolves it.
+      if (const auto reference = internal::ResolveJobReference(request, text);
+        reference.has_value()) {
+        products.insert(reference->resolved);
+      }
+    };
+    for (const auto& lod : source.lods) {
+      if (const auto* buffers
+        = std::get_if<internal::GeometrySource::Buffers>(&lod.mesh)) {
+        add(buffers->index);
+      } else if (const auto* skinned
+        = std::get_if<internal::GeometrySource::Skinned>(&lod.mesh)) {
+        add(skinned->buffers.index);
+        add(skinned->joint_index);
+      }
+    }
+    return products;
   }
 
   //! The diagnostic codes a family of asset references reports its lookup
@@ -452,6 +564,76 @@ namespace {
       std::string(logical_name) + " does not advertise required usage flag",
       pointer);
     return false;
+  }
+
+  //! Runs a `Data` buffer rule, reporting its refusal as `code` at `pointer`.
+  template <typename Rule>
+  auto PassesBufferRule(GeometryExecutionContext& context, const Rule& rule,
+    const std::string_view code, const JsonPointer& pointer) -> bool
+  {
+    try {
+      rule();
+      return true;
+    } catch (const data::CookedFormatError& error) {
+      AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+        std::string(code), error.what(), pointer);
+      return false;
+    }
+  }
+
+  //! The number of indices of `sidecar`'s type its bytes hold, read by the
+  //! same rule the runtime binds the buffer by.
+  auto IndicesOf(const ResolvedBufferSidecar& sidecar)
+    -> data::detail::IndexBufferView
+  {
+    return data::detail::IndexBufferView {
+      .bytes = *sidecar.contents,
+      .type = data::IndexTypeOf(
+        static_cast<Format>(sidecar.descriptor.element_format),
+        sidecar.descriptor.element_stride),
+    };
+  }
+
+  //! Refuses a vertex buffer of other records than `data::Vertex`.
+  auto PassesVertexBufferRule(GeometryExecutionContext& context,
+    const ResolvedBufferSidecar& vertices, const JsonPointer& pointer) -> bool
+  {
+    return PassesBufferRule(
+      context,
+      [&vertices] -> void { data::CheckVertexBufferRow(vertices.descriptor); },
+      import_codes::kGeometryBufferLayoutInvalid, pointer);
+  }
+
+  //! Refuses an index buffer of other values than 16-bit or 32-bit indices.
+  auto PassesIndexBufferRule(GeometryExecutionContext& context,
+    const ResolvedBufferSidecar& indices, const JsonPointer& pointer) -> bool
+  {
+    return PassesBufferRule(
+      context, [&indices] -> void { static_cast<void>(IndicesOf(indices)); },
+      import_codes::kGeometryBufferLayoutInvalid, pointer);
+  }
+
+  //! Refuses a view its buffers cannot draw, which the runtime refuses when it
+  //! binds them: a range past a buffer, or an index past the view's vertices.
+  auto PassesMeshViewRule(GeometryExecutionContext& context,
+    const data::pak::geometry::MeshViewDesc& view,
+    const ResolvedBufferSidecar& vertices, const ResolvedBufferSidecar& indices,
+    const JsonPointer& view_pointer) -> bool
+  {
+    return PassesBufferRule(
+      context,
+      [&] -> void {
+        data::CheckMeshViewRange(
+          data::MeshViewRange {
+            .first_vertex = view.first_vertex,
+            .vertex_count = view.vertex_count,
+            .first_index = view.first_index,
+            .index_count = view.index_count,
+          },
+          vertices.descriptor.size_bytes / sizeof(data::Vertex),
+          IndicesOf(indices));
+      },
+      import_codes::kGeometryBufferViewInvalid, view_pointer / "view_ref");
   }
 
   using Bounds = internal::GeometrySource::Bounds;
@@ -639,7 +821,7 @@ namespace {
 
         auto vb_sidecar_opt = co_await ResolveBufferSidecar(
           context, vb_ref, lod_pointer / "buffers" / "vb_ref");
-        auto ib_sidecar_opt = co_await ResolveBufferSidecar(
+        auto ib_sidecar_opt = co_await ResolveBufferWithContents(
           context, ib_ref, lod_pointer / "buffers" / "ib_ref");
         if (!vb_sidecar_opt.has_value() || !ib_sidecar_opt.has_value()) {
           co_return std::nullopt;
@@ -653,6 +835,12 @@ namespace {
             lod_pointer / "buffers" / "ib_ref", "Index buffer")) {
           co_return std::nullopt;
         }
+        if (!PassesVertexBufferRule(
+              context, *vb_sidecar_opt, lod_pointer / "buffers" / "vb_ref")
+          || !PassesIndexBufferRule(
+            context, *ib_sidecar_opt, lod_pointer / "buffers" / "ib_ref")) {
+          co_return std::nullopt;
+        }
 
         resolved_vb = *vb_sidecar_opt;
         resolved_ib = *ib_sidecar_opt;
@@ -662,7 +850,7 @@ namespace {
         if (skinned != nullptr) {
           mesh_desc.mesh_type = static_cast<uint8_t>(data::MeshType::kSkinned);
 
-          auto joint_index_sidecar = co_await ResolveBufferSidecar(context,
+          auto joint_index_sidecar = co_await ResolveBufferWithContents(context,
             skinned->joint_index, lod_pointer / "skinning" / "joint_index_ref");
           auto joint_weight_sidecar
             = co_await ResolveBufferSidecar(context, skinned->joint_weight,
@@ -676,6 +864,27 @@ namespace {
             || !joint_weight_sidecar.has_value()
             || !inverse_bind_sidecar.has_value()
             || !joint_remap_sidecar.has_value()) {
+            co_return std::nullopt;
+          }
+          const auto skin_valid = PassesBufferRule(
+            context,
+            [&] -> void {
+              data::CheckSkinBufferRows(data::SkinBufferRows {
+                .joint_indices = joint_index_sidecar->descriptor,
+                .joint_weights = joint_weight_sidecar->descriptor,
+                .inverse_bind_matrices = inverse_bind_sidecar->descriptor,
+                .joint_remap = joint_remap_sidecar->descriptor,
+                .vertex_count
+                = vb_sidecar_opt->descriptor.size_bytes / sizeof(data::Vertex),
+                .joint_count = skinned->joint_count,
+                .influences_per_vertex = skinned->influences_per_vertex,
+              });
+              data::CheckJointIndices(
+                *joint_index_sidecar->contents, skinned->joint_count);
+            },
+            import_codes::kGeometrySkinningBuffersInvalid,
+            lod_pointer / "skinning");
+          if (!skin_valid) {
             co_return std::nullopt;
           }
 
@@ -838,7 +1047,9 @@ namespace {
             }
 
             if (!ResolveMeshViewPair(context, *resolved_vb, *resolved_ib,
-                  view.view_ref, view_pointer, view_desc)) {
+                  view.view_ref, view_pointer, view_desc)
+              || !PassesMeshViewRule(
+                context, view_desc, *resolved_vb, *resolved_ib, view_pointer)) {
               co_return std::nullopt;
             }
           }
@@ -957,11 +1168,10 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
     auto submitter
       = BufferImportSubmitter(session, Request(), FileReader(), StopToken());
-    const auto submission
-      = co_await submitter.SubmitBuffers(source->buffers, pipeline);
-    pipeline.Close();
+    const auto cooked = co_await submitter.CookBuffers(
+      source->buffers, ContentsTheLinkReads(Request(), *source), pipeline);
 
-    if (submission.submitted_count == 0U) {
+    if (cooked.submitted_count == 0U) {
       if (!session.HasErrors()) {
         AddDiagnostic(session, Request(), ImportSeverity::kError,
           std::string(import_codes::kGeometryBufferNoSubmissions),
@@ -972,9 +1182,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       co_return co_await FinalizeWithTelemetry(session);
     }
 
-    const auto emitted
-      = co_await submitter.CollectAndEmit(pipeline, submission);
-    CacheLocalBufferResults(context, emitted);
+    CacheLocalBufferResults(context, cooked.emitted);
   }
 
   const auto prepared_opt = co_await LinkGeometryDescriptor(context, *source);

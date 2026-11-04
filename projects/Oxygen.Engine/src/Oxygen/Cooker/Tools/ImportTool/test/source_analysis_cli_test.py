@@ -512,8 +512,10 @@ class CapturedInputBatchCliTests(unittest.TestCase):
 
     def test_geometry_and_scene_resolve_cooked_references_outside_capture_map(self):
         self.capture("material.json", '{"name":"Stone"}')
+        # A data::Vertex is 18 floats: its position, then its other attributes.
+        vertex_floats = 18
         vertices = b"".join(
-            struct.pack("<8f", *position, 0, 0, 1, 0, 0)
+            struct.pack(f"<{vertex_floats}f", *position, *([0] * (vertex_floats - 3)))
             for position in ((0, 0, 0), (1, 0, 0), (0, 1, 0))
         )
         self.capture("vertices.bin", vertices)
@@ -525,14 +527,14 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         ib = "../Resources/Buffers/indices.obuf"
         buffers = [
             {
-                "uri": name,
+                "source": name,
                 "virtual_path": path,
                 "usage_flags": usage,
                 "element_stride": stride,
                 "views": [{"name": "surface", "element_offset": 0, "element_count": 3}],
             }
             for name, path, usage, stride in (
-                ("vertices.bin", vb, 1, 32),
+                ("vertices.bin", vb, 1, vertex_floats * 4),
                 ("indices.bin", ib, 2, 4),
             )
         ]

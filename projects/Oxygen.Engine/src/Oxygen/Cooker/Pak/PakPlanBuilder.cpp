@@ -833,8 +833,9 @@ struct PlanningState final {
   std::vector<data::PakCatalogBase> layers;
   std::vector<PendingResource> pending_resources;
   //! Buffer descriptor sidecars by the source and source-local buffer index
-  //! they name.
-  std::unordered_map<size_t, std::unordered_map<uint32_t, std::string>>
+  //! they name; identical buffers share a row, each with its own sidecar.
+  std::unordered_map<size_t,
+    std::unordered_map<uint32_t, std::vector<std::string>>>
     buffer_sidecars;
   std::vector<size_t> planned_resource_source_orders;
   std::vector<std::vector<data::AssetKey>>
@@ -1034,8 +1035,9 @@ auto CollectBufferSidecar(PlanningState& state, const SourceCollection& context,
       path);
     return;
   }
-  state.buffer_sidecars[context.order].insert_or_assign(
-    decoded->index.get(), sidecar.name);
+  // Identical buffers share a row, each with its own sidecar.
+  state.buffer_sidecars[context.order][decoded->index.get()].push_back(
+    sidecar.name);
 }
 
 //! Records the source's layer identity, deletions, named textures and buffer
@@ -2231,18 +2233,20 @@ auto ReportDroppedResources(
     if (resource.resource_kind == "buffer" && resource.source_local_index) {
       const auto sidecars = state.buffer_sidecars.find(resource.source_order);
       if (sidecars != state.buffer_sidecars.end()) {
-        if (const auto sidecar
+        if (const auto named
           = sidecars->second.find(*resource.source_local_index);
-          sidecar != sidecars->second.end()) {
-          AddDiagnostic(diagnostics, PakDiagnosticSeverity::kWarning,
-            PakBuildPhase::kPlanning, "pak.plan.sidecar_buffer_dropped",
-            "No packed asset binds buffer "
-              + std::to_string(*resource.source_local_index)
-              + ", which the sidecar '" + sidecar->second
-              + "' still names; the pak drops it.",
-            ToCanonicalSourcePath(
-              state.request->sources.at(resource.source_order).path)
-              / std::filesystem::path(sidecar->second));
+          named != sidecars->second.end()) {
+          for (const auto& sidecar : named->second) {
+            AddDiagnostic(diagnostics, PakDiagnosticSeverity::kWarning,
+              PakBuildPhase::kPlanning, "pak.plan.sidecar_buffer_dropped",
+              "No packed asset binds buffer "
+                + std::to_string(*resource.source_local_index)
+                + ", which the sidecar '" + sidecar
+                + "' still names; the pak drops it.",
+              ToCanonicalSourcePath(
+                state.request->sources.at(resource.source_order).path)
+                / std::filesystem::path(sidecar));
+          }
           continue;
         }
       }

@@ -994,7 +994,7 @@ public sealed class AssetRelocationTests
     private static GeometryDocument BoxGeometry(string folder = "Geometry", string name = "Box", string material = "/Content/Materials/Red.omat")
     {
         var geometry = AuthoredFiles.Geometry($"/Content/{folder}/{name}.ogeo").SubmeshMaterial(0, 0, material).WithIdentityField();
-        return geometry.Append("/buffers", new JsonObject { ["uri"] = "mesh.bin", ["virtual_path"] = geometry.Spell($"/Content/{folder}/{name}.obuf") });
+        return geometry.Append("/buffers", new JsonObject { ["source"] = "mesh.bin", ["virtual_path"] = geometry.Spell($"/Content/{folder}/{name}.obuf") });
     }
 
     private static TextureDocument FarTexture()

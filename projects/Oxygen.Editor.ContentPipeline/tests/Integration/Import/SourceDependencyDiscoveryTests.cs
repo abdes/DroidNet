@@ -212,7 +212,7 @@ public sealed class SourceDependencyDiscoveryTests
         {
             const string source = "Content/Geometry/AuthoredCube.ogeo.json";
             var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-            descriptor["buffers"]![0]!["uri"] = Path.GetRelativePath(Path.Combine(workspace.Root, "Content", "Geometry"), outside).Replace('\\', '/');
+            descriptor["buffers"]![0]!["source"] = Path.GetRelativePath(Path.Combine(workspace.Root, "Content", "Geometry"), outside).Replace('\\', '/');
             workspace.WriteText(source, descriptor.ToJsonString());
             var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
 
@@ -238,7 +238,7 @@ public sealed class SourceDependencyDiscoveryTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         const string source = "Content/Geometry/AuthoredCube.ogeo.json";
         var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-        descriptor["buffers"]![0]!["uri"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
+        descriptor["buffers"]![0]!["source"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
         workspace.WriteText(source, descriptor.ToJsonString());
         var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
 

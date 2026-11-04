@@ -242,10 +242,9 @@ Architectural split:
      creates a `BufferPipeline`, delegates chunk submission and collection to
      `BufferImportSubmitter`, and finalizes the session.
    - stages: `ValidatePayload` → `ParseDescriptor` → `CreatePipeline` →
-     `SubmitChunks` → `CollectAndEmit` → `FinalizeSession`.
-   - note: The job re-parses the JSON for structure (not schema re-validate);
-     full per-entry schema validation occurs inside
-     `BufferImportSubmitter::SubmitBufferChunks`.
+     `CookBuffers` → `FinalizeSession`.
+   - note: `BufferSource::FromContainer` validates the whole document against
+     the schema, then prepares its declarations.
 
 **Submitter (Reusable):**
 
@@ -253,28 +252,21 @@ Architectural split:
    - files:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.h`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
-   - role: two-phase reusable helper for buffer chunk processing. Not a job;
-     used compositionally by `BufferContainerImportJob` and by geometry/scene
-     import pipelines that emit embedded buffer data.
-   - `SubmitBufferChunks(buffer_chunks_json, descriptor_dir, pipeline)`:
-     1. `ParseBufferEntries` — per-entry schema validation, path resolution,
-        virtual path uniqueness check, virtual path → rel-path mapping.
-     2. Per valid entry: async file read via `IAsyncFileReader`.
-     3. Source size cap check (≤ 4 GiB = `uint32_t::max`).
-     4. `NormalizeBufferViews` — validates and resolves
-        `BufferDescriptorViewSpec[]` against `BufferResourceDesc::size_bytes`.
-     5. Submits `BufferPipeline::WorkItem` per entry.
-     - Returns:
-       `Submission { submitted_count, descriptor_relpath_by_source_id, descriptor_views_by_source_id }`.
-   - `CollectAndEmit(pipeline, submission)`:
-     1. Per submitted item: `pipeline.Collect()` → `WorkResult`.
-     2. Calls `session.BufferEmitter().Emit(cooked, source_id)` →
-        `emitted_index` (`ResourceIndexT`).
-     3. Looks up `BufferResourceDesc` from `BufferEmitter::TryGetDescriptor`.
-     4. Detects deduplication virtual path conflicts.
-     5. Calls
-        `session.ResourceDescriptorEmitter().EmitBufferAtRelPath(relpath, emitted_index, descriptor, views)`
-        → writes `.obuf` sidecar.
+   - role: reusable helper for cooking declared buffers. Not a job; used
+     compositionally by `BufferContainerImportJob` and
+     `GeometryDescriptorImportJob`.
+   - `CookBuffers(entries, keep_contents_of, pipeline)` runs two coroutines
+     together, so any number of buffers passes through the bounded queues:
+     - submission, per entry: async file read via `IAsyncFileReader`; source
+       size cap (`kDataBlobMaxSize`); `CheckBufferRow`, the rule every reader of
+       the row applies; `NormalizeBufferViews`; `BufferPipeline::WorkItem`.
+       It closes the pipeline when done.
+     - collection, until `pipeline.CollectNext()` returns nothing:
+       `session.BufferEmitter().Emit(cooked)` → `emitted_index`, then
+       `EmitBuffer(source_id, emitted_index, descriptor, views)` → `.obuf`
+       sidecar.
+   - Equal rows and bytes share one table row whatever their virtual paths;
+     each virtual path has its own sidecar, with its own views.
 
 **Pipeline:**
 
@@ -676,27 +668,26 @@ Buffer import errors are surfaced as diagnostics in `ImportReport` and as log
 messages written to `error_stream`. Error codes follow the pattern
 `buffer.<category>.<key>`:
 
-| Category     | Code Pattern                                   | Key Causes                                                             |
-| ------------ | ---------------------------------------------- | ---------------------------------------------------------------------- |
-| Schema       | `buffer.container.schema_validation_failed`    | Container or entry JSON fields violate schema                          |
-| Schema       | `buffer.container.schema_validator_failure`    | JSON Schema validator internal failure                                 |
-| I/O          | `buffer.container.source_read_failed`          | Binary source file could not be read                                   |
-| Routing      | `buffer.container.request_invalid`             | `request.buffer_container` absent in job                               |
-| Routing      | `buffer.container.request_invalid_json`        | Embedded normalized JSON cannot be parsed                              |
-| Validation   | `buffer.container.buffers_missing`             | `buffers[]` array absent or not an array                               |
-| Validation   | `buffer.container.no_buffers`                  | All entries failed validation; no valid entries remain                 |
-| Validation   | `buffer.container.no_submissions`              | No work items were submitted to pipeline                               |
-| Validation   | `buffer.container.virtual_path_duplicate`      | Two entries share the same `virtual_path`                              |
-| Validation   | `buffer.container.virtual_path_unmounted`      | `virtual_path` names no mount                                          |
-| Validation   | `buffer.container.source_too_large`            | Source file exceeds 4 GiB (`uint32_t::max` bytes)                      |
-| Views        | `buffer.container.view_*`                      | View addressing errors from `NormalizeBufferViews`                     |
-| Reader       | `buffer.container.reader_unavailable`          | `IAsyncFileReader` not injected                                        |
-| Emit         | `buffer.container.descriptor_missing`          | `BufferEmitter::TryGetDescriptor` returned empty                       |
-| Emit         | `buffer.container.sidecar_emit_failed`         | Exception during `.obuf` sidecar write                                 |
-| Emit         | `buffer.container.dedup_virtual_path_conflict` | Two different virtual paths hash-deduplicated to same `ResourceIndexT` |
-| Internal     | `buffer.container.internal_lookup_failed`      | Submission map lookup failed during collection                         |
-| Cancellation | `buffer.cancelled`                             | `stop_token` signalled during job execution                            |
-| Predecessor  | `import.skipped_predecessor_failed`            | A `depends_on` job failed                                              |
+| Category     | Code Pattern                                | Key Causes                                             |
+| ------------ | ------------------------------------------- | ------------------------------------------------------ |
+| Schema       | `buffer.container.schema_validation_failed` | Container or entry JSON fields violate schema          |
+| Schema       | `buffer.container.schema_validator_failure` | JSON Schema validator internal failure                 |
+| I/O          | `buffer.container.source_read_failed`       | Binary source file could not be read                   |
+| Routing      | `buffer.container.request_invalid`          | `request.buffer_container` absent in job               |
+| Routing      | `buffer.container.request_invalid_json`     | Embedded normalized JSON cannot be parsed              |
+| Validation   | `buffer.container.buffers_missing`          | `buffers[]` array absent or not an array               |
+| Validation   | `buffer.container.no_buffers`               | All entries failed validation; no valid entries remain |
+| Validation   | `buffer.container.no_submissions`           | No work items were submitted to pipeline               |
+| Validation   | `buffer.container.virtual_path_duplicate`   | Two entries share the same `virtual_path`              |
+| Validation   | `buffer.container.virtual_path_unmounted`   | `virtual_path` names no mount                          |
+| Validation   | `buffer.container.source_too_large`         | Source file exceeds 4 GiB (`uint32_t::max` bytes)      |
+| Views        | `buffer.container.view_*`                   | View addressing errors from `NormalizeBufferViews`     |
+| Reader       | `buffer.container.reader_unavailable`       | `IAsyncFileReader` not injected                        |
+| Emit         | `buffer.container.descriptor_missing`       | `BufferEmitter::TryGetDescriptor` returned empty       |
+| Emit         | `buffer.container.sidecar_emit_failed`      | Exception during `.obuf` sidecar write                 |
+| Internal     | `buffer.container.internal_lookup_failed`   | Submission map lookup failed during collection         |
+| Cancellation | `buffer.cancelled`                          | `stop_token` signalled during job execution            |
+| Predecessor  | `import.skipped_predecessor_failed`         | A `depends_on` job failed                              |
 
 ---
 
@@ -742,8 +733,7 @@ used by `BufferContainerImportJob`:
 
 ```text
 GeometryPipeline / ScenePipeline
-   └── BufferImportSubmitter::SubmitBufferChunks(chunks, dir, pipeline)
-   └── BufferImportSubmitter::CollectAndEmit(pipeline, submission)
+   └── BufferImportSubmitter::CookBuffers(entries, keep_contents_of, pipeline)
 ```
 
 The resulting `buffers.table` / `buffers.data` / `.obuf` sidecar files are

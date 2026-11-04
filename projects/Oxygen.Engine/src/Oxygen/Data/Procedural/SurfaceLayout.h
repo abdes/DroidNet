@@ -15,6 +15,7 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/Vertex.h>
 
 //! The UV layout and tangent frames of generated surfaces.
@@ -31,6 +32,51 @@ struct MeshBuffers final {
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
 };
+
+//! The most vertices a cooked or generated vertex buffer holds.
+inline constexpr uint64_t kMaxMeshVertices
+  = uint64_t { pak::core::kDataBlobMaxSize } / sizeof(Vertex);
+
+//! The most indices a cooked or generated index buffer holds.
+inline constexpr uint64_t kMaxMeshIndices
+  = uint64_t { pak::core::kDataBlobMaxSize } / sizeof(uint32_t);
+
+//! A grid of cells of two triangles.
+struct GridSize final {
+  uint32_t columns;
+  uint32_t rows;
+};
+
+//! Whether the buffers of `grid` fit the format, which a generator checks
+//! before it allocates them.
+[[nodiscard]] constexpr auto GridFitsMeshBuffers(const GridSize grid) noexcept
+  -> bool
+{
+  constexpr uint64_t kIndicesPerCell = 6U;
+  const auto column_count = uint64_t { grid.columns };
+  const auto row_count = uint64_t { grid.rows };
+  return column_count + 1U <= kMaxMeshVertices / (row_count + 1U)
+    && (grid.rows == 0U
+      || column_count <= kMaxMeshIndices / kIndicesPerCell / row_count);
+}
+
+//! A solid of segments around its axis, at no more than these counts each; a
+//! seam and a pole need two more segments' worth of vertices.
+struct SolidSize final {
+  uint32_t segments;
+  uint32_t vertices_per_segment;
+  uint32_t indices_per_segment;
+};
+
+//! Whether the buffers of `solid` fit the format, which a generator checks
+//! before it allocates them.
+[[nodiscard]] constexpr auto SolidFitsMeshBuffers(
+  const SolidSize solid) noexcept -> bool
+{
+  const auto segment_count = uint64_t { solid.segments };
+  return segment_count + 2U <= kMaxMeshVertices / solid.vertices_per_segment
+    && segment_count <= kMaxMeshIndices / solid.indices_per_segment;
+}
 
 //! A planar face's outward normal, tangent (+U) and bitangent (+V).
 struct FaceFrame final {

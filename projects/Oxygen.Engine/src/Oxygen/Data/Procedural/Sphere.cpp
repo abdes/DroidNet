@@ -6,7 +6,6 @@
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <numbers>
 #include <optional>
 #include <utility>
@@ -51,14 +50,12 @@ auto oxygen::data::MakeSphereMeshAsset(
   unsigned int latitude_segments, unsigned int longitude_segments)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  constexpr auto kMaxCount = std::numeric_limits<uint32_t>::max();
-  constexpr auto kIndicesPerCell = 6U;
   constexpr auto kRadius = 0.5F;
   if (latitude_segments < 3 || longitude_segments < 3
-    || (static_cast<uint64_t>(latitude_segments) + 1U)
-      > kMaxCount / (static_cast<uint64_t>(longitude_segments) + 1U)
-    || (static_cast<uint64_t>(latitude_segments) * longitude_segments)
-      > kMaxCount / kIndicesPerCell) {
+    || !procedural::GridFitsMeshBuffers({
+      .columns = latitude_segments,
+      .rows = longitude_segments,
+    })) {
     return std::nullopt;
   }
 

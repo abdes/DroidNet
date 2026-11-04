@@ -84,7 +84,7 @@ public sealed class CapturedInputCookTests
                 var logicalDescriptor = execution.MountsFile.Resolve(execution.InputRoot, job.AttributedSource);
                 var descriptorPath = CapturedPath(execution, job.AttributedSource);
                 using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath, token).ConfigureAwait(false));
-                var relative = descriptor.RootElement.GetProperty("buffers")[0].GetProperty("uri").GetString()!;
+                var relative = descriptor.RootElement.GetProperty("buffers")[0].GetProperty("source").GetString()!;
                 var capturedBuffer = CapturedPath(execution, Path.GetFullPath(relative, Path.GetDirectoryName(logicalDescriptor)!));
                 _ = capturedBuffer.Should().NotBe(Path.Combine(execution.InputRoot, "Content", "Geometry", "mesh.bin"));
                 _ = (await File.ReadAllTextAsync(capturedBuffer, token).ConfigureAwait(false)).Should().Be("saved buffer bytes");
@@ -120,7 +120,7 @@ public sealed class CapturedInputCookTests
             workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
             source = "Content/Geometry/AuthoredCube.ogeo.json";
             var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
-            descriptor["buffers"]![0]!["uri"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
+            descriptor["buffers"]![0]!["source"] = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
             workspace.WriteText(source, descriptor.ToJsonString());
         }
         else

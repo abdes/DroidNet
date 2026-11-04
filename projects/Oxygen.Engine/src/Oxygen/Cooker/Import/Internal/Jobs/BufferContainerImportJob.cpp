@@ -107,10 +107,9 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto submitter
     = BufferImportSubmitter(session, Request(), FileReader(), StopToken());
-  const auto submission = co_await submitter.SubmitBuffers(*sources, pipeline);
-  pipeline.Close();
+  const auto cooked = co_await submitter.CookBuffers(*sources, {}, pipeline);
 
-  if (submission.submitted_count == 0U) {
+  if (cooked.submitted_count == 0U) {
     if (!session.HasErrors()) {
       AddDiagnostic(session, Request(), ImportSeverity::kError,
         std::string(import_codes::kBufferContainerNoSubmissions),
@@ -120,9 +119,6 @@ auto BufferContainerImportJob::ExecuteAsync() -> co::Co<ImportReport>
       "Buffer container failed before pipeline submission");
     co_return co_await FinalizeWithTelemetry(session);
   }
-
-  [[maybe_unused]] const auto emitted_buffers
-    = co_await submitter.CollectAndEmit(pipeline, submission);
 
   auto report = co_await FinalizeWithTelemetry(session);
   ReportPhaseProgress(

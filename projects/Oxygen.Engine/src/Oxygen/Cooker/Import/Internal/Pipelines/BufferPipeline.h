@@ -135,9 +135,19 @@ public:
   //! Collect one completed result (suspends until ready or closed).
   OXGN_COOK_NDAPI auto Collect() -> co::Co<WorkResult>;
 
+  //! The next completed result, or nothing once the pipeline is closed, its
+  //! workers have finished and every result was collected.
+  /*!
+   A collector that runs while work is submitted loops on this, with no count
+   of what will come, and keeps the bounded queues moving: submitting more than
+   the queues hold before collecting never ends.
+  */
+  OXGN_COOK_NDAPI auto CollectNext() -> co::Co<std::optional<WorkResult>>;
+
   //! Close the input queue.
   /*!
-   Causes workers to eventually exit after draining queued work.
+   Causes workers to eventually exit after draining queued work; the last one
+   to exit closes the output queue, whose results stay collectable.
 
    @note Does not cancel ThreadPool tasks already running.
   */
@@ -194,6 +204,7 @@ private:
   std::atomic<size_t> completed_ { 0 };
   std::atomic<size_t> failed_ { 0 };
   bool started_ = false;
+  uint32_t running_workers_ = 0;
 };
 
 static_assert(ImportPipeline<BufferPipeline>);
