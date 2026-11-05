@@ -28,8 +28,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Core/Types/ShaderRequestRules.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/Vertex.h>
 
 namespace oxygen::content::import {
 namespace {
@@ -432,7 +434,7 @@ namespace {
     return replaced;
   }
 
-  [[nodiscard]] auto SameUvs(const MaterialTextureBinding& first,
+  [[nodiscard]] auto SameSampling(const MaterialTextureBinding& first,
     const MaterialTextureBinding& second) noexcept -> bool
   {
     return first.uv_set == second.uv_set
@@ -440,7 +442,75 @@ namespace {
       && std::ranges::equal(
         first.uv_transform.offset, second.uv_transform.offset)
       && first.uv_transform.rotation_radians
-      == second.uv_transform.rotation_radians;
+      == second.uv_transform.rotation_radians
+      && first.sampler == second.sampler;
+  }
+
+  [[nodiscard]] auto ParseTextureAddress(const std::string_view value)
+    -> std::optional<TextureAddress>
+  {
+    if (value == "repeat") {
+      return TextureAddress::kRepeat;
+    }
+    if (value == "mirror") {
+      return TextureAddress::kMirror;
+    }
+    if (value == "clamp") {
+      return TextureAddress::kClamp;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto ParseTextureFilter(const std::string_view value)
+    -> std::optional<TextureFilter>
+  {
+    if (value == "nearest") {
+      return TextureFilter::kNearest;
+    }
+    if (value == "linear") {
+      return TextureFilter::kLinear;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] auto ParseTextureMipFilter(const std::string_view value)
+    -> std::optional<TextureMipFilter>
+  {
+    if (value == "none") {
+      return TextureMipFilter::kNone;
+    }
+    if (value == "nearest") {
+      return TextureMipFilter::kNearest;
+    }
+    if (value == "linear") {
+      return TextureMipFilter::kLinear;
+    }
+    return std::nullopt;
+  }
+
+  //! Reads a descriptor's `sampler` over the defaults; nothing when a value is
+  //! not one the format knows.
+  [[nodiscard]] auto ParseTextureSampler(const nlohmann::json& source)
+    -> std::optional<TextureSamplerState>
+  {
+    auto sampler = TextureSamplerState {};
+    const auto read = [&source](const char* const key, auto& field,
+                        const auto parse) -> bool {
+      if (!source.contains(key)) {
+        return true;
+      }
+      const auto value = parse(source.at(key).get<std::string>());
+      if (value.has_value()) {
+        field = *value;
+      }
+      return value.has_value();
+    };
+    const auto known = read("address_u", sampler.address_u, ParseTextureAddress)
+      && read("address_v", sampler.address_v, ParseTextureAddress)
+      && read("mag_filter", sampler.mag_filter, ParseTextureFilter)
+      && read("min_filter", sampler.min_filter, ParseTextureFilter)
+      && read("mip_filter", sampler.mip_filter, ParseTextureMipFilter);
+    return known ? std::optional { sampler } : std::nullopt;
   }
 
   //! Whether `grid` is one the renderer can draw: finite, with a spacing, and
@@ -483,49 +553,26 @@ auto MaterialSource::CanPackOrm() const noexcept -> bool
   const auto& roughness = textures.roughness;
   return metallic.assigned && roughness.assigned && !metallic.source_id.empty()
     && metallic.source_id == roughness.source_id
-    && SameUvs(metallic, roughness);
-}
-
-auto MaterialSource::ReportDroppedUvs(const std::string_view source_id,
-  std::vector<ImportDiagnostic>& diagnostics) const -> void
-{
-  const MaterialTextureBinding* first = nullptr;
-  auto second_set = false;
-  auto other_uvs = std::string {};
-  for (const auto& slot : TextureSlots()) {
-    const auto& binding = textures.*slot.binding;
-    if (!binding.assigned) {
-      continue;
-    }
-    second_set = second_set || binding.uv_set != 0U;
-    if (first == nullptr) {
-      first = &binding;
-    } else if (!SameUvs(*first, binding)) {
-      other_uvs += (other_uvs.empty() ? "" : ", ") + std::string(slot.name);
-    }
-  }
-  const auto warn = [&](std::string message) -> void {
-    diagnostics.push_back(ImportDiagnostic {
-      .severity = ImportSeverity::kWarning,
-      .code = std::string(import_codes::kMaterialUvDropped),
-      .message = std::move(message),
-      .source_path = std::string(source_id),
-      .object_path = name,
-    });
-  };
-  if (!other_uvs.empty()) {
-    warn("A material has one UV transform, its first texture's; these use it "
-         "instead of their own: "
-      + other_uvs);
-  }
-  if (second_set) {
-    warn("Vertices have one UV set; textures bound to another use it instead");
-  }
+    && SameSampling(metallic, roughness);
 }
 
 auto MaterialSource::RepairModelInputs(const std::string_view source_id,
   std::vector<ImportDiagnostic>& diagnostics) -> void
 {
+  for (const auto& slot : TextureSlots()) {
+    auto& binding = textures.*slot.binding;
+    if (binding.assigned && binding.uv_set >= data::kUvSetCount) {
+      binding.uv_set = 0U;
+      diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kWarning,
+        .code = std::string(import_codes::kMaterialUvDropped),
+        .message = "Vertices hold two UV sets; the " + std::string(slot.name)
+          + " texture names another and uses the first",
+        .source_path = std::string(source_id),
+        .object_path = name,
+      });
+    }
+  }
   auto repaired = false;
   for (auto& value : inputs.emissive_factor) {
     const auto clamped = std::isfinite(value)
@@ -573,6 +620,12 @@ auto MaterialSource::Validate(const std::string_view source_id,
   if (auto repaired = *this; ReplaceNonFiniteInputs(repaired)) {
     error(std::string(import_codes::kMaterialInputNotFinite),
       "Material values must be finite");
+  }
+  if (std::ranges::any_of(TextureSlots(), [this](const auto& slot) -> bool {
+        return (textures.*slot.binding).uv_set >= data::kUvSetCount;
+      })) {
+    error(std::string(import_codes::kMaterialDescriptorTextureUvInvalid),
+      "A texture must read one of the two UV sets vertices hold");
   }
   if (procedural_grid.has_value() && !IsDrawableGrid(*procedural_grid)) {
     error(std::string(import_codes::kMaterialGridInvalid),
@@ -752,6 +805,20 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
         }
         binding.uv_transform.rotation_radians
           = transform.value("rotation_radians", 0.0F);
+      }
+      if (source.contains("sampler")) {
+        const auto sampler = ParseTextureSampler(source.at("sampler"));
+        if (!sampler.has_value()) {
+          AddError(diagnostics, source_path.string(),
+            std::string(import_codes::kMaterialDescriptorTextureUvInvalid),
+            "Texture sampler holds a wrap or filter mode that does not exist",
+            {},
+            (nlohmann::json::json_pointer {} / "textures"
+              / std::string(slot.name))
+              .to_string());
+          return std::nullopt;
+        }
+        binding.sampler = *sampler;
       }
     }
   }

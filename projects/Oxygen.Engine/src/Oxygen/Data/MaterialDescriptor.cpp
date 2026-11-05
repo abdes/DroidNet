@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -15,11 +16,13 @@
 
 #include <Oxygen/Core/Types/ShaderRequestRules.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/MaterialDescriptor.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 
 namespace {
 
@@ -51,6 +54,37 @@ auto UnknownStages(uint32_t stages) -> uint32_t
   return unknown;
 }
 
+//! Refuses a slot naming a UV set vertices do not hold, a sampler state outside
+//! the table, or a transform that is not finite.
+auto CheckTextureSampling(const render::TextureSlotSampling& sampling) -> void
+{
+  if (sampling.uv_set >= oxygen::data::kUvSetCount) {
+    throw CookedFormatError(CookedDefect::kInvalidValue,
+      fmt::format("material texture UV set {} is unknown", sampling.uv_set));
+  }
+  const auto known_sampler = sampling.address_u < oxygen::kTextureAddressCount
+    && sampling.address_v < oxygen::kTextureAddressCount
+    && sampling.mag_filter < oxygen::kTextureFilterCount
+    && sampling.min_filter < oxygen::kTextureFilterCount
+    && sampling.mip_filter < oxygen::kTextureMipFilterCount;
+  if (!known_sampler) {
+    throw CookedFormatError(
+      CookedDefect::kInvalidValue, "material texture sampler is unknown");
+  }
+  const auto transform = std::array {
+    float { sampling.uv_scale[0] },
+    float { sampling.uv_scale[1] },
+    float { sampling.uv_offset[0] },
+    float { sampling.uv_offset[1] },
+    float { sampling.uv_rotation_radians },
+  };
+  if (!std::ranges::all_of(transform,
+        [](const float value) -> bool { return std::isfinite(value); })) {
+    throw CookedFormatError(CookedDefect::kInvalidValue,
+      "material texture UV transform is not finite");
+  }
+}
+
 auto CheckValues(const render::MaterialAssetDesc& desc) -> void
 {
   const auto known_domain
@@ -78,6 +112,9 @@ auto CheckValues(const render::MaterialAssetDesc& desc) -> void
   if (!emissive_in_range) {
     throw CookedFormatError(
       CookedDefect::kInvalidValue, "material emissive factor is out of range");
+  }
+  for (const auto& sampling : desc.texture_sampling) {
+    CheckTextureSampling(sampling);
   }
 }
 

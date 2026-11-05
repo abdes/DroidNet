@@ -33,6 +33,7 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint4.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/matrix.hpp>
@@ -78,6 +79,7 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -233,6 +235,49 @@ namespace {
     }
 
     return texture;
+  }
+
+  [[nodiscard]] auto ToTextureAddress(const ufbx_wrap_mode mode)
+    -> TextureAddress
+  {
+    return mode == UFBX_WRAP_CLAMP ? TextureAddress::kClamp
+                                   : TextureAddress::kRepeat;
+  }
+
+  //! A material's form of an FBX UV matrix, and whether it had to lose a shear.
+  struct ConvertedUvTransform {
+    MaterialUvTransform nearest;
+    bool sheared = false;
+  };
+
+  //! Converts `uv_to_texture` to the transform a material holds.
+  /*!
+   FBX has V grow up and import flips it at the vertex (v' = 1 - v), so the
+   matrix is conjugated by that flip. The result is the material's form,
+   x' = c*sx*x - s*sy*y + offset.x and y' = s*sx*x + c*sy*y + offset.y, whose
+   columns give scale and rotation. A negative `sy` holds a mirror.
+  */
+  [[nodiscard]] auto ToMaterialUvTransform(const ufbx_matrix& uv_to_texture)
+    -> ConvertedUvTransform
+  {
+    const auto& m = uv_to_texture;
+    const auto column_u = glm::vec2 { m.m00, -m.m10 };
+    const auto column_v = glm::vec2 { -m.m01, m.m11 };
+    const auto scale_u = glm::length(column_u);
+    const auto rotation = std::atan2(column_u.y, column_u.x);
+    const auto along_u = glm::vec2 { std::cos(rotation), std::sin(rotation) };
+    const auto along_v = glm::vec2 { -along_u.y, along_u.x };
+    constexpr auto kShearTolerance = 1.0e-4F;
+    return ConvertedUvTransform {
+      .nearest = MaterialUvTransform {
+        .scale = { scale_u, glm::dot(column_v, along_v) },
+        .offset = { static_cast<float>(m.m03 + m.m01),
+          static_cast<float>(1.0 - m.m11 - m.m13), },
+        .rotation_radians = rotation,
+      },
+      .sheared = std::abs(glm::dot(column_v, along_u))
+        > kShearTolerance * glm::length(column_v),
+    };
   }
 
   [[nodiscard]] auto NormalizeTexturePathId(std::filesystem::path p)
@@ -461,44 +506,6 @@ namespace {
   {
     return stream.exists && stream.values.data != nullptr
       && stream.indices.data != nullptr;
-  }
-
-  [[nodiscard]] auto SameName(
-    const ufbx_string& first, const ufbx_string& second) noexcept -> bool
-  {
-    return std::string_view(first.data, first.length)
-      == std::string_view(second.data, second.length);
-  }
-
-  //! The UV set a mesh keeps beside its first: the one a texture of `materials`
-  //! names, or else its second. Null for a mesh of one set.
-  [[nodiscard]] auto SecondUvSetOf(const ufbx_mesh& mesh,
-    const ufbx_material_list& materials) -> const ufbx_uv_set*
-  {
-    const auto sets = Items(mesh.uv_sets);
-    if (sets.size() < 2U) {
-      return nullptr;
-    }
-    const auto others = sets.subspan(1U);
-    for (const auto* material : Items(materials)) {
-      if (material == nullptr) {
-        continue;
-      }
-      for (const auto& slot : FbxMaterialTextures::From(*material).Slots()) {
-        const auto* texture = slot.Texture();
-        if (texture == nullptr) {
-          continue;
-        }
-        const auto named
-          = std::ranges::find_if(others, [&](const ufbx_uv_set& set) -> bool {
-              return SameName(set.name, texture->uv_set);
-            });
-        if (named != others.end()) {
-          return &*named;
-        }
-      }
-    }
-    return &others.front();
   }
 
   //! The UV set the tangents of a surface with `material` follow: 1 when its
@@ -749,7 +756,7 @@ namespace {
     if (material_node != nullptr && material_node->materials.count > 0) {
       material_list = &material_node->materials;
     }
-    const auto* second_uv_set = SecondUvSetOf(mesh, *material_list);
+    const auto* second_uv_set = SecondUvSetOf(mesh, Items(*material_list));
     // Authored frames belong to one UV set, the one the normal textures read.
     const auto* frame_uv_set
       = std::ranges::any_of(Items(*material_list),
@@ -2840,9 +2847,37 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     return identity->texture_id;
   };
 
-  auto apply_binding = [&](MaterialTextureBinding& binding,
-                         std::optional<std::string> texture_id,
-                         const TextureUsage usage) -> void {
+  const auto first_mesh_of_materials = FirstMeshOfMaterials(scene);
+
+  auto apply_sampling
+    = [&](MaterialTextureBinding& binding, const ufbx_material& material,
+        const ufbx_texture& texture) -> void {
+    const auto first_mesh = first_mesh_of_materials.find(&material);
+    binding.uv_set = BoundUvSet(texture,
+      first_mesh != first_mesh_of_materials.end() ? first_mesh->second
+                                                  : nullptr);
+    const auto& file_texture = *ResolveFileTexture(&texture);
+    binding.sampler.address_u = ToTextureAddress(file_texture.wrap_u);
+    binding.sampler.address_v = ToTextureAddress(file_texture.wrap_v);
+    if (!file_texture.has_uv_transform) {
+      return;
+    }
+    const auto transform = ToMaterialUvTransform(file_texture.uv_to_texture);
+    binding.uv_transform = transform.nearest;
+    if (transform.sheared) {
+      result.diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMaterialUvDropped),
+          "The material's texture UV transform shears, which a material does "
+          "not hold; the texture uses the nearest scale and rotation.",
+          input.source_id_prefix,
+          std::string(material.name.data, material.name.length)));
+    }
+  };
+
+  auto apply_binding
+    = [&](MaterialTextureBinding& binding, const ufbx_material& material,
+        const ufbx_texture* texture, const TextureUsage usage) -> void {
+    const auto texture_id = resolve_texture_id(texture);
     if (!texture_id.has_value()) {
       return;
     }
@@ -2851,7 +2886,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     binding.source_id
       = BuildTextureSourceId(input.source_id_prefix, *texture_id, usage);
     binding.index = 0;
-    binding.uv_set = 0;
+    apply_sampling(binding, material, *texture);
   };
 
   const auto material_count = static_cast<uint32_t>(scene.materials.count);
@@ -3045,56 +3080,55 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           item.material.textures.metallic.assigned = true;
           item.material.textures.metallic.source_id = source_id;
           item.material.textures.metallic.index = 0;
-          item.material.textures.metallic.uv_set = 0;
+          apply_sampling(
+            item.material.textures.metallic, *material, *metallic_tex);
+          // One texture packs both channels, so it is sampled one way.
           item.material.textures.roughness.assigned = true;
           item.material.textures.roughness.source_id = source_id;
           item.material.textures.roughness.index = 0;
-          item.material.textures.roughness.uv_set = 0;
+          apply_sampling(
+            item.material.textures.roughness, *material, *metallic_tex);
 
           const auto* ao_file = ResolveFileTexture(ao_tex);
           if (ao_file != nullptr && ao_file == metallic_file) {
             item.material.textures.ambient_occlusion.assigned = true;
             item.material.textures.ambient_occlusion.source_id = source_id;
             item.material.textures.ambient_occlusion.index = 0;
-            item.material.textures.ambient_occlusion.uv_set = 0;
+            apply_sampling(
+              item.material.textures.ambient_occlusion, *material, *ao_tex);
           }
         }
       }
 
       if (!orm_packed) {
-        apply_binding(item.material.textures.metallic,
-          resolve_texture_id(metallic_tex), TextureUsage::kMetallic);
-        apply_binding(item.material.textures.roughness,
-          resolve_texture_id(roughness_tex), TextureUsage::kRoughness);
+        apply_binding(item.material.textures.metallic, *material, metallic_tex,
+          TextureUsage::kMetallic);
+        apply_binding(item.material.textures.roughness, *material,
+          roughness_tex, TextureUsage::kRoughness);
       }
 
-      apply_binding(item.material.textures.base_color,
-        resolve_texture_id(base_color_tex), TextureUsage::kBaseColor);
-      apply_binding(item.material.textures.normal,
-        resolve_texture_id(normal_tex), TextureUsage::kNormal);
+      apply_binding(item.material.textures.base_color, *material,
+        base_color_tex, TextureUsage::kBaseColor);
+      apply_binding(item.material.textures.normal, *material, normal_tex,
+        TextureUsage::kNormal);
       if (!orm_packed
         || item.material.textures.ambient_occlusion.source_id.empty()) {
-        apply_binding(item.material.textures.ambient_occlusion,
-          resolve_texture_id(ao_tex), TextureUsage::kOcclusion);
+        apply_binding(item.material.textures.ambient_occlusion, *material,
+          ao_tex, TextureUsage::kOcclusion);
       }
-      apply_binding(item.material.textures.emissive,
-        resolve_texture_id(emissive_tex), TextureUsage::kEmissive);
+      apply_binding(item.material.textures.emissive, *material, emissive_tex,
+        TextureUsage::kEmissive);
 
-      apply_binding(item.material.textures.specular,
-        resolve_texture_id(textures.specular.Texture()),
-        TextureUsage::kSpecular);
-      apply_binding(item.material.textures.sheen_color,
-        resolve_texture_id(textures.sheen_color.Texture()),
-        TextureUsage::kSheenColor);
-      apply_binding(item.material.textures.clearcoat,
-        resolve_texture_id(textures.clearcoat.Texture()),
-        TextureUsage::kClearcoat);
-      apply_binding(item.material.textures.clearcoat_normal,
-        resolve_texture_id(textures.clearcoat_normal.Texture()),
-        TextureUsage::kClearcoatNormal);
-      apply_binding(item.material.textures.transmission,
-        resolve_texture_id(textures.transmission.Texture()),
-        TextureUsage::kTransmission);
+      apply_binding(item.material.textures.specular, *material,
+        textures.specular.Texture(), TextureUsage::kSpecular);
+      apply_binding(item.material.textures.sheen_color, *material,
+        textures.sheen_color.Texture(), TextureUsage::kSheenColor);
+      apply_binding(item.material.textures.clearcoat, *material,
+        textures.clearcoat.Texture(), TextureUsage::kClearcoat);
+      apply_binding(item.material.textures.clearcoat_normal, *material,
+        textures.clearcoat_normal.Texture(), TextureUsage::kClearcoatNormal);
+      apply_binding(item.material.textures.transmission, *material,
+        textures.transmission.Texture(), TextureUsage::kTransmission);
 
       item.material.inputs.specular_factor
         = SpecularLevel(*material, textures.specular.Texture() != nullptr);

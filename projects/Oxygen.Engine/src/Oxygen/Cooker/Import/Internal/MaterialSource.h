@@ -18,6 +18,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/MaterialDomain.h>
 
 namespace oxygen::content::import {
@@ -55,6 +56,7 @@ struct MaterialTextureBinding {
   std::string source_id;
   uint8_t uv_set = 0;
   MaterialUvTransform uv_transform;
+  TextureSamplerState sampler;
 };
 
 //! Texture bindings for all material slots.
@@ -168,11 +170,6 @@ struct MaterialSource final {
   //! warning, so the material imports; descriptors are validated as authored.
   OXGN_COOK_API auto RepairModelInputs(std::string_view source_id,
     std::vector<ImportDiagnostic>& diagnostics) -> void;
-
-  //! Warns of what the bindings ask that a material cannot do: it has one UV
-  //! transform, its first binding's, and vertices have one UV set.
-  OXGN_COOK_API auto ReportDroppedUvs(std::string_view source_id,
-    std::vector<ImportDiagnostic>& diagnostics) const -> void;
 
   OXGN_COOK_NDAPI auto CanPackOrm() const noexcept -> bool;
 };

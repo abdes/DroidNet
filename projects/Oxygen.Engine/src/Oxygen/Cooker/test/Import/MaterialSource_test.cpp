@@ -19,6 +19,7 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -248,28 +249,72 @@ namespace {
     EXPECT_TRUE(material.Validate("material", valid));
   }
 
-  //! Until #113 a material has one transform and vertices one UV set: a
-  //! descriptor asking for more hears so.
-  NOLINT_TEST(MaterialSourceTest, DroppedUvsWarn)
+  //! A model file naming a set vertices do not hold reads the first, and hears
+  //! so; a descriptor cannot name one, since validation refuses it.
+  NOLINT_TEST(MaterialSourceTest, ModelBindingPastTheSetsVerticesHoldIsRepaired)
   {
-    const auto warns = [](const MaterialSource& material) -> bool {
-      std::vector<ImportDiagnostic> diagnostics;
-      material.ReportDroppedUvs("material", diagnostics);
-      return HasDiagnosticCode(diagnostics, import_codes::kMaterialUvDropped);
-    };
     auto material = MaterialSource {};
-    material.textures.base_color.assigned = true;
     material.textures.normal.assigned = true;
-    EXPECT_FALSE(warns(material));
+    material.textures.normal.uv_set = 2;
+    auto refused = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(material.Validate("material", refused));
+    EXPECT_TRUE(HasDiagnosticCode(
+      refused, import_codes::kMaterialDescriptorTextureUvInvalid));
 
-    auto second_transform = material;
-    second_transform.textures.normal.uv_transform.scale = { 2.0F, 2.0F };
-    EXPECT_TRUE(warns(second_transform));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    material.RepairModelInputs("material", diagnostics);
 
-    auto second_set = material;
-    second_set.textures.base_color.uv_set = 1;
-    second_set.textures.normal.uv_set = 1;
-    EXPECT_TRUE(warns(second_set));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, import_codes::kMaterialUvDropped));
+    EXPECT_EQ(material.textures.normal.uv_set, 0U);
+    auto valid = std::vector<ImportDiagnostic> {};
+    EXPECT_TRUE(material.Validate("material", valid));
+  }
+
+  NOLINT_TEST(MaterialSourceTest, DescriptorKeepsEachBindingsSampler)
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto result = MaterialSource::FromDescriptor(
+      MaterialDescriptor { "/Content/Materials/Label.omat" }
+        .Texture("base_color", "/Content/label.otex")
+        .Set("/textures/base_color/sampler/address_u", "clamp")
+        .Set("/textures/base_color/sampler/address_v", "mirror")
+        .Set("/textures/base_color/sampler/mag_filter", "nearest")
+        .Set("/textures/base_color/sampler/min_filter", "nearest")
+        .Set("/textures/base_color/sampler/mip_filter", "none")
+        .Set("/textures/base_color/uv_set", 1)
+        .Texture("normal", "/Content/label_n.otex")
+        .Text(),
+      "material.json", "", diagnostics);
+
+    ASSERT_HAS_VALUE(result);
+    EXPECT_EQ(result->textures.base_color.uv_set, 1U);
+    EXPECT_EQ(result->textures.base_color.sampler,
+      (TextureSamplerState {
+        .address_u = TextureAddress::kClamp,
+        .address_v = TextureAddress::kMirror,
+        .mag_filter = TextureFilter::kNearest,
+        .min_filter = TextureFilter::kNearest,
+        .mip_filter = TextureMipFilter::kNone,
+      }));
+    EXPECT_EQ(result->textures.normal.sampler, TextureSamplerState {});
+  }
+
+  //! One texture packing two channels is sampled one way.
+  NOLINT_TEST(MaterialSourceTest, ForcePackedRequiresTheSameSampler)
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto result = MaterialSource::FromDescriptor(
+      MaterialDescriptor { "/Content/Materials/Packed.omat" }
+        .Set("/orm_policy", "force_packed")
+        .Texture("metallic", "/Content/orm.otex")
+        .Texture("roughness", "/Content/orm.otex")
+        .Set("/textures/roughness/sampler/address_u", "clamp")
+        .Text(),
+      "material.json", "", diagnostics);
+    EXPECT_FALSE(result);
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, import_codes::kMaterialOrmPolicy));
   }
 
   NOLINT_TEST(MaterialSourceTest, ForcePackedRequiresTheSameTextureAndUv)

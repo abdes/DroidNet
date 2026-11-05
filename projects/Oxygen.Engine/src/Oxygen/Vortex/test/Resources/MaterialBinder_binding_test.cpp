@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -14,6 +16,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Testing/GTest.h>
@@ -125,10 +128,35 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
   EXPECT_NE(constants.normal_texture_index, kRawNormalIndex);
 }
 
-//! MaterialShadingConstants must reflect the material UV transform fields.
+//! Each slot's constants reflect that slot's sampling, not another's.
 NOLINT_TEST_F(
-  MaterialBinderBindingTest, SerializeMaterialShadingConstantsCopiesUv)
+  MaterialBinderBindingTest, SerializeMaterialShadingConstantsCopiesEachSlot)
 {
+  using oxygen::data::MaterialTextureSlot;
+  using oxygen::data::pak::render::TextureSlotSampling;
+  constexpr auto kSlots = std::array {
+    MaterialTextureSlot::kBaseColor,
+    MaterialTextureSlot::kNormal,
+    MaterialTextureSlot::kMetallic,
+    MaterialTextureSlot::kRoughness,
+    MaterialTextureSlot::kAmbientOcclusion,
+    MaterialTextureSlot::kEmissive,
+  };
+  auto kSampling = std::array<TextureSlotSampling,
+    oxygen::data::kMaterialTextureSlotCount> {};
+  for (const auto slot : kSlots) {
+    const auto n = static_cast<float>(slot) + 1.0F;
+    kSampling[static_cast<std::size_t>(slot)] = TextureSlotSampling {
+      .uv_scale = { 2.0F * n, 3.0F * n },
+      .uv_offset = { 0.25F * n, -0.5F * n },
+      .uv_rotation_radians = 0.1F * n,
+      .uv_set = static_cast<uint8_t>(static_cast<uint8_t>(slot) % 2U),
+      .address_u = static_cast<uint8_t>(oxygen::TextureAddress::kClamp),
+      .address_v = static_cast<uint8_t>(static_cast<uint8_t>(slot) % 3U),
+      .mag_filter = static_cast<uint8_t>(oxygen::TextureFilter::kNearest),
+    };
+  }
+
   constexpr ResourceKey base_color_key {
     22101U,
   };
@@ -153,10 +181,7 @@ NOLINT_TEST_F(
     .raw_base_color_index = 1U,
     .raw_normal_index = 2U,
     .base_color = { 1.0F, 1.0F, 1.0F, 1.0F },
-    .uv_scale = { 2.0F, 3.0F },
-    .uv_offset = { 0.25F, -0.5F },
-    .uv_rotation_radians = 0.75F,
-    .uv_set = 1U,
+    .texture_sampling = kSampling,
   });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
@@ -170,28 +195,63 @@ NOLINT_TEST_F(
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
   const auto& constants = MaterialConstants(handle);
 
-  const auto c = std::cos(0.75F);
-  const auto s = std::sin(0.75F);
-  for (const auto& sampling : {
-         constants.base_color_sampling,
-         constants.normal_sampling,
-         constants.metallic_sampling,
-         constants.roughness_sampling,
-         constants.ambient_occlusion_sampling,
-         constants.emissive_sampling,
-       }) {
-    EXPECT_FLOAT_EQ(sampling.uv_basis_u.x, 2.0F * c);
-    EXPECT_FLOAT_EQ(sampling.uv_basis_u.y, 2.0F * s);
-    EXPECT_FLOAT_EQ(sampling.uv_basis_v.x, -3.0F * s);
-    EXPECT_FLOAT_EQ(sampling.uv_basis_v.y, 3.0F * c);
-    EXPECT_FLOAT_EQ(sampling.uv_offset.x, 0.25F);
-    EXPECT_FLOAT_EQ(sampling.uv_offset.y, -0.5F);
-    EXPECT_EQ(sampling.uv_set, 1U);
-    // Repeat with trilinear filtering, the sampler every material has used.
-    EXPECT_EQ(sampling.sampler_index.get(),
-      oxygen::bindless::generated::kTextureSamplerTableIndex
-        + oxygen::TextureSamplerOffset({}));
+  const auto records = std::array {
+    constants.base_color_sampling,
+    constants.normal_sampling,
+    constants.metallic_sampling,
+    constants.roughness_sampling,
+    constants.ambient_occlusion_sampling,
+    constants.emissive_sampling,
+  };
+  for (std::size_t index = 0; index < records.size(); ++index) {
+    SCOPED_TRACE(index);
+    const auto& sampling = records.at(index);
+    const auto n = static_cast<float>(index) + 1.0F;
+    const auto c = std::cos(0.1F * n);
+    const auto s = std::sin(0.1F * n);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_u.x, 2.0F * n * c);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_u.y, 2.0F * n * s);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_v.x, -3.0F * n * s);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_v.y, 3.0F * n * c);
+    EXPECT_FLOAT_EQ(sampling.uv_offset.x, 0.25F * n);
+    EXPECT_FLOAT_EQ(sampling.uv_offset.y, -0.5F * n);
+    EXPECT_EQ(sampling.uv_set, index % 2U);
+    EXPECT_EQ(sampling.sampler_index,
+      oxygen::TextureSamplerIndex({
+        .address_u = oxygen::TextureAddress::kClamp,
+        .address_v = static_cast<oxygen::TextureAddress>(index % 3U),
+        .mag_filter = oxygen::TextureFilter::kNearest,
+      }));
   }
+}
+
+//! A material that states nothing samples as every material used to: repeat
+//! with trilinear filtering.
+NOLINT_TEST_F(MaterialBinderBindingTest,
+  SerializeMaterialShadingConstantsDefaultsToTrilinear)
+{
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot {
+      1,
+    });
+  MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot {
+      1,
+    });
+
+  oxygen::vortex::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterial({});
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+
+  const auto handle = MatBinder().GetOrAllocate(ref);
+
+  ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+  const auto& constants = MaterialConstants(handle);
+  EXPECT_EQ(constants.base_color_sampling.sampler_index.get(),
+    oxygen::bindless::generated::kTextureSamplerTableIndex
+      + oxygen::TextureSamplerOffset({}));
+  EXPECT_EQ(constants.base_color_sampling.uv_set, 0U);
 }
 
 //! When TextureBinder cannot provide a texture (error index), MaterialBinder

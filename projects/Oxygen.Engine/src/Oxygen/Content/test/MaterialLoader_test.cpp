@@ -27,12 +27,14 @@
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/ProductRefusal.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -187,6 +189,39 @@ NOLINT_TEST_F(MaterialLoaderBasicTest, RejectsNonFiniteEmission)
     CookedDefect::kInvalidValue);
 }
 
+//! A slot's sampling must name a UV set and sampler that exist, and transform
+//! by finite values.
+NOLINT_TEST_F(MaterialLoaderBasicTest, RejectsInvalidTextureSampling)
+{
+  using oxygen::data::pak::render::TextureSlotSampling;
+  const auto invalid = std::array {
+    TextureSlotSampling { .uv_set = 2U },
+    TextureSlotSampling { .address_u = 3U },
+    TextureSlotSampling { .address_v = 3U },
+    TextureSlotSampling { .mag_filter = 2U },
+    TextureSlotSampling { .min_filter = 2U },
+    TextureSlotSampling { .mip_filter = 3U },
+    TextureSlotSampling {
+      .uv_scale = { std::numeric_limits<float>::infinity(), 1.0F },
+    },
+    TextureSlotSampling {
+      .uv_offset = { 0.0F, std::numeric_limits<float>::quiet_NaN() },
+    },
+    TextureSlotSampling {
+      .uv_rotation_radians = std::numeric_limits<float>::infinity(),
+    },
+  };
+  for (const auto& sampling : invalid) {
+    ASSERT_TRUE(desc_stream_.Seek(oxygen::serio::ByteOffset { 0 }));
+    auto desc = MakeMaterialDescriptor("Invalid sampling");
+    desc.texture_sampling[3] = sampling;
+    WriteMaterialDescriptor(desc);
+
+    ExpectDefect([&] { (void)LoadMaterialAsset(CreateLoaderContext()); },
+      CookedDefect::kInvalidValue);
+  }
+}
+
 //! Test: LoadMaterialAsset returns valid MaterialAsset for correct input.
 /*!
   Scenario: Loads a MaterialAsset from a binary descriptor and shader reference
@@ -218,8 +253,6 @@ NOLINT_TEST_F(
   constexpr float kRoughness = 0.2F;
   constexpr float kOcclusion = 0.9F;
   constexpr auto kTextureSlots = std::array { 42U, 43U, 44U, 45U, 46U };
-  constexpr auto kUvScale = std::array { 2.0F, 3.0F };
-  constexpr auto kUvOffset = std::array { 0.25F, 0.75F };
   desc.flags = kFlags;
   desc.shader_stages = kShaderStages;
   std::ranges::copy(kBaseColor, std::begin(desc.base_color));
@@ -237,10 +270,18 @@ NOLINT_TEST_F(
     = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(3) };
   desc.ambient_occlusion_texture
     = oxygen::data::ResourceReferenceIndex { kTextureSlots.at(4) };
-  std::ranges::copy(kUvScale, std::begin(desc.uv_scale));
-  std::ranges::copy(kUvOffset, std::begin(desc.uv_offset));
-  desc.uv_rotation_radians = 0.5F;
-  desc.uv_set = 1U;
+  // The last slot, so the read stays in step across all of them.
+  desc.texture_sampling[11] = oxygen::data::pak::render::TextureSlotSampling {
+    .uv_scale = { 2.0F, 3.0F },
+    .uv_offset = { 0.25F, 0.75F },
+    .uv_rotation_radians = 0.5F,
+    .uv_set = 1U,
+    .address_u = 2U,
+    .address_v = 1U,
+    .mag_filter = 0U,
+    .min_filter = 0U,
+    .mip_filter = 0U,
+  };
 
   const std::array<ShaderReferenceDesc, 2> shader_descs {
     MakeShaderReferenceDesc(ShaderType::kVertex,
@@ -276,11 +317,25 @@ NOLINT_TEST_F(
   EXPECT_NEAR(asset->GetMetalness(), 0.7F, 1.0F / 65535.0F);
   EXPECT_NEAR(asset->GetRoughness(), 0.2F, 1.0F / 65535.0F);
   EXPECT_NEAR(asset->GetAmbientOcclusion(), 0.9F, 1.0F / 65535.0F);
-  EXPECT_THAT(asset->GetUvScale(), ::testing::ElementsAre(Eq(2.0F), Eq(3.0F)));
-  EXPECT_THAT(
-    asset->GetUvOffset(), ::testing::ElementsAre(Eq(0.25F), Eq(0.75F)));
-  EXPECT_FLOAT_EQ(asset->GetUvRotationRadians(), 0.5F);
-  EXPECT_EQ(asset->GetUvSet(), 1U);
+  using oxygen::data::MaterialTextureSlot;
+  const auto& sampling
+    = asset->GetTextureSampling(MaterialTextureSlot::kThickness);
+  EXPECT_FLOAT_EQ(sampling.uv_scale[0], 2.0F);
+  EXPECT_FLOAT_EQ(sampling.uv_scale[1], 3.0F);
+  EXPECT_FLOAT_EQ(sampling.uv_offset[0], 0.25F);
+  EXPECT_FLOAT_EQ(sampling.uv_offset[1], 0.75F);
+  EXPECT_FLOAT_EQ(sampling.uv_rotation_radians, 0.5F);
+  EXPECT_EQ(sampling.uv_set, 1U);
+  EXPECT_EQ(asset->GetTextureSamplerState(MaterialTextureSlot::kThickness),
+    (oxygen::TextureSamplerState {
+      .address_u = oxygen::TextureAddress::kClamp,
+      .address_v = oxygen::TextureAddress::kMirror,
+      .mag_filter = oxygen::TextureFilter::kNearest,
+      .min_filter = oxygen::TextureFilter::kNearest,
+      .mip_filter = oxygen::TextureMipFilter::kNone,
+    }));
+  EXPECT_EQ(asset->GetTextureSamplerState(MaterialTextureSlot::kBaseColor),
+    oxygen::TextureSamplerState {});
 
   EXPECT_THAT(asset->GetBaseColor(),
     ::testing::Pointwise(

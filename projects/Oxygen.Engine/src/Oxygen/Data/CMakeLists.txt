@@ -71,6 +71,7 @@ set(
   "MaterialAsset.h"
   "MaterialDescriptor.h"
   "MaterialDomain.h"
+  "MaterialTextureSlot.h"
   "StableId.h"
   "SurfaceId.h"
   "SurfaceInventory.h"

@@ -45,7 +45,6 @@ namespace {
     desc.normal_scale = 1.0F;
     desc.roughness = data::Unorm16 { 1.0F };
     desc.ambient_occlusion = data::Unorm16 { 1.0F };
-    desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
     desc.grid_spacing[0] = desc.grid_spacing[1] = 1.0F;
     desc.grid_major_every = 1U;
     // Line widths as wide as the spacing cover the whole surface.

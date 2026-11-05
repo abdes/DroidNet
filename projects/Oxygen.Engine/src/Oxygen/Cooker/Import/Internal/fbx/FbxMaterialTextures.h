@@ -9,6 +9,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <span>
+#include <string_view>
+#include <unordered_map>
 
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 
@@ -194,5 +197,89 @@ struct FbxMaterialTextures final {
       [](const auto& slot) -> auto { return slot.Texture() != nullptr; });
   }
 };
+
+[[nodiscard]] inline auto SameName(
+  const ufbx_string& first, const ufbx_string& second) noexcept -> bool
+{
+  return std::string_view(first.data, first.length)
+    == std::string_view(second.data, second.length);
+}
+
+//! The materials a node's mesh draws with.
+[[nodiscard]] inline auto MaterialsOf(const ufbx_node& node) noexcept
+  -> std::span<ufbx_material* const>
+{
+  const auto& materials = node.materials.count != 0U || node.mesh == nullptr
+    ? node.materials
+    : node.mesh->materials;
+  return { materials.data, materials.count };
+}
+
+//! The UV set a mesh keeps beside its first: the one a texture of `materials`
+//! names, or else its second. Null for a mesh of one set.
+[[nodiscard]] inline auto SecondUvSetOf(const ufbx_mesh& mesh,
+  const std::span<ufbx_material* const> materials) -> const ufbx_uv_set*
+{
+  const auto sets = std::span(mesh.uv_sets.data, mesh.uv_sets.count);
+  if (sets.size() < 2U) {
+    return nullptr;
+  }
+  const auto others = sets.subspan(1U);
+  for (const auto* material : materials) {
+    if (material == nullptr) {
+      continue;
+    }
+    for (const auto& slot : FbxMaterialTextures::From(*material).Slots()) {
+      const auto* texture = slot.Texture();
+      if (texture == nullptr) {
+        continue;
+      }
+      const auto named
+        = std::ranges::find_if(others, [&](const ufbx_uv_set& set) -> bool {
+            return SameName(set.name, texture->uv_set);
+          });
+      if (named != others.end()) {
+        return &*named;
+      }
+    }
+  }
+  return &others.front();
+}
+
+//! The first mesh of the scene that draws with each material.
+[[nodiscard]] inline auto FirstMeshOfMaterials(const ufbx_scene& scene)
+  -> std::unordered_map<const ufbx_material*, const ufbx_mesh*>
+{
+  auto meshes = std::unordered_map<const ufbx_material*, const ufbx_mesh*> {};
+  for (const auto* node : std::span(scene.nodes.data, scene.nodes.count)) {
+    if (node->mesh == nullptr) {
+      continue;
+    }
+    for (const auto* material : MaterialsOf(*node)) {
+      meshes.try_emplace(material, node->mesh);
+    }
+  }
+  return meshes;
+}
+
+//! The UV set a material binding reads for `texture`: 1 when it names a set
+//! other than the first of `mesh`, the first mesh drawing with the material.
+//! A name no set has reads the first.
+[[nodiscard]] inline auto BoundUvSet(
+  const ufbx_texture& texture, const ufbx_mesh* mesh) -> uint8_t
+{
+  if (mesh == nullptr || mesh->uv_sets.count < 2U
+    || texture.uv_set.length == 0U) {
+    return 0U;
+  }
+  const auto others
+    = std::span(mesh->uv_sets.data, mesh->uv_sets.count).subspan(1U);
+  return std::ranges::any_of(others,
+           [&](const ufbx_uv_set& set) -> bool {
+             return SameName(set.name, texture.uv_set);
+           })
+    ? uint8_t { 1 }
+    : uint8_t { 0 };
+}
 
 } // namespace oxygen::content::import::adapters

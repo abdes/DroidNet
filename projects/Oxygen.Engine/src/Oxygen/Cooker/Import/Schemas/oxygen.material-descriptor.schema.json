@@ -119,10 +119,34 @@
         "uv_set": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 255
+          "maximum": 1
         },
         "uv_transform": {
           "$ref": "#/definitions/uv_transform"
+        },
+        "sampler": {
+          "$ref": "#/definitions/texture_sampler"
+        }
+      }
+    },
+    "texture_sampler": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address_u": {
+          "enum": ["repeat", "mirror", "clamp"]
+        },
+        "address_v": {
+          "enum": ["repeat", "mirror", "clamp"]
+        },
+        "mag_filter": {
+          "enum": ["nearest", "linear"]
+        },
+        "min_filter": {
+          "enum": ["nearest", "linear"]
+        },
+        "mip_filter": {
+          "enum": ["none", "nearest", "linear"]
         }
       }
     },

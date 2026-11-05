@@ -462,7 +462,6 @@ NOLINT_TEST_F(
             material_desc.ambient_occlusion = data::Unorm16 {
               1,
             };
-            material_desc.uv_scale[0] = material_desc.uv_scale[1] = 1;
             for (auto& v : material_desc.emissive_factor) {
               v = base_color_source ? 0.0F : 1.0F;
             }

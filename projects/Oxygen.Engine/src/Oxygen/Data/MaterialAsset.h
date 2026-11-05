@@ -17,12 +17,15 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/api_export.h>
@@ -74,28 +77,44 @@ public:
     return static_cast<MaterialDomain>(desc_.material_domain);
   }
 
-  //! Returns the global UV scale (tiling) for the material.
-  [[nodiscard]] auto GetUvScale() const noexcept -> std::array<float, 2>
+  //! Returns how `slot` samples its texture.
+  [[nodiscard]] auto GetTextureSampling(
+    const MaterialTextureSlot slot) const noexcept
+    -> const pak::render::TextureSlotSampling&
   {
-    return { desc_.uv_scale[0], desc_.uv_scale[1] };
+    return desc_.texture_sampling[static_cast<std::size_t>(slot)];
   }
 
-  //! Returns the global UV offset for the material.
-  [[nodiscard]] auto GetUvOffset() const noexcept -> std::array<float, 2>
+  //! Returns the wrap and filter state of `slot`.
+  [[nodiscard]] auto GetTextureSamplerState(
+    const MaterialTextureSlot slot) const noexcept -> TextureSamplerState
   {
-    return { desc_.uv_offset[0], desc_.uv_offset[1] };
+    const auto& sampling = GetTextureSampling(slot);
+    return TextureSamplerState {
+      .address_u = static_cast<TextureAddress>(sampling.address_u),
+      .address_v = static_cast<TextureAddress>(sampling.address_v),
+      .mag_filter = static_cast<TextureFilter>(sampling.mag_filter),
+      .min_filter = static_cast<TextureFilter>(sampling.min_filter),
+      .mip_filter = static_cast<TextureMipFilter>(sampling.mip_filter),
+    };
   }
 
-  //! Returns the global UV rotation in radians.
-  [[nodiscard]] auto GetUvRotationRadians() const noexcept -> float
+  //! Mixes the sampling of every slot into `seed`.
+  auto HashTextureSampling(std::size_t& seed) const noexcept -> void
   {
-    return desc_.uv_rotation_radians;
-  }
-
-  //! Returns the UV set index used by the global transform.
-  [[nodiscard]] auto GetUvSet() const noexcept -> uint8_t
-  {
-    return desc_.uv_set;
+    for (const auto& sampling : desc_.texture_sampling) {
+      HashCombine(seed, float { sampling.uv_scale[0] });
+      HashCombine(seed, float { sampling.uv_scale[1] });
+      HashCombine(seed, float { sampling.uv_offset[0] });
+      HashCombine(seed, float { sampling.uv_offset[1] });
+      HashCombine(seed, float { sampling.uv_rotation_radians });
+      HashCombine(seed, uint8_t { sampling.uv_set });
+      HashCombine(seed, uint8_t { sampling.address_u });
+      HashCombine(seed, uint8_t { sampling.address_v });
+      HashCombine(seed, uint8_t { sampling.mag_filter });
+      HashCombine(seed, uint8_t { sampling.min_filter });
+      HashCombine(seed, uint8_t { sampling.mip_filter });
+    }
   }
 
   //! Returns the material flags bitfield.

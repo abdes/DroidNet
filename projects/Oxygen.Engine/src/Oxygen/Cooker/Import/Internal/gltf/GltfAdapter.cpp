@@ -90,6 +90,7 @@
 #include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
@@ -1082,13 +1083,68 @@ namespace {
     return reads_second_set ? uint8_t { 1 } : uint8_t { 0 };
   }
 
-  //! The UV set a material binding stores. A set no binding can hold names no
-  //! set a mesh has either, and the geometry warns about it.
+  //! The UV set a material binding stores, as the file names it. A set past
+  //! those a vertex holds reads as the first one past, which `MaterialSource`
+  //! repairs with a warning.
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
   {
     const auto declared = DeclaredUvSet(view);
-    return std::in_range<uint8_t>(declared) ? static_cast<uint8_t>(declared)
-                                            : uint8_t { 0 };
+    return declared >= 0 && std::cmp_less(declared, data::kUvSetCount)
+      ? static_cast<uint8_t>(declared)
+      : data::kUvSetCount;
+  }
+
+  [[nodiscard]] auto ToTextureAddress(const cgltf_wrap_mode mode)
+    -> TextureAddress
+  {
+    switch (mode) {
+    case cgltf_wrap_mode_clamp_to_edge:
+      return TextureAddress::kClamp;
+    case cgltf_wrap_mode_mirrored_repeat:
+      return TextureAddress::kMirror;
+    case cgltf_wrap_mode_repeat:
+      break;
+    }
+    return TextureAddress::kRepeat;
+  }
+
+  //! The sampler a file states; a filter it leaves undefined is linear.
+  [[nodiscard]] auto ToTextureSampler(const cgltf_sampler& sampler)
+    -> TextureSamplerState
+  {
+    auto state = TextureSamplerState {
+      .address_u = ToTextureAddress(sampler.wrap_s),
+      .address_v = ToTextureAddress(sampler.wrap_t),
+      .mag_filter = sampler.mag_filter == cgltf_filter_type_nearest
+        ? TextureFilter::kNearest
+        : TextureFilter::kLinear,
+    };
+    switch (sampler.min_filter) {
+    case cgltf_filter_type_nearest:
+      state.min_filter = TextureFilter::kNearest;
+      state.mip_filter = TextureMipFilter::kNone;
+      break;
+    case cgltf_filter_type_linear:
+      state.min_filter = TextureFilter::kLinear;
+      state.mip_filter = TextureMipFilter::kNone;
+      break;
+    case cgltf_filter_type_nearest_mipmap_nearest:
+      state.min_filter = TextureFilter::kNearest;
+      state.mip_filter = TextureMipFilter::kNearest;
+      break;
+    case cgltf_filter_type_linear_mipmap_nearest:
+      state.min_filter = TextureFilter::kLinear;
+      state.mip_filter = TextureMipFilter::kNearest;
+      break;
+    case cgltf_filter_type_nearest_mipmap_linear:
+      state.min_filter = TextureFilter::kNearest;
+      state.mip_filter = TextureMipFilter::kLinear;
+      break;
+    case cgltf_filter_type_undefined:
+    case cgltf_filter_type_linear_mipmap_linear:
+      break;
+    }
+    return state;
   }
 
   auto ApplyTextureBinding(MaterialTextureBinding& binding,
@@ -1109,6 +1165,9 @@ namespace {
         = static_cast<float>(view.transform.offset[1]);
       binding.uv_transform.rotation_radians
         = static_cast<float>(view.transform.rotation);
+    }
+    if (view.texture != nullptr && view.texture->sampler != nullptr) {
+      binding.sampler = ToTextureSampler(*view.texture->sampler);
     }
 
     DLOG_F(INFO,

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma once
-
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -93,13 +91,6 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.metalness = Unorm16 { 0.0F }; // Non-metallic
     desc.roughness = Unorm16 { 0.8F }; // Fairly rough (diffuse-like)
     desc.ambient_occlusion = Unorm16 { 1.0F }; // No AO
-
-    desc.uv_scale[0] = 1.0F;
-    desc.uv_scale[1] = 1.0F;
-    desc.uv_offset[0] = 0.0F;
-    desc.uv_offset[1] = 0.0F;
-    desc.uv_rotation_radians = 0.0F;
-    desc.uv_set = 0;
 
     // No shader references initially - renderer will provide appropriate
     // shaders

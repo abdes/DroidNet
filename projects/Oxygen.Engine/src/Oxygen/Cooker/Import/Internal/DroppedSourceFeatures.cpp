@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <optional>
 #include <ranges>
 #include <set>
 #include <span>
@@ -28,29 +27,6 @@
 
 namespace oxygen::content::import::internal {
 namespace {
-
-  struct TextureCoordinates {
-    cgltf_int set = 0;
-    std::array<cgltf_float, 2> scale { 1.0F, 1.0F };
-    std::array<cgltf_float, 2> offset {};
-    cgltf_float rotation = 0.0F;
-
-    auto operator==(const TextureCoordinates&) const -> bool = default;
-  };
-
-  auto Coordinates(const cgltf_texture_view& view) -> TextureCoordinates
-  {
-    const bool transformed = view.has_transform != 0;
-    const bool texcoord_set = transformed && view.transform.has_texcoord != 0;
-    return {
-      .set = texcoord_set ? view.transform.texcoord : view.texcoord,
-      .scale = transformed ? std::to_array(view.transform.scale)
-                           : std::array { 1.0F, 1.0F },
-      .offset = transformed ? std::to_array(view.transform.offset)
-                            : std::array<cgltf_float, 2> {},
-      .rotation = transformed ? view.transform.rotation : 0.0F,
-    };
-  }
 
   //! Reports a source feature the import leaves out. The message says what is
   //! left out and what the imported content is instead; the object name is the
@@ -175,51 +151,6 @@ namespace {
       Drop(present, std::move(message), source_path, object_path, diagnostics,
         name);
     };
-    // Every texture the material format holds.
-    const auto imported_textures = std::array {
-      &material.pbr_metallic_roughness.base_color_texture,
-      &material.pbr_metallic_roughness.metallic_roughness_texture,
-      &material.normal_texture,
-      &material.occlusion_texture,
-      &material.emissive_texture,
-      &material.specular.specular_texture,
-      &material.sheen.sheen_color_texture,
-      &material.clearcoat.clearcoat_texture,
-      &material.clearcoat.clearcoat_normal_texture,
-      &material.transmission.transmission_texture,
-      &material.volume.thickness_texture,
-    };
-    auto coordinates = std::optional<TextureCoordinates> {};
-    auto conflicting = false;
-    auto custom_sampling = false;
-    for (const auto* view : imported_textures) {
-      if (view->texture == nullptr) {
-        continue;
-      }
-      const auto current = Coordinates(*view);
-      if (!coordinates.has_value()) {
-        coordinates = current;
-      } else {
-        conflicting = conflicting || *coordinates != current;
-      }
-      if (const auto* sampler = view->texture->sampler; sampler != nullptr) {
-        custom_sampling = custom_sampling
-          || sampler->wrap_s != cgltf_wrap_mode_repeat
-          || sampler->wrap_t != cgltf_wrap_mode_repeat
-          || (sampler->mag_filter != cgltf_filter_type_undefined
-            && sampler->mag_filter != cgltf_filter_type_linear)
-          || (sampler->min_filter != cgltf_filter_type_undefined
-            && sampler->min_filter != cgltf_filter_type_linear_mipmap_linear);
-      }
-    }
-    drop(conflicting,
-      "The material's textures use different UV sets or transforms, which a "
-      "material does not hold; every texture uses those of the first one.",
-      path);
-    drop(custom_sampling,
-      "The material's texture wrap and filter modes are not imported; its "
-      "textures repeat and use trilinear filtering.",
-      path);
     drop(material.has_specular != 0
         && std::ranges::any_of(material.specular.specular_color_factor,
           [](const auto value) -> bool { return value != 1.0F; }),
@@ -472,21 +403,13 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
         "The material's layered or procedural textures are not imported; the "
         "material imports without them.",
         source_path, path, diagnostics, material_name);
-      Drop(texture->has_uv_transform,
-        "The material's texture UV transforms are not imported; its textures "
-        "map without them.",
-        source_path, path, diagnostics, material_name);
-      Drop(texture->wrap_u != UFBX_WRAP_REPEAT
-          || texture->wrap_v != UFBX_WRAP_REPEAT,
-        "The material's texture wrap modes are not imported; its textures "
-        "repeat.",
-        source_path, path, diagnostics, material_name);
     }
     Drop(material->features.sheen.enabled && pbr.sheen_roughness.has_value
         && pbr.sheen_roughness.value_real != 0.0,
       "The material's sheen roughness is not imported; its sheen is smooth.",
       source_path, path, diagnostics, material_name);
   }
+  const auto first_meshes = adapters::FirstMeshOfMaterials(source);
   for (const auto& [index, node] :
     std::views::enumerate(std::span(source.nodes.data, source.nodes.count))) {
     if (node->mesh == nullptr) {
@@ -494,28 +417,46 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
     }
     const auto& mesh = *node->mesh;
     const auto uv_sets = std::span(mesh.uv_sets.data, mesh.uv_sets.count);
-    const auto emitted_uv = uv_sets.empty()
-      ? std::string_view {}
-      : std::string_view(
-          uv_sets.front().name.data, uv_sets.front().name.length);
-    const auto& materials
-      = node->materials.count != 0U ? node->materials : mesh.materials;
-    for (const auto* material : std::span(materials.data, materials.count)) {
-      for (const auto slot :
-        adapters::FbxMaterialTextures::From(*material).Slots()) {
-        const auto* texture = slot.Texture();
-        if (texture == nullptr || texture->uv_set.length == 0U) {
-          continue;
-        }
-        const auto requested
-          = std::string_view(texture->uv_set.data, texture->uv_set.length);
-        Drop(requested != emitted_uv,
-          "Texture UV set '" + std::string(requested)
-            + "' is not imported; the mesh carries only '"
-            + std::string(emitted_uv) + "', which the texture uses.",
-          source_path, "/Nodes/" + std::to_string(index), diagnostics,
-          NameOf(node->name));
-      }
+    if (uv_sets.size() < 2U) {
+      continue;
+    }
+    // A material holds one set per texture, chosen on the first mesh drawing
+    // with it: this mesh may give that choice another set than the one named.
+    const auto materials = adapters::MaterialsOf(*node);
+    const auto* second = adapters::SecondUvSetOf(mesh, materials);
+    const auto reads_named_set = [&](const ufbx_material& material,
+                                   const ufbx_texture& texture) -> bool {
+      const auto first_mesh = first_meshes.find(&material);
+      const auto bound = adapters::BoundUvSet(texture,
+        first_mesh != first_meshes.end() ? first_mesh->second : nullptr);
+      const auto& read = bound == 0U ? uv_sets.front() : *second;
+      return adapters::SameName(read.name, texture.uv_set)
+        || std::ranges::none_of(uv_sets, [&](const ufbx_uv_set& set) -> bool {
+             return adapters::SameName(set.name, texture.uv_set);
+           });
+    };
+    const auto disagrees = std::ranges::any_of(
+      materials, [&](const ufbx_material* material) -> bool {
+        const auto slots
+          = adapters::FbxMaterialTextures::From(*material).Slots();
+        return std::ranges::any_of(slots, [&](const auto& slot) -> bool {
+          const auto* texture = slot.Texture();
+          return texture != nullptr && texture->uv_set.length != 0U
+            && !reads_named_set(*material, *texture);
+        });
+      });
+    if (disagrees) {
+      diagnostics.push_back(ImportDiagnostic {
+        .severity = ImportSeverity::kWarning,
+        .code = std::string(import_codes::kMeshUvSetConflict),
+        .message
+        = "A texture names a UV set of this mesh that its material reads as "
+          "another; a material chooses each texture's set on the first mesh "
+          "drawing with it.",
+        .source_path = std::string(source_path),
+        .object_path = "/Nodes/" + std::to_string(index),
+        .object_name = std::string(NameOf(node->name)),
+      });
     }
   }
 }

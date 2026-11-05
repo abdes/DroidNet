@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <shared_mutex>
 #include <utility>
 #include <vector>
@@ -59,8 +60,8 @@ namespace {
         }
       }
 
-      for (auto it = children.rbegin(); it != children.rend(); ++it) {
-        stack.push_back(*it);
+      for (auto& it : std::views::reverse(children)) {
+        stack.push_back(it);
       }
     }
   }
@@ -86,16 +87,7 @@ namespace {
     oxygen::HashCombine(seed, material.GetFlags());
     oxygen::HashCombine(seed, material.GetAlphaCutoff());
 
-    const auto uv_scale = material.GetUvScale();
-    oxygen::HashCombine(seed, uv_scale[0]);
-    oxygen::HashCombine(seed, uv_scale[1]);
-
-    const auto uv_offset = material.GetUvOffset();
-    oxygen::HashCombine(seed, uv_offset[0]);
-    oxygen::HashCombine(seed, uv_offset[1]);
-
-    oxygen::HashCombine(seed, material.GetUvRotationRadians());
-    oxygen::HashCombine(seed, material.GetUvSet());
+    material.HashTextureSampling(seed);
 
     for (const auto& shader : material.GetShaders()) {
       oxygen::HashCombine(seed, shader.GetShaderType());

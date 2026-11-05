@@ -178,7 +178,6 @@ namespace {
         desc.roughness = data::Unorm16 { 0.25F };
         desc.ambient_occlusion = data::Unorm16 { 1.0F };
         desc.normal_scale = 1.0F;
-        desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
         ASSERT_TRUE(mesh_node.GetRenderable().SetMaterialOverride(
           FirstSurfaceOf(mesh_node),
           std::make_shared<data::MaterialAsset>(

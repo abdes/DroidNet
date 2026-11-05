@@ -45,7 +45,7 @@ In scope:
 4. Shader reference cooking: explicit shader stage arrays or synthesized
    defaults.
 5. Loose-cooked descriptor emission (`.omat`) via `LooseCookedLayout`.
-6. Binary format: `MaterialAssetDesc` (306 bytes) + `ShaderReferenceDesc[]` (21
+6. Binary format: `MaterialAssetDesc` (597 bytes) + `ShaderReferenceDesc[]` (21
    bytes each) + the descriptor string table, in `PakFormat_render.h`.
 7. Runtime loading via `MaterialLoader` and `MaterialAsset`.
 8. Manifest batch orchestration with texture dependency ordering.
@@ -98,7 +98,7 @@ The following facts were confirmed during the documentation pass:
 | Route discriminant is request payload presence | `src/Oxygen/Cooker/Import/AsyncImportService.cpp` (`const bool is_material_descriptor_request = request.material_descriptor.has_value()`)                |
 | Manifest job type exists                       | `src/Oxygen/Cooker/Import/ImportManifest.cpp`: `if (job_type == "material-descriptor")`                                                                  |
 | Schema is embedded                             | `src/Oxygen/Cooker/Import/Internal/ImportManifest_schema.h` (`kMaterialDescriptorSchema`)                                                                |
-| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==306)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
+| Binary format is locked                        | `src/Oxygen/Data/PakFormat_render.h` (`MaterialAssetDesc`, `static_assert(sizeof(...))==597)`, `ShaderReferenceDesc`, `static_assert(sizeof(...))==21)`) |
 | Loose cooked layout for materials              | The descriptor lives at its identity: `/Content/Wood/Floor.omat` is `Wood/Floor.omat` under the cooked root (`internal::PlaceAsset`)                     |
 | Texture sidecar reader exists                  | `src/Oxygen/Cooker/Import/Internal/Jobs/MaterialDescriptorImportJob.cpp` (`TextureSidecarFile`, `ResolveTextureIndexFromVirtualPath`)                    |
 | Runtime loader for materials exists            | `src/Oxygen/Content/Loaders/MaterialLoader.h` (`LoadMaterialAsset`)                                                                                      |
@@ -249,18 +249,18 @@ Architectural split:
      4. `ApplyMaterialInputs` — normalizes PBR scalars (clamp, Unorm16,
         HalfFloat encoding, `roughness_as_glossiness` inversion).
      5. `ResolveOrmPacked` — for `kAuto`, enables ORM if metallic and roughness
-        share same `source_id` + uv_set; for `kForcePacked`, errors if
+        share same `source_id`, uv set, transform and sampler; for `kForcePacked`, errors if
         incompatible; for `kForceSeparate`, always returns `std::nullopt`.
      6. `HasAnyAssignedTextures` — clears `kMaterialFlag_NoTextureSampling` if
         any slot has `assigned=true`.
      7. `AssignTextureIndices` — fills all 12 `*_texture` fields; if ORM packed,
         `metallic_texture = roughness_texture = orm_index`.
-     8. `BuildMaterialUvTransformDesc` — extracts UV scale/offset/rotation from
-        the first assigned binding's `uv_transform`.
+     8. `BuildSlotSampling` — writes each slot's `uv_set`, `uv_transform` and
+        `sampler` to its `texture_sampling` entry.
      9. `BuildShaderReferences` — validates shader stages (unique types, 1..32
         count, non-empty paths), sorts ascending by `shader_type`, fills
         `ShaderReferenceDesc[N]`, computes `shader_stages` bitfield.
-     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (306 bytes),
+     10. `SerializeMaterialDescriptor` — packs `MaterialAssetDesc` (597 bytes),
          `ShaderReferenceDesc[]` and the string table to a `MemoryStream`.
          The pipeline does not hash the descriptor; `AssetEmitter` records
          `header.content_hash` when it emits the bytes.
@@ -282,7 +282,8 @@ Architectural split:
 3. `oxygen::content::import::MaterialTextureBinding`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
    - fields: `index` (`ResourceIndexT`), `assigned` (bool), `source_id`
-     (string), `uv_set` (uint8), `uv_transform` (`MaterialUvTransform`).
+     (string), `uv_set` (uint8), `uv_transform` (`MaterialUvTransform`),
+     `sampler` (`TextureSamplerState`).
 
 4. `oxygen::content::import::MaterialTextureBindings`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h`
@@ -573,6 +574,13 @@ Each texture slot is specified as:
     "scale":             [1.0, 1.0],
     "offset":            [0.0, 0.0],
     "rotation_radians":  0.0
+  },
+  "sampler": {
+    "address_u":  "repeat",
+    "address_v":  "repeat",
+    "mag_filter": "linear",
+    "min_filter": "linear",
+    "mip_filter": "linear"
   }
 }
 ```
@@ -599,9 +607,11 @@ segments, no `//` sequences. At cook time, `ResolveTextureIndexFromVirtualPath`
 reads the `.otex` sidecar from the cooked output to retrieve the
 `ResourceIndexT`.
 
-`uv_set` is optional (default 0). `uv_transform` is optional (defaults to
-identity). Only a single global UV transform is stored in `MaterialAssetDesc`;
-it is extracted from the first assigned binding.
+`uv_set` is optional (default 0, at most 1). `uv_transform` is optional
+(defaults to identity). `sampler` and each of its fields are optional, with the
+defaults shown: `address_*` is `repeat`, `mirror` or `clamp`, `mag_filter` and
+`min_filter` are `nearest` or `linear`, and `mip_filter` is `none`, `nearest` or
+`linear`. `MaterialAssetDesc` stores all of it per slot.
 
 #### 7.2.7 `shaders` Settings
 
@@ -666,18 +676,18 @@ All material cooking stages execute within `BuildMaterialPayload` in the
 `MaterialPipeline` worker coroutine. Stages are not independently named in
 `detail` namespace (unlike `TexturePipeline`). The full sequence per work item:
 
-| Step | Function                       | Action                                                                                             |
-| ---- | ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| 1    | Header init                    | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name`                      |
-| 2    | Baseline flags                 | `flags = kMaterialFlag_NoTextureSampling`                                                          |
-| 3    | `ResolveMaterialDomain`        | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked             |
-| 4    | `ApplyMaterialInputs`          | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness`           |
-| 5    | `ResolveOrmPacked`             | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch          |
-| 6    | Flag update                    | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()`                             |
-| 7    | `AssignTextureIndices`         | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
-| 8    | `BuildMaterialUvTransformDesc` | Writes first assigned binding's UV scale/offset/rotation to descriptor                             |
-| 9    | `BuildShaderReferences`        | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
-| 10   | `SerializeMaterialDescriptor`  | Packed write: `MaterialAssetDesc` (306 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
+| Step | Function                      | Action                                                                                             |
+| ---- | ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| 1    | Header init                   | `asset_type=kMaterial`, `version=kMaterialAssetVersion`, `name=material_name`                      |
+| 2    | Baseline flags                | `flags = kMaterialFlag_NoTextureSampling`                                                          |
+| 3    | `ResolveMaterialDomain`       | Maps `MaterialAlphaMode` → `MaterialDomain`; sets `kMaterialFlag_AlphaTest` for masked             |
+| 4    | `ApplyMaterialInputs`         | Normalizes all PBR scalars; encodes Unorm16/HalfFloat; handles `roughness_as_glossiness`           |
+| 5    | `ResolveOrmPacked`            | Returns packed `ResourceIndexT` when ORM is compatible; errors on `kForcePacked` mismatch          |
+| 6    | Flag update                   | Clears `kMaterialFlag_NoTextureSampling` if `HasAnyAssignedTextures()`                             |
+| 7    | `AssignTextureIndices`        | Fills 12 `*_texture` `ResourceIndexT` fields; handles ORM shared index                             |
+| 8    | `BuildSlotSampling`           | Writes each slot's UV set, transform and sampler                                                   |
+| 9    | `BuildShaderReferences`       | Validates, deduplicates, sorts, encodes `ShaderReferenceDesc[]`; computes `shader_stages` bitfield |
+| 10   | `SerializeMaterialDescriptor` | Packed write: `MaterialAssetDesc` (597 B) + `ShaderReferenceDesc[N]` (21 B × N) + string table     |
 
 All stages cooperatively support cancellation via `work_item.stop_token`.
 
@@ -761,11 +771,8 @@ struct MaterialAssetDesc {
   HalfFloat attenuation_color[3];
   float     attenuation_distance;
 
-  // UV transform extension (single global transform)
-  float   uv_scale[2];
-  float   uv_offset[2];
-  float   uv_rotation_radians;
-  uint8_t uv_set;
+  // Texture sampling, indexed by MaterialTextureSlot (26 bytes each)
+  TextureSlotSampling texture_sampling[12];
 
   // Procedural grid extension
   float    grid_spacing[2];
@@ -782,7 +789,7 @@ struct MaterialAssetDesc {
   float    grid_origin_color[4];
 };
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 306);
+static_assert(sizeof(MaterialAssetDesc) == 597);
 ```
 
 Immediately following the `MaterialAssetDesc` in the `.omat` file is an array of

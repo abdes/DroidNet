@@ -706,8 +706,10 @@ namespace {
             desc.ambient_occlusion = data::Unorm16 { 1.0F };
             desc.normal_scale = 1.0F;
             desc.alpha_cutoff = data::Unorm16 { alpha.cutoff };
-            desc.uv_offset[0] = uv.at(0) - 0.5F;
-            desc.uv_offset[1] = uv.at(1) - 0.5F;
+            for (auto& sampling : desc.texture_sampling) {
+              sampling.uv_offset[0] = uv.at(0) - 0.5F;
+              sampling.uv_offset[1] = uv.at(1) - 0.5F;
+            }
             auto keys = std::vector<content::ResourceKey>(
               static_cast<std::size_t>(MaterialSlot::kCount));
             keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = color;
@@ -907,7 +909,9 @@ namespace {
           material.roughness = data::Unorm16 { 1.0F };
           material.ambient_occlusion = data::Unorm16 { 1.0F };
           material.normal_scale = 1.0F;
-          material.uv_scale[0] = material.uv_scale[1] = scale;
+          for (auto& sampling : material.texture_sampling) {
+            sampling.uv_scale[0] = sampling.uv_scale[1] = scale;
+          }
           auto keys = std::vector<content::ResourceKey>(
             static_cast<std::size_t>(MaterialSlot::kCount));
           keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = key;

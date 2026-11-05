@@ -137,12 +137,22 @@ public:
       8);
     PrintUtils::Field(
       ctx.Out(), "Attenuation Distance", mat.attenuation_distance, 8);
-    PrintUtils::Field(ctx.Out(), "UV Scale",
-      fmt::format("[{:.3f}, {:.3f}]", mat.uv_scale[0], mat.uv_scale[1]), 8);
-    PrintUtils::Field(ctx.Out(), "UV Offset",
-      fmt::format("[{:.3f}, {:.3f}]", mat.uv_offset[0], mat.uv_offset[1]), 8);
-    PrintUtils::Field(ctx.Out(), "UV Rotation", mat.uv_rotation_radians, 8);
-    PrintUtils::Field(ctx.Out(), "UV Set", static_cast<int>(mat.uv_set), 8);
+    for (std::size_t index = 0; index < data::kMaterialTextureSlotCount;
+      ++index) {
+      const auto& sampling = mat.texture_sampling[index];
+      PrintUtils::Field(ctx.Out(),
+        fmt::format("{} Sampling",
+          data::to_string(static_cast<data::MaterialTextureSlot>(index))),
+        fmt::format("set {} scale [{:.3f}, {:.3f}] offset [{:.3f}, {:.3f}] "
+                    "rotation {:.3f} address {}/{} filter {}/{}/{}",
+          sampling.uv_set, float { sampling.uv_scale[0] },
+          float { sampling.uv_scale[1] }, float { sampling.uv_offset[0] },
+          float { sampling.uv_offset[1] },
+          float { sampling.uv_rotation_radians }, sampling.address_u,
+          sampling.address_v, sampling.mag_filter, sampling.min_filter,
+          sampling.mip_filter),
+        8);
+    }
     PrintUtils::Field(ctx.Out(), "Grid Spacing",
       fmt::format("[{:.3f}, {:.3f}]", mat.grid_spacing[0], mat.grid_spacing[1]),
       8);

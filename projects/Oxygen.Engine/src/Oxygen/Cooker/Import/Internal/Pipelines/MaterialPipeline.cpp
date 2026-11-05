@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <ranges>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -46,13 +47,6 @@
 namespace oxygen::content::import {
 
 namespace {
-
-  struct MaterialUvTransformDesc {
-    std::array<float, 2> uv_scale = { 1.0F, 1.0F };
-    std::array<float, 2> uv_offset = { 0.0F, 0.0F };
-    float uv_rotation_radians = 0.0F;
-    uint8_t uv_set = 0;
-  };
 
   struct ShaderBuildResult {
     std::vector<data::pak::render::ShaderReferenceDesc> shader_refs;
@@ -175,38 +169,22 @@ namespace {
     return result;
   }
 
-  [[nodiscard]] auto BuildMaterialUvTransformDesc(
-    const MaterialTextureBindings& textures) -> MaterialUvTransformDesc
+  [[nodiscard]] auto BuildSlotSampling(const MaterialTextureBinding& binding)
+    -> data::pak::render::TextureSlotSampling
   {
-    MaterialUvTransformDesc desc {};
-
-    const MaterialTextureBinding* reference = nullptr;
-    for (const auto& slot : MaterialSource::TextureSlots()) {
-      const auto* binding = &(textures.*slot.binding);
-      if (!binding->assigned) {
-        continue;
-      }
-      reference = binding;
-      break;
-    }
-
-    if (reference == nullptr) {
-      return desc;
-    }
-
-    // TODO: Update this when multiple UV sets/transforms are supported in
-    // material descriptors.
-    DLOG_F(INFO,
-      "Using single UV transform from '{}'; multiple UV sets not yet supported",
-      reference->source_id);
-
-    desc.uv_scale[0] = reference->uv_transform.scale[0];
-    desc.uv_scale[1] = reference->uv_transform.scale[1];
-    desc.uv_offset[0] = reference->uv_transform.offset[0];
-    desc.uv_offset[1] = reference->uv_transform.offset[1];
-    desc.uv_rotation_radians = reference->uv_transform.rotation_radians;
-    desc.uv_set = reference->uv_set;
-    return desc;
+    return data::pak::render::TextureSlotSampling {
+      .uv_scale = { binding.uv_transform.scale[0],
+        binding.uv_transform.scale[1], },
+      .uv_offset = { binding.uv_transform.offset[0],
+        binding.uv_transform.offset[1], },
+      .uv_rotation_radians = binding.uv_transform.rotation_radians,
+      .uv_set = binding.uv_set,
+      .address_u = static_cast<uint8_t>(binding.sampler.address_u),
+      .address_v = static_cast<uint8_t>(binding.sampler.address_v),
+      .mag_filter = static_cast<uint8_t>(binding.sampler.mag_filter),
+      .min_filter = static_cast<uint8_t>(binding.sampler.min_filter),
+      .mip_filter = static_cast<uint8_t>(binding.sampler.mip_filter),
+    };
   }
 
   [[nodiscard]] auto Normalize01(const float value) -> float
@@ -505,13 +483,12 @@ namespace {
     AssetReferenceBuilder references;
     AssignTextureReferences(material.textures, orm_packed, desc, references);
 
-    const auto uv_desc = BuildMaterialUvTransformDesc(material.textures);
-    desc.uv_scale[0] = uv_desc.uv_scale[0];
-    desc.uv_scale[1] = uv_desc.uv_scale[1];
-    desc.uv_offset[0] = uv_desc.uv_offset[0];
-    desc.uv_offset[1] = uv_desc.uv_offset[1];
-    desc.uv_rotation_radians = uv_desc.uv_rotation_radians;
-    desc.uv_set = uv_desc.uv_set;
+    // `TextureSlots` lists the slots in the order the record holds them.
+    for (const auto [index, slot] :
+      std::views::enumerate(MaterialSource::TextureSlots())) {
+      desc.texture_sampling[index]
+        = BuildSlotSampling(material.textures.*slot.binding);
+    }
 
     auto shader_requests = material.shader_requests;
     if (shader_requests.empty()) {

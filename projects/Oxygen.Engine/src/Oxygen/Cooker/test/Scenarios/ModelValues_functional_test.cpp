@@ -77,6 +77,7 @@
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -84,6 +85,7 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -472,17 +474,19 @@ protected:
   }
 };
 
-//! An FBX mesh keeps its first UV set and the one its normal texture names,
-//! which need not be its second, and generates its tangents on that one.
-NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
+//! An import of a triangle whose mesh has three UV sets and whose normal
+//! texture names the third, "Detail", with more of the texture's properties.
+[[nodiscard]] auto NamedUvSetImport(
+  const std::filesystem::path& root, const std::string_view texture_properties)
+  -> oxygen::content::import::ImportRequest
 {
-  const auto root = MakeTempDir("named_uv_set");
   std::filesystem::copy_file(
-    TestModelsDirFromFile() / "static_tangent_normal.png",
+    oxygen::cooker::test::ModelPath("static_tangent_normal.png"),
     root / "static_tangent_normal.png");
   auto text = std::string {};
   {
-    std::ifstream input(TestModelsDirFromFile() / "static_normal_triangle.fbx");
+    std::ifstream input(
+      oxygen::cooker::test::ModelPath("static_normal_triangle.fbx"));
     text.assign(
       std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
   }
@@ -523,9 +527,12 @@ NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
     "            }\n"
     "        }\n        ");
   insert_before("TextureName: \"Texture::Checker\"",
-    "Properties70: {\n"
-    "            P: \"UVSet\", \"KString\", \"\", \"\", \"Detail\"\n"
-    "        }\n        ");
+    fmt::format(
+      "Properties70: {{\n"
+      "            P: \"UVSet\", \"KString\", \"\", \"\", \"Detail\"\n"
+      "{}"
+      "        }}\n        ",
+      texture_properties));
   const auto source = root / "named_uv_set.fbx";
   {
     std::ofstream output(source);
@@ -542,8 +549,15 @@ NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
   request.options.coordinate.bake_transforms_into_meshes = false;
   request.options.tangent_policy
     = oxygen::content::import::GeometryAttributePolicy::kGenerateMissing;
-  ImportAndVerifyCleanCopy(
-    std::move(request), [](const CookedModel& model) -> void {
+  return request;
+}
+
+//! An FBX mesh keeps its first UV set and the one its normal texture names,
+//! which need not be its second, and generates its tangents on that one.
+NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
+{
+  ImportAndVerifyCleanCopy(NamedUvSetImport(MakeTempDir("named_uv_set"), ""),
+    [](const CookedModel& model) -> void {
       const auto& vertices = model.vertices;
       ASSERT_EQ(vertices.size(), 3U);
       // "Detail" swaps the first set's U and V. The source's V grew up and is
@@ -562,6 +576,35 @@ NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
       for (const auto& vertex : vertices) {
         ExpectVec3Near(vertex.tangent, along_u);
       }
+    });
+}
+
+//! An FBX texture keeps its UV set, wrap and transform. A file's V grows up and
+//! import flips it, so the transform reaches the material through that flip.
+NOLINT_TEST_F(ModelValuesTest, FbxTextureKeepsItsUvSetWrapAndTransform)
+{
+  ImportAndVerifyCleanCopy(
+    NamedUvSetImport(MakeTempDir("texture_transform"),
+      "            P: \"WrapModeU\", \"enum\", \"\", \"\",1\n"
+      "            P: \"Translation\", \"Vector\", \"\", \"A\",0.25,0.5,0\n"
+      "            P: \"Scaling\", \"Vector\", \"\", \"A\",0.5,0.25,1\n"),
+    [](const CookedModel& model) -> void {
+      using oxygen::data::MaterialTextureSlot;
+      const auto& sampling
+        = model.material->GetTextureSampling(MaterialTextureSlot::kNormal);
+      EXPECT_EQ(sampling.uv_set, 1U);
+      EXPECT_EQ(
+        model.material->GetTextureSamplerState(MaterialTextureSlot::kNormal),
+        (oxygen::TextureSamplerState {
+          .address_u = oxygen::TextureAddress::kClamp,
+        }));
+      // ufbx: uv = 0.5*tex + 0.25, so tex = 2*uv - 0.5; and v = 0.25*tex + 0.5,
+      // so tex = 4*v - 2, which is 4*v' - 1 for v' = 1 - v and tex' = 1 - tex.
+      EXPECT_NEAR(sampling.uv_scale[0], 2.0F, 1.0e-5F);
+      EXPECT_NEAR(sampling.uv_scale[1], 4.0F, 1.0e-5F);
+      EXPECT_NEAR(sampling.uv_offset[0], -0.5F, 1.0e-5F);
+      EXPECT_NEAR(sampling.uv_offset[1], -1.0F, 1.0e-5F);
+      EXPECT_NEAR(sampling.uv_rotation_radians, 0.0F, 1.0e-5F);
     });
 }
 

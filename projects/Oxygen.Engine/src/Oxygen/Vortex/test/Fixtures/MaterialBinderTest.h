@@ -40,17 +40,9 @@ protected:
       0.25F,
       1.0F,
     };
-    std::array<float, 2> uv_scale {
-      1.0F,
-      1.0F,
-    };
-    std::array<float, 2> uv_offset {};
-    float uv_rotation_radians {
-      0.0F,
-    };
-    uint8_t uv_set {
-      0U,
-    };
+    std::array<data::pak::render::TextureSlotSampling,
+      data::kMaterialTextureSlotCount>
+      texture_sampling {};
   };
   [[nodiscard]] static auto MakeMaterial(const MaterialRecipe& recipe)
     -> std::shared_ptr<const data::MaterialAsset>;

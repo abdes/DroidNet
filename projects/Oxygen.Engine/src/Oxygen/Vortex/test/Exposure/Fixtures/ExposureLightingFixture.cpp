@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Transforms/NodeFrame.h>
@@ -306,7 +307,6 @@ auto ExposureLightingGpuTest::MakeEmissiveMaterial(float value)
   authored.ambient_occlusion = data::Unorm16 {
     1,
   };
-  authored.uv_scale[0] = authored.uv_scale[1] = 1;
   for (auto& component : authored.emissive_factor) {
     component = 1.0F;
   }
@@ -431,7 +431,6 @@ auto ExposureLightingGpuTest::SetSurface(
   desc.ambient_occlusion = data::Unorm16 {
     1,
   };
-  desc.uv_scale[0] = desc.uv_scale[1] = 1;
   CHECK_F(
     mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
       std::make_shared<data::MaterialAsset>(

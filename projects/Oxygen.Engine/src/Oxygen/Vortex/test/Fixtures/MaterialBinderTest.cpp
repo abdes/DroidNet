@@ -61,10 +61,7 @@ auto MaterialBinderTest::MakeMaterial(const MaterialRecipe& recipe)
   desc.base_color_texture = data::ResourceReferenceIndex { 0U };
   desc.normal_texture = data::ResourceReferenceIndex { 1U };
   std::ranges::copy(recipe.base_color, std::begin(desc.base_color));
-  std::ranges::copy(recipe.uv_scale, std::begin(desc.uv_scale));
-  std::ranges::copy(recipe.uv_offset, std::begin(desc.uv_offset));
-  desc.uv_rotation_radians = recipe.uv_rotation_radians;
-  desc.uv_set = recipe.uv_set;
+  std::ranges::copy(recipe.texture_sampling, std::begin(desc.texture_sampling));
   auto material = std::make_shared<data::MaterialAsset>(data::AssetKey {}, desc,
     std::vector<data::ShaderReference> {},
     std::vector {

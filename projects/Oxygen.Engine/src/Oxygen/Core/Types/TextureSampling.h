@@ -44,17 +44,17 @@ struct TextureSamplerState {
   auto operator==(const TextureSamplerState&) const -> bool = default;
 };
 
-namespace detail {
-  inline constexpr std::uint32_t kTextureAddressCount = 3U;
-  inline constexpr std::uint32_t kTextureFilterCount = 2U;
-  inline constexpr std::uint32_t kTextureMipFilterCount = 3U;
-} // namespace detail
+//! Values of `TextureAddress`.
+inline constexpr std::uint32_t kTextureAddressCount = 3U;
+//! Values of `TextureFilter`.
+inline constexpr std::uint32_t kTextureFilterCount = 2U;
+//! Values of `TextureMipFilter`.
+inline constexpr std::uint32_t kTextureMipFilterCount = 3U;
 
 //! Samplers in the table: every combination of `TextureSamplerState`.
-inline constexpr std::uint32_t kTextureSamplerCount
-  = detail::kTextureAddressCount * detail::kTextureAddressCount
-  * detail::kTextureFilterCount * detail::kTextureFilterCount
-  * detail::kTextureMipFilterCount;
+inline constexpr std::uint32_t kTextureSamplerCount = kTextureAddressCount
+  * kTextureAddressCount * kTextureFilterCount * kTextureFilterCount
+  * kTextureMipFilterCount;
 static_assert(
   kTextureSamplerCount == bindless::generated::kTextureSamplerTableCount);
 
@@ -63,13 +63,13 @@ static_assert(
   const TextureSamplerState& state) noexcept -> std::uint32_t
 {
   auto offset = static_cast<std::uint32_t>(state.address_u);
-  offset = (offset * detail::kTextureAddressCount)
+  offset = (offset * kTextureAddressCount)
     + static_cast<std::uint32_t>(state.address_v);
-  offset = (offset * detail::kTextureFilterCount)
+  offset = (offset * kTextureFilterCount)
     + static_cast<std::uint32_t>(state.mag_filter);
-  offset = (offset * detail::kTextureFilterCount)
+  offset = (offset * kTextureFilterCount)
     + static_cast<std::uint32_t>(state.min_filter);
-  return (offset * detail::kTextureMipFilterCount)
+  return (offset * kTextureMipFilterCount)
     + static_cast<std::uint32_t>(state.mip_filter);
 }
 
@@ -80,17 +80,14 @@ static_assert(
 {
   auto state = TextureSamplerState {};
   state.mip_filter
-    = static_cast<TextureMipFilter>(offset % detail::kTextureMipFilterCount);
-  offset /= detail::kTextureMipFilterCount;
-  state.min_filter
-    = static_cast<TextureFilter>(offset % detail::kTextureFilterCount);
-  offset /= detail::kTextureFilterCount;
-  state.mag_filter
-    = static_cast<TextureFilter>(offset % detail::kTextureFilterCount);
-  offset /= detail::kTextureFilterCount;
-  state.address_v
-    = static_cast<TextureAddress>(offset % detail::kTextureAddressCount);
-  offset /= detail::kTextureAddressCount;
+    = static_cast<TextureMipFilter>(offset % kTextureMipFilterCount);
+  offset /= kTextureMipFilterCount;
+  state.min_filter = static_cast<TextureFilter>(offset % kTextureFilterCount);
+  offset /= kTextureFilterCount;
+  state.mag_filter = static_cast<TextureFilter>(offset % kTextureFilterCount);
+  offset /= kTextureFilterCount;
+  state.address_v = static_cast<TextureAddress>(offset % kTextureAddressCount);
+  offset /= kTextureAddressCount;
   state.address_u = static_cast<TextureAddress>(offset);
   return state;
 }

@@ -27,8 +27,10 @@
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -44,13 +46,6 @@ namespace {
 
   //=== Test Helpers
   //===---------------------------------------------------------//
-
-  struct MaterialUvTransformDesc {
-    std::array<float, 2> uv_scale { 1.0F, 1.0F };
-    std::array<float, 2> uv_offset { 0.0F, 0.0F };
-    float uv_rotation_radians = 0.0F;
-    uint8_t uv_set = 0;
-  };
 
   auto MakeShaderRequest(ShaderType stage, std::string source_path,
     std::string entry_point, std::string defines = {}) -> ShaderRequest
@@ -104,19 +99,6 @@ namespace {
       refs.push_back(*ref);
     }
     return refs;
-  }
-
-  auto ReadUvTransform(const data::pak::render::MaterialAssetDesc& desc)
-    -> MaterialUvTransformDesc
-  {
-    MaterialUvTransformDesc out {};
-    out.uv_scale[0] = desc.uv_scale[0];
-    out.uv_scale[1] = desc.uv_scale[1];
-    out.uv_offset[0] = desc.uv_offset[0];
-    out.uv_offset[1] = desc.uv_offset[1];
-    out.uv_rotation_radians = desc.uv_rotation_radians;
-    out.uv_set = desc.uv_set;
-    return out;
   }
 
   using oxygen::cooker::test::HasDiagnosticCode;
@@ -284,59 +266,33 @@ namespace {
   //=== UV Transform Tests
   //===---------------------------------------------------------//
 
-  NOLINT_TEST_F(MaterialPipelineTest, CollectSharedTransformWritesExtension)
+  //! Each slot keeps its own UV set, transform and sampler; a slot with no
+  //! texture holds the defaults.
+  NOLINT_TEST_F(MaterialPipelineTest, EachSlotKeepsItsOwnSampling)
   {
     auto item = MakeBaseItem();
     item.material.textures.base_color = MaterialTextureBinding {
-    .index = 2,
-    .assigned = true,
-    .source_id = "base",
-    .uv_set = 2,
-    .uv_transform = { .scale = { 2.0F, 2.0F },
-      .offset = { 0.25F, 0.5F },
-      .rotation_radians = 0.1F, },
-  };
-
-    const auto result
-      = RunPipelineOnce<MaterialPipeline>(loop_, std::move(item), pool_,
-        MaterialPipeline::Config {
-          .queue_capacity = 4,
-          .worker_count = 1,
-          .use_thread_pool = true,
-        });
-
-    ASSERT_TRUE(result.success);
-    ASSERT_HAS_VALUE(result.cooked)
-      << "Expected result.cooked to contain a value";
-    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
-    const auto uv = ReadUvTransform(desc);
-
-    EXPECT_EQ(uv.uv_set, 2U);
-    EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0F);
-    EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0F);
-    EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.25F);
-    EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.5F);
-    EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.1F);
-  }
-
-  NOLINT_TEST_F(MaterialPipelineTest, CollectMismatchedTransformsUsesFirst)
-  {
-    auto item = MakeBaseItem();
-    item.material.textures.base_color = MaterialTextureBinding {
-    .index = 2,
-    .assigned = true,
-    .source_id = "base",
-    .uv_set = 0,
-    .uv_transform = { .scale = { 2.0F, 2.0F },
-      .offset = { 0.0F, 0.0F },
-      .rotation_radians = 0.0F, },
-  };
+      .index = 2,
+      .assigned = true,
+      .source_id = "base",
+      .uv_set = 1,
+      .uv_transform = { .scale = { 2.0F, 3.0F },
+        .offset = { 0.25F, 0.5F },
+        .rotation_radians = 0.1F, },
+      .sampler = {
+        .address_u = TextureAddress::kClamp,
+        .address_v = TextureAddress::kMirror,
+        .mag_filter = TextureFilter::kNearest,
+        .min_filter = TextureFilter::kNearest,
+        .mip_filter = TextureMipFilter::kNone,
+      },
+    };
     item.material.textures.normal = MaterialTextureBinding {
       .index = 3,
       .assigned = true,
       .source_id = "normal",
-      .uv_set = 1,
-      .uv_transform = {},
+      .uv_set = 0,
+      .uv_transform = { .scale = { 4.0F, 4.0F } },
     };
 
     const auto result
@@ -351,14 +307,66 @@ namespace {
     ASSERT_HAS_VALUE(result.cooked)
       << "Expected result.cooked to contain a value";
     const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
-    const auto uv = ReadUvTransform(desc);
 
-    EXPECT_EQ(uv.uv_set, 0U);
-    EXPECT_FLOAT_EQ(uv.uv_scale[0], 2.0F);
-    EXPECT_FLOAT_EQ(uv.uv_scale[1], 2.0F);
-    EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.0F);
-    EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.0F);
-    EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.0F);
+    const auto slot_of
+      = [&desc](const data::MaterialTextureSlot slot) -> auto& {
+      return desc.texture_sampling[static_cast<std::size_t>(slot)];
+    };
+    const auto& base = slot_of(data::MaterialTextureSlot::kBaseColor);
+    EXPECT_EQ(base.uv_set, 1U);
+    EXPECT_FLOAT_EQ(base.uv_scale[0], 2.0F);
+    EXPECT_FLOAT_EQ(base.uv_scale[1], 3.0F);
+    EXPECT_FLOAT_EQ(base.uv_offset[0], 0.25F);
+    EXPECT_FLOAT_EQ(base.uv_offset[1], 0.5F);
+    EXPECT_FLOAT_EQ(base.uv_rotation_radians, 0.1F);
+    EXPECT_EQ(base.address_u, static_cast<uint8_t>(TextureAddress::kClamp));
+    EXPECT_EQ(base.address_v, static_cast<uint8_t>(TextureAddress::kMirror));
+    EXPECT_EQ(base.mag_filter, static_cast<uint8_t>(TextureFilter::kNearest));
+    EXPECT_EQ(base.min_filter, static_cast<uint8_t>(TextureFilter::kNearest));
+    EXPECT_EQ(base.mip_filter, static_cast<uint8_t>(TextureMipFilter::kNone));
+
+    const auto& normal = slot_of(data::MaterialTextureSlot::kNormal);
+    EXPECT_EQ(normal.uv_set, 0U);
+    EXPECT_FLOAT_EQ(normal.uv_scale[0], 4.0F);
+    EXPECT_EQ(normal.address_u, static_cast<uint8_t>(TextureAddress::kRepeat));
+    EXPECT_EQ(
+      normal.mip_filter, static_cast<uint8_t>(TextureMipFilter::kLinear));
+
+    const auto& thickness = slot_of(data::MaterialTextureSlot::kThickness);
+    EXPECT_FLOAT_EQ(thickness.uv_scale[0], 1.0F);
+    EXPECT_EQ(
+      thickness.mip_filter, static_cast<uint8_t>(TextureMipFilter::kLinear));
+  }
+
+  //! Sampling belongs to the reference: one image read two ways is one texture.
+  NOLINT_TEST_F(MaterialPipelineTest, OneImageUnderTwoSamplersIsOneTexture)
+  {
+    auto item = MakeBaseItem();
+    item.material.textures.base_color = MaterialTextureBinding {
+      .index = 2,
+      .assigned = true,
+      .source_id = "shared",
+    };
+    item.material.textures.emissive = MaterialTextureBinding {
+      .index = 2,
+      .assigned = true,
+      .source_id = "shared",
+      .sampler = { .address_u = TextureAddress::kClamp },
+    };
+
+    const auto result
+      = RunPipelineOnce<MaterialPipeline>(loop_, std::move(item), pool_,
+        MaterialPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+          .use_thread_pool = true,
+        });
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked)
+      << "Expected result.cooked to contain a value";
+    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
+    EXPECT_EQ(desc.base_color_texture, desc.emissive_texture);
   }
 
   //=== Authored Value Tests

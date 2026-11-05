@@ -9,7 +9,9 @@
 #include <string_view>
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/Record.h>
 
@@ -117,6 +119,26 @@ static_assert(sizeof(ShaderReferenceDesc) == 21);
 */
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
+//! How one texture slot samples its texture.
+/*!
+ Scale, then counter-clockwise rotation around the UV origin, then offset, with
+ the origin at the image's upper left. The bytes after `uv_set` hold
+ `TextureAddress`, `TextureFilter` and `TextureMipFilter` values. The state
+ belongs to the slot, so one image can serve two slots differently.
+*/
+struct TextureSlotSampling {
+  float uv_scale[2] = { 1.0F, 1.0F };
+  float uv_offset[2] = { 0.0F, 0.0F };
+  float uv_rotation_radians = 0.0F;
+  uint8_t uv_set = 0;
+  uint8_t address_u = static_cast<uint8_t>(TextureAddress::kRepeat);
+  uint8_t address_v = static_cast<uint8_t>(TextureAddress::kRepeat);
+  uint8_t mag_filter = static_cast<uint8_t>(TextureFilter::kLinear);
+  uint8_t min_filter = static_cast<uint8_t>(TextureFilter::kLinear);
+  uint8_t mip_filter = static_cast<uint8_t>(TextureMipFilter::kLinear);
+};
+static_assert(sizeof(TextureSlotSampling) == 26);
+
 struct MaterialAssetDesc {
   core::AssetHeader header;
   uint8_t material_domain; // e.g. Opaque, AlphaBlended
@@ -174,11 +196,8 @@ struct MaterialAssetDesc {
     = { HalfFloat { 1.0F }, HalfFloat { 1.0F }, HalfFloat { 1.0F } };
   float attenuation_distance = 0.0F;
 
-  // --- UV transform extension ---
-  float uv_scale[2] = { 1.0F, 1.0F };
-  float uv_offset[2] = { 0.0F, 0.0F };
-  float uv_rotation_radians = 0.0F;
-  uint8_t uv_set = 0;
+  // --- Texture sampling, indexed by `MaterialTextureSlot` ---
+  TextureSlotSampling texture_sampling[kMaterialTextureSlotCount] = {};
 
   // --- Procedural grid extension ---
   float grid_spacing[2] = { 1.0F, 1.0F };
@@ -201,7 +220,7 @@ struct MaterialAssetDesc {
 //   count of `shader_stages`.
 // - The descriptor string table.
 #pragma pack(pop)
-static_assert(sizeof(MaterialAssetDesc) == 306);
+static_assert(sizeof(MaterialAssetDesc) == 597);
 
 //=== Texture Payload Structures ===-----------------------------------------//
 

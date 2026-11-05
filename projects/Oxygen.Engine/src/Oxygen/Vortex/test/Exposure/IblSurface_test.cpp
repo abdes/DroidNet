@@ -54,7 +54,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/test/CommandRecordingTestSupport.h>
-#include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h>
+#include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -72,8 +72,6 @@
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
-#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
-#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
@@ -526,7 +524,6 @@ namespace {
       desc.metalness = data::Unorm16 { properties.metallic };
       desc.ambient_occlusion = data::Unorm16 { 1.0F };
       desc.normal_scale = 1.0F;
-      desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
       std::vector<content::ResourceKey> keys(6);
       keys[1] = normal;
       CHECK_F(

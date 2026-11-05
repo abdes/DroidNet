@@ -16,7 +16,7 @@ same compiled RGB input. The pipeline rejects non-finite, negative or
 out-of-range factors and writes float32 channels without clamping or binary16
 conversion.
 
-`MaterialAssetDesc` is 306 packed bytes. Native readers accept only the current
+`MaterialAssetDesc` is 597 packed bytes. Native readers accept only the current
 `kMaterialAssetVersion`. Recook maintained content and update fixture writers
 together; do not add old-format branches or managed binary writers.
 
@@ -70,10 +70,10 @@ Notes:
   textures, index `0` refers to the fallback texture (`kFallbackResourceIndex`).
   Use `assigned=false` to indicate a truly missing texture slot; `assigned=true`
   means the slot should be sampled (including placeholder or fallback).
-- A material has one UV transform and one UV set: the first assigned texture's
-  are written, and the others use them. glTF and FBX adapters warn of what they
-  drop, and descriptors warn `material.uv_dropped`. Issue #113 tracks per-slot
-  transforms and sets.
+- Each texture slot keeps its own UV set, transform and sampler, so one image
+  can serve two slots differently and stays one texture. Vertices hold two UV
+  sets: a descriptor naming another is refused, and a model binding naming
+  another reads set 0 with `material.uv_dropped`.
 - `shader_requests` is optional; when empty, the pipeline synthesizes default
   stage bindings for the resolved domain and flags.
 - `orm_policy` controls `kMaterialFlag_GltfOrmPacked`, the only thing that says a
@@ -173,21 +173,18 @@ For each work item:
    - If `alpha_mode == kOpaque`, a `kMasked` or `kAlphaBlended` domain decides,
      and `kMasked` sets `kMaterialFlag_AlphaTest`
    - A mode and a domain that disagree warn `material.domain_alpha_conflict`
-5. Resolve UV transforms:
-   - If all assigned textures share the same `uv_set` and `uv_transform`, store
-     that transform in the descriptor extension (see "UV Transform Extension").
-   - If assigned textures have differing transforms the _first assigned_
-     texture's transform is stored (see the notes on the work item).
+5. Write each slot's `uv_set`, `uv_transform` and `sampler` to its
+   `texture_sampling` entry (see "Texture Sampling").
 6. Resolve flags:
    - Start with `kMaterialFlag_NoTextureSampling`.
    - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`.
    - Resolve ORM packing using metallic+roughness compatibility:
      - `OrmPolicy::kForcePacked` requires _metallic_ and _roughness_ to be
-       `assigned=true` and to share the same `source_id` and exact `uv_set` +
-       `uv_transform`; otherwise the pipeline emits a blocking diagnostic
+       `assigned=true` and to share the same `source_id` and exact `uv_set`,
+       `uv_transform` and `sampler`; otherwise the pipeline emits a blocking diagnostic
        (`material.orm_policy`) and the item fails.
      - `OrmPolicy::kAuto` enables packing when metallic and roughness are both
-       assigned and share the same `source_id` and UV transform; ambient
+       assigned and share the same `source_id`, UV transform and sampler; ambient
        occlusion is not required to enable packing (if AO is present but has a
        different source it remains a separate texture). If packing succeeds,
        `kMaterialFlag_GltfOrmPacked` is set and metallic/roughness indices are
@@ -223,7 +220,7 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 - Scalar value normalization and unit conversion
 - Alpha mode and material domain resolution
 - ORM detection (source id equality)
-- UV transform resolution
+- Per-slot texture sampling
 - Default shader binding decisions (when no explicit requests)
 
 ### Stage B: Material Cook (ThreadPool-capable)
@@ -245,7 +242,7 @@ authority; increment it when changing the material layout.
 Packed binary blob:
 
 ```text
-MaterialAssetDesc (306 bytes)
+MaterialAssetDesc (597 bytes)
 ShaderReferenceDesc[ popcount(shader_stages) ]
 string table
 ```
@@ -261,29 +258,43 @@ Key requirements:
 - `header.content_hash` is left to the emitter: `AssetEmitter` records it
   (`data::StampDescriptorHash`) over descriptor bytes + shader refs
 
-### UV Transform Fields
+### Texture Sampling
 
-`MaterialAssetDesc` stores the default per-material UV transform (global,
-applied to all slots) in explicit fields. The pipeline must **always** write
-these values; identity means “no transform.”
+`MaterialAssetDesc` stores each texture slot's UV set, UV transform and sampler.
+The pipeline must **always** write these values; identity means “no transform.”
 
 ```text
-struct MaterialAssetDesc {
-  // ...
+struct TextureSlotSampling { // 26 bytes
   float uv_scale[2];
   float uv_offset[2];
   float uv_rotation_radians;
   uint8_t uv_set;
+  uint8_t address_u, address_v; // TextureAddress
+  uint8_t mag_filter, min_filter; // TextureFilter
+  uint8_t mip_filter; // TextureMipFilter
+};
+
+struct MaterialAssetDesc {
+  // ...
+  TextureSlotSampling texture_sampling[12]; // by MaterialTextureSlot
   // ...
 };
 ```
 
 Contract:
 
-- If all assigned textures share identical `uv_set` and `uv_transform`, store
-  that transform here.
-- If assigned textures have differing transforms, the _first assigned_
-  texture's transform is stored here. Loaders read these fields unconditionally.
+- Every slot has an entry; one with no texture holds the defaults: identity, set
+  0, repeat, trilinear.
+- Loaders refuse a set past 1, an enum out of range and a transform that is not
+  finite.
+- glTF: `texCoord`, `KHR_texture_transform` and the texture's sampler. An
+  undefined filter is linear. `minFilter` gives min and mip; `LINEAR` and
+  `NEAREST` mean no mips, as authored.
+- FBX: `wrap_u`, `wrap_v`, default filters, and `uv_set` by name. A binding reads
+  set 1 when it names a set other than the first of the first mesh using the
+  material. A later mesh keeping that set elsewhere warns `mesh.uv_set_conflict`.
+  `uv_to_texture` is conjugated by the V flip import applies at the vertex; a
+  shear warns `material.uv_dropped` and keeps the nearest scale and rotation.
 
 Renderer convention:
 
@@ -291,7 +302,7 @@ Renderer convention:
 - Rotation is around the UV origin (0,0), not the center of the texture.
 - Transform order is: scale → rotation → offset.
 - `uv_set` selects the source UV set: 0 is `Vertex::texcoord`, 1 is
-  `Vertex::texcoord1`, and any other reads as 0.
+  `Vertex::texcoord1`.
 
 ---
 
@@ -307,7 +318,7 @@ the PAK format:
   thickness, IOR, and attenuation.
 - Asset header metadata: `version` (the emitter records `content_hash` when it
   emits the descriptor).
-- One UV transform and one UV set, with a warning for what asks for more.
+- Two UV sets per vertex, with a warning for a model binding that names another.
 - The procedural grid and the ambient occlusion mode, from descriptors.
 
 ---
@@ -408,8 +419,8 @@ invalid data. Conservative defaults aligned with common engine practice:
 - `MaterialAlphaMode::kMasked` requires `alpha_cutoff` in [0,1]; clamp and emit
   a warning when out of range.
 - `OrmPolicy::kForcePacked` requires `metallic` and `roughness` to be
-  `assigned=true` and to share identical `source_id`, `uv_set`, and
-  `uv_transform`; otherwise emit a blocking error (diagnostic code
+  `assigned=true` and to share identical `source_id`, `uv_set`, `uv_transform`
+  and `sampler`; otherwise emit a blocking error (diagnostic code
   `material.orm_policy`). `OrmPolicy::kAuto` will enable packing when metallic
   and roughness are assigned and compatible; ambient occlusion may be packed
   when compatible but is not required.

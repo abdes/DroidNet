@@ -30,7 +30,7 @@ lines.
 | ----- | ---------------------------------------- | ----------- |
 | S1    | A second UV set through geometry         | Done        |
 | S2    | Renderer samples each slot on its own    | Done        |
-| S3    | Cooked format, descriptors and importers | Not started |
+| S3    | Cooked format, descriptors and importers | Done        |
 | S4    | Material Editor                          | Not started |
 
 ## What the user gets
@@ -261,8 +261,10 @@ share of issue #107.
 - glTF: `cgltf_sampler`, mapping undefined filters to linear, and `min_filter`
   to min and mip. FBX: `wrap_u`, `wrap_v`, `uv_set` and the converted transform,
   with default filters.
-- `ReportDroppedUvs` only reports what the format cannot hold. The `conflicting`
-  and `custom_sampling` drops in `DroppedSourceFeatures.cpp` go.
+- `ReportDroppedUvs` goes: the schema refuses a set past 1, and
+  `RepairModelInputs` moves a model's to set 0 with `material.uv_dropped`. The
+  `conflicting` and `custom_sampling` drops in `DroppedSourceFeatures.cpp` go,
+  with FBX's drops of wrap and transform.
 - Importer revisions and goldens: gltf, fbx and material_descriptor.
 - `oxygen.material-descriptor.editor.schema.json` and the managed reader follow,
   as a row in the portable-references plan's S7. The engine does not wait for it.
@@ -280,10 +282,29 @@ for UVs or sampling, and its band renders where authored. The file exercises set
 1, per-slot transforms and clamp. NewSponza and BurgerPiz are not in this tree,
 so the owner imports them.
 
+Proof order, because the material record's version moves and readers refuse the
+old one, so all cooked content is stale until this runs:
+
+1. Build Release, then run the Data, Content, Cooker, Vortex and SceneSync lanes.
+2. Remove the Showcase cooked root, recook it, and pak it. Each warning is traced.
+3. Play every scene of `Examples.json` and capture it after exposure settles.
+   Differences from S2's captures are traced: a glTF sampler or a per-slot
+   transform now takes effect, so some are expected. A filter of no mips is
+   honoured as authored.
+4. Import the Chronograph Watch and check the warnings above and its band.
+5. A clean recook removes the transient Sponza, Bistro and Sun Temple imports, so
+   they are imported again and played.
+6. The owner checks the renders, then runs tidy, then the slice is committed.
+
 ### S4. Material Editor
 
 Closes #107. It needs portable-references S7, which owns the editor's material
 formats.
+
+S4 changes no cooked format and no importer, so it needs no Showcase recook. Its
+proof is one material authored in the editor with a non-default sampler, cooked
+through the editor's import and played. If S4 does touch the engine, the S3 proof
+order applies again.
 
 - Each texture slot shows and edits UV set, transform, wrap U, wrap V and the
   three filters, with undo, dirty state, save and reload.

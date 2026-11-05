@@ -251,12 +251,14 @@ NOLINT_TEST(DroppedSourceFeaturesTest, ADisabledFeatureImportsNoTexture)
   EXPECT_EQ(Naming(Report(material), "Sheen"), 1);
 }
 
-NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
+//! Wrap modes and UV transforms now reach the material.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapAndTransformAreNotReported)
 {
   auto texture = ufbx_texture {};
   texture.type = UFBX_TEXTURE_FILE;
   texture.wrap_u = UFBX_WRAP_CLAMP;
   texture.wrap_v = UFBX_WRAP_REPEAT;
+  texture.has_uv_transform = true;
   auto material = ufbx_material {};
   material.name = { .data = "Bun", .length = 3 };
   material.pbr.base_color.texture = &texture;
@@ -266,13 +268,11 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureWrapModesAreReported)
   source.materials = { .data = &material_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "wrap.fbx", diagnostics);
-  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kSourceFeatureDropped
-      && issue.object_path == "/Materials/0" && issue.object_name == "Bun";
-  }));
+  EXPECT_TRUE(diagnostics.empty());
 }
 
-NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureOnAnotherUvSetIsReported)
+//! A name no set of the mesh has loses nothing: the texture reads the first.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureNamingNoSetOfItsMeshIsSilent)
 {
   auto texture = ufbx_texture {};
   texture.uv_set = { .data = "Second", .length = 6 };
@@ -280,10 +280,12 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureOnAnotherUvSetIsReported)
   material.pbr.base_color.texture = &texture;
   material.pbr.base_color.texture_enabled = true;
   auto* material_pointer = &material;
-  auto uv_set = ufbx_uv_set {};
-  uv_set.name = { .data = "First", .length = 5 };
+  auto uv_sets = std::array {
+    ufbx_uv_set { .name = { .data = "First", .length = 5 } },
+    ufbx_uv_set { .name = { .data = "Other", .length = 5 } },
+  };
   auto mesh = ufbx_mesh {};
-  mesh.uv_sets = { .data = &uv_set, .count = 1 };
+  mesh.uv_sets = { .data = uv_sets.data(), .count = uv_sets.size() };
   auto node = ufbx_node {};
   node.mesh = &mesh;
   node.materials = { .data = &material_pointer, .count = 1 };
@@ -293,10 +295,53 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxTextureOnAnotherUvSetIsReported)
   source.nodes = { .data = &node_pointer, .count = 1 };
   auto diagnostics = std::vector<ImportDiagnostic> {};
   ReportDroppedSourceFeatures(source, "uv.fbx", diagnostics);
-  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> auto {
-    return issue.code == kSourceFeatureDropped
-      && issue.object_path == "/Nodes/0" && issue.message.contains("Second");
-  }));
+  EXPECT_TRUE(diagnostics.empty());
+}
+
+//! A material holds one set per texture, chosen on its first mesh. A later mesh
+//! keeping the named set elsewhere draws that texture on another set.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxMeshDisagreeingWithItsMaterialWarns)
+{
+  auto texture = ufbx_texture {};
+  texture.uv_set = { .data = "Detail", .length = 6 };
+  auto material = ufbx_material {};
+  material.pbr.base_color.texture = &texture;
+  material.pbr.base_color.texture_enabled = true;
+  auto* material_pointer = &material;
+  auto agreeing_sets = std::array {
+    ufbx_uv_set { .name = { .data = "Main", .length = 4 } },
+    ufbx_uv_set { .name = { .data = "Detail", .length = 6 } },
+  };
+  auto agreeing = ufbx_mesh {};
+  agreeing.uv_sets
+    = { .data = agreeing_sets.data(), .count = agreeing_sets.size() };
+  auto disagreeing_sets = std::array {
+    ufbx_uv_set { .name = { .data = "Detail", .length = 6 } },
+    ufbx_uv_set { .name = { .data = "Main", .length = 4 } },
+  };
+  auto disagreeing = ufbx_mesh {};
+  disagreeing.uv_sets
+    = { .data = disagreeing_sets.data(), .count = disagreeing_sets.size() };
+  auto first = ufbx_node {};
+  first.mesh = &agreeing;
+  first.materials = { .data = &material_pointer, .count = 1 };
+  auto second = ufbx_node {};
+  second.mesh = &disagreeing;
+  second.name = { .data = "Later", .length = 5 };
+  second.materials = { .data = &material_pointer, .count = 1 };
+  auto nodes = std::array { &first, &second };
+  auto source = ufbx_scene {};
+  source.materials = { .data = &material_pointer, .count = 1 };
+  source.nodes = { .data = nodes.data(), .count = nodes.size() };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "uv.fbx", diagnostics);
+
+  ASSERT_EQ(diagnostics.size(), 1U);
+  EXPECT_EQ(diagnostics.front().code,
+    oxygen::content::import::import_codes::kMeshUvSetConflict);
+  EXPECT_EQ(diagnostics.front().object_path, "/Nodes/1");
+  EXPECT_EQ(diagnostics.front().object_name, "Later");
 }
 
 NOLINT_TEST(DroppedSourceFeaturesTest, ReportsEachDroppedGltfFeature)
@@ -416,13 +461,21 @@ NOLINT_TEST(DroppedSourceFeaturesTest, MaterialTextureChannelsAreNotReported)
   EXPECT_TRUE(diagnostics.empty());
 }
 
-NOLINT_TEST(DroppedSourceFeaturesTest, ConflictingTextureUvMappingsAreReported)
+//! Different UV sets, transforms and samplers per texture all reach the
+//! material, so none is reported.
+NOLINT_TEST(DroppedSourceFeaturesTest, PerTextureSamplingIsNotReported)
 {
-  auto texture = cgltf_texture {};
+  auto sampler = cgltf_sampler {
+    .wrap_s = cgltf_wrap_mode_clamp_to_edge,
+    .wrap_t = cgltf_wrap_mode_repeat,
+  };
+  auto clamped = cgltf_texture {};
+  clamped.sampler = &sampler;
+  auto repeated = cgltf_texture {};
   auto material = cgltf_material {};
   material.has_pbr_metallic_roughness = 1;
-  material.pbr_metallic_roughness.base_color_texture.texture = &texture;
-  material.normal_texture.texture = &texture;
+  material.pbr_metallic_roughness.base_color_texture.texture = &clamped;
+  material.normal_texture.texture = &repeated;
   material.normal_texture.texcoord = 1;
   auto source = cgltf_data {};
   source.materials = &material;
@@ -431,36 +484,30 @@ NOLINT_TEST(DroppedSourceFeaturesTest, ConflictingTextureUvMappingsAreReported)
 
   ReportDroppedSourceFeatures(source, "uv.gltf", diagnostics);
 
-  ASSERT_EQ(diagnostics.size(), 1U);
-  EXPECT_TRUE(AllDropWarnings(diagnostics));
-  EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
+  EXPECT_TRUE(diagnostics.empty());
 }
 
-NOLINT_TEST(DroppedSourceFeaturesTest, CustomSamplingIsReported)
+NOLINT_TEST(DroppedSourceFeaturesTest, MaterialReportNamesTheMaterial)
 {
-  auto sampler = cgltf_sampler {
-    .wrap_s = cgltf_wrap_mode_clamp_to_edge,
-    .wrap_t = cgltf_wrap_mode_repeat,
-  };
-  auto texture = cgltf_texture {};
-  texture.sampler = &sampler;
   auto name = std::string("Bun");
   auto material = cgltf_material {};
   material.name = name.data();
-  material.pbr_metallic_roughness.base_color_texture.texture = &texture;
+  material.has_sheen = 1;
+  material.sheen.sheen_roughness_factor = 0.5F;
   auto source = cgltf_data {};
   source.materials = &material;
   source.materials_count = 1U;
   auto diagnostics = std::vector<ImportDiagnostic> {};
 
-  ReportDroppedSourceFeatures(source, "clamp.gltf", diagnostics);
+  ReportDroppedSourceFeatures(source, "sheen.gltf", diagnostics);
 
   ASSERT_EQ(diagnostics.size(), 1U);
   EXPECT_TRUE(AllDropWarnings(diagnostics));
   // A material's report names the material as the file does, so a person can
   // tell which of a file's materials it is about.
   EXPECT_EQ(diagnostics.front().object_name, "Bun");
-  EXPECT_EQ(diagnostics.front().object_path, "/materials/0");
+  EXPECT_EQ(diagnostics.front().object_path,
+    "/materials/0/extensions/KHR_materials_sheen");
 }
 
 NOLINT_TEST(DroppedSourceFeaturesTest, EmissiveStrengthIsRead)
@@ -631,30 +678,6 @@ NOLINT_TEST(DroppedSourceFeaturesTest, GltfLostSetsAreReported)
   EXPECT_TRUE(says("Joint sets past the first"));
   EXPECT_TRUE(says("Vertex color sets past the first"));
   EXPECT_TRUE(says("Skin weights import"));
-}
-
-//! The wrap modes of an extension's texture are lost like a core texture's.
-NOLINT_TEST(DroppedSourceFeaturesTest, GltfExtensionTextureSamplingIsReported)
-{
-  auto sampler = cgltf_sampler {
-    .wrap_s = cgltf_wrap_mode_clamp_to_edge,
-    .wrap_t = cgltf_wrap_mode_repeat,
-  };
-  auto texture = cgltf_texture {};
-  texture.sampler = &sampler;
-  auto material = cgltf_material {};
-  material.has_clearcoat = 1;
-  material.clearcoat.clearcoat_texture.texture = &texture;
-  auto source = cgltf_data {};
-  source.materials = &material;
-  source.materials_count = 1;
-  auto diagnostics = std::vector<ImportDiagnostic> {};
-
-  ReportDroppedSourceFeatures(source, "model.gltf", diagnostics);
-
-  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> bool {
-    return issue.message.contains("wrap and filter");
-  }));
 }
 
 //! Only normalizing to meters reads the file's unit, so only it warns.

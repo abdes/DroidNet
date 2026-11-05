@@ -35,6 +35,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -272,14 +273,7 @@ auto MakeMaterialKey(
 
   // Every retained sampling input must distinguish the GPU constants. UVs
   // are coordinates, so dimensionless scalar quantization is inappropriate.
-  for (const auto component : asset.GetUvScale()) {
-    oxygen::HashCombine(seed, component);
-  }
-  for (const auto component : asset.GetUvOffset()) {
-    oxygen::HashCombine(seed, component);
-  }
-  oxygen::HashCombine(seed, asset.GetUvRotationRadians());
-  oxygen::HashCombine(seed, asset.GetUvSet());
+  asset.HashTextureSampling(seed);
   oxygen::HashCombine(seed, asset.GetAlphaCutoff());
 
   MaterialTextureBindingKeys::From(asset).HashInto(seed);
@@ -376,21 +370,22 @@ auto SerializeMaterialShadingConstants(
   // Opacity is implicitly sourced from the base color texture alpha.
   // No explicit opacity_texture_index is kept in the constant buffer.
 
-  // The cooked material holds one transform, so every slot reads it, with the
-  // default sampler.
-  const auto uv_scale = material.resolved_asset->GetUvScale();
-  const auto uv_offset = material.resolved_asset->GetUvOffset();
-  const auto sampling = oxygen::vortex::MakeMaterialSlotSampling(
-    material.resolved_asset->GetUvSet(),
-    { std::get<0>(uv_scale), std::get<1>(uv_scale) },
-    { std::get<0>(uv_offset), std::get<1>(uv_offset) },
-    material.resolved_asset->GetUvRotationRadians());
-  constants.base_color_sampling = sampling;
-  constants.normal_sampling = sampling;
-  constants.metallic_sampling = sampling;
-  constants.roughness_sampling = sampling;
-  constants.ambient_occlusion_sampling = sampling;
-  constants.emissive_sampling = sampling;
+  const auto sampling_of = [&asset = *material.resolved_asset](
+                             const oxygen::data::MaterialTextureSlot slot) {
+    const auto& sampling = asset.GetTextureSampling(slot);
+    return oxygen::vortex::MakeMaterialSlotSampling(sampling.uv_set,
+      { sampling.uv_scale[0], sampling.uv_scale[1] },
+      { sampling.uv_offset[0], sampling.uv_offset[1] },
+      sampling.uv_rotation_radians, asset.GetTextureSamplerState(slot));
+  };
+  using oxygen::data::MaterialTextureSlot;
+  constants.base_color_sampling = sampling_of(MaterialTextureSlot::kBaseColor);
+  constants.normal_sampling = sampling_of(MaterialTextureSlot::kNormal);
+  constants.metallic_sampling = sampling_of(MaterialTextureSlot::kMetallic);
+  constants.roughness_sampling = sampling_of(MaterialTextureSlot::kRoughness);
+  constants.ambient_occlusion_sampling
+    = sampling_of(MaterialTextureSlot::kAmbientOcclusion);
+  constants.emissive_sampling = sampling_of(MaterialTextureSlot::kEmissive);
 
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();

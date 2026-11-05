@@ -166,6 +166,54 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
       "/textures/base_color/virtual_path",
     },
     SchemaCase {
+      "AcceptsSecondUvSetAndEverySampler",
+      WoodFloor()
+        .Texture("base_color", "/Cooked/Textures/WoodFloor_Color.otex")
+        .Set("/textures/base_color/uv_set", 1)
+        .Set("/textures/base_color/sampler/address_u", "mirror")
+        .Set("/textures/base_color/sampler/address_v", "clamp")
+        .Set("/textures/base_color/sampler/mag_filter", "nearest")
+        .Set("/textures/base_color/sampler/min_filter", "linear")
+        .Set("/textures/base_color/sampler/mip_filter", "none")
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsAUvSetVerticesDoNotHold",
+      WoodFloor().Set("/textures/base_color/uv_set", 2).Text(),
+      false,
+      "maximum",
+    },
+    SchemaCase {
+      "RejectsAnUnknownWrapMode",
+      WoodFloor()
+        .Set("/textures/base_color/sampler/address_u", "border")
+        .Text(),
+      false,
+      "/textures/base_color/sampler/address_u",
+    },
+    SchemaCase {
+      "RejectsAnUnknownFilter",
+      WoodFloor().Set("/textures/base_color/sampler/mag_filter", "none").Text(),
+      false,
+      "/textures/base_color/sampler/mag_filter",
+    },
+    SchemaCase {
+      "RejectsAnUnknownMipFilter",
+      WoodFloor()
+        .Set("/textures/base_color/sampler/mip_filter", "cubic")
+        .Text(),
+      false,
+      "/textures/base_color/sampler/mip_filter",
+    },
+    SchemaCase {
+      "RejectsAnUnknownSamplerField",
+      WoodFloor().Set("/textures/base_color/sampler/anisotropy", 8).Text(),
+      false,
+      "'anisotropy'",
+    },
+    SchemaCase {
       "RequiresTextureVirtualPath",
       WoodFloor().Set("/textures/base_color/uv_set", 0).Text(),
       false,

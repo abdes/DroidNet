@@ -109,9 +109,6 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   auto diagnostics = std::vector<ImportDiagnostic> {};
   auto prepared = MaterialSource::FromDescriptor(descriptor->descriptor_json,
     Request().source_path, Request().job_name.value_or(""), diagnostics);
-  if (prepared) {
-    prepared->ReportDroppedUvs(Request().source_path.string(), diagnostics);
-  }
   AddDiagnostics(session, std::move(diagnostics));
   if (!prepared) {
     ReportPhaseProgress(

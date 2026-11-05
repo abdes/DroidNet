@@ -10,6 +10,7 @@
 
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Data/MaterialTextureSlot.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Testing/GTest.h>
@@ -57,7 +58,7 @@ NOLINT_TEST(PakFormatLayoutRenderTest, ShaderReferenceDescWireBytes)
 
 //! A material is its header, domain, flags, shader stages, base color and
 //! factors, twelve texture references, the transmission and surface factors,
-//! the UV transform and the procedural grid block, in that order.
+//! each texture slot's sampling and the procedural grid block, in that order.
 NOLINT_TEST(PakFormatLayoutRenderTest, MaterialAssetDescWireBytes)
 {
   const auto material = render::MaterialAssetDesc {
@@ -93,10 +94,19 @@ NOLINT_TEST(PakFormatLayoutRenderTest, MaterialAssetDescWireBytes)
     .thickness_factor = Unorm(0x7778U),
     .attenuation_color = { Half(0x8182U), Half(0x8384U), Half(0x8586U), },
     .attenuation_distance = 10.5F,
-    .uv_scale = { 11.5F, 12.5F, },
-    .uv_offset = { 13.5F, 14.5F, },
-    .uv_rotation_radians = 15.5F,
-    .uv_set = 0x91U,
+    .texture_sampling = {
+      render::TextureSlotSampling {
+        .uv_scale = { 11.5F, 12.5F, },
+        .uv_offset = { 13.5F, 14.5F, },
+        .uv_rotation_radians = 15.5F,
+        .uv_set = 0x91U,
+        .address_u = 0x92U,
+        .address_v = 0x93U,
+        .mag_filter = 0x94U,
+        .min_filter = 0x95U,
+        .mip_filter = 0x96U,
+      },
+    },
     .grid_spacing = { 16.5F, 17.5F, },
     .grid_major_every = 0xA1A2A3A4U,
     .grid_line_thickness = 18.5F,
@@ -152,7 +162,26 @@ NOLINT_TEST(PakFormatLayoutRenderTest, MaterialAssetDescWireBytes)
     .Floats(13.5F, 2)
     .F32(15.5F)
     .U8(0x91U)
-    .Floats(16.5F, 2)
+    .U8(0x92U)
+    .U8(0x93U)
+    .U8(0x94U)
+    .U8(0x95U)
+    .U8(0x96U);
+  // The other slots hold the defaults: identity, set 0, repeat, trilinear.
+  for (auto slot = 1U; slot < oxygen::data::kMaterialTextureSlotCount; ++slot) {
+    expected.F32(1.0F)
+      .F32(1.0F)
+      .F32(0.0F)
+      .F32(0.0F)
+      .F32(0.0F)
+      .U8(0U)
+      .U8(0U)
+      .U8(0U)
+      .U8(1U)
+      .U8(1U)
+      .U8(2U);
+  }
+  expected.Floats(16.5F, 2)
     .U32(0xA1A2A3A4U)
     .Floats(18.5F, 5)
     .Floats(23.5F, 4)
