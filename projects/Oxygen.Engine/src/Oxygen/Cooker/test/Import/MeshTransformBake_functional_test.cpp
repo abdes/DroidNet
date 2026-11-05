@@ -47,6 +47,8 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/CookedRecords.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -195,15 +197,6 @@ protected:
     result.scene.nodes = scene.nodes;
     result.scene.renderables = scene.renderables;
     const auto inspection = LoadInspection(report->cooked_root);
-    const auto read_bytes
-      = [](const std::filesystem::path& path) -> std::vector<std::byte> {
-      std::ifstream stream(path, std::ios::binary);
-      std::vector<char> raw(
-        static_cast<size_t>(std::filesystem::file_size(path)));
-      stream.read(raw.data(), static_cast<std::streamsize>(raw.size()));
-      const auto bytes = std::as_bytes(std::span(raw));
-      return { bytes.begin(), bytes.end() };
-    };
     const auto& buffer_table
       = inspection.ResourceTable(data::ResourceKind::kBuffer);
     const auto read_buffer =
@@ -218,14 +211,12 @@ protected:
       }
       MeshBuildPipeline::CookedGeometryPayload geometry;
       geometry.geometry_key = asset.key;
-      geometry.descriptor_bytes
-        = read_bytes(inspection.DescriptorStored(asset.key).file);
-      data::pak::geometry::MeshDesc descriptor;
-      std::memcpy(&descriptor,
-        std::span<const std::byte>(geometry.descriptor_bytes)
-          .subspan(sizeof(data::pak::geometry::GeometryAssetDesc))
-          .data(),
-        sizeof(descriptor));
+      geometry.descriptor_bytes = oxygen::cooker::test::ReadBytes(
+        inspection.DescriptorStored(asset.key).file);
+      const auto descriptor
+        = oxygen::cooker::test::ReadRecord<data::pak::geometry::MeshDesc>(
+          geometry.descriptor_bytes,
+          sizeof(data::pak::geometry::GeometryAssetDesc));
       MeshBuildPipeline::CookedMeshPayload mesh;
       const auto resolve_buffer =
         [&](
@@ -580,14 +571,11 @@ NOLINT_TEST_F(MeshTransformBakeTest, FbxMapsSharedVariantsAndPerNodeMaterials)
   const auto material_key
     = [](const MeshBuildPipeline::CookedGeometryPayload& geometry)
     -> data::AssetKey {
-    data::pak::geometry::SubMeshDesc submesh;
-    std::memcpy(&submesh,
-      std::span<const std::byte>(geometry.descriptor_bytes)
-        .subspan(sizeof(data::pak::geometry::GeometryAssetDesc)
-          + sizeof(data::pak::geometry::MeshDesc))
-        .data(),
-      sizeof(submesh));
-    return submesh.material_asset_key;
+    return oxygen::cooker::test::ReadRecord<data::pak::geometry::SubMeshDesc>(
+      geometry.descriptor_bytes,
+      sizeof(data::pak::geometry::GeometryAssetDesc)
+        + sizeof(data::pak::geometry::MeshDesc))
+      .material_asset_key;
   };
   EXPECT_NE(material_key(first), material_key(second));
   ExpectEquivalentWorldGeometry(retained, baked);

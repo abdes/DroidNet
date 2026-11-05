@@ -22,6 +22,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/test/Support/CookedRecords.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/testing/Descriptors.h>
@@ -86,13 +87,7 @@ namespace {
     return item;
   }
 
-  auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
-    -> data::pak::render::MaterialAssetDesc
-  {
-    return oxygen::serio::CopyAt<data::pak::render::MaterialAssetDesc>(
-      std::span { bytes })
-      .value_or(data::pak::render::MaterialAssetDesc {});
-  }
+  using oxygen::cooker::test::ReadMaterialDesc;
 
   auto ReadShaderRefs(const std::vector<std::byte>& bytes, size_t count)
     -> std::vector<data::pak::render::ShaderReferenceDesc>

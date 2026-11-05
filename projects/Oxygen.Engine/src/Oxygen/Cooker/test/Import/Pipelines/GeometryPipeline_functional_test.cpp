@@ -644,14 +644,26 @@ namespace {
   NOLINT_TEST_F(
     GeometryPipelineTest, CollectWithSkinnedBufferTooLargeReturnsFailure)
   {
+    // The vertex buffer just fits: only a skin buffer can be what is too large.
+    constexpr auto kLimit = sizeof(data::Vertex) * 3U;
     const auto buffers = MakeSkinnedTriangleMeshBuffers();
+    buffers->inverse_bind_matrices.assign(
+      (kLimit / sizeof(glm::mat4)) + 1U, glm::mat4(1.0F));
+    const auto within = RunPipelineOnce<MeshBuildPipeline>(loop_,
+      MakeSkinnedWorkItem(MakeSkinnedTriangleMeshBuffers()), pool_,
+      MeshBuildPipeline::Config {
+        .queue_capacity = 4,
+        .worker_count = 1,
+        .max_data_blob_bytes = kLimit,
+      });
+    EXPECT_TRUE(within.success);
 
     const auto result = RunPipelineOnce<MeshBuildPipeline>(loop_,
       MakeSkinnedWorkItem(buffers), pool_,
       MeshBuildPipeline::Config {
         .queue_capacity = 4,
         .worker_count = 1,
-        .max_data_blob_bytes = sizeof(glm::uvec4) * 2U,
+        .max_data_blob_bytes = kLimit,
       });
 
     EXPECT_FALSE(result.success);

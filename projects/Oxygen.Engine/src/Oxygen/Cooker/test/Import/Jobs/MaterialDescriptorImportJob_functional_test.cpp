@@ -7,7 +7,6 @@
 // Covers: Import/Internal/Jobs/MaterialDescriptorImportJob.cpp
 
 #include <algorithm>
-#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -23,6 +22,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ImportRequestCodes.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
+#include <Oxygen/Cooker/test/Support/CookedRecords.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
@@ -36,7 +36,6 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -52,15 +51,8 @@ namespace {
   using oxygen::cooker::testing::Materialize;
   using oxygen::cooker::testing::SeedBytes;
 
-  auto ReadMaterialDesc(const std::vector<std::byte>& bytes)
-    -> data::pak::render::MaterialAssetDesc
-  {
-    return oxygen::serio::CopyAt<data::pak::render::MaterialAssetDesc>(
-      std::span { bytes })
-      .value_or(data::pak::render::MaterialAssetDesc {});
-  }
-
   using oxygen::cooker::test::HasDiagnosticCode;
+  using oxygen::cooker::test::ReadMaterialDesc;
 
   //! The identity a material request is submitted under.
   struct MaterialIdentity final {

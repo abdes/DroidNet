@@ -32,12 +32,12 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportSourceAnalysis.h>
+#include <Oxygen/Cooker/test/Support/CookedRecords.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -138,9 +138,7 @@ namespace {
       const auto material = FindAssetOfType(content, AssetType::kMaterial);
       ASSERT_HAS_VALUE(material);
       const auto descriptor = content.Descriptor(material->key);
-      const auto desc
-        = serio::CopyAt<data::pak::render::MaterialAssetDesc>(descriptor);
-      ASSERT_HAS_VALUE(desc);
+      const auto desc = oxygen::cooker::test::ReadMaterialDesc(descriptor);
       const auto& textures = content.ResourceTable(cooked::TableKind::kTexture);
       // A descriptor field names a slot of its resource bindings, and the slot
       // names the table row.
@@ -151,8 +149,8 @@ namespace {
         return textures.Row<TextureResourceDesc>(bindings[slot.get()].index)
           .content_hash;
       };
-      bound.base_color = hash_of(desc->base_color_texture);
-      bound.normal = hash_of(desc->normal_texture);
+      bound.base_color = hash_of(desc.base_color_texture);
+      bound.normal = hash_of(desc.normal_texture);
     }
   };
 

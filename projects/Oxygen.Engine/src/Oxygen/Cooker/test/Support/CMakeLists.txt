@@ -19,6 +19,7 @@ add_library(
   "AuthoredFiles.h"
   "CookedFiles.cpp"
   "CookedFiles.h"
+  "CookedRecords.h"
   "Diagnostics.h"
   "FileIo.cpp"
   "FileIo.h"

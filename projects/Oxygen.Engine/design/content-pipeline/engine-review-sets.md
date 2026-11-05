@@ -653,24 +653,24 @@ same engine model for the same scene.
 `Cooker/Docs/Import/geometry_work_pipeline_v2.md`,
 `material_work_pipeline_v2.md`, `buffer_work_pipeline_v2.md`.
 
-**Objectives.** Cooked meshes, buffers and materials are correct, compact and
-reproducible, and every material property the engine renders is authorable.
+**Objectives.** Cooked meshes, buffers and materials are correct and compact,
+what cooks is what the runtime binds, and every material property the engine
+renders is authorable.
 
 **Critical points.**
 
 - `GeometryPipeline_tangents`: MikkTSpace tangents match the renderer's
   convention, including mirrored UVs and degenerate triangles.
 - `MeshBuildPipeline.cpp` (2 200 lines), `MeshOptimization`, `LodGeneration`:
-  cooked indices are always 32-bit (`:1662`), though the format also has 16-bit
-  indices; vertex and index limits are checked; LOD policies validate;
-  optimization is deterministic.
+  model indices are always 32-bit, by choice: Vortex widens 16-bit indices to 32
+  before upload, so they save only disk; LOD policies validate; source data no
+  renderer can draw is repaired or dropped with a warning.
 - `BufferSource` JSON input: a product's `virtual_path` resolves against the
   identity of its container or geometry. `BufferPipeline`: digests come from
   the bytes stored.
-- `MaterialPipeline.cpp:195` (one UV transform per material) and `:270` (a
-  masked material's out-of-range alpha cutoff is clamped and warns; the TODO at
-  `:278` leaves a cutoff of zero or less alone): confirm the behaviour on sources
-  with several UV sets and with those cutoffs.
+- `MaterialPipeline.cpp`: one UV transform per material, with a warning for what
+  asks for more until #113; a masked cutoff is tested as authored, and only an
+  out-of-range one is clamped and warns.
 
 ## R13. Scenes and physics
 

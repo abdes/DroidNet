@@ -16,11 +16,9 @@ same compiled RGB input. The pipeline rejects non-finite, negative or
 out-of-range factors and writes float32 channels without clamping or binary16
 conversion.
 
-`MaterialAssetDesc` version 3 is 363 packed bytes. Native readers accept only
-the current version. Recook maintained content and update fixture writers
-together; do not add old-format branches or managed binary writers. This storage
-change adds six bytes per material and leaves Vortex's float32 GPU constants,
-shaders and captured-sky IBL contract unchanged.
+`MaterialAssetDesc` is 306 packed bytes. Native readers accept only the current
+`kMaterialAssetVersion`. Recook maintained content and update fixture writers
+together; do not add old-format branches or managed binary writers.
 
 ---
 
@@ -60,118 +58,29 @@ document
 
 ### WorkItem
 
-```cpp
-struct MaterialUvTransform {
-  float scale[2] = { 1.0f, 1.0f };
-  float offset[2] = { 0.0f, 0.0f };
-  float rotation_radians = 0.0f;
-};
-
-enum class MaterialAlphaMode : uint8_t { kOpaque, kMasked, kBlended };
-
-struct ShaderRequest {
-  uint8_t shader_type = 0; // ShaderType enum value
-  std::string source_path;
-  std::string entry_point;
-  std::string defines;
-  uint64_t shader_hash = 0;
-};
-
-struct MaterialTextureBinding {
-  uint32_t index = 0;        // Texture table index (0 = fallback / none)
-  bool assigned = false;     // True if a texture was resolved (placeholder ok)
-  std::string source_id;     // Optional identity for ORM detection
-  uint8_t uv_set = 0;        // Source UV set index (0 = default)
-  MaterialUvTransform uv_transform;
-};
-
-struct MaterialTextureBindings {
-  MaterialTextureBinding base_color;
-  MaterialTextureBinding normal;
-  MaterialTextureBinding metallic;
-  MaterialTextureBinding roughness;
-  MaterialTextureBinding ambient_occlusion;
-  MaterialTextureBinding emissive;
-  MaterialTextureBinding specular;
-  MaterialTextureBinding sheen_color;
-  MaterialTextureBinding clearcoat;
-  MaterialTextureBinding clearcoat_normal;
-  MaterialTextureBinding transmission;
-  MaterialTextureBinding thickness;
-};
-
-struct MaterialInputs {
-  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-  float normal_scale = 1.0f;
-  float metalness = 0.0f;
-  float roughness = 1.0f;
-  float ambient_occlusion = 1.0f;
-  float emissive_factor[3] = { 0.0f, 0.0f, 0.0f }; // HDR allowed
-  float alpha_cutoff = 0.5f;
-  float ior = 1.5f;
-  float specular_factor = 0.5f; // specular level: F0 = 0.08 x level
-  float sheen_color_factor[3] = { 0.0f, 0.0f, 0.0f };
-  float clearcoat_factor = 0.0f;
-  float clearcoat_roughness = 0.0f;
-  float transmission_factor = 0.0f;
-  float thickness_factor = 0.0f;
-  float attenuation_color[3] = { 1.0f, 1.0f, 1.0f };
-  float attenuation_distance = 0.0f;
-  bool double_sided = false;
-  bool unlit = false;
-  bool roughness_as_glossiness = false;
-};
-
-enum class OrmPolicy : uint8_t { kAuto, kForcePacked, kForceSeparate };
-
-struct WorkItem {
-  std::string source_id;
-  std::string material_name;
-  std::string storage_material_name;
-  const void* source_key{};
-
-  MaterialDomain material_domain = MaterialDomain::kOpaque;
-  MaterialAlphaMode alpha_mode = MaterialAlphaMode::kOpaque;
-  MaterialInputs inputs;
-  MaterialTextureBindings textures;
-  OrmPolicy orm_policy = OrmPolicy::kAuto;
-  std::vector<ShaderRequest> shader_requests;
-
-  // Optional lifecycle callbacks invoked by the worker.
-  std::function<void()> on_started;
-  std::function<void()> on_finished;
-
-  ImportRequest request;
-  observer_ptr<NamingService> naming_service;
-  std::stop_token stop_token;
-};
-```
+A work item carries a `MaterialSource` (`Import/Internal/MaterialSource.h`), which
+owns the material's semantics: its domain, alpha mode, scalar `MaterialInputs`,
+`MaterialTextureBindings`, ORM policy, ambient occlusion mode, procedural grid and
+shader requests. Descriptors and model adapters produce the same type.
 
 Notes:
 
-- `material_name` and `storage_material_name` should be resolved by the
-  orchestrator using `BuildMaterialName` and `NamespaceImportedAssetName`.
-- `storage_material_name` is used for virtual paths and descriptor relpaths.
-- `material_domain` uses `oxygen::data::MaterialDomain`.
 - `textures.*.index` must be final texture indices from `TextureEmitter`. The
   planner must ensure these dependencies are ready before submission. For
   textures, index `0` refers to the fallback texture (`kFallbackResourceIndex`).
   Use `assigned=false` to indicate a truly missing texture slot; `assigned=true`
   means the slot should be sampled (including placeholder or fallback).
-- `textures.*.uv_set` refers to the source UV set. If `uv_set != 0`, the
-  orchestrator must remap geometry UVs to set 0 or bake textures accordingly.
-- `textures.*.uv_transform` comes from source material transforms (glTF or FBX).
-  When assigned textures have differing transforms the pipeline currently
-  selects the _first assigned_ texture's transform and writes it into the
-  descriptor (it logs an informational message when multiple transforms are
-  present). Support for per-slot baking or multi-UV-set descriptors is a future
-  enhancement (the orchestrator may still choose to bake textures to achieve a
-  single transform if desired).
+- A material has one UV transform and vertices have one UV set: the first assigned
+  texture's transform is written, and the others use it. glTF and FBX adapters warn
+  of what they drop, and descriptors warn `material.uv_dropped`. Issue #113 tracks
+  per-slot transforms and a second set.
 - `shader_requests` is optional; when empty, the pipeline synthesizes default
-  stage bindings for the requested `material_domain` and flags.
-- `orm_policy` controls `kMaterialFlag_GltfOrmPacked`.
-- Scalars must be pre-normalized to 0..1 where appropriate; emissive is HDR and
-  is **not** clamped. `alpha_cutoff` must be in [0, 1].
+  stage bindings for the resolved domain and flags.
+- `orm_policy` controls `kMaterialFlag_GltfOrmPacked`, the only thing that says a
+  texture is packed; slots holding the same texture do not.
+- Values that are not finite are refused with `material.input_not_finite`; model
+  adapters replace them by their defaults first, with that code as a warning.
+  Emissive is HDR and is **not** clamped.
 
 ### WorkResult
 
@@ -245,7 +154,9 @@ For each work item:
    - `descriptor_relpath`: that virtual path under the mount (`Ship.glb/Paint.omat`)
    - `material_key = xxHash3-128(canonical virtual_path)`
 3. Normalize scalar inputs:
-   - Apply `roughness_as_glossiness` inversion first
+   - Apply `roughness_as_glossiness` inversion first, so `roughness` is always a
+     roughness; with a roughness texture, also set
+     `kMaterialFlag_GlossinessTexture`, whose samples the shader reads as glossiness
    - Clamp base color and scalar factors to [0, 1]
    - Clamp `alpha_cutoff` (0 stays 0: it keeps every pixel), `specular_factor`,
      `clearcoat_factor`,
@@ -265,10 +176,8 @@ For each work item:
 5. Resolve UV transforms:
    - If all assigned textures share the same `uv_set` and `uv_transform`, store
      that transform in the descriptor extension (see "UV Transform Extension").
-   - If assigned textures have differing transforms the pipeline currently
-     selects the _first assigned_ texture's transform (logged at INFO). This
-     behavior avoids failing imports; future work may add explicit baking or
-     per-slot transform support.
+   - If assigned textures have differing transforms the _first assigned_
+     texture's transform is stored (see the notes on the work item).
 6. Resolve flags:
    - Start with `kMaterialFlag_NoTextureSampling`.
    - Apply `kMaterialFlag_DoubleSided`, `kMaterialFlag_Unlit`.
@@ -285,7 +194,8 @@ For each work item:
        set to the packed index.
 7. Bind textures:
    - Copy texture indices into `MaterialAssetDesc` for all slots
-   - If ORM packed, set metallic/roughness/AO indices to the packed texture
+   - If ORM packed, set the metallic and roughness references to the packed
+     texture; ambient occlusion keeps its own binding, which may be the same one
    - Clear `kMaterialFlag_NoTextureSampling` if any `assigned == true`
 8. Resolve shader stages:
    - If `shader_requests` is empty, synthesize default shader refs for the
@@ -313,7 +223,7 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 - Scalar value normalization and unit conversion
 - Alpha mode and material domain resolution
 - ORM detection (source id equality)
-- UV transform resolution and baking decisions
+- UV transform resolution
 - Default shader binding decisions (when no explicit requests)
 
 ### Stage B: Material Cook (ThreadPool-capable)
@@ -324,20 +234,20 @@ The pipeline is defined as two stages with explicit parallelization boundaries:
 
 ---
 
-## Cooked Output Contract (PAK v7)
+## Cooked Output Contract
 
 The enclosing PAK container and the material descriptor have independent
 versions. `kMaterialAssetVersion` is the sole native descriptor-version
-authority; increment it when changing the material layout. The current value
-is 3.
+authority; increment it when changing the material layout.
 
 ### Material Descriptor (`.omat`)
 
 Packed binary blob:
 
 ```text
-MaterialAssetDesc (363 bytes)
+MaterialAssetDesc (306 bytes)
 ShaderReferenceDesc[ popcount(shader_stages) ]
+string table
 ```
 
 Key requirements:
@@ -364,7 +274,7 @@ struct MaterialAssetDesc {
   float uv_offset[2];
   float uv_rotation_radians;
   uint8_t uv_set;
-  uint8_t reserved[19];
+  // ...
 };
 ```
 
@@ -372,34 +282,8 @@ Contract:
 
 - If all assigned textures share identical `uv_set` and `uv_transform`, store
   that transform here.
-- If assigned textures have differing transforms the pipeline currently stores
-  the _first assigned_ texture's transform in the extension (it logs an info
-  message when multiple transforms were present). Loaders must read this
-  extension unconditionally.
-
-### Future: Multi-UV Support (Design Notes)
-
-The current single-UV selection behavior is a temporary compatibility measure.
-Planned evolution to full multi-UV support includes the following options and
-considerations:
-
-- Descriptor changes: add per-slot `uv_set` and `uv_transform` fields (or an
-  extension), so materials can express different transforms and UV sets without
-  remapping geometry.
-- Shader/Loader changes: ensure shaders can sample with an arbitrary UV set
-  index, and loaders can supply additional vertex attribute bindings when a
-  `uv_set != 0` is used by the material descriptor.
-- Orchestrator migration: provide an option to either bake transforms into
-  textures (existing compatibility path) or emit descriptors with per-slot
-  transforms when the pipeline and runtime support them.
-- Backwards compatibility: any descriptor format changes must ensure existing
-  content loads with the current runtime; new fields or extensions should be
-  optional and ignored by older runtimes.
-
-These items should be specified and prioritized when multi-UV content
-requirements arise (e.g., authoring tools or glTF models that reference
-`TEXCOORD1+`). Future work should also include tests that validate per-slot
-transform serialization, loader consumption, and rendering parity.
+- If assigned textures have differing transforms, the _first assigned_
+  texture's transform is stored here. Loaders read these fields unconditionally.
 
 Renderer convention:
 
@@ -423,18 +307,8 @@ the PAK format:
   thickness, IOR, and attenuation.
 - Asset header metadata: `version` (the emitter records `content_hash` when it
   emits the descriptor).
-- UV transform and UV set handling via the extension above or baking.
-
----
-
-## TODO (Future Wiring)
-
-- TODO: Evolve UV handling to support multi-UV sets and per-slot transforms:
-  - Define descriptor layout changes or an extension that encodes per-slot
-    `uv_set` and `uv_transform` when required.
-  - Update import orchestration to prefer descriptor-resident transforms over
-    baking when supported, and provide clear migration guidance for existing
-    content.
+- One UV transform and one UV set, with a warning for what asks for more.
+- The procedural grid and the ambient occlusion mode, from descriptors.
 
 ---
 

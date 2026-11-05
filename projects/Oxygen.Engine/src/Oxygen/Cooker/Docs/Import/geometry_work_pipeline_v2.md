@@ -147,9 +147,11 @@ then first referring node order. Variant identities follow the existing virtual
 path-to-AssetKey rule. Enabling baking therefore deliberately changes geometry
 identities; no cooked index or already-published identity is patched in place.
 
-MeshBuildPipeline owns applying the bake after attribute generation and before
-bounds/descriptor generation: positions use the affine transform, normals use
-inverse transpose, and tangent directions use the linear transform. Negative
+MeshBuildPipeline applies the bake to the source's corners, before the normals
+and tangents it generates, which then follow the baked surface, and before
+bounds and descriptors: positions use the affine transform, authored normals
+use inverse transpose, and authored tangent directions use the linear transform.
+A tangent or bitangent without a direction stays so for the frame repair. Negative
 baked determinants reverse triangle indices exactly once to preserve the
 authored exterior. Retained node transforms do not change shared mesh winding;
 the runtime renderer owns their determinant correction.
@@ -159,32 +161,6 @@ positive and reflected transforms, shared equal/distinct transforms, retained
 attachments/deformation semantics, material binding, hierarchy, and matching
 world-space output. Native cooked-buffer checks must verify bounds, normal/
 winding agreement, and scene-to-geometry references.
-
-Validation recorded on 2026-09-15:
-
-- Debug build of `Oxygen.Cooker.AsyncImportGltf.Tests` and
-  `Oxygen.Cooker.AsyncImportFbx.Tests` passed in the existing `out/build-ninja`
-  tree. Build log: `DroidNet/artifacts/sidedness-import-regression-build.log`.
-- The glTF test executable passed **26/26 tests in 1.879 seconds**, including
-  seven new bake cases, existing native loaded-value checks for both formats,
-  static-content validation, source inspection, and the default-baking Tabuleiro
-  and light-extras imports. Evidence:
-  `DroidNet/artifacts/sidedness-import-regression-gltf.{log,xml}`.
-- The FBX test executable passed **2/2 tests in 1.428 seconds**, covering the
-  full Dino scene and light custom properties. Evidence:
-  `DroidNet/artifacts/sidedness-import-regression-fbx.{log,xml}`.
-- `MeshTransformBake_test.cpp` uses the public async import service with tiny
-  sources and reads the published scene/geometry descriptors and buffer tables.
-  It verifies actual vertex positions/normals/bounds, source winding when baking
-  is disabled, node-local reset, scene-to-variant keys, shared equal variants,
-  distinct FBX material bindings, retained attachments, animated/morph-node
-  diagnostics, and parent/child reflections without double reversal.
-
-This validates the static baking contract and preservation of transforms that
-must remain authored. It does not add animation, skinning, or morph playback or
-claim general glTF/FBX feature compliance. Main-view rendered sidedness evidence
-belongs to the renderer correction's validation record; these importer checks
-prove the published geometry and scene contracts.
 
 ### WorkItem (GeometryPipeline)
 
@@ -296,11 +272,14 @@ For each work item the worker performs:
      descriptor bounds are treated as errors.
    - Returns the finalized bytes or `std::nullopt` on any failure, accumulating
      diagnostics.
-4. Determine `success = finalized.has_value() && diagnostics.empty()`.
-5. Assemble and send a `WorkResult` containing the `source_id`, optional
+4. Load the finalized descriptor with the runtime's own loader to read the
+   surface inventory for provenance. A descriptor it refuses is an error,
+   `mesh.descriptor_invalid`.
+5. Determine `success = finalized.has_value() && diagnostics.empty()`.
+6. Assemble and send a `WorkResult` containing the `source_id`, optional
    `cooked` payload (present on success), `finalized_descriptor_bytes`, any
    diagnostics, `telemetry` (e.g., `cook_duration`) and the `success` flag.
-6. Invoke `on_finished()` if provided.
+7. Invoke `on_finished()` if provided.
 
 All errors are reported as `ImportDiagnostic` entries; no exceptions cross async
 boundaries.
@@ -315,13 +294,19 @@ boundaries.
    - Validate each LOD for positions/indices and other stream prerequisites.
    - Record diagnostics for missing or invalid streams.
 
-2. **Vertex expansion + coordinate conversion**
-   - Build one vertex per index (no vertex dedupe) and apply the required
-     coordinate conversion to engine space.
+2. **Corner expansion**
+   - Expand each triangle to its corners, dropping or repairing what no renderer
+     can draw (see [Source Data No Renderer Can Draw](#source-data-no-renderer-can-draw)).
+     Adapters have already converted coordinates to engine space.
+   - Apply the transform bake, then weld the corners of the source's own
+     surfaces: this is what LOD simplification reads.
 
 3. **Attribute policy application**
-   - Enforce `normal_policy` and `tangent_policy` and generate attributes as
-     required. Emit diagnostics for missing prerequisites.
+   - Expand each LOD's triangles to corners again, and enforce `normal_policy`
+     and `tangent_policy`, generating attributes for that LOD's own triangles.
+     Emit diagnostics for missing prerequisites.
+   - Weld the result: corners left equal share a vertex, and a hard edge or a
+     faceted surface keeps its corners apart.
    - Validate authored tangent frames: a triangle's frame follows its UVs
      when its tangent lies within 45 degrees of dP/dU and its bitangent of
      dP/dV. A mesh whose authored frames follow them on less than 90% of its
@@ -352,9 +337,8 @@ boundaries.
      2. Cut the ordered triangles into consecutive runs of at most 4096.
      3. Make each run one view, with tight local bounds.
 
-     Vertices are already expanded one per index (stage 2), so reordering
-     triangles moves their vertices with them. Each run is one contiguous index
-     range and one contiguous vertex range.
+     Each run takes its own vertices and is ordered for the GPU, so it is one
+     contiguous index range and one contiguous vertex range.
 
    - **Why views.** Each view is one draw and one
      [occlusion culling unit](../../../../../design/vortex/lld/occlusion.md#21-culling-units-and-records),
@@ -390,23 +374,22 @@ boundaries.
 
 ---
 
-## Cooked Output Contract (PAK vNext)
+## Cooked Output Contract
 
-This pipeline targets a **new PAK namespace** with a new
-`kGeometryAssetVersion`. Backward compatibility is not required for geometry.
-The format **must** explicitly support a skinned-mesh blob and any additional
-geometry metadata needed by this pipeline.
+`kGeometryAssetVersion` is the sole version of this descriptor; readers accept
+only the current one.
 
 ### Geometry Descriptor (`.ogeo`)
 
 Packed binary blob:
 
 ```text
-GeometryAssetDesc (256 bytes)
+GeometryAssetDesc (169 bytes)
 MeshDesc[ lod_count ]
-  [optional mesh-type blob]
   SubMeshDesc[ submesh_count ]
   MeshViewDesc[ mesh_view_count ]
+SurfaceDesc[ surface_count ]
+string table
 ```
 
 Requirements:
@@ -434,25 +417,15 @@ draws nothing. So the build repairs what it can and warns:
 | UV that is not finite                     | Zeroes it                                    | `mesh.invalid_uvs`       |
 | Surface left with no triangle, in any LOD | Drops the submesh; its surface ID is kept    | `mesh.surface_empty`     |
 
-### Mesh-Type Blobs
+### Mesh Types
 
-If `mesh_type == MeshType::kStandard`, no blob is emitted.
-
-If `mesh_type == MeshType::kProcedural`, emit the procedural params blob
-immediately after `MeshDesc` (size = `MeshDesc.info.procedural.params_size`).
-
-If `mesh_type == MeshType::kSkinned`, emit a skinned blob that carries the
-resource indices for the mesh buffers as well as any auxiliary skinning tables
-required by runtime. In practice the skinned blob contains at least:
-
-- `vertex_buffer`, `index_buffer`, `joint_index_buffer`, `joint_weight_buffer`;
-- optional auxiliary indices such as `inverse_bind_buffer` and
-  `joint_remap_buffer`;
-- per-mesh bounding box values (min/max).
-
-The finalizer patches these resource indices from the supplied `bindings` and
-the pipeline must still set `mesh_view_count`, `submesh_count`, and bounds as
-usual.
+`MeshDesc.info` holds a mesh's resource references by `mesh_type`. A standard
+mesh has its vertex and index buffers and bounds. A skinned mesh adds
+`joint_index_buffer`, `joint_weight_buffer`, `inverse_bind_buffer`,
+`joint_remap_buffer`, `joint_count` and `influences_per_vertex`. The finalizer
+patches the references from the supplied `bindings`. Procedural meshes are cooked
+by the descriptor job, which writes their parameters; this pipeline refuses them
+with `mesh.procedural_unsupported`.
 
 ### Buffers (`buffers.data` / `buffers.table`)
 
@@ -472,14 +445,14 @@ Buffers are emitted via `BufferEmitter` using `CookedBufferPayload`:
 - **Attribute policies**: `normal_policy` and `tangent_policy` are fully
   honored, with diagnostics when prerequisites are missing.
 - **LOD support**: all authored LODs are serialized in order.
-- **Mesh types**: `kStandard`, `kSkinned`, and `kProcedural` are supported. Mesh
-  types without a defined blob must emit a diagnostic and be skipped or coerced
-  to `kStandard` per job policy.
+- **Mesh types**: `kStandard` and `kSkinned`. Skin data that cannot bind a mesh
+  warns and the mesh cooks as static geometry in its bind pose.
 - **Header metadata**: `header.version` is populated by the pipeline;
   `AssetEmitter` records `header.content_hash` when it emits the finalized
   descriptor.
-- **Failure policy**: no geometry fallback is allowed. Any failure produces
-  explicit diagnostics and `success=false`.
+- **Failure policy**: what a source states that cannot be drawn is dropped or
+  repaired with a warning, so the rest of the model imports; a geometry left
+  with nothing to draw fails with `success=false`.
 
 ### Importer/Orchestrator Responsibilities
 

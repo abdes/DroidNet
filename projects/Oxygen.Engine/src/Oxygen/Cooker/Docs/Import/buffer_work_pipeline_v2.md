@@ -108,6 +108,7 @@ void Start(co::Nursery& nursery);                       // Must be called on imp
 auto Submit(WorkItem item) -> co::Co<>;                 // Suspends when input queue is full
 auto TrySubmit(WorkItem item) -> bool;                  // Non-blocking submit
 auto Collect() -> co::Co<WorkResult>;                   // Suspends until a result is available
+auto CollectNext() -> co::Co<std::optional<WorkResult>>; // Like Collect; nothing once every worker ended
 void Close();                                           // Close input queue; does not cancel running ThreadPool tasks
 auto HasPending() const noexcept -> bool;               // Any submitted work not yet collected
 auto PendingCount() const noexcept -> size_t;           // Number of items not yet collected
@@ -123,15 +124,21 @@ auto OutputQueueSize() const noexcept -> size_t;        // Current queued result
 - Workers are coroutines running on the import thread that drain the bounded
   input queue.
 - For each `WorkItem`:
-  1. Invoke `on_started()` (if provided) on the import thread.
-  2. If the item was cancelled (`stop_token`), short-circuit and return a
-     `WorkResult` with `success = false`.
+  1. If the item was cancelled (`stop_token`), invoke `on_finished()` (if
+     provided) and enqueue a `WorkResult` with `success = false`;
+     `on_started()` is not invoked.
+  2. Invoke `on_started()` (if provided) on the import thread.
   3. Offload SHA-256 computation over `bytes` to the shared
-     `co::ThreadPool`. The pipeline stores the bytes and digest into
-     `CookedBufferPayload::data` on success. A failure is reported as
-     an `ImportDiagnostic` propagated in the `WorkResult`.
-  4. Capture per-item telemetry and diagnostics, invoke `on_finished()` and
-     enqueue a `WorkResult` for collection.
+     `co::ThreadPool`, which stores the bytes and digest into
+     `CookedBufferPayload::data`.
+  4. If the hash did not complete or a stop arrived meanwhile, report it as
+     cancelled, as in step 1, even when its bytes were hashed.
+  5. Capture per-item telemetry, invoke `on_finished()` and enqueue a successful
+     `WorkResult` for collection.
+
+- The last worker to end closes the output queue, so `CollectNext` can drain what
+  is queued and then end. A job submitting several buffers collects while it
+  submits: the queues are bounded, and submitting first would block forever.
 
 - All errors are converted to `ImportDiagnostic`; exceptions are not allowed
   to propagate across async boundaries.

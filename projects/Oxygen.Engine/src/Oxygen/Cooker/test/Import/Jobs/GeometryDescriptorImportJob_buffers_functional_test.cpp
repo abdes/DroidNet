@@ -14,6 +14,7 @@
 #include <cstring>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -25,19 +26,37 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Finally.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
+#include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ResourceDescriptor.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
+
+namespace oxygen::engine::internal {
+//! The tag an `AssetLoader` takes, which only the engine and its tests make.
+struct EngineTagFactory {
+  static auto Get() noexcept -> EngineTag { return EngineTag {}; }
+};
+} // namespace oxygen::engine::internal
 
 namespace oxygen::content::import::test {
 
@@ -1000,11 +1019,9 @@ namespace {
     std::vector<std::byte> joint_remap = std::vector<std::byte>(12U);
   };
 
-  [[nodiscard]] auto CookSkinnedMesh(const LocalSkin& skin)
-    -> std::optional<ImportReport>
+  [[nodiscard]] auto CookSkinnedMesh(const std::filesystem::path& root,
+    const LocalSkin& skin) -> std::optional<ImportReport>
   {
-    const ScopedTempDir temp;
-    const auto root = temp.Path() / "skinned_mesh";
     const auto source_dir = root / "Sources";
     const auto cooked_root = root / ".cooked";
     std::filesystem::create_directories(source_dir);
@@ -1063,7 +1080,116 @@ namespace {
       }));
   }
 
+  //! Runs `CookSkinnedMesh` in a new root.
+  [[nodiscard]] auto CookSkinnedMesh(const LocalSkin& skin)
+    -> std::optional<ImportReport>
+  {
+    const ScopedTempDir temp;
+    return CookSkinnedMesh(temp.Path() / "skinned_mesh", skin);
+  }
+
+  //! The geometry `report` cooked, loaded as the runtime loads it: from its
+  //! root, with its buffers bound.
+  [[nodiscard]] auto LoadCookedGeometry(const ImportReport& report)
+    -> std::shared_ptr<const data::GeometryAsset>
+  {
+    const auto product = std::ranges::find(report.products,
+      data::AssetType::kGeometry, &ImportProductRecord::asset_type);
+    if (product == report.products.end() || !product->key.has_value()) {
+      return nullptr;
+    }
+    auto loop = ImportEventLoop {};
+    auto pool = co::ThreadPool { loop, 1U };
+    auto loader = AssetLoader { engine::internal::EngineTagFactory::Get(),
+      AssetLoaderConfig { .thread_pool = observer_ptr { &pool } } };
+    loader.AddLooseCookedRoot(report.cooked_root);
+    auto geometry = std::shared_ptr<const data::GeometryAsset> {};
+    // co::Run blocks until the coroutine completes.
+    co::Run(loop, [&] -> co::Co<> {
+      OXCO_WITH_NURSERY(nursery)
+      {
+        co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        geometry
+          = co_await loader.LoadAssetAsync<data::GeometryAsset>(*product->key);
+        loader.Stop();
+        co_return co::kJoin;
+      };
+    });
+    return geometry;
+  }
+
+  [[nodiscard]] auto HoldsBytes(const std::span<const std::byte> actual,
+    const std::span<const std::byte> expected) -> bool
+  {
+    return std::ranges::equal(actual, expected);
+  }
+
+  //! Whether `buffer` holds `expected`, which tells one stream from another
+  //! because the fixtures give every stream its own bytes.
+  [[nodiscard]] auto BufferHolds(
+    const std::shared_ptr<data::BufferResource>& buffer,
+    const std::span<const std::byte> expected) -> bool
+  {
+    return buffer != nullptr
+      && HoldsBytes(std::as_bytes(buffer->GetData()), expected);
+  }
+
 } // namespace
+
+//! Each reference of a cooked mesh reaches the buffer it names: a reference to
+//! the wrong row is one no descriptor rule can see, as each stream's own shape
+//! stays right.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, LoadedMeshBindsItsBuffers)
+{
+  const ScopedTempDir temp;
+  const auto root = temp.Path() / "loaded_mesh";
+  std::filesystem::create_directories(root / "Sources");
+  CookDefaultMaterial(root / ".cooked");
+  auto service = AsyncImportService(AsyncImportService::Config {
+    .thread_pool_size = 2U,
+  });
+  [[maybe_unused]] auto stop_service
+    = oxygen::Finally([&service] -> void { service.Stop(); });
+  const auto mesh = LocalMesh {};
+
+  const auto report = CookLocalMesh(service, root, mesh);
+
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  const auto geometry = LoadCookedGeometry(*report);
+  ASSERT_NE(geometry, nullptr);
+  ASSERT_EQ(geometry->LodCount(), 1U);
+  const auto& loaded = geometry->Meshes().front();
+  EXPECT_TRUE(HoldsBytes(std::as_bytes(loaded->Vertices()), mesh.vertices));
+  EXPECT_TRUE(HoldsBytes(loaded->IndexBuffer().bytes, mesh.indices));
+}
+
+//! Nothing draws skin yet: without this no run shows a stream bound to the
+//! wrong reference, such as weights where joint indices belong.
+NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, LoadedSkinBindsItsStreams)
+{
+  const ScopedTempDir temp;
+  const auto skin = LocalSkin {
+    .joint_weights = std::vector<std::byte>(48U, std::byte { 0x3F }),
+    .inverse_bind = std::vector<std::byte>(192U, std::byte { 0x40 }),
+    .joint_remap = IndexBytes({ 2U, 1U, 0U }),
+  };
+
+  const auto report = CookSkinnedMesh(temp.Path() / "loaded_skin", skin);
+
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+  const auto geometry = LoadCookedGeometry(*report);
+  ASSERT_NE(geometry, nullptr);
+  ASSERT_EQ(geometry->LodCount(), 1U);
+  const auto& loaded = geometry->Meshes().front();
+  ASSERT_TRUE(loaded->IsSkinned());
+  EXPECT_TRUE(BufferHolds(loaded->JointIndexBuffer(), skin.joint_indices));
+  EXPECT_TRUE(BufferHolds(loaded->JointWeightBuffer(), skin.joint_weights));
+  EXPECT_TRUE(BufferHolds(loaded->InverseBindBuffer(), skin.inverse_bind));
+  EXPECT_TRUE(BufferHolds(loaded->JointRemapBuffer(), skin.joint_remap));
+}
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, BindableSkinStreamsCook)
 {

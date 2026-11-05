@@ -24,13 +24,13 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/ModelImportState.h>
 #include <Oxygen/Cooker/Import/SurfaceProvenance.h>
+#include <Oxygen/Cooker/test/Support/CookedRecords.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -130,13 +130,10 @@ namespace {
     ASSERT_NE(product, report->products.end());
     const auto bytes
       = ReadBytes(report->cooked_root / product->descriptor_relpath);
-    const auto desc
-      = oxygen::serio::CopyAt<data::pak::render::MaterialAssetDesc>(
-        std::span { bytes });
-    ASSERT_HAS_VALUE(desc);
-    EXPECT_FLOAT_EQ(desc->emissive_factor[0], 8.0F);
-    EXPECT_FLOAT_EQ(desc->emissive_factor[1], 4.0F);
-    EXPECT_FLOAT_EQ(desc->emissive_factor[2], 2.0F);
+    const auto desc = oxygen::cooker::test::ReadMaterialDesc(bytes);
+    EXPECT_FLOAT_EQ(desc.emissive_factor[0], 8.0F);
+    EXPECT_FLOAT_EQ(desc.emissive_factor[1], 4.0F);
+    EXPECT_FLOAT_EQ(desc.emissive_factor[2], 2.0F);
   }
 
 } // namespace
