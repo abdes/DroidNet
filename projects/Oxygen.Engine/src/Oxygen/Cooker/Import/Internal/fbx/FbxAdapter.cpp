@@ -2912,14 +2912,27 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
     if (material != nullptr) {
+      // In FBX a slot's map replaces its value, which is then only a leftover;
+      // the renderer multiplies factor and sample, so a mapped slot's factor is
+      // neutral. Weights such as `base_factor` still scale what the map gives.
+      const auto textures = FbxMaterialTextures::From(*material);
+      const auto* base_color_tex = textures.base_color.Texture();
+      const auto* normal_tex = textures.normal.Texture();
+      const auto* metallic_tex = textures.metallic.Texture();
+      const auto* roughness_tex = textures.roughness.Texture();
+      const auto* ao_tex = textures.occlusion.Texture();
+      const auto* emissive_tex = textures.emissive.Texture();
+
       auto base = glm::vec4 { 1.0F };
-      if (material->pbr.base_color.has_value
-        && material->pbr.base_color.value_components >= 3) {
-        base = ToVec4(material->pbr.base_color.value_vec4);
-      } else if (material->fbx.diffuse_color.has_value
-        && material->fbx.diffuse_color.value_components >= 3) {
-        base
-          = glm::vec4 { ToVec3(material->fbx.diffuse_color.value_vec3), 1.0F };
+      if (base_color_tex == nullptr) {
+        if (material->pbr.base_color.has_value
+          && material->pbr.base_color.value_components >= 3) {
+          base = ToVec4(material->pbr.base_color.value_vec4);
+        } else if (material->fbx.diffuse_color.has_value
+          && material->fbx.diffuse_color.value_components >= 3) {
+          base = glm::vec4 { ToVec3(material->fbx.diffuse_color.value_vec3),
+            1.0F };
+        }
       }
 
       float base_factor = 1.0F;
@@ -2946,7 +2959,9 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         item.material.domain = data::MaterialDomain::kAlphaBlended;
       }
 
-      if (material->pbr.metalness.has_value) {
+      if (metallic_tex != nullptr) {
+        item.material.inputs.metalness = 1.0F;
+      } else if (material->pbr.metalness.has_value) {
         item.material.inputs.metalness
           = Clamp01(material->pbr.metalness.value_real);
       }
@@ -2956,20 +2971,28 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         = material->features.roughness_as_glossiness.enabled;
       const auto& roughness_map
         = as_glossiness ? material->pbr.glossiness : material->pbr.roughness;
-      if (roughness_map.has_value) {
+      if (roughness_tex != nullptr) {
+        // A glossiness sample becomes 1 - (1 - factor) * sample, so its neutral
+        // factor is 0.
+        item.material.inputs.roughness = as_glossiness ? 0.0F : 1.0F;
+      } else if (roughness_map.has_value) {
         item.material.inputs.roughness = Clamp01(roughness_map.value_real);
       }
       item.material.inputs.roughness_as_glossiness = as_glossiness
         && (roughness_map.has_value || roughness_map.texture != nullptr);
 
-      if (material->pbr.ambient_occlusion.has_value) {
+      if (ao_tex != nullptr) {
+        item.material.inputs.ambient_occlusion = 1.0F;
+      } else if (material->pbr.ambient_occlusion.has_value) {
         item.material.inputs.ambient_occlusion
           = Clamp01(material->pbr.ambient_occlusion.value_real);
       }
 
       {
         auto emission = glm::vec4 { 0.0F };
-        if (material->pbr.emission_color.has_value
+        if (emissive_tex != nullptr) {
+          emission = glm::vec4 { 1.0F };
+        } else if (material->pbr.emission_color.has_value
           && material->pbr.emission_color.value_components >= 3) {
           emission = ToVec4(material->pbr.emission_color.value_vec4);
         } else if (material->fbx.emission_color.has_value
@@ -2991,25 +3014,23 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         item.material.inputs.emissive_factor[2] = emission.z * emission_factor;
       }
 
+      // The value of a mapped normal slot is an amount only when the file
+      // states one; the zero of a slot that merely holds a map would flatten
+      // it.
+      auto normal_amount = 1.0F;
       if (material->pbr.normal_map.has_value) {
-        item.material.inputs.normal_scale
-          = (std::max)(0.0F, material->pbr.normal_map.value_real);
+        normal_amount = material->pbr.normal_map.value_real;
       } else if (material->fbx.bump_factor.has_value) {
-        item.material.inputs.normal_scale
-          = (std::max)(0.0F, material->fbx.bump_factor.value_real);
+        normal_amount = material->fbx.bump_factor.value_real;
       }
+      item.material.inputs.normal_scale
+        = normal_tex != nullptr && normal_amount <= 0.0F
+        ? 1.0F
+        : (std::max)(0.0F, normal_amount);
 
       item.material.inputs.double_sided
         = material->features.double_sided.enabled;
       item.material.inputs.unlit = material->features.unlit.enabled;
-
-      const auto textures = FbxMaterialTextures::From(*material);
-      const auto* base_color_tex = textures.base_color.Texture();
-      const auto* normal_tex = textures.normal.Texture();
-      const auto* metallic_tex = textures.metallic.Texture();
-      const auto* roughness_tex = textures.roughness.Texture();
-      const auto* ao_tex = textures.occlusion.Texture();
-      const auto* emissive_tex = textures.emissive.Texture();
 
       const auto* metallic_file = ResolveFileTexture(metallic_tex);
       const auto* roughness_file = ResolveFileTexture(roughness_tex);

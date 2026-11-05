@@ -565,6 +565,120 @@ NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
     });
 }
 
+//! In FBX a slot's map replaces its value, and the renderer multiplies factor
+//! and sample: a leftover value in a mapped slot must not reach the factor,
+//! while weights and stated amounts still do.
+NOLINT_TEST_F(ModelValuesTest, FbxMappedSlotsTakeNeutralFactors)
+{
+  struct Case {
+    std::string_view name;
+    std::string_view properties;
+    std::string_view connections;
+    float base;
+    float metalness;
+    float roughness;
+    float normal_scale;
+  };
+  const auto cases = std::array {
+    Case {
+      .name = "max_physical",
+      // What 3ds Max's Physical Material leaves next to its maps.
+      .properties
+      = "P: \"3dsMax|ClassIDa\", \"int\", \"Integer\", \"\","
+        "1030429932\n"
+        "            P: \"3dsMax|ClassIDb\", \"int\", \"Integer\", "
+        "\"\",-559038463\n"
+        "            P: \"3dsMax|SuperClassID\", \"int\", "
+        "\"Integer\", \"\",3072\n"
+        "            P: \"3dsMax|Parameters|base_color\", "
+        "\"ColorAndAlpha\", \"\", \"A\",0.25,0.25,0.25,1\n"
+        "            P: \"3dsMax|Parameters|base_weight\", "
+        "\"Float\", \"\", \"A\",0.5\n"
+        "            P: \"3dsMax|Parameters|metalness\", \"Float\", "
+        "\"\", \"A\",0\n"
+        "            P: \"3dsMax|Parameters|roughness\", \"Float\", "
+        "\"\", \"A\",0\n"
+        "            P: \"3dsMax|Parameters|roughness_inv\", "
+        "\"Bool\", \"\", \"A\",0\n",
+      .connections
+      = "C: \"OP\",1005,1003,\"3dsMax|Parameters|base_color_map\"\n"
+        "    C: \"OP\",1005,1003,\"3dsMax|Parameters|metalness_map\"\n"
+        "    C: \"OP\",1005,1003,\"3dsMax|Parameters|roughness_map\"\n"
+        "    C: \"OP\",1005,1003,\"3dsMax|Parameters|bump_map\"\n",
+      .base = 0.5F,
+      .metalness = 1.0F,
+      .roughness = 1.0F,
+      .normal_scale = 1.0F,
+    },
+    Case {
+      .name = "phong_stated_amount",
+      .properties
+      = "P: \"DiffuseColor\", \"Color\", \"\", \"A\",0.25,0.25,0.25\n"
+        "            P: \"DiffuseFactor\", \"Number\", \"\", \"A\",0.5\n"
+        "            P: \"BumpFactor\", \"Number\", \"\", \"A\",0.3\n",
+      .connections = "C: \"OP\",1005,1003,\"DiffuseColor\"\n",
+      .base = 0.5F,
+      .metalness = 0.0F,
+      .roughness = 0.0F,
+      .normal_scale = 0.3F,
+    },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    const auto root = MakeTempDir(test_case.name);
+    std::filesystem::copy_file(
+      TestModelsDirFromFile() / "static_tangent_normal.png",
+      root / "static_tangent_normal.png");
+    auto text = std::string {};
+    {
+      std::ifstream input(
+        TestModelsDirFromFile() / "static_normal_triangle.fbx");
+      text.assign(std::istreambuf_iterator<char>(input),
+        std::istreambuf_iterator<char>());
+    }
+    // A shading model of its own hides the 3ds Max material's class IDs.
+    if (test_case.metalness > 0.0F) {
+      const auto model = std::string_view { "ShadingModel: \"phong\"" };
+      const auto at = text.find(model);
+      ASSERT_NE(at, std::string::npos);
+      text.replace(at, model.size(), "ShadingModel: \"unknown\"");
+    }
+    const auto color = text.find("P: \"DiffuseColor\"");
+    const auto end = text.find("        }\n", color);
+    ASSERT_NE(color, std::string::npos);
+    ASSERT_NE(end, std::string::npos);
+    text.replace(color, end - color, test_case.properties);
+    const auto connection = text.find("C: \"OO\",1003,1002");
+    ASSERT_NE(connection, std::string::npos);
+    text.insert(connection, std::string(test_case.connections) + "    ");
+
+    const auto source = root / "mapped_slots.fbx";
+    {
+      std::ofstream output(source);
+      output << text;
+    }
+    oxygen::content::import::ImportRequest request {};
+    request.source_path = source;
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.cooked_root = root / "cooked";
+    ImportAndVerifyCleanCopy(
+      std::move(request), [&test_case](const CookedModel& model) -> void {
+        const auto& material = *model.material;
+        EXPECT_NE(
+          material.GetNormalTexture(), oxygen::data::kNoResourceReference);
+        EXPECT_NEAR(material.GetBaseColor()[0], test_case.base, 0.001F);
+        if (test_case.metalness > 0.0F) {
+          EXPECT_NEAR(material.GetMetalness(), test_case.metalness, 0.001F);
+          EXPECT_NEAR(material.GetRoughness(), test_case.roughness, 0.001F);
+        }
+        EXPECT_NEAR(material.GetNormalScale(), test_case.normal_scale, 0.001F);
+      });
+  }
+}
+
 NOLINT_TEST_F(ModelValuesTest, FbxGeneratesMissingNormalMapTangents)
 {
   const auto root = MakeTempDir("normal_map_tangents");

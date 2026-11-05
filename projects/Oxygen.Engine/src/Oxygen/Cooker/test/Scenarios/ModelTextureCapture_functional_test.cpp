@@ -10,6 +10,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -185,6 +186,37 @@ namespace {
     EXPECT_NE(serial.base_color, serial.normal);
     EXPECT_EQ(serial.base_color, parallel.base_color);
     EXPECT_EQ(serial.normal, parallel.normal);
+  }
+
+  //! A model imported with no texture settings still minifies cleanly: its
+  //! textures cook their whole mip chain.
+  NOLINT_TEST_F(ModelConcurrencyTest, TexturesWithoutSettingsCookTheirMipChain)
+  {
+    const auto root = MakeTempDir("model_default_mips");
+    auto request = ImportRequest {};
+    request.source_path
+      = TestModelsDirFromFile() / "static_textured_triangle.gltf";
+    request.asset_virtual_path
+      = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+    request.source_mount_path
+      = oxygen::cooker::test::SourceMountPath(request.source_path);
+    request.cooked_root = root / "cooked";
+    const auto cooked = RunImport(std::move(request));
+    ASSERT_TRUE(cooked.report.success);
+
+    const auto content = LoadInspection(cooked.report.cooked_root);
+    const auto material = FindAssetOfType(content, AssetType::kMaterial);
+    ASSERT_HAS_VALUE(material);
+    const auto desc = oxygen::cooker::test::ReadMaterialDesc(
+      content.Descriptor(material->key));
+    const auto& texture = content.ResourceTable(cooked::TableKind::kTexture)
+                            .Row<TextureResourceDesc>(material->references
+                                .Resources()[desc.base_color_texture.get()]
+                                .index);
+    ASSERT_GT(texture.width, 1U);
+    EXPECT_EQ(static_cast<int>(texture.mip_levels),
+      static_cast<int>(
+        std::bit_width((std::max)(texture.width, texture.height))));
   }
 
   class ModelCapturedInputTest : public ModelImportTestBase {

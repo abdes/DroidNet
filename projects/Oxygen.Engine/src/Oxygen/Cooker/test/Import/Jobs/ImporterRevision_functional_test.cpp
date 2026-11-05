@@ -72,76 +72,76 @@ namespace {
     {
       .importer = Importer::kGltf,
       .scenario = "",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "71156bfaec5023e27431fadb578afc9ea611832e82057a34bfbcc9ba2fa172f8",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "textured",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "7bee6192d59266523751e5ab53e9f128bd8ae9874aab8f4aac1e1c99c1066053",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "lights",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "7cff02e78035d2f8744b263dc6433c38c2c6fb80ae5908ee80eaca3c3602d277",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "remap",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "c349260223166825f8bd6cca65ffd17a7a80c88b5c7f24baa939cd53f2ba0026",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "tuned",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "9ce4909535b3673d8193c38d6a66ec993353f8b28971b18d0834ac70f250dafd",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "c9799e5c2906743bbdde354c27d1761a94a6caabb8d2c60253b00e48e77fc4c2",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "textured",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "93fc5f6057baf3a64e4a97fa68cf125a0edb4fce7d3fc2fbba135ef229196eaa",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "skinned",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "6faf2a27b14eef9c9518ecf69aebb137177256c3056eb7f66dcd90bcb5c3134a",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "lights",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "c76a0409d22661b1b6e75ac88229771f8d3a45b2ed4d1240ff81f0e2c3a0e952",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "tuned",
-      .revision = 13,
+      .revision = 14,
       .digest
       = "c39c159521283194ae6e441c7f993fdf5228670b8bf7ed7e5791b91a891fe065",
     },
     {
       .importer = Importer::kTexture,
-      .revision = 5,
+      .revision = 6,
       .digest
       = "a29e0978e13f327d808eed9de1913c0584a2b4429a72191f72216b23aaa97552",
     },

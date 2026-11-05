@@ -581,7 +581,7 @@ struct ImportOptions final {
     bool force_rgba_on_decode = true;
 
     //! Mip chain generation policy.
-    MipPolicy mip_policy = MipPolicy::kNone;
+    MipPolicy mip_policy = MipPolicy::kFullChain;
 
     //! Maximum mip levels when @p mip_policy is `MipPolicy::kMaxCount`.
     uint8_t max_mip_levels = 1;
