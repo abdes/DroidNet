@@ -123,6 +123,7 @@ m_gtest_program(
     "Scene_active_camera_test.cpp"
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
+    "Scene_table_growth_test.cpp"
     "Scene_environment_test.cpp"
     "Scene_graph_test.cpp"
     "Scene_nodes_test.cpp"

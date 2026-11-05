@@ -17,7 +17,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -154,10 +153,7 @@ auto Scene::CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
 {
   DLOG_SCOPE_F(3, "Create Child Node");
   return SafeCall(NodeIsValidAndMine(parent),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &parent);
-      DCHECK_NOTNULL_F(state.node_impl);
-
+    [&](const SafeCallState& /*state*/) -> std::optional<SceneNode> {
       const NodeHandle child_handle {
         nodes_->Emplace(std::forward<Args>(args)...),
         GetId(),
@@ -165,12 +161,13 @@ auto Scene::CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
       DCHECK_F(
         child_handle.IsValid(), "expecting a valid handle for a new node");
       auto* node_impl = &nodes_->ItemAt(child_handle);
+      // Inserting can move every node, so `state.node_impl` no longer holds.
+      auto* parent_impl = &nodes_->ItemAt(parent.GetHandle());
 
-      LinkChild(
-        state.node->GetHandle(), state.node_impl, child_handle, node_impl);
+      LinkChild(parent.GetHandle(), parent_impl, child_handle, node_impl);
 
       // Mark parent transform dirty since it now has a new child
-      state.node_impl->MarkTransformDirty();
+      parent_impl->MarkTransformDirty();
 
       return SceneNode(shared_from_this(), child_handle);
     });
@@ -431,8 +428,6 @@ auto Scene::DestroyNodeHierarchy(SceneNode& root) noexcept -> bool
             return VisitResult::kContinue;
           }
           // Real visit: destroy the node after its children have been destroyed
-          // Capture node name before destruction for logging
-          const std::string node_name = std::string(node.node_impl->GetName());
           if (node.node_impl->template HasComponent<ScriptingComponent>()) {
             node.node_impl->template GetComponent<ScriptingComponent>()
               .EmitActiveSlotDeactivations();
@@ -466,7 +461,7 @@ auto Scene::DestroyNodeHierarchy(SceneNode& root) noexcept -> bool
           }
           // Node destruction failed - this shouldn't happen unless the node
           // was already destroyed or became invalid during traversal
-          DLOG_F(ERROR, "Failed to destroy node: {} (handle: {})", node_name,
+          DLOG_F(ERROR, "Failed to destroy node with handle {}",
             nostd::to_string(node.handle));
           return VisitResult::kStop;
         },
@@ -700,21 +695,20 @@ auto Scene::CreateChildNodeFrom(SceneNode& parent, SceneNode& original,
 {
   DLOG_SCOPE_F(3, "Clone Into Parent");
   return SafeCall(NodeIsValidAndMine(parent),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &parent);
-      DCHECK_NOTNULL_F(state.node_impl);
-
+    [&](const SafeCallState& /*state*/) -> std::optional<SceneNode> {
       // Create the cloned node as a root first
       auto clone = CloneNode(original, new_name);
       if (!clone) {
         return std::nullopt; // Cloning failed
       }
       auto [cloned_handle, cloned_node_impl] = *clone;
+      // Inserting can move every node, so `state.node_impl` no longer holds.
+      auto* parent_impl = &nodes_->ItemAt(parent.GetHandle());
       LinkChild(
-        parent.GetHandle(), state.node_impl, cloned_handle, cloned_node_impl);
+        parent.GetHandle(), parent_impl, cloned_handle, cloned_node_impl);
 
       // Mark parent transform dirty since it now has a new child
-      state.node_impl->MarkTransformDirty();
+      parent_impl->MarkTransformDirty();
 
       return SceneNode(shared_from_this(), cloned_handle);
     });
@@ -785,11 +779,15 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
     return std::nullopt;
   }
 
-  std::unordered_map<NodeHandle, NodeHandle> handle_map;
-  NodeHandle root_cloned_handle;
-  SceneNodeImpl* root_cloned_impl = nullptr;
-  bool root_cloned = false;
-  std::vector<NodeHandle> cloned_nodes; // Track for cleanup on failure
+  // Cloning a hierarchy of this scene inserts into the table the traversal
+  // reads, and an insert can move every node: nothing is inserted until the
+  // traversal is over.
+  struct SourceNode {
+    NodeHandle handle;
+    NodeHandle parent;
+    std::unique_ptr<SceneNodeImpl> clone;
+  };
+  std::vector<SourceNode> sources;
   const NonMutatingTraversal traversal(starting_node.scene_weak_.lock());
   const auto traversal_result = traversal.TraverseHierarchy(
     starting_node,
@@ -797,85 +795,67 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
       DCHECK_F(!dry_run,
         "CloneHierarchy uses kPreOrder and should never receive dry_run=true");
 
-      auto orig_parent_handle = node.node_impl->AsGraphNode().GetParent();
-      const std::string name { node.node_impl->GetName() };
-
       try {
-        // Clone the node directly from impl
-        const auto cloned_impl = node.node_impl->Clone();
-        cloned_impl->SetName(name);
-        const NodeHandle cloned_handle {
-          nodes_->Insert(std::move(*cloned_impl)),
-          GetId(),
-        };
-        DCHECK_F(
-          cloned_handle.IsValid(), "expecting a valid handle for cloned node");
-
-        cloned_nodes.push_back(cloned_handle);
-        handle_map[node.handle] = cloned_handle;
-        if (!orig_parent_handle.IsValid()) {
-          // Root node of the hierarchy being cloned - keep as orphan
-          root_cloned_handle = cloned_handle;
-          root_cloned_impl = &nodes_->ItemAt(cloned_handle);
-          root_cloned = true;
-          // Do NOT add to root nodes - create as orphan hierarchy
-        } else {
-          // Link to already-cloned parent
-          const auto it = handle_map.find(orig_parent_handle);
-          if (it == handle_map.end()) {
-            // This should never happen with depth-first traversal and a valid
-            // hierarchy If it does, it indicates corruption in the source
-            // hierarchy
-            DLOG_F(ERROR,
-              "Parent handle {} not found in handle map for node {} - "
-              "hierarchy corruption detected",
-              nostd::to_string(orig_parent_handle), name);
-            return VisitResult::kStop;
-          }
-          const NodeHandle cloned_parent_handle = it->second;
-          SceneNodeImpl* cloned_parent_impl
-            = &GetNodeImplRefUnsafe(cloned_parent_handle);
-          LinkChild(cloned_parent_handle, cloned_parent_impl, cloned_handle,
-            &nodes_->ItemAt(cloned_handle));
-
-          // Mark parent transform dirty since it now has a new child
-          cloned_parent_impl->MarkTransformDirty();
-        }
+        auto clone = node.node_impl->Clone();
+        clone->SetName(node.node_impl->GetName());
+        sources.push_back({
+          .handle = node.handle,
+          .parent = node.node_impl->AsGraphNode().GetParent(),
+          .clone = std::move(clone),
+        });
         return VisitResult::kContinue;
       } catch ([[maybe_unused]] const std::exception& ex) {
-        DLOG_F(ERROR, "Failed to clone node {}: {}", name, ex.what());
-        // Clean up any nodes we've created so far
-        for (const auto& handle : cloned_nodes) {
-          if (nodes_->Contains(handle)) {
-            nodes_->Erase(handle);
-          }
-        }
-        if (root_cloned_handle.IsValid()) {
-          // No need to remove from root nodes since we never added it
-        }
+        DLOG_F(ERROR, "Failed to clone node {}: {}", node.node_impl->GetName(),
+          ex.what());
         return VisitResult::kStop;
       }
     },
     TraversalOrder::kPreOrder); // Pre-order guarantees parent visited
                                 // before children
 
-  if (traversal_result.completed && root_cloned) {
-    const auto same_scene = starting_node.GetHandle().BelongsToScene(GetId());
-    for (const auto& handle : cloned_nodes) {
-      RemapClonedScriptBindings(nodes_->ItemAt(handle), handle_map, same_scene);
-    }
-  }
-
   LOG_SCOPE_F(INFO, "Traversal result");
   LOG_F(INFO, "traversal completed: {}", traversal_result.completed);
   LOG_F(INFO, "visited nodes: {}", traversal_result.nodes_visited);
   LOG_F(INFO, "filtered nodes: {}", traversal_result.nodes_filtered);
 
-  if (!traversal_result.completed || !root_cloned) {
+  if (!traversal_result.completed || sources.empty()) {
     DLOG_F(WARNING, "Hierarchy cloning failed or incomplete");
     return std::nullopt;
   }
-  return std::make_pair(root_cloned_handle, root_cloned_impl);
+
+  std::unordered_map<NodeHandle, NodeHandle> handle_map;
+  std::vector<NodeHandle> cloned_nodes;
+  cloned_nodes.reserve(sources.size());
+  for (const auto& source : sources) {
+    const NodeHandle cloned_handle {
+      nodes_->Insert(std::move(*source.clone)),
+      GetId(),
+    };
+    DCHECK_F(
+      cloned_handle.IsValid(), "expecting a valid handle for cloned node");
+    cloned_nodes.push_back(cloned_handle);
+    handle_map[source.handle] = cloned_handle;
+
+    // The starting node keeps no parent: the clone is an orphan hierarchy.
+    if (const auto parent = handle_map.find(source.parent);
+      source.handle != starting_node.GetHandle()
+      && parent != handle_map.end()) {
+      auto* parent_impl = &nodes_->ItemAt(parent->second);
+      LinkChild(parent->second, parent_impl, cloned_handle,
+        &nodes_->ItemAt(cloned_handle));
+
+      // Mark parent transform dirty since it now has a new child
+      parent_impl->MarkTransformDirty();
+    }
+  }
+
+  const auto same_scene = starting_node.GetHandle().BelongsToScene(GetId());
+  for (const auto& handle : cloned_nodes) {
+    RemapClonedScriptBindings(nodes_->ItemAt(handle), handle_map, same_scene);
+  }
+
+  const auto root = cloned_nodes.front();
+  return std::make_pair(root, &nodes_->ItemAt(root));
 }
 
 /*!
@@ -1004,10 +984,7 @@ auto Scene::CreateChildHierarchyFrom(SceneNode& parent,
 {
   DLOG_SCOPE_F(3, "Create Child Hierarchy From");
   return SafeCall(NodeIsValidAndMine(parent),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
-      DCHECK_EQ_F(state.node, &parent);
-      DCHECK_NOTNULL_F(state.node_impl);
-
+    [&](const SafeCallState& /*state*/) -> std::optional<SceneNode> {
       // Clone the entire hierarchy first
       auto clone_result = CloneHierarchy(original_root);
       if (!clone_result) {
@@ -1018,11 +995,13 @@ auto Scene::CreateChildHierarchyFrom(SceneNode& parent,
       cloned_root_impl->SetName(
         new_root_name); // CloneHierarchy creates an orphan hierarchy - link it
                         // as a child
-      LinkChild(parent.GetHandle(), state.node_impl, cloned_root_handle,
-        cloned_root_impl);
+      // Inserting can move every node, so `state.node_impl` no longer holds.
+      auto* parent_impl = &nodes_->ItemAt(parent.GetHandle());
+      LinkChild(
+        parent.GetHandle(), parent_impl, cloned_root_handle, cloned_root_impl);
 
       // Mark parent transform dirty since it now has a new child hierarchy
-      state.node_impl->MarkTransformDirty();
+      parent_impl->MarkTransformDirty();
 
       return SceneNode(shared_from_this(), cloned_root_handle);
     });
