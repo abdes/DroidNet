@@ -308,9 +308,11 @@ These stages follow the current synchronous implementation in
      - `extension_hint` from `source_id` or per-face `TextureSource.source_id`
    - Formats, detected from the leading bytes: OpenEXR (tinyexr), Radiance
      HDR, PNG (libspng), WebP still images (libwebp), KTX2 compressed with
-     Basis Universal (libktx, base level transcoded to RGBA8), and the other
-     stb_image formats. Other KTX2 encodings, KTX2 arrays, cube maps and
-     volumes, and animated WebP are refused.
+     Basis Universal (libktx, base level transcoded to RGBA8), DDS with BC1 to
+     BC5 or 32-bit RGBA (base level decoded to RGBA8, BC5's blue reconstructed
+     as a normal's z), and the other stb_image formats. Other KTX2 and DDS
+     encodings, their arrays, cube maps and volumes, and animated WebP are
+     refused.
    - Output: `ScratchImage` (RGBA8 or RGBA32Float)
 
 5. **(Single-source only) Cubemap transforms**

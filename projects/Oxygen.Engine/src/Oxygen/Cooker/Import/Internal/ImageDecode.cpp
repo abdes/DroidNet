@@ -25,6 +25,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Cooker/Import/Internal/DdsDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
@@ -1020,6 +1021,9 @@ auto DecodeToScratchImage(std::span<const std::byte> bytes,
   }
   if (IsKtx2Signature(bytes)) {
     return DecodeKtx2ToScratchImage(bytes, options);
+  }
+  if (IsDdsSignature(bytes)) {
+    return DecodeDdsToScratchImage(bytes, options.flip_y);
   }
 
   // 5. Fallback to LDR decoder (stb_image)

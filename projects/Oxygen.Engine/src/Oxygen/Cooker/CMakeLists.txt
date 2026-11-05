@@ -193,6 +193,7 @@ set(
   OXYGEN_COOKER_PRIVATE_HEADERS
   "Import/Internal/AdapterTypes.h"
   "Import/Internal/AsyncImporter.h"
+  "Import/Internal/DdsDecode.h"
   "Import/Internal/bc7/bc7enc.h"
   "Import/Internal/bc7/Bc7Encoder.h"
   "Import/Internal/Emitters/AssetEmitter.h"
@@ -327,6 +328,7 @@ set(
   "CookedVersions.cpp"
   "Import/Importer.cpp"
   "Import/Internal/AsyncImporter.cpp"
+  "Import/Internal/DdsDecode.cpp"
   "Import/Internal/bc7/bc7enc.cpp"
   "Import/Internal/bc7/Bc7Encoder.cpp"
   "Import/Internal/Emitters/AssetEmitter.cpp"

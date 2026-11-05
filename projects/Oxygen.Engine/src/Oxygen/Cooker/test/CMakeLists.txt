@@ -45,6 +45,7 @@ oxygen_cooker_test(
     "Import/BufferSource_test.cpp"
     "Import/CapturedInputSet_test.cpp"
     "Import/CompressedImageDecode_test.cpp"
+    "Import/DdsDecode_test.cpp"
     "Import/DroppedSourceFeatures_test.cpp"
     "Import/EngineContent_test.cpp"
     "Import/GeometrySource_test.cpp"

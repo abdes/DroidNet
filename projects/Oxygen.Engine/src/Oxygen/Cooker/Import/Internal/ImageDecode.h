@@ -123,12 +123,14 @@ OXGN_COOK_NDAPI auto IsHdrFormat(std::span<const std::byte> bytes,
   - **KTX2**: Basis Universal (ETC1S, UASTC) textures transcoded via libktx
     to RGBA8UNorm, base level only; other KTX2 encodings, arrays, cube maps
     and volumes are refused
+  - **DDS**: BC1 to BC5 and 32-bit RGBA, base level only, to RGBA8UNorm; see
+    `DecodeDdsToScratchImage`
   - **LDR formats**: Decoded via stb_image to RGBA8UNorm
 
   Format detection order:
   1. EXR signature detection (magic bytes)
   2. HDR signature detection or `.hdr` extension hint
-  3. WebP and KTX2 signature detection
+  3. WebP, KTX2 and DDS signature detection
   4. Fallback to stb_image for LDR formats
 
   @param bytes   Input image data
