@@ -98,7 +98,13 @@ struct FbxMaterialTextures final {
       .base_color = { .primary=&material.pbr.base_color, .fallback=&material.fbx.diffuse_color },
       .normal = { .primary=&material.pbr.normal_map, .fallback=&material.fbx.normal_map },
       .metallic = { .primary=&material.pbr.metalness, .fallback=nullptr },
-      .roughness = { .primary=&material.pbr.roughness, .fallback=nullptr },
+      // ufbx moves a material's glossiness out of its roughness map.
+      .roughness = {
+        .primary = material.features.roughness_as_glossiness.enabled
+          ? &material.pbr.glossiness
+          : &material.pbr.roughness,
+        .fallback = nullptr,
+      },
       .occlusion = { .primary=&material.pbr.ambient_occlusion, .fallback=nullptr },
       .emissive
       = { .primary=&material.pbr.emission_color, .fallback=&material.fbx.emission_color },

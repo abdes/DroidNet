@@ -2865,12 +2865,16 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           = Clamp01(material->pbr.metalness.value_real);
       }
 
-      if (material->pbr.roughness.has_value) {
-        item.material.inputs.roughness
-          = Clamp01(material->pbr.roughness.value_real);
-      }
-      item.material.inputs.roughness_as_glossiness
+      // ufbx moves a material's glossiness out of its roughness map.
+      const auto as_glossiness
         = material->features.roughness_as_glossiness.enabled;
+      const auto& roughness_map
+        = as_glossiness ? material->pbr.glossiness : material->pbr.roughness;
+      if (roughness_map.has_value) {
+        item.material.inputs.roughness = Clamp01(roughness_map.value_real);
+      }
+      item.material.inputs.roughness_as_glossiness = as_glossiness
+        && (roughness_map.has_value || roughness_map.texture != nullptr);
 
       if (material->pbr.ambient_occlusion.has_value) {
         item.material.inputs.ambient_occlusion

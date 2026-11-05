@@ -87,9 +87,8 @@ namespace {
   }
 
   const auto normal_scale = material.GetNormalScale();
-  if (!std::isfinite(normal_scale) || normal_scale < 0.0F
-    || normal_scale > kReasonableScaleMax) {
-    error_msg = "Material normal_scale out of reasonable range [0, 10]";
+  if (!std::isfinite(normal_scale) || normal_scale < 0.0F) {
+    error_msg = "Material normal_scale must be finite and not negative";
     return false;
   }
 
@@ -119,8 +118,11 @@ constexpr float kMaterialScalarQuantizationScale = 1024.0F;
 
 auto QuantizeMaterialScalar(const float value) noexcept -> std::uint32_t
 {
+  // A normal scale has no upper limit; what quantizes past the range is equal.
+  constexpr auto kLargestQuantized = 4294967040.0F;
   return static_cast<std::uint32_t>(
-    std::round(value * kMaterialScalarQuantizationScale));
+    (std::min)(std::round(value * kMaterialScalarQuantizationScale),
+      kLargestQuantized));
 }
 
 template <typename VectorT>

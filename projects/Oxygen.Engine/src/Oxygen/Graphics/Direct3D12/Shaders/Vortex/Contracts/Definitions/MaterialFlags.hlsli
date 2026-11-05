@@ -30,3 +30,6 @@ static const uint MATERIAL_FLAG_PROCEDURAL_GRID = (1u << 5);
 
 // Ambient occlusion blends from unoccluded white using the authored strength.
 static const uint MATERIAL_FLAG_AMBIENT_OCCLUSION_STRENGTH = (1u << 6);
+
+// The roughness texture holds glossiness.
+static const uint MATERIAL_FLAG_GLOSSINESS_TEXTURE = (1u << 7);

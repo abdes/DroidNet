@@ -97,7 +97,23 @@ static inline float4 EvaluateProceduralGrid(
 
     // Z-up: XY plane dominates when normal points +/-Z.
     // Blend planes by normal magnitude (no camera dependency).
-    return color_xy * w.z + color_xz * w.y + color_yz * w.x;
+    float4 color = color_xy * w.z + color_xz * w.y + color_yz * w.x;
+
+    if (mat.grid_fade_end > mat.grid_fade_start) {
+        const float dist = length(world_pos - camera_position);
+        color *= saturate((mat.grid_fade_end - dist)
+            / (mat.grid_fade_end - mat.grid_fade_start));
+    }
+    return color;
+}
+
+// The surface's roughness from its factor and the sample of its roughness
+// texture, which may hold glossiness.
+static inline float ApplyRoughnessSample(float roughness, float roughness_sample, uint flags)
+{
+    return (flags & MATERIAL_FLAG_GLOSSINESS_TEXTURE) != 0u
+        ? 1.0 - (1.0 - roughness) * roughness_sample
+        : roughness * roughness_sample;
 }
 
 // Surface of an already loaded draw material; without one (`has_material`
@@ -218,24 +234,10 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         }
 
         // Scalar maps
-        const bool is_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
-        bool use_orm_packed = is_orm_packed;
-
-        // If the packed flag isn't set, still support the common case where
-        // ORM is authored as a single texture wired into all three slots.
-        uint orm_tex_index = K_INVALID_BINDLESS_INDEX;
-        if (!use_orm_packed) {
-            const uint idx = mat.metallic_texture_index;
-            if (idx != K_INVALID_BINDLESS_INDEX && idx == mat.roughness_texture_index
-                && idx == mat.ambient_occlusion_texture_index) {
-                use_orm_packed = true;
-                orm_tex_index = idx;
-            }
-        } else {
-            orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
-                ? mat.roughness_texture_index
-                : mat.metallic_texture_index;
-        }
+        const bool use_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
+        const uint orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
+            ? mat.roughness_texture_index
+            : mat.metallic_texture_index;
 
         if (!no_texture_sampling && use_orm_packed
             && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
@@ -247,7 +249,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
             // - AO:       R
             // - Roughness:G
             // - Metalness:B
-            s.roughness *= orm.g;
+            s.roughness = ApplyRoughnessSample(s.roughness, orm.g, mat.flags);
             s.metalness *= orm.b;
 
             // Packed MR does not imply an AO binding.
@@ -270,7 +272,8 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
                 && mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
                 SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-                s.roughness *= saturate(r_tex.Sample(samp, uv).r);
+                s.roughness = ApplyRoughnessSample(
+                    s.roughness, saturate(r_tex.Sample(samp, uv).r), mat.flags);
             }
             if (!no_texture_sampling
                 && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {

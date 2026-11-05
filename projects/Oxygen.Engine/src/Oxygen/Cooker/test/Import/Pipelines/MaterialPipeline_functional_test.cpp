@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/testing/Descriptors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -363,6 +364,194 @@ namespace {
     EXPECT_FLOAT_EQ(uv.uv_offset[0], 0.0F);
     EXPECT_FLOAT_EQ(uv.uv_offset[1], 0.0F);
     EXPECT_FLOAT_EQ(uv.uv_rotation_radians, 0.0F);
+  }
+
+  //=== Authored Value Tests
+  //===---------------------------------------------------//
+
+  class MaterialPipelineValuesTest : public MaterialPipelineTest {
+  protected:
+    auto Cook(MaterialPipeline::WorkItem item) -> MaterialPipeline::WorkResult
+    {
+      return RunPipelineOnce<MaterialPipeline>(loop_, std::move(item), pool_,
+        MaterialPipeline::Config {
+          .queue_capacity = 4,
+          .worker_count = 1,
+          .use_thread_pool = true,
+        });
+    }
+  };
+
+  //! Cutoff 0 keeps every pixel: the value authored is the value the renderer
+  //! tests against.
+  NOLINT_TEST_F(MaterialPipelineValuesTest, MaskedCutoffZeroStaysZero)
+  {
+    auto item = MakeBaseItem();
+    item.material.alpha_mode = MaterialAlphaMode::kMasked;
+    item.material.inputs.alpha_cutoff = 0.0F;
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
+    EXPECT_EQ(desc.alpha_cutoff.get(), 0U);
+    EXPECT_FALSE(HasDiagnosticCode(
+      result.diagnostics, import_codes::kMaterialAlphaCutoffRange));
+  }
+
+  //! Glossiness stays a roughness in the descriptor; only a texture needs the
+  //! renderer to know, because its samples read the other way.
+  NOLINT_TEST_F(MaterialPipelineValuesTest, GlossinessFlagFollowsTheTexture)
+  {
+    using data::pak::render::kMaterialFlag_GlossinessTexture;
+    auto scalar = MakeBaseItem();
+    scalar.material.inputs.roughness_as_glossiness = true;
+    scalar.material.inputs.roughness = 0.25F;
+    auto textured = scalar;
+    textured.material.textures.roughness = MaterialTextureBinding {
+      .index = 2,
+      .assigned = true,
+      .source_id = "gloss",
+    };
+
+    const auto without = Cook(std::move(scalar));
+    const auto with = Cook(std::move(textured));
+
+    ASSERT_HAS_VALUE(without.cooked);
+    ASSERT_HAS_VALUE(with.cooked);
+    const auto scalar_desc = ReadMaterialDesc(without.cooked->descriptor_bytes);
+    const auto textured_desc = ReadMaterialDesc(with.cooked->descriptor_bytes);
+    EXPECT_EQ(scalar_desc.flags & kMaterialFlag_GlossinessTexture, 0U);
+    EXPECT_NE(textured_desc.flags & kMaterialFlag_GlossinessTexture, 0U);
+    constexpr auto kTolerance = 0.001F;
+    EXPECT_NEAR(scalar_desc.roughness.ToFloat(), 0.75F, kTolerance);
+    EXPECT_NEAR(textured_desc.roughness.ToFloat(), 0.75F, kTolerance);
+  }
+
+  NOLINT_TEST_F(MaterialPipelineValuesTest, ProceduralGridReachesTheDescriptor)
+  {
+    auto item = MakeBaseItem();
+    item.material.procedural_grid = MaterialProceduralGrid {
+      .spacing = { 2.0F, 3.0F },
+      .major_every = 5,
+      .fade_start = 10.0F,
+      .fade_end = 20.0F,
+      .origin_color = { 0.1F, 0.2F, 0.3F, 0.4F },
+    };
+
+    const auto result = Cook(std::move(item));
+
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
+    EXPECT_NE(desc.flags & data::pak::render::kMaterialFlag_ProceduralGrid, 0U);
+    EXPECT_FLOAT_EQ(desc.grid_spacing[1], 3.0F);
+    EXPECT_EQ(desc.grid_major_every, 5U);
+    EXPECT_FLOAT_EQ(desc.grid_fade_start, 10.0F);
+    EXPECT_FLOAT_EQ(desc.grid_fade_end, 20.0F);
+    EXPECT_FLOAT_EQ(desc.grid_origin_color[3], 0.4F);
+    // What it does not say keeps the format's defaults.
+    EXPECT_FLOAT_EQ(desc.grid_major_thickness, 2.0F);
+  }
+
+  //! A material's domain and alpha mode cook to one answer, and say so when
+  //! they disagree.
+  NOLINT_TEST_F(MaterialPipelineValuesTest, DomainAndAlphaModeCookToOneAnswer)
+  {
+    using data::MaterialDomain;
+    using data::pak::render::kMaterialFlag_AlphaTest;
+    struct Case {
+      MaterialDomain domain;
+      MaterialAlphaMode mode;
+      MaterialDomain cooked;
+      bool alpha_test;
+      bool warns;
+    };
+    for (const auto& [domain, mode, cooked, alpha_test, warns] : std::array {
+           Case {
+             .domain = MaterialDomain::kOpaque,
+             .mode = MaterialAlphaMode::kOpaque,
+             .cooked = MaterialDomain::kOpaque,
+             .alpha_test = false,
+             .warns = false,
+           },
+           Case {
+             .domain = MaterialDomain::kOpaque,
+             .mode = MaterialAlphaMode::kMasked,
+             .cooked = MaterialDomain::kMasked,
+             .alpha_test = true,
+             .warns = false,
+           },
+           Case {
+             .domain = MaterialDomain::kOpaque,
+             .mode = MaterialAlphaMode::kBlended,
+             .cooked = MaterialDomain::kAlphaBlended,
+             .alpha_test = false,
+             .warns = false,
+           },
+           Case {
+             .domain = MaterialDomain::kMasked,
+             .mode = MaterialAlphaMode::kMasked,
+             .cooked = MaterialDomain::kMasked,
+             .alpha_test = true,
+             .warns = false,
+           },
+           Case {
+             .domain = MaterialDomain::kMasked,
+             .mode = MaterialAlphaMode::kOpaque,
+             .cooked = MaterialDomain::kMasked,
+             .alpha_test = true,
+             .warns = true,
+           },
+           Case {
+             .domain = MaterialDomain::kMasked,
+             .mode = MaterialAlphaMode::kBlended,
+             .cooked = MaterialDomain::kAlphaBlended,
+             .alpha_test = false,
+             .warns = true,
+           },
+           Case {
+             .domain = MaterialDomain::kAlphaBlended,
+             .mode = MaterialAlphaMode::kOpaque,
+             .cooked = MaterialDomain::kAlphaBlended,
+             .alpha_test = false,
+             .warns = true,
+           },
+           Case {
+             .domain = MaterialDomain::kAlphaBlended,
+             .mode = MaterialAlphaMode::kMasked,
+             .cooked = MaterialDomain::kMasked,
+             .alpha_test = true,
+             .warns = true,
+           },
+           Case {
+             .domain = MaterialDomain::kDecal,
+             .mode = MaterialAlphaMode::kMasked,
+             .cooked = MaterialDomain::kDecal,
+             .alpha_test = true,
+             .warns = false,
+           },
+           Case {
+             .domain = MaterialDomain::kDecal,
+             .mode = MaterialAlphaMode::kBlended,
+             .cooked = MaterialDomain::kDecal,
+             .alpha_test = false,
+             .warns = false,
+           },
+         }) {
+      auto item = MakeBaseItem();
+      item.material.domain = domain;
+      item.material.alpha_mode = mode;
+
+      const auto result = Cook(std::move(item));
+
+      ASSERT_HAS_VALUE(result.cooked);
+      const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
+      EXPECT_EQ(desc.material_domain, static_cast<uint8_t>(cooked));
+      EXPECT_EQ((desc.flags & kMaterialFlag_AlphaTest) != 0U, alpha_test);
+      EXPECT_EQ(HasDiagnosticCode(result.diagnostics,
+                  import_codes::kMaterialDomainAlphaConflict),
+        warns);
+    }
   }
 
   //=== Shader Reference Tests

@@ -34,7 +34,8 @@ constexpr auto kKnownFlags = render::kMaterialFlag_NoTextureSampling
   | render::kMaterialFlag_DoubleSided | render::kMaterialFlag_AlphaTest
   | render::kMaterialFlag_Unlit | render::kMaterialFlag_GltfOrmPacked
   | render::kMaterialFlag_ProceduralGrid
-  | render::kMaterialFlag_AmbientOcclusionStrength;
+  | render::kMaterialFlag_AmbientOcclusionStrength
+  | render::kMaterialFlag_GlossinessTexture;
 
 //! The bits of `stages` that name no pipeline stage; a stage bit is a shader
 //! type's value.

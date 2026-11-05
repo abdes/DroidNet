@@ -97,6 +97,26 @@ struct MaterialInputs {
   bool roughness_as_glossiness = false;
 };
 
+//! A material's procedural grid, shaded in world space on any surface.
+struct MaterialProceduralGrid {
+  //! World units between minor lines, along each axis of a plane.
+  std::array<float, 2> spacing = { 1.0F, 1.0F };
+  //! Minor cells per major line.
+  uint32_t major_every = 10;
+  float line_thickness = 1.0F;
+  float major_thickness = 2.0F;
+  float axis_thickness = 2.0F;
+  //! View distances over which the grid fades out; none when the end is not
+  //! past the start.
+  float fade_start = 0.0F;
+  float fade_end = 0.0F;
+  std::array<float, 4> minor_color = { 0.35F, 0.35F, 0.35F, 1.0F };
+  std::array<float, 4> major_color = { 0.55F, 0.55F, 0.55F, 1.0F };
+  std::array<float, 4> axis_color_x = { 0.90F, 0.20F, 0.20F, 1.0F };
+  std::array<float, 4> axis_color_y = { 0.20F, 0.60F, 0.90F, 1.0F };
+  std::array<float, 4> origin_color = { 1.0F, 1.0F, 1.0F, 1.0F };
+};
+
 //! ORM packing policy for metallic/roughness/AO.
 enum class OrmPolicy : uint8_t {
   kAuto,
@@ -120,6 +140,7 @@ struct MaterialSource final {
   MaterialTextureBindings textures;
   OrmPolicy orm_policy = OrmPolicy::kAuto;
   AmbientOcclusionMode occlusion_mode = AmbientOcclusionMode::kFactor;
+  std::optional<MaterialProceduralGrid> procedural_grid;
   std::vector<ShaderRequest> shader_requests;
 
   struct TextureSlot final {
@@ -147,6 +168,11 @@ struct MaterialSource final {
   //! warning, so the material imports; descriptors are validated as authored.
   OXGN_COOK_API auto RepairModelInputs(std::string_view source_id,
     std::vector<ImportDiagnostic>& diagnostics) -> void;
+
+  //! Warns of what the bindings ask that a material cannot do: it has one UV
+  //! transform, its first binding's, and vertices have one UV set.
+  OXGN_COOK_API auto ReportDroppedUvs(std::string_view source_id,
+    std::vector<ImportDiagnostic>& diagnostics) const -> void;
 
   OXGN_COOK_NDAPI auto CanPackOrm() const noexcept -> bool;
 };

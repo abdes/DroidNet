@@ -247,7 +247,8 @@ For each work item:
 3. Normalize scalar inputs:
    - Apply `roughness_as_glossiness` inversion first
    - Clamp base color and scalar factors to [0, 1]
-   - Clamp `alpha_cutoff`, `specular_factor`, `clearcoat_factor`,
+   - Clamp `alpha_cutoff` (0 stays 0: it keeps every pixel), `specular_factor`,
+     `clearcoat_factor`,
      `clearcoat_roughness`, `transmission_factor`, and `thickness_factor`
    - Clamp `ior` to `>= 1.0` and `attenuation_distance` to `>= 0`
    - Preserve emissive HDR (no clamp)
@@ -258,6 +259,9 @@ For each work item:
      `kMaterialFlag_AlphaTest`
    - If `alpha_mode == kBlended`, set `material_domain = kAlphaBlended` unless
      the domain is `kDecal`, `kUserInterface`, or `kPostProcess`
+   - If `alpha_mode == kOpaque`, a `kMasked` or `kAlphaBlended` domain decides,
+     and `kMasked` sets `kMaterialFlag_AlphaTest`
+   - A mode and a domain that disagree warn `material.domain_alpha_conflict`
 5. Resolve UV transforms:
    - If all assigned textures share the same `uv_set` and `uv_transform`, store
      that transform in the descriptor extension (see "UV Transform Extension").

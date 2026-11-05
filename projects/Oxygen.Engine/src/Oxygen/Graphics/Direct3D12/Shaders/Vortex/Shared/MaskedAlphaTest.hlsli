@@ -15,20 +15,12 @@
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 
-static const float kDefaultMaskedAlphaCutoff = 0.5f;
-
 struct MaskedAlphaTestResult {
   bool has_material_data;
   bool alpha_test_enabled;
   float alpha;
   float cutoff;
 };
-
-static inline float ResolveMaskedAlphaCutoff(MaterialShadingConstants material)
-{
-  return material.alpha_cutoff > 0.0f ? material.alpha_cutoff
-                                      : kDefaultMaskedAlphaCutoff;
-}
 
 // A draw's material with the draw-metadata fields material evaluation needs.
 struct DrawMaterial {
@@ -116,7 +108,7 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestForMaterial(
   }
 
   result.alpha = SampleMaskedMaterialAlpha(uv0, material, linear_sampler);
-  result.cutoff = ResolveMaskedAlphaCutoff(material);
+  result.cutoff = material.alpha_cutoff;
   return result;
 }
 

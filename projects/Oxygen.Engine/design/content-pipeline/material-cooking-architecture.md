@@ -430,16 +430,18 @@ JSON Schema draft-07, `additionalProperties: false` at all levels.
 
 #### 7.2.1 Top-Level Field Contract
 
-| Field        | Required | Type                   | Description                                          |
-| ------------ | -------- | ---------------------- | ---------------------------------------------------- |
-| `$schema`    | No       | `string`               | Points to shipped JSON Schema for editor integration |
-| `name`       | No       | `string` (minLength 1) | Human-readable asset name                            |
-| `domain`     | No       | string enum            | Material domain (Section 7.2.2)                      |
-| `alpha_mode` | No       | string enum            | Alpha blending mode (Section 7.2.3)                  |
-| `orm_policy` | No       | string enum            | ORM packing policy (Section 7.2.4)                   |
-| `inputs`     | No       | object                 | PBR scalar inputs (Section 7.2.5)                    |
-| `textures`   | No       | object                 | Texture slot bindings (Section 7.2.6)                |
-| `shaders`    | No       | array                  | Explicit shader stage references (Section 7.2.7)     |
+| Field                    | Required | Type                   | Description                                                                                                     |
+| ------------------------ | -------- | ---------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `$schema`                | No       | `string`               | Points to shipped JSON Schema for editor integration                                                            |
+| `name`                   | No       | `string` (minLength 1) | Human-readable asset name                                                                                       |
+| `domain`                 | No       | string enum            | Material domain (Section 7.2.2)                                                                                 |
+| `alpha_mode`             | No       | string enum            | Alpha blending mode (Section 7.2.3)                                                                             |
+| `orm_policy`             | No       | string enum            | ORM packing policy (Section 7.2.4)                                                                              |
+| `ambient_occlusion_mode` | No       | string enum            | `factor` multiplies the AO sample; `strength` blends from unoccluded to it, and is unoccluded without a texture |
+| `procedural_grid`        | No       | object                 | World-space grid; its presence turns it on (Section 7.2.8)                                                      |
+| `inputs`                 | No       | object                 | PBR scalar inputs (Section 7.2.5)                                                                               |
+| `textures`               | No       | object                 | Texture slot bindings (Section 7.2.6)                                                                           |
+| `shaders`                | No       | array                  | Explicit shader stage references (Section 7.2.7)                                                                |
 
 Canonical example (`woodfloor007.material.json`):
 
@@ -495,7 +497,7 @@ Top-level validation rules:
 | `"ui"`            | `kUI`            | 2D UI rendering          |
 | `"post_process"`  | `kPostProcess`   | Full-screen post-process |
 
-When absent, domain is inferred from `alpha_mode` (see Section 7.2.3).
+When absent, domain follows `alpha_mode` (see Section 7.2.3).
 
 #### 7.2.3 Alpha Mode Values
 
@@ -505,9 +507,15 @@ When absent, domain is inferred from `alpha_mode` (see Section 7.2.3).
 | `"masked"`         | `kMasked`           | Alpha cutoff test (`kMaterialFlag_AlphaTest`) |
 | `"blended"`        | `kBlended`          | Alpha blending, domain set to `kAlphaBlended` |
 
-`ResolveMaterialDomain()` merges `alpha_mode` with `domain`. `kMasked` alpha
-mode sets the `kMaterialFlag_AlphaTest` flag and also adds `ALPHA_TEST=1` to
-default shader defines.
+When absent, alpha mode follows `domain`: `"masked"` is masked and
+`"alpha_blended"` blended.
+
+`ResolveMaterialDomain()` merges `alpha_mode` with `domain`. Decal, UI and
+post-process keep their domain. For the others a masked or blended mode decides;
+an opaque mode leaves a masked or blended domain to decide. A mode and a domain
+that disagree cook to that one answer with `material.domain_alpha_conflict`. A
+masked material gets `kMaterialFlag_AlphaTest` and `ALPHA_TEST=1` in its default
+shader defines. Its `alpha_cutoff` is tested as authored: 0 keeps every pixel.
 
 #### 7.2.4 ORM Policy Values
 
@@ -542,7 +550,12 @@ ORM packing uses glTF convention: R=AO, G=Roughness, B=Metalness (stored in
 | `attenuation_distance`    | `number` | ≥0        | `MaterialAssetDesc::attenuation_distance`              | `0.0`       |
 | `double_sided`            | `bool`   | —         | `kMaterialFlag_DoubleSided`                            | `false`     |
 | `unlit`                   | `bool`   | —         | `kMaterialFlag_Unlit`                                  | `false`     |
-| `roughness_as_glossiness` | `bool`   | —         | inverts roughness: `roughness = 1 - value`             | `false`     |
+| `roughness_as_glossiness` | `bool`   | —         | `roughness` and its texture hold glossiness            | `false`     |
+
+With `roughness_as_glossiness`, the surface's roughness is
+1 - `roughness` × sample. The descriptor stores `roughness` as 1 - `roughness`,
+so it stays a roughness; a bound roughness texture adds
+`kMaterialFlag_GlossinessTexture`, and the shader reads its sample as glossiness.
 
 `specular_factor` is the dielectric specular level L, as in Blender and Unreal:
 F0 = 0.08 × L, so the default 0.5 gives F0 = 0.04. With a `specular` texture,
@@ -631,6 +644,21 @@ Validation rules:
 | `pixel`  | `Forward/ForwardMesh_PS.hlsl` | `PS`        | `ALPHA_TEST=1` (masked only) |
 
 ---
+
+#### 7.2.8 `procedural_grid` Settings
+
+| Key                                                                          | Type        | Range  | Default       |
+| ---------------------------------------------------------------------------- | ----------- | ------ | ------------- |
+| `spacing`                                                                    | `number[2]` | > 0    | `[1, 1]`      |
+| `major_every`                                                                | `integer`   | ≥ 1    | `10`          |
+| `line_thickness`, `major_thickness`, `axis_thickness`                        | `number`    | ≥ 0    | `1`, `2`, `2` |
+| `fade_start`, `fade_end`                                                     | `number`    | ≥ 0    | `0`, `0`      |
+| `minor_color`, `major_color`, `axis_color_x`, `axis_color_y`, `origin_color` | `number[4]` | [0, 1] | the format's  |
+
+The grid shades in world space on any surface, blending the three world planes
+by the surface normal. It fades over the view distances `fade_start` to
+`fade_end`, and does not fade when they are equal; an end before the start is
+`material.grid_invalid`.
 
 ## 8. Pipeline Stages (Internal)
 
@@ -783,14 +811,16 @@ order (LSB first = lowest `ShaderType` value first).
 
 ### 9.4 Flags Bitfield (`flags` in `MaterialAssetDesc`)
 
-| Constant                          | Bit   | Meaning                                         |
-| --------------------------------- | ----- | ----------------------------------------------- |
-| `kMaterialFlag_NoTextureSampling` | bit 0 | No textures assigned; use scalar fallbacks only |
-| `kMaterialFlag_DoubleSided`       | bit 1 | Disable backface culling                        |
-| `kMaterialFlag_AlphaTest`         | bit 2 | Alpha cutoff testing against `alpha_cutoff`     |
-| `kMaterialFlag_Unlit`             | bit 3 | Render base_color + emissive only; no lighting  |
-| `kMaterialFlag_GltfOrmPacked`     | bit 4 | ORM packed: R=AO, G=Roughness, B=Metalness      |
-| `kMaterialFlag_ProceduralGrid`    | bit 5 | Procedural grid enabled (editor grid)           |
+| Constant                                 | Bit   | Meaning                                         |
+| ---------------------------------------- | ----- | ----------------------------------------------- |
+| `kMaterialFlag_NoTextureSampling`        | bit 0 | No textures assigned; use scalar fallbacks only |
+| `kMaterialFlag_DoubleSided`              | bit 1 | Disable backface culling                        |
+| `kMaterialFlag_AlphaTest`                | bit 2 | Alpha cutoff testing against `alpha_cutoff`     |
+| `kMaterialFlag_Unlit`                    | bit 3 | Render base_color + emissive only; no lighting  |
+| `kMaterialFlag_GltfOrmPacked`            | bit 4 | ORM packed: R=AO, G=Roughness, B=Metalness      |
+| `kMaterialFlag_ProceduralGrid`           | bit 5 | World-space procedural grid (Section 7.2.8)     |
+| `kMaterialFlag_AmbientOcclusionStrength` | bit 6 | AO scalar is strength, not factor               |
+| `kMaterialFlag_GlossinessTexture`        | bit 7 | Roughness texture samples hold glossiness       |
 
 ### 9.5 Loose Cooked Layout
 

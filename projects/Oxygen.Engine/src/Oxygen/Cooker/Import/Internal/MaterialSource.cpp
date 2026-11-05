@@ -185,6 +185,18 @@ namespace {
     return std::nullopt;
   }
 
+  auto ParseOcclusionMode(const std::string_view mode)
+    -> std::optional<AmbientOcclusionMode>
+  {
+    if (mode == "factor") {
+      return AmbientOcclusionMode::kFactor;
+    }
+    if (mode == "strength") {
+      return AmbientOcclusionMode::kStrength;
+    }
+    return std::nullopt;
+  }
+
   auto ParseShaderType(const std::string_view stage) -> std::optional<uint8_t>
   {
     using oxygen::ShaderType;
@@ -330,6 +342,134 @@ namespace {
     return true;
   }
 
+  auto ParseProceduralGrid(const nlohmann::json& doc)
+    -> std::optional<MaterialProceduralGrid>
+  {
+    auto grid = MaterialProceduralGrid {};
+    const auto colors_read = [&] -> bool {
+      const auto read = [&doc](const char* key, std::array<float, 4>& color) {
+        return !doc.contains(key) || ParseFloatArray(doc.at(key), color);
+      };
+      return read("minor_color", grid.minor_color)
+        && read("major_color", grid.major_color)
+        && read("axis_color_x", grid.axis_color_x)
+        && read("axis_color_y", grid.axis_color_y)
+        && read("origin_color", grid.origin_color);
+    };
+    if ((doc.contains("spacing")
+          && !ParseFloatArray(doc.at("spacing"), grid.spacing))
+      || !colors_read()) {
+      return std::nullopt;
+    }
+    grid.major_every = doc.value("major_every", grid.major_every);
+    grid.line_thickness = doc.value("line_thickness", grid.line_thickness);
+    grid.major_thickness = doc.value("major_thickness", grid.major_thickness);
+    grid.axis_thickness = doc.value("axis_thickness", grid.axis_thickness);
+    grid.fade_start = doc.value("fade_start", grid.fade_start);
+    grid.fade_end = doc.value("fade_end", grid.fade_end);
+    return grid;
+  }
+
+  //! Replaces each value of `values` that is not finite by that of `defaults`;
+  //! returns whether there was one.
+  auto ReplaceNonFinite(const std::span<float> values,
+    const std::span<const float> defaults) -> bool
+  {
+    auto replaced = false;
+    for (std::size_t at = 0; at < values.size(); ++at) {
+      if (!std::isfinite(values[at])) {
+        values[at] = defaults[at];
+        replaced = true;
+      }
+    }
+    return replaced;
+  }
+
+  //! Replaces what is not finite in `material`'s inputs and UV transforms by
+  //! its default; returns whether there was any. Emission has its own range.
+  auto ReplaceNonFiniteInputs(MaterialSource& material) -> bool
+  {
+    static constexpr auto kScalars = std::array {
+      &MaterialInputs::normal_scale,
+      &MaterialInputs::metalness,
+      &MaterialInputs::roughness,
+      &MaterialInputs::ambient_occlusion,
+      &MaterialInputs::alpha_cutoff,
+      &MaterialInputs::ior,
+      &MaterialInputs::specular_factor,
+      &MaterialInputs::clearcoat_factor,
+      &MaterialInputs::clearcoat_roughness,
+      &MaterialInputs::transmission_factor,
+      &MaterialInputs::thickness_factor,
+      &MaterialInputs::attenuation_distance,
+    };
+    auto& inputs = material.inputs;
+    const auto defaults = MaterialInputs {};
+    auto replaced = false;
+    for (const auto scalar : kScalars) {
+      replaced = ReplaceNonFinite(std::span { &(inputs.*scalar), 1U },
+                   std::span { &(defaults.*scalar), 1U })
+        || replaced;
+    }
+    replaced
+      = ReplaceNonFinite(inputs.base_color, defaults.base_color) || replaced;
+    replaced
+      = ReplaceNonFinite(inputs.sheen_color_factor, defaults.sheen_color_factor)
+      || replaced;
+    replaced
+      = ReplaceNonFinite(inputs.attenuation_color, defaults.attenuation_color)
+      || replaced;
+    const auto identity = MaterialUvTransform {};
+    for (const auto& slot : MaterialSource::TextureSlots()) {
+      auto& transform = (material.textures.*slot.binding).uv_transform;
+      replaced = ReplaceNonFinite(transform.scale, identity.scale) || replaced;
+      replaced
+        = ReplaceNonFinite(transform.offset, identity.offset) || replaced;
+      replaced = ReplaceNonFinite(std::span { &transform.rotation_radians, 1U },
+                   std::span { &identity.rotation_radians, 1U })
+        || replaced;
+    }
+    return replaced;
+  }
+
+  [[nodiscard]] auto SameUvs(const MaterialTextureBinding& first,
+    const MaterialTextureBinding& second) noexcept -> bool
+  {
+    return first.uv_set == second.uv_set
+      && std::ranges::equal(first.uv_transform.scale, second.uv_transform.scale)
+      && std::ranges::equal(
+        first.uv_transform.offset, second.uv_transform.offset)
+      && first.uv_transform.rotation_radians
+      == second.uv_transform.rotation_radians;
+  }
+
+  //! Whether `grid` is one the renderer can draw: finite, with a spacing, and
+  //! a fade that does not end before it starts.
+  [[nodiscard]] auto IsDrawableGrid(const MaterialProceduralGrid& grid) -> bool
+  {
+    const auto finite = [](const std::span<const float> values) -> bool {
+      return std::ranges::all_of(
+        values, [](const float value) -> bool { return std::isfinite(value); });
+    };
+    const auto lengths = std::array {
+      grid.line_thickness,
+      grid.major_thickness,
+      grid.axis_thickness,
+      grid.fade_start,
+      grid.fade_end,
+    };
+    const auto spaced = finite(grid.spacing) && grid.spacing[0] > 0.0F
+      && grid.spacing[1] > 0.0F;
+    const auto lengths_valid = finite(lengths)
+      && std::ranges::all_of(
+        lengths, [](const float value) -> bool { return value >= 0.0F; });
+    const auto colors_finite = finite(grid.minor_color)
+      && finite(grid.major_color) && finite(grid.axis_color_x)
+      && finite(grid.axis_color_y) && finite(grid.origin_color);
+    return spaced && lengths_valid && colors_finite && grid.major_every > 0U
+      && grid.fade_end >= grid.fade_start;
+  }
+
 } // namespace
 
 auto MaterialSource::TextureSlots() noexcept -> std::span<const TextureSlot>
@@ -343,13 +483,44 @@ auto MaterialSource::CanPackOrm() const noexcept -> bool
   const auto& roughness = textures.roughness;
   return metallic.assigned && roughness.assigned && !metallic.source_id.empty()
     && metallic.source_id == roughness.source_id
-    && metallic.uv_set == roughness.uv_set
-    && std::ranges::equal(
-      metallic.uv_transform.scale, roughness.uv_transform.scale)
-    && std::ranges::equal(
-      metallic.uv_transform.offset, roughness.uv_transform.offset)
-    && metallic.uv_transform.rotation_radians
-    == roughness.uv_transform.rotation_radians;
+    && SameUvs(metallic, roughness);
+}
+
+auto MaterialSource::ReportDroppedUvs(const std::string_view source_id,
+  std::vector<ImportDiagnostic>& diagnostics) const -> void
+{
+  const MaterialTextureBinding* first = nullptr;
+  auto second_set = false;
+  auto other_uvs = std::string {};
+  for (const auto& slot : TextureSlots()) {
+    const auto& binding = textures.*slot.binding;
+    if (!binding.assigned) {
+      continue;
+    }
+    second_set = second_set || binding.uv_set != 0U;
+    if (first == nullptr) {
+      first = &binding;
+    } else if (!SameUvs(*first, binding)) {
+      other_uvs += (other_uvs.empty() ? "" : ", ") + std::string(slot.name);
+    }
+  }
+  const auto warn = [&](std::string message) -> void {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = std::string(import_codes::kMaterialUvDropped),
+      .message = std::move(message),
+      .source_path = std::string(source_id),
+      .object_path = name,
+    });
+  };
+  if (!other_uvs.empty()) {
+    warn("A material has one UV transform, its first texture's; these use it "
+         "instead of their own: "
+      + other_uvs);
+  }
+  if (second_set) {
+    warn("Vertices have one UV set; textures bound to another use it instead");
+  }
 }
 
 auto MaterialSource::RepairModelInputs(const std::string_view source_id,
@@ -373,6 +544,15 @@ auto MaterialSource::RepairModelInputs(const std::string_view source_id,
       .object_path = name,
     });
   }
+  if (ReplaceNonFiniteInputs(*this)) {
+    diagnostics.push_back(ImportDiagnostic {
+      .severity = ImportSeverity::kWarning,
+      .code = std::string(import_codes::kMaterialInputNotFinite),
+      .message = "Material values that are NaN or infinite take their defaults",
+      .source_path = std::string(source_id),
+      .object_path = name,
+    });
+  }
 }
 
 auto MaterialSource::Validate(const std::string_view source_id,
@@ -389,6 +569,15 @@ auto MaterialSource::Validate(const std::string_view source_id,
       })) {
     error(std::string(import_codes::kMaterialEmissiveFactorRange),
       "Emission must contain finite channels in [0,65504]");
+  }
+  if (auto repaired = *this; ReplaceNonFiniteInputs(repaired)) {
+    error(std::string(import_codes::kMaterialInputNotFinite),
+      "Material values must be finite");
+  }
+  if (procedural_grid.has_value() && !IsDrawableGrid(*procedural_grid)) {
+    error(std::string(import_codes::kMaterialGridInvalid),
+      "A procedural grid needs a spacing above zero, at least one minor cell "
+      "per major line, finite values, and a fade that ends after it starts");
   }
   if (orm_policy == OrmPolicy::kForcePacked && !CanPackOrm()) {
     error(std::string(import_codes::kMaterialOrmPolicy),
@@ -488,6 +677,10 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       return std::nullopt;
     }
     material.alpha_mode = *value;
+  } else if (material.domain == data::MaterialDomain::kMasked) {
+    material.alpha_mode = MaterialAlphaMode::kMasked;
+  } else if (material.domain == data::MaterialDomain::kAlphaBlended) {
+    material.alpha_mode = MaterialAlphaMode::kBlended;
   }
   if (document.contains("orm_policy")) {
     const auto value
@@ -499,6 +692,27 @@ auto MaterialSource::FromDescriptor(const std::string_view bytes,
       return std::nullopt;
     }
     material.orm_policy = *value;
+  }
+  if (document.contains("ambient_occlusion_mode")) {
+    const auto value = ParseOcclusionMode(
+      document.at("ambient_occlusion_mode").get<std::string>());
+    if (!value) {
+      AddError(diagnostics, source_path.string(),
+        std::string(import_codes::kMaterialDescriptorParametersInvalid),
+        "Material ambient occlusion mode is invalid");
+      return std::nullopt;
+    }
+    material.occlusion_mode = *value;
+  }
+  if (document.contains("procedural_grid")) {
+    material.procedural_grid
+      = ParseProceduralGrid(document.at("procedural_grid"));
+    if (!material.procedural_grid.has_value()) {
+      AddError(diagnostics, source_path.string(),
+        std::string(import_codes::kMaterialDescriptorParametersInvalid),
+        "Material procedural grid has an invalid shape");
+      return std::nullopt;
+    }
   }
   if (document.contains("parameters")
     && !ApplyMaterialInputsFromJson(

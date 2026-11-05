@@ -471,6 +471,116 @@ namespace {
     RecordProperty("maximum_stored_code_error", maximum_code_error);
   }
 
+  //! What a roughness texture means comes from the material's flags, never
+  //! from which slots hold the same texture.
+  NOLINT_TEST_F(MaterialRasterReferenceTest, RoughnessSamplesFollowTheFlags)
+  {
+    struct Case {
+      std::uint32_t flags;
+      exposure::Pixel sample;
+      float factor;
+      double expected;
+    };
+    using data::pak::render::kMaterialFlag_GlossinessTexture;
+    using data::pak::render::kMaterialFlag_GltfOrmPacked;
+    const auto red_low = exposure::Pixel { 0.2F, 0.6F, 0.8F, 1.0F };
+    const auto red_gloss = exposure::Pixel { 0.4F, 0.9F, 0.8F, 1.0F };
+    const auto green_gloss = exposure::Pixel { 0.9F, 0.4F, 0.8F, 1.0F };
+    std::shared_ptr<const graphics::Texture> surface;
+    probe->inspect = [&](const auto&, const auto&, unsigned) -> void {
+      auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      surface
+        = owner->GetSceneTextures().GetGBufferResource(GBufferIndex::kMaterial);
+    };
+    for (const auto& [flags, sample, factor, expected] : std::array {
+           // One texture in every slot and no packing flag: its red.
+           Case {
+             .flags = 0U,
+             .sample = red_low,
+             .factor = 1.0F,
+             .expected = 0.2,
+           },
+           Case {
+             .flags = kMaterialFlag_GltfOrmPacked,
+             .sample = red_low,
+             .factor = 1.0F,
+             .expected = 0.6,
+           },
+           // Glossiness 0.75 x 0.4 from the red, then from the packed green.
+           Case {
+             .flags = kMaterialFlag_GlossinessTexture,
+             .sample = red_gloss,
+             .factor = 0.25F,
+             .expected = 0.7,
+           },
+           Case {
+             .flags
+             = kMaterialFlag_GlossinessTexture | kMaterialFlag_GltfOrmPacked,
+             .sample = green_gloss,
+             .factor = 0.25F,
+             .expected = 0.7,
+           },
+         }) {
+      SCOPED_TRACE(flags);
+      auto desc = data::pak::render::MaterialAssetDesc {};
+      desc.material_domain
+        = static_cast<std::uint8_t>(data::MaterialDomain::kOpaque);
+      desc.flags = flags | data::pak::render::kMaterialFlag_DoubleSided;
+      desc.roughness = data::Unorm16 { factor };
+      const auto texture = AddTexture(sample);
+      auto keys = std::vector<content::ResourceKey>(
+        static_cast<std::size_t>(MaterialSlot::kCount));
+      keys.at(static_cast<std::size_t>(MaterialSlot::kMetallic)) = texture;
+      keys.at(static_cast<std::size_t>(MaterialSlot::kRoughness)) = texture;
+      keys.at(static_cast<std::size_t>(MaterialSlot::kOcclusion)) = texture;
+      ASSERT_TRUE(
+        mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/test/Lighting/Material-"
+              + std::to_string(++material_sequence) + ".omat"),
+            desc, std::vector<data::ShaderReference> {}, std::move(keys))));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      ASSERT_NE(surface, nullptr);
+      auto word = std::uint32_t { 0 };
+      ASSERT_NO_FATAL_FAILURE(ReadPacked(*surface, word));
+      EXPECT_NEAR(
+        static_cast<double>((word >> 16U) & 255U), expected * 255.0, 1.0);
+    }
+  }
+
+  //! A cutoff of 0 keeps every pixel, and a normal scale has no upper limit.
+  NOLINT_TEST_F(MaterialRasterReferenceTest, AuthoredValuesReachTheRenderer)
+  {
+    struct Case {
+      float cutoff;
+      float normal_scale;
+    };
+    for (const auto& [cutoff, normal_scale] : std::array {
+           Case { .cutoff = 0.0F, .normal_scale = 1.0F },
+           Case { .cutoff = 0.5F, .normal_scale = 20.0F },
+         }) {
+      SCOPED_TRACE(cutoff);
+      auto desc = data::pak::render::MaterialAssetDesc {};
+      desc.material_domain
+        = static_cast<std::uint8_t>(data::MaterialDomain::kMasked);
+      desc.flags = data::pak::render::kMaterialFlag_AlphaTest
+        | data::pak::render::kMaterialFlag_NoTextureSampling
+        | data::pak::render::kMaterialFlag_DoubleSided;
+      desc.base_color[3] = cutoff == 0.0F ? 0.25F : 0.75F;
+      desc.alpha_cutoff = data::Unorm16 { cutoff };
+      desc.normal_scale = normal_scale;
+      desc.emissive_factor[0] = 2.0F;
+      ASSERT_TRUE(
+        mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/test/Lighting/Material-"
+              + std::to_string(++material_sequence) + ".omat"),
+            desc, std::vector<data::ShaderReference> {})));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      EXPECT_NEAR(ReadFloatTexture(*probe->color).at(0).at(0), 2.0F, 1.0e-4F);
+    }
+  }
+
   NOLINT_TEST_F(
     MaterialRasterReferenceTest, FilteredFormatsMatchIndependentTexels)
   {

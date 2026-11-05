@@ -37,6 +37,19 @@ auto AllDropWarnings(const std::vector<ImportDiagnostic>& diagnostics) -> bool
   });
 }
 
+//! ufbx moves a material's glossiness out of its roughness map, and its texture
+//! with it: the roughness slot follows, or the map is lost without a word.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxRoughnessSlotFollowsGlossiness)
+{
+  using oxygen::content::import::adapters::FbxMaterialTextures;
+  auto material = ufbx_material {};
+  EXPECT_EQ(FbxMaterialTextures::From(material).roughness.primary,
+    &material.pbr.roughness);
+  material.features.roughness_as_glossiness.enabled = true;
+  EXPECT_EQ(FbxMaterialTextures::From(material).roughness.primary,
+    &material.pbr.glossiness);
+}
+
 NOLINT_TEST(DroppedSourceFeaturesTest, DisabledFbxCoreMapsAreNotSelected)
 {
   auto texture = ufbx_texture {};

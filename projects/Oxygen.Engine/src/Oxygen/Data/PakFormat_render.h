@@ -67,6 +67,11 @@ namespace oxygen::data::pak::render {
 //! Without a sampled AO binding, this mode is unoccluded.
 inline constexpr uint32_t kMaterialFlag_AmbientOcclusionStrength = (1U << 6U);
 
+//! The roughness texture holds glossiness: for a factor R and a sample S, the
+//! surface's roughness is 1 - (1 - R) x S instead of R x S. `roughness` stays a
+//! roughness either way.
+inline constexpr uint32_t kMaterialFlag_GlossinessTexture = (1U << 7U);
+
 //! Material asset descriptor version for current PAK schema.
 [[maybe_unused]] constexpr uint8_t kMaterialAssetVersion
   = version::kMaterialAssetVersion;

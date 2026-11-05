@@ -9,16 +9,13 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
@@ -32,8 +29,8 @@ namespace {
 
   //! An opaque white surface, optionally with a procedural grid whose minor
   //! lines cover every pixel in pure red.
-  auto MakeGridSurfaceMaterial(const bool with_grid, const std::string& name)
-    -> std::shared_ptr<data::MaterialAsset>
+  auto MakeGridSurfaceMaterial(const bool with_grid, const std::string& name,
+    const float fade_end = 2.0e6F) -> std::shared_ptr<data::MaterialAsset>
   {
     auto desc = data::pak::render::MaterialAssetDesc {};
     desc.material_domain
@@ -54,8 +51,8 @@ namespace {
     // Line widths as wide as the spacing cover the whole surface.
     desc.grid_line_thickness = 1.0F;
     desc.grid_major_thickness = 1.0F;
-    desc.grid_fade_start = 1.0e6F;
-    desc.grid_fade_end = 2.0e6F;
+    desc.grid_fade_start = 0.0F;
+    desc.grid_fade_end = fade_end;
     desc.grid_minor_color[0] = 1.0F;
     desc.grid_minor_color[3] = 1.0F;
     desc.grid_major_color[0] = 1.0F;
@@ -66,6 +63,31 @@ namespace {
   }
 
 } // namespace
+
+//! Past the end of its fade the grid is gone, and the surface is the plain one.
+NOLINT_TEST_F(ExposureLightingGpuTest, ProceduralGridFadesWithViewDistance)
+{
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = 0.0F;
+  const auto render = [&](const bool with_grid, const float fade_end) -> Pixel {
+    EXPECT_TRUE(
+      mesh_node.GetRenderable().SetMaterialOverride(FirstSurfaceOf(mesh_node),
+        MakeGridSurfaceMaterial(
+          with_grid, "Fade" + std::to_string(++material_sequence), fade_end)));
+    RenderSurface(false, 0.0F, 3U);
+    return ReadFloatTexture(*probe->color).at(0);
+  };
+  constexpr auto kFar = 2.0e6F;
+  constexpr auto kNear = 1.0e-3F;
+  const auto plain = render(false, kFar);
+  ASSERT_FALSE(HasFatalFailure());
+  const auto kept = render(true, kFar);
+  ASSERT_FALSE(HasFatalFailure());
+  const auto faded = render(true, kNear);
+  ASSERT_FALSE(HasFatalFailure());
+  EXPECT_GT(kept.at(0), plain.at(0) + 0.25F);
+  EXPECT_NEAR(faded.at(0), plain.at(0), 1.0e-4F * (1.0F + plain.at(0)));
+}
 
 //! A procedural-grid material reaches its grid constants through the view's
 //! draw-frame record, so the grid colors the surface in both shading paths.

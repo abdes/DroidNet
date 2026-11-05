@@ -2531,6 +2531,33 @@ NOLINT_TEST_F(ModelFormatsTest, ChosenUpAxisWarnsThatItMirrorsALeftHandedFile)
     kFbxLeftHandedAxesReplaced));
 }
 
+//! A 3ds Max spec/gloss material states glossiness: ufbx moves it out of the
+//! roughness map, and it must not read as a mirror.
+NOLINT_TEST_F(ModelFormatsTest, FbxGlossinessIsNotMirrorSmooth)
+{
+  const auto properties = std::string {
+    "            P: \"3dsMax|ClassIDa\", \"int\", \"Integer\", "
+    "\"\",-804315648\n"
+    "            P: \"3dsMax|ClassIDb\", \"int\", \"Integer\", \"\",31173939\n"
+    "            P: \"3dsMax|main|useGlossiness\", \"Float\", \"\", \"A\",1\n"
+    "            P: \"3dsMax|main|glossiness\", \"Float\", \"\", \"A\",0.3\n"
+  };
+  // ufbx reads the 3ds Max class only of a material of no FBX shading model.
+  auto material = FbxMaterial(properties);
+  const auto phong = std::string_view { "phong" };
+  material.replace(material.find(phong), phong.size(), "unknown");
+  const auto imported = RunImport(MakeRequest("glossiness", ModelFormat::kFbx,
+    FbxFile(FbxTriangleGeometry() + material
+        + "    Model: 2000, \"Model::Triangle\", \"Mesh\" {\n"
+          "        Version: 232\n    }\n",
+      "    C: \"OO\",2000,0\n    C: \"OO\",1001,2000\n"
+      "    C: \"OO\",1003,2000\n")));
+  ASSERT_TRUE(imported.report.success);
+  LoadAndVerify(imported.report, [](const CookedModel& model) -> void {
+    EXPECT_NEAR(model.material->GetRoughness(), 0.7F, 0.001F);
+  });
+}
+
 //! Bad faces are counted, not reported one by one, and a face with no triangles
 //! leaves nothing behind. A mesh that binds no material has nothing to warn of.
 NOLINT_TEST_F(ModelFormatsTest, FbxBadFacesWarnOnceAndNoMaterialIsNotADefect)

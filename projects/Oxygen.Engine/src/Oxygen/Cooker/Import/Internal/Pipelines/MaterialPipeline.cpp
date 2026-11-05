@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -219,30 +221,56 @@ namespace {
     return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
   }
 
+  //! The domain a material cooks with, its alpha test in `flags`.
+  /*!
+   Decal, UI and post-process materials keep their domain. For the others a
+   stated alpha mode decides, and an opaque one leaves a masked or blended
+   domain to say how the material is transparent, as the runtime reads it. A
+   mode and a domain that say different things warn.
+  */
   [[nodiscard]] auto ResolveMaterialDomain(const data::MaterialDomain domain,
-    const MaterialAlphaMode alpha_mode, uint32_t& flags) -> data::MaterialDomain
+    const MaterialAlphaMode alpha_mode, uint32_t& flags,
+    const std::string_view source_id, const std::string_view object_path,
+    std::vector<ImportDiagnostic>& diagnostics) -> data::MaterialDomain
   {
-    auto resolved = domain;
-
-    if (alpha_mode == MaterialAlphaMode::kMasked) {
-      flags |= data::pak::render::kMaterialFlag_AlphaTest;
-      if (domain != data::MaterialDomain::kDecal
-        && domain != data::MaterialDomain::kUserInterface
-        && domain != data::MaterialDomain::kPostProcess) {
-        resolved = data::MaterialDomain::kMasked;
+    using data::MaterialDomain;
+    const auto keeps_domain = domain == MaterialDomain::kDecal
+      || domain == MaterialDomain::kUserInterface
+      || domain == MaterialDomain::kPostProcess;
+    if (keeps_domain) {
+      if (alpha_mode == MaterialAlphaMode::kMasked) {
+        flags |= data::pak::render::kMaterialFlag_AlphaTest;
       }
-    } else if ((alpha_mode == MaterialAlphaMode::kBlended)
-      && (domain != data::MaterialDomain::kDecal
-        && domain != data::MaterialDomain::kUserInterface
-        && domain != data::MaterialDomain::kPostProcess)) {
-      resolved = data::MaterialDomain::kAlphaBlended;
+      return domain;
     }
 
-    return resolved;
+    const auto domain_says_masked = domain == MaterialDomain::kMasked;
+    const auto domain_says_blended = domain == MaterialDomain::kAlphaBlended;
+    const auto opaque_mode = alpha_mode == MaterialAlphaMode::kOpaque;
+    const auto masked = alpha_mode == MaterialAlphaMode::kMasked
+      || (opaque_mode && domain_says_masked);
+    const auto blended = alpha_mode == MaterialAlphaMode::kBlended
+      || (opaque_mode && domain_says_blended);
+    const auto conflict = (masked && domain_says_blended)
+      || (blended && domain_says_masked)
+      || (opaque_mode && (domain_says_masked || domain_says_blended));
+    if (conflict) {
+      diagnostics.push_back(MakeWarningDiagnostic(
+        std::string(import_codes::kMaterialDomainAlphaConflict),
+        fmt::format("The material's domain and alpha mode disagree; it cooks "
+                    "as {}",
+          masked ? "masked" : "alpha blended"),
+        source_id, object_path));
+    }
+    if (masked) {
+      flags |= data::pak::render::kMaterialFlag_AlphaTest;
+      return MaterialDomain::kMasked;
+    }
+    return blended ? MaterialDomain::kAlphaBlended : domain;
   }
 
   auto ApplyMaterialInputs(const MaterialInputs& inputs,
-    const MaterialAlphaMode alpha_mode, std::string_view source_id,
+    const bool alpha_tested, std::string_view source_id,
     std::string_view object_path, std::vector<ImportDiagnostic>& diagnostics,
     data::pak::render::MaterialAssetDesc& desc) -> void
   {
@@ -268,18 +296,12 @@ namespace {
     desc.emissive_factor[2] = inputs.emissive_factor[2];
 
     float alpha_cutoff = inputs.alpha_cutoff;
-    if (alpha_mode == MaterialAlphaMode::kMasked
-      && (alpha_cutoff < 0.0F || alpha_cutoff > 1.0F)) {
+    if (alpha_tested && (alpha_cutoff < 0.0F || alpha_cutoff > 1.0F)) {
       diagnostics.push_back(MakeWarningDiagnostic(
         std::string(import_codes::kMaterialAlphaCutoffRange),
         "Alpha cutoff outside [0,1] was clamped", source_id, object_path));
     }
-    alpha_cutoff = Normalize01(alpha_cutoff);
-    // TODO: Clamp alpha_cutoff to a reasonable default (e.g., 0.5f) during
-    // cooker emission if it is <= 0.0f and the material domain is Masked. This
-    // will allow removing runtime fallback checks from the shader clip()
-    // instructions.
-    desc.alpha_cutoff = data::Unorm16 { alpha_cutoff };
+    desc.alpha_cutoff = data::Unorm16 { Normalize01(alpha_cutoff) };
 
     desc.ior = (std::max)(1.0F, inputs.ior);
     desc.specular_factor
@@ -308,6 +330,24 @@ namespace {
     desc.attenuation_color[2]
       = data::HalfFloat { Normalize01(inputs.attenuation_color[2]) };
     desc.attenuation_distance = (std::max)(0.0F, inputs.attenuation_distance);
+  }
+
+  auto ApplyProceduralGrid(const MaterialProceduralGrid& grid,
+    data::pak::render::MaterialAssetDesc& desc) -> void
+  {
+    desc.flags |= data::pak::render::kMaterialFlag_ProceduralGrid;
+    std::ranges::copy(grid.spacing, std::begin(desc.grid_spacing));
+    desc.grid_major_every = grid.major_every;
+    desc.grid_line_thickness = grid.line_thickness;
+    desc.grid_major_thickness = grid.major_thickness;
+    desc.grid_axis_thickness = grid.axis_thickness;
+    desc.grid_fade_start = grid.fade_start;
+    desc.grid_fade_end = grid.fade_end;
+    std::ranges::copy(grid.minor_color, std::begin(desc.grid_minor_color));
+    std::ranges::copy(grid.major_color, std::begin(desc.grid_major_color));
+    std::ranges::copy(grid.axis_color_x, std::begin(desc.grid_axis_color_x));
+    std::ranges::copy(grid.axis_color_y, std::begin(desc.grid_axis_color_y));
+    std::ranges::copy(grid.origin_color, std::begin(desc.grid_origin_color));
   }
 
   [[nodiscard]] auto HasAnyAssignedTextures(
@@ -424,12 +464,23 @@ namespace {
       desc.flags |= data::pak::render::kMaterialFlag_AmbientOcclusionStrength;
     }
 
+    if (material.inputs.roughness_as_glossiness
+      && material.textures.roughness.assigned) {
+      desc.flags |= data::pak::render::kMaterialFlag_GlossinessTexture;
+    }
+    if (material.procedural_grid.has_value()) {
+      ApplyProceduralGrid(*material.procedural_grid, desc);
+    }
+
     const auto resolved_domain
-      = ResolveMaterialDomain(material.domain, material.alpha_mode, desc.flags);
+      = ResolveMaterialDomain(material.domain, material.alpha_mode, desc.flags,
+        source_id, object_path, outcome.diagnostics);
     desc.material_domain = static_cast<uint8_t>(resolved_domain);
 
-    ApplyMaterialInputs(material.inputs, material.alpha_mode, source_id,
-      object_path, outcome.diagnostics, desc);
+    const auto alpha_tested
+      = (desc.flags & data::pak::render::kMaterialFlag_AlphaTest) != 0U;
+    ApplyMaterialInputs(material.inputs, alpha_tested, source_id, object_path,
+      outcome.diagnostics, desc);
 
     const bool orm_packed = IsOrmPacked(material);
 
@@ -646,7 +697,7 @@ auto MaterialPipeline::Worker() -> co::Co<>
       build_outcome = BuildMaterialPayload(
         item.material, item.source_id, item.stop_token, {});
     }
-    if (build_outcome.canceled) {
+    if (build_outcome.canceled || item.stop_token.stop_requested()) {
       co_await ReportCancelled(std::move(item));
       continue;
     }

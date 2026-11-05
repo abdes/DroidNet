@@ -222,7 +222,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMaterialDescriptorShaderStageInvalid = "material.descriptor.shader_stage_invalid";
   inline constexpr std::string_view kMaterialDescriptorTextureDescriptorMissing = "material.descriptor.texture_descriptor_missing";
   inline constexpr std::string_view kMaterialDescriptorTextureUvInvalid = "material.descriptor.texture_uv_invalid";
+  inline constexpr std::string_view kMaterialDomainAlphaConflict = "material.domain_alpha_conflict";
   inline constexpr std::string_view kMaterialEmissiveFactorRange = "material.emissive_factor_range";
+  inline constexpr std::string_view kMaterialGridInvalid = "material.grid_invalid";
+  inline constexpr std::string_view kMaterialInputNotFinite = "material.input_not_finite";
   inline constexpr std::string_view kMaterialOrmPolicy = "material.orm_policy";
   inline constexpr std::string_view kMaterialSerializeFailed = "material.serialize_failed";
   inline constexpr std::string_view kMaterialShaderRefInvalid = "material.shader_ref_invalid";
@@ -230,6 +233,7 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kMaterialShaderStageDuplicate = "material.shader_stage_duplicate";
   inline constexpr std::string_view kMaterialShaderStageInvalid = "material.shader_stage_invalid";
   inline constexpr std::string_view kMaterialTextureMissing = "material.texture_missing";
+  inline constexpr std::string_view kMaterialUvDropped = "material.uv_dropped";
   //! What mesh building found.
   inline constexpr std::string_view kMeshAuxBufferCount = "mesh.aux_buffer_count";
   inline constexpr std::string_view kMeshBufferTooLarge = "mesh.buffer_too_large";

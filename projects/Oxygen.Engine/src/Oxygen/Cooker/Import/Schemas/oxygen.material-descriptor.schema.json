@@ -26,6 +26,14 @@
     "orm_policy": {
       "enum": ["auto", "force_packed", "force_separate"]
     },
+    "ambient_occlusion_mode": {
+      "description": "How `parameters.ambient_occlusion` combines with an ambient occlusion texture: `factor` multiplies the sample; `strength` blends from unoccluded to the sample, and is unoccluded without a texture.",
+      "enum": ["factor", "strength"],
+      "default": "factor"
+    },
+    "procedural_grid": {
+      "$ref": "#/definitions/procedural_grid"
+    },
     "parameters": {
       "$ref": "#/definitions/parameters"
     },
@@ -40,21 +48,23 @@
     }
   },
   "definitions": {
+    "float": {
+      "type": "number",
+      "minimum": -3.4028234663852886e38,
+      "maximum": 3.4028234663852886e38
+    },
+    "non_negative_float": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 3.4028234663852886e38
+    },
     "vec2": {
       "type": "array",
       "items": {
-        "type": "number"
+        "$ref": "#/definitions/float"
       },
       "minItems": 2,
       "maxItems": 2
-    },
-    "vec3": {
-      "type": "array",
-      "items": {
-        "type": "number"
-      },
-      "minItems": 3,
-      "maxItems": 3
     },
     "vec3_01": {
       "type": "array",
@@ -87,7 +97,7 @@
           "$ref": "#/definitions/vec2"
         },
         "rotation_radians": {
-          "type": "number"
+          "$ref": "#/definitions/float"
         }
       }
     },
@@ -158,6 +168,64 @@
         }
       }
     },
+    "procedural_grid": {
+      "description": "Shades the material with a world-space grid on any surface. Its presence turns the grid on.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "spacing": {
+          "description": "World units between minor lines, along each axis of a plane.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "maximum": 3.4028234663852886e38
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [1.0, 1.0]
+        },
+        "major_every": {
+          "description": "Minor cells per major line.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "default": 10
+        },
+        "line_thickness": {
+          "$ref": "#/definitions/non_negative_float"
+        },
+        "major_thickness": {
+          "$ref": "#/definitions/non_negative_float"
+        },
+        "axis_thickness": {
+          "$ref": "#/definitions/non_negative_float"
+        },
+        "fade_start": {
+          "description": "View distance at which the grid starts to fade.",
+          "$ref": "#/definitions/non_negative_float"
+        },
+        "fade_end": {
+          "description": "View distance at which the grid is gone; it does not fade when this is not past fade_start.",
+          "$ref": "#/definitions/non_negative_float"
+        },
+        "minor_color": {
+          "$ref": "#/definitions/vec4_01"
+        },
+        "major_color": {
+          "$ref": "#/definitions/vec4_01"
+        },
+        "axis_color_x": {
+          "$ref": "#/definitions/vec4_01"
+        },
+        "axis_color_y": {
+          "$ref": "#/definitions/vec4_01"
+        },
+        "origin_color": {
+          "$ref": "#/definitions/vec4_01"
+        }
+      }
+    },
     "shader_stage": {
       "type": "object",
       "additionalProperties": false,
@@ -206,8 +274,7 @@
           "$ref": "#/definitions/vec4_01"
         },
         "normal_scale": {
-          "type": "number",
-          "minimum": 0.0
+          "$ref": "#/definitions/non_negative_float"
         },
         "metalness": {
           "type": "number",
@@ -244,7 +311,8 @@
         },
         "ior": {
           "type": "number",
-          "minimum": 1.0
+          "minimum": 1.0,
+          "maximum": 3.4028234663852886e38
         },
         "specular_factor": {
           "description": "Specular level of dielectrics: F0 = 0.08 x level. 0.5, the default, gives F0 = 0.04; with a specular texture, the level is this factor times the texture's red channel.",
@@ -280,8 +348,7 @@
           "$ref": "#/definitions/vec3_01"
         },
         "attenuation_distance": {
-          "type": "number",
-          "minimum": 0.0
+          "$ref": "#/definitions/non_negative_float"
         },
         "double_sided": {
           "type": "boolean"
@@ -290,6 +357,7 @@
           "type": "boolean"
         },
         "roughness_as_glossiness": {
+          "description": "`roughness` and the roughness texture hold glossiness: the surface's roughness is 1 - roughness x sample.",
           "type": "boolean"
         }
       }

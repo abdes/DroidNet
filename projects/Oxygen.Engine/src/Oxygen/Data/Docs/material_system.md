@@ -30,6 +30,15 @@ Material flags are defined by `kMaterialFlag_*` in `PakFormat_render.h`.
 Geometry visibility, casting and receiving policies belong to scene/renderable
 state rather than an invented material flag convention.
 
+## Roughness
+
+Roughness is the factor times the red of a roughness texture, or its green when
+`kMaterialFlag_GltfOrmPacked` packs metallic and roughness into one texture;
+only that flag says so, whichever slots hold the same texture.
+`kMaterialFlag_GlossinessTexture` reads the sample as glossiness: for a factor R
+and a sample S, roughness is `1 - (1 - R) * S`. The stored factor is a roughness
+either way, so a glossiness G cooks as `R = 1 - G`.
+
 ## Occlusion
 
 Ambient occlusion has an explicit texture binding. A packed metallic/roughness

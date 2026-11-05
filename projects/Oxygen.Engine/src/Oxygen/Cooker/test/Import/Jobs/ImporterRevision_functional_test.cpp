@@ -72,70 +72,70 @@ namespace {
     {
       .importer = Importer::kGltf,
       .scenario = "",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "671db410123db8e042bc68b8fb3595374b3f78fed67a39de68af7ff98b8c642e",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "textured",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "5253b65b927e11fb2e2e30058a16547bd8654f4aabc5e941e8a7019174ecbecb",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "lights",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "7cff02e78035d2f8744b263dc6433c38c2c6fb80ae5908ee80eaca3c3602d277",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "remap",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "96eeb62ed7b86a8b48e26423c4cd0e8a41804badc1cfa859d208b07b9dab2119",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "tuned",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "a6bfddfb6c1547658301bef305b88983adab5b5bf69213734a4319c0dfabac47",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "1cfc6fb36ca84752b54afc5225189511e341fe194d77adbdbd965257fdcb4b91",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "textured",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "de7e4a691e5e273a27cad3c534928a6d48f8333a679849e04a10951707cae182",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "skinned",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "9e451eb6204f257bde0ee745b297867fda935ef5991b13a2d2d59999961302f6",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "lights",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "c76a0409d22661b1b6e75ac88229771f8d3a45b2ed4d1240ff81f0e2c3a0e952",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "tuned",
-      .revision = 11,
+      .revision = 12,
       .digest
       = "24f1cc0f9b0e322c3f2047ce64f5321f4ec198976a737e1cdf72649d82fe77ab",
     },
@@ -153,7 +153,7 @@ namespace {
     },
     {
       .importer = Importer::kMaterialDescriptor,
-      .revision = 3,
+      .revision = 4,
       .digest
       = "fe21e5f5abe3f5ef7c4338555b9fd078ee1bcd31ae507d63eb5a5ef56833f725",
     },

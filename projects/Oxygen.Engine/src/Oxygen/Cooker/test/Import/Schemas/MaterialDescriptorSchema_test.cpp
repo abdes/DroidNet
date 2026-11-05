@@ -84,6 +84,63 @@ INSTANTIATE_TEST_SUITE_P(Cases, MaterialDescriptorSchemaCaseTest,
       "",
     },
     SchemaCase {
+      "AcceptsAuthoredGridAndOcclusionMode",
+      WoodFloor()
+        .Set("/ambient_occlusion_mode", "strength")
+        .Set("/procedural_grid/spacing", json::array({ 1.0, 2.0 }))
+        .Set("/procedural_grid/major_every", 10)
+        .Set("/procedural_grid/line_thickness", 1.0)
+        .Set("/procedural_grid/fade_start", 10.0)
+        .Set("/procedural_grid/fade_end", 20.0)
+        .Set(
+          "/procedural_grid/minor_color", json::array({ 1.0, 0.0, 0.0, 1.0 }))
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsUnknownOcclusionMode",
+      WoodFloor().Set("/ambient_occlusion_mode", "multiply").Text(),
+      false,
+      "enum",
+    },
+    SchemaCase {
+      "RejectsGridWithoutSpacing",
+      WoodFloor()
+        .Set("/procedural_grid/spacing", json::array({ 0.0, 1.0 }))
+        .Text(),
+      false,
+      "minimum",
+    },
+    SchemaCase {
+      "RejectsGridWithoutMinorCells",
+      WoodFloor().Set("/procedural_grid/major_every", 0).Text(),
+      false,
+      "minimum",
+    },
+    SchemaCase {
+      "RejectsUnknownGridField",
+      WoodFloor().Set("/procedural_grid/glow", true).Text(),
+      false,
+      "'glow'",
+    },
+    SchemaCase {
+      "RejectsNormalScaleNoFloatHolds",
+      WoodFloor().Set("/parameters/normal_scale", 1.0e39).Text(),
+      false,
+      "maximum",
+    },
+    SchemaCase {
+      "RejectsUvScaleNoFloatHolds",
+      WoodFloor()
+        .Texture("base_color", "/Cooked/Textures/WoodFloor_Color.otex")
+        .Set("/textures/base_color/uv_transform/scale",
+          json::array({ 1.0e39, 1.0 }))
+        .Text(),
+      false,
+      "maximum",
+    },
+    SchemaCase {
       "RejectsUnknownNestedFields",
       WoodFloor()
         .Texture("base_color", "/Cooked/Textures/WoodFloor_Color.otex")
