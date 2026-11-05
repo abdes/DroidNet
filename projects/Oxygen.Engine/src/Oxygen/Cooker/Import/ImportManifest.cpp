@@ -1713,7 +1713,10 @@ namespace {
       CHECK_NOTNULL_F(
         job.mounts.get(), "A manifest job carries its mount table");
       return internal::BuildBufferContainerRequest(job.buffer_container,
-        BufferContainerIdentity(job.virtual_path, job.source_mount_path),
+        BufferContainerIdentity({
+          .virtual_path = job.virtual_path,
+          .source_mount_path = job.source_mount_path,
+        }),
         *job.mounts, diagnostics, captured_inputs);
     }
     if (type == "geometry-descriptor") {

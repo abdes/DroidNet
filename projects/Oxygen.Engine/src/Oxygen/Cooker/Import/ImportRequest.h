@@ -351,7 +351,11 @@ struct ImportRequest final {
 //! The identity of a buffer container job: its virtual path, or, when it names
 //! none, its location (`source_mount_path` without the authoring suffix).
 //! Its buffers' references are relative to it.
-OXGN_COOK_NDAPI auto BufferContainerIdentity(std::string_view virtual_path,
-  std::string_view source_mount_path) -> std::string_view;
+struct BufferContainerPaths final {
+  std::string_view virtual_path;
+  std::string_view source_mount_path;
+};
+OXGN_COOK_NDAPI auto BufferContainerIdentity(const BufferContainerPaths& paths)
+  -> std::string_view;
 
 } // namespace oxygen::content::import

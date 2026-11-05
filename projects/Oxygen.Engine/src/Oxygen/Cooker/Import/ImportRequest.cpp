@@ -79,22 +79,22 @@ auto ImportRequest::OutputIdentity() const -> std::string_view
     return physics->target_scene_virtual_path;
   }
   if (buffer_container.has_value()) {
-    return BufferContainerIdentity({}, source_mount_path);
+    return BufferContainerIdentity({ .source_mount_path = source_mount_path });
   }
   return {};
 }
 
-auto BufferContainerIdentity(const std::string_view virtual_path,
-  const std::string_view source_mount_path) -> std::string_view
+auto BufferContainerIdentity(const BufferContainerPaths& paths)
+  -> std::string_view
 {
-  if (!virtual_path.empty()) {
-    return virtual_path;
+  if (!paths.virtual_path.empty()) {
+    return paths.virtual_path;
   }
   constexpr auto kAuthoringSuffix = std::string_view { ".json" };
-  return source_mount_path.ends_with(kAuthoringSuffix)
-    ? source_mount_path.substr(
-        0, source_mount_path.size() - kAuthoringSuffix.size())
-    : source_mount_path;
+  return paths.source_mount_path.ends_with(kAuthoringSuffix)
+    ? paths.source_mount_path.substr(
+        0, paths.source_mount_path.size() - kAuthoringSuffix.size())
+    : paths.source_mount_path;
 }
 
 auto ImportRequest::OutputMountRoot() const -> std::string_view

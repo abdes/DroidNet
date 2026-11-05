@@ -539,7 +539,10 @@ namespace {
     const auto text = co_await ReadSourceText(
       context, job.buffer_container.descriptor_path, {});
     context.anchor = std::string {
-      BufferContainerIdentity(job.virtual_path, job.source_mount_path),
+      BufferContainerIdentity({
+        .virtual_path = job.virtual_path,
+        .source_mount_path = job.source_mount_path,
+      }),
     };
     CHECK_NOTNULL_F(job.mounts.get(), "A manifest job carries its mount table");
     const auto sources = internal::BufferSource::FromContainer(text,
