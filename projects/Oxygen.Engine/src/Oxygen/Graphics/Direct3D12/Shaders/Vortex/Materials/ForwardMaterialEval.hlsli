@@ -116,6 +116,137 @@ static inline float ApplyRoughnessSample(float roughness, float roughness_sample
         : roughness * roughness_sample;
 }
 
+// Applies a material's factors and textures to a surface. Reads no view state.
+static inline void ApplyMaterialConstants(
+    inout MaterialSurface s,
+    MaterialShadingConstants mat,
+    float3 world_normal,
+    float3 world_tangent,
+    float3 world_bitangent,
+    float4 uvs)
+{
+    s.base_rgb  = mat.base_color.rgb;
+    s.base_a    = mat.base_color.a;
+    s.flags     = mat.flags;
+    s.metalness = saturate(mat.metalness);
+    s.roughness = saturate(mat.roughness);
+    const bool ao_is_strength = (mat.flags & MATERIAL_FLAG_AMBIENT_OCCLUSION_STRENGTH) != 0u;
+    const float ao_factor = saturate(mat.ambient_occlusion);
+    s.ao        = ao_is_strength ? 1.0 : ao_factor;
+
+    const bool no_texture_sampling =
+        (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
+
+    if (!no_texture_sampling
+        && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
+        float4 texel = SampleSlot(mat.base_color_texture_index, mat.base_color_sampling, uvs);
+        // The cooked format determines transfer decoding: sRGB SRVs
+        // decode in hardware; linear UNORM/float SRVs already yield linear RGB.
+        s.base_rgb *= texel.rgb;
+        s.base_a   *= texel.a;
+    }
+
+    // Normal map (tangent-space)
+    if (!no_texture_sampling
+        && mat.normal_texture_index != K_INVALID_BINDLESS_INDEX) {
+        float3 n_ts = DecodeNormalTS(
+            SampleSlot(mat.normal_texture_index, mat.normal_sampling, uvs).xyz);
+        n_ts.xy = SlotNormalToMeshFrame(n_ts.xy, mat.normal_sampling);
+        n_ts.xy *= mat.normal_scale;
+        n_ts = SafeNormalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
+
+        float3 NN = SafeNormalize(world_normal);
+        // Fallback if geometric normal is degenerate
+        if (dot(NN, NN) < 0.5) {
+            NN = float3(0.0, 0.0, 1.0);
+        }
+
+        // The VS provides an orthonormal TBN basis. In the PS we only do a
+        // minimal, correctness-preserving renormalization and handedness
+        // check to account for interpolation.
+        float3 T = SafeNormalize(world_tangent);
+        float3 B_in = SafeNormalize(world_bitangent);
+
+        // Re-orthogonalize T against N (cheap) to avoid accumulating error
+        // across interpolation.
+        T = T - NN * dot(NN, T);
+        if (dot(T, T) <= 1e-6) {
+            const float3 axis = (abs(NN.z) > 0.9) ? float3(1.0, 0.0, 0.0)
+                                                  : float3(0.0, 0.0, 1.0);
+            T = cross(NN, axis);
+        }
+        T = SafeNormalize(T);
+
+        float3 B = cross(NN, T);
+        if (dot(B, B) <= 1e-6) {
+            B = B_in;
+        }
+        const float handedness = (dot(B, B_in) < 0.0) ? -1.0 : 1.0;
+        B = SafeNormalize(B * handedness);
+
+        // Transform tangent-space normal to world space.
+        // TBN basis vectors (T, B, NN) are columns of the transform matrix.
+        // n_ws = T * n_ts.x + B * n_ts.y + NN * n_ts.z
+        float3 perturbed_N = T * n_ts.x + B * n_ts.y + NN * n_ts.z;
+        perturbed_N = SafeNormalize(perturbed_N);
+
+        // Validate the perturbed normal - if it's zero or points sharply away
+        // from the geometric normal (> 90 degrees), fall back to geometric normal
+        if (dot(perturbed_N, perturbed_N) < 0.5 || dot(perturbed_N, NN) < 0.0) {
+            perturbed_N = NN;
+        }
+        s.N = perturbed_N;
+    }
+
+    // Scalar maps
+    const bool use_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
+    const bool orm_in_roughness = mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX;
+    const uint orm_tex_index = orm_in_roughness
+        ? mat.roughness_texture_index
+        : mat.metallic_texture_index;
+
+    if (!no_texture_sampling && use_orm_packed
+        && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
+        MaterialSlotSampling orm_sampling = mat.metallic_sampling;
+        if (orm_in_roughness) {
+            orm_sampling = mat.roughness_sampling;
+        }
+        const float3 orm = saturate(SampleSlot(orm_tex_index, orm_sampling, uvs).rgb);
+
+        // glTF ORM packing:
+        // - Roughness:G
+        // - Metalness:B
+        s.roughness = ApplyRoughnessSample(s.roughness, orm.g, mat.flags);
+        s.metalness *= orm.b;
+    } else if (!no_texture_sampling) {
+        if (mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX) {
+            s.metalness *= saturate(SampleSlot(
+                mat.metallic_texture_index, mat.metallic_sampling, uvs).r);
+        }
+        if (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
+            s.roughness = ApplyRoughnessSample(s.roughness, saturate(SampleSlot(
+                mat.roughness_texture_index, mat.roughness_sampling, uvs).r), mat.flags);
+        }
+    }
+
+    // Occlusion reads red, also of a packed ORM, always through its own slot.
+    if (!no_texture_sampling
+        && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
+        const float ao_sample = saturate(SampleSlot(mat.ambient_occlusion_texture_index,
+            mat.ambient_occlusion_sampling, uvs).r);
+        s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
+    }
+
+    // Emissive: self-illumination that bypasses BRDF.
+    // Start with the constant factor, then modulate by texture if present.
+    s.emissive = mat.emissive_factor;
+    if (!no_texture_sampling
+        && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
+        // Preserve linear HDR values and avoid decoding sRGB SRVs twice.
+        s.emissive *= SampleSlot(mat.emissive_texture_index, mat.emissive_sampling, uvs).rgb;
+    }
+}
+
 // Surface of an already loaded draw material; without one (`has_material`
 // false) the surface keeps its defaults.
 MaterialSurface EvaluateMaterialSurfaceForMaterial(
@@ -153,148 +284,8 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         s.receives_shadows = (draw_material.primitive_flags
             & DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION) == 0u;
         const MaterialShadingConstants mat = draw_material.constants;
-
-        s.base_rgb  = mat.base_color.rgb;
-        s.base_a    = mat.base_color.a;
-        s.flags     = mat.flags;
-        s.metalness = saturate(mat.metalness);
-        s.roughness = saturate(mat.roughness);
-        const bool ao_is_strength = (mat.flags & MATERIAL_FLAG_AMBIENT_OCCLUSION_STRENGTH) != 0u;
-        const float ao_factor = saturate(mat.ambient_occlusion);
-        s.ao        = ao_is_strength ? 1.0 : ao_factor;
-
-        // UV convention (see ApplyMaterialUv in Vortex/Contracts/Draw/MaterialShadingConstants.hlsli):
-        // scale -> rotation (radians, CCW around origin) -> offset.
-        const float2 uv = ApplyMaterialUv(uvs, mat);
-
-        const bool no_texture_sampling =
-            (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
-
-        if (!no_texture_sampling
-            && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
-            Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-            float4 texel = base_tex.Sample(samp, uv);
-            // The cooked format determines transfer decoding: sRGB SRVs
-            // decode in hardware; linear UNORM/float SRVs already yield linear RGB.
-            s.base_rgb *= texel.rgb;
-            s.base_a   *= texel.a;
-        }
-
-        // Normal map (tangent-space)
-        if (!no_texture_sampling
-            && mat.normal_texture_index != K_INVALID_BINDLESS_INDEX) {
-            Texture2D<float4> nrm_tex = ResourceDescriptorHeap[mat.normal_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-            float3 n_ts = DecodeNormalTS(nrm_tex.Sample(samp, uv).xyz);
-            n_ts.xy *= mat.normal_scale;
-            n_ts = SafeNormalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
-
-            float3 NN = SafeNormalize(world_normal);
-            // Fallback if geometric normal is degenerate
-            if (dot(NN, NN) < 0.5) {
-                NN = float3(0.0, 0.0, 1.0);
-            }
-
-            // The VS provides an orthonormal TBN basis. In the PS we only do a
-            // minimal, correctness-preserving renormalization and handedness
-            // check to account for interpolation.
-            float3 T = SafeNormalize(world_tangent);
-            float3 B_in = SafeNormalize(world_bitangent);
-
-            // Re-orthogonalize T against N (cheap) to avoid accumulating error
-            // across interpolation.
-            T = T - NN * dot(NN, T);
-            if (dot(T, T) <= 1e-6) {
-                const float3 axis = (abs(NN.z) > 0.9) ? float3(1.0, 0.0, 0.0)
-                                                      : float3(0.0, 0.0, 1.0);
-                T = cross(NN, axis);
-            }
-            T = SafeNormalize(T);
-
-            float3 B = cross(NN, T);
-            if (dot(B, B) <= 1e-6) {
-                B = B_in;
-            }
-            const float handedness = (dot(B, B_in) < 0.0) ? -1.0 : 1.0;
-            B = SafeNormalize(B * handedness);
-
-            // Transform tangent-space normal to world space.
-            // TBN basis vectors (T, B, NN) are columns of the transform matrix.
-            // n_ws = T * n_ts.x + B * n_ts.y + NN * n_ts.z
-            float3 perturbed_N = T * n_ts.x + B * n_ts.y + NN * n_ts.z;
-            perturbed_N = SafeNormalize(perturbed_N);
-
-            // Validate the perturbed normal - if it's zero or points sharply away
-            // from the geometric normal (> 90 degrees), fall back to geometric normal
-            if (dot(perturbed_N, perturbed_N) < 0.5 || dot(perturbed_N, NN) < 0.0) {
-                perturbed_N = NN;
-            }
-            s.N = perturbed_N;
-        }
-
-        // Scalar maps
-        const bool use_orm_packed = (mat.flags & MATERIAL_FLAG_GLTF_ORM_PACKED) != 0u;
-        const uint orm_tex_index = (mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX)
-            ? mat.roughness_texture_index
-            : mat.metallic_texture_index;
-
-        if (!no_texture_sampling && use_orm_packed
-            && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
-            Texture2D<float4> orm_tex = ResourceDescriptorHeap[orm_tex_index];
-            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-            const float3 orm = saturate(orm_tex.Sample(samp, uv).rgb);
-
-            // glTF ORM packing:
-            // - AO:       R
-            // - Roughness:G
-            // - Metalness:B
-            s.roughness = ApplyRoughnessSample(s.roughness, orm.g, mat.flags);
-            s.metalness *= orm.b;
-
-            // Packed MR does not imply an AO binding.
-            if (mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
-                float ao_sample = orm.r;
-                if (mat.ambient_occlusion_texture_index != orm_tex_index) {
-                    Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
-                    ao_sample = saturate(ao_tex.Sample(samp, uv).r);
-                }
-                s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
-            }
-        } else {
-            if (!no_texture_sampling
-                && mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX) {
-                Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-                s.metalness *= saturate(m_tex.Sample(samp, uv).r);
-            }
-            if (!no_texture_sampling
-                && mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
-                Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-                s.roughness = ApplyRoughnessSample(
-                    s.roughness, saturate(r_tex.Sample(samp, uv).r), mat.flags);
-            }
-            if (!no_texture_sampling
-                && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
-                Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-                const float ao_sample = saturate(ao_tex.Sample(samp, uv).r);
-                s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
-            }
-        }
-
-        // Emissive: self-illumination that bypasses BRDF.
-        // Start with the constant factor, then modulate by texture if present.
-        s.emissive = mat.emissive_factor;
-        if (!no_texture_sampling
-            && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
-            Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
-            // Preserve linear HDR values and avoid decoding sRGB SRVs twice.
-            float3 emissive_sample = emissive_tex.Sample(samp, uv).rgb;
-            s.emissive *= emissive_sample;
-        }
+        ApplyMaterialConstants(s, mat, world_normal, world_tangent,
+            world_bitangent, uvs);
 
         if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u
             && procedural_grid_material_constants_slot

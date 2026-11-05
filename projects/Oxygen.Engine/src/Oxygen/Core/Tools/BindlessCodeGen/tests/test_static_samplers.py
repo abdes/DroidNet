@@ -60,3 +60,38 @@ def test_invalid_slots_are_rejected(
 ) -> None:
     with pytest.raises(ValueError, match=message):
         domains.validate_static_samplers(samplers, DOMAINS)
+
+
+def table(
+    table_id: str, slot: int, count: int, domain: str = "samplers"
+) -> dict[str, Any]:
+    return {"id": table_id, "domain": domain, "slot": slot, "count": count}
+
+
+def test_tables_render_their_first_index_and_count() -> None:
+    samplers = [sampler("linear_wrap", 0)]
+    tables = [table("texture", 1, 3)]
+    domains.validate_static_sampler_tables(tables, samplers, DOMAINS)
+    cpp = domains.render_cpp_static_sampler_tables(tables, DOMAINS)
+    assert "inline constexpr uint32_t kTextureSamplerTableIndex = 1U;" in cpp
+    assert "inline constexpr uint32_t kTextureSamplerTableCount = 3U;" in cpp
+
+
+@pytest.mark.parametrize(
+    ("tables", "message"),
+    [
+        ([table("a", 2, 3)], "outside domain"),
+        ([table("a", 1, 0)], "outside domain"),
+        ([table("a", 0, 1, "textures")], "sampler domain"),
+        ([table("a", 0, 2)], "overlaps slot 0"),
+        ([table("a", 1, 1), table("b", 1, 1)], "overlaps slot 1"),
+        ([table("a", 1, 1), table("a", 2, 1)], "not unique"),
+    ],
+)
+def test_invalid_tables_are_rejected(
+    tables: list[dict[str, Any]], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        domains.validate_static_sampler_tables(
+            tables, [sampler("linear_wrap", 0)], DOMAINS
+        )

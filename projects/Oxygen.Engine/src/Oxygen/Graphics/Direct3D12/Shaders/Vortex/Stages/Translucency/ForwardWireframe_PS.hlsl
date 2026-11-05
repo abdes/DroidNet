@@ -58,9 +58,8 @@ struct WireframePassConstants {
   : SV_Target0
 {
 #ifdef ALPHA_TEST
-  const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
   ApplyMaskedAlphaClip(
-    EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+    EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif // ALPHA_TEST
 
   float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);

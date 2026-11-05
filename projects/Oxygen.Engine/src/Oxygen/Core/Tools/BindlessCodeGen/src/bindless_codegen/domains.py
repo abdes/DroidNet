@@ -278,6 +278,45 @@ def validate_static_samplers(
         seen_slots.add((domain_id, slot))
 
 
+def validate_static_sampler_tables(
+    tables: List[Dict[str, Any]],
+    samplers: List[Dict[str, Any]],
+    domains: List[Dict[str, Any]],
+) -> None:
+    """Sampler tables occupy runs of a sampler domain that nothing else holds."""
+    by_id = {str(domain.get("id")): domain for domain in domains}
+    taken: set[tuple[str, int]] = {
+        (str(sampler.get("domain")), int(sampler.get("slot", -1)))
+        for sampler in samplers
+    }
+    seen_ids: set[str] = set()
+    for table in tables:
+        table_id = str(table.get("id"))
+        domain_id = str(table.get("domain"))
+        slot = int(table.get("slot", -1))
+        count = int(table.get("count", 0))
+        domain = by_id.get(domain_id)
+        if domain is None or domain.get("shader_access_class") != "sampler":
+            raise ValueError(
+                f"sampler table '{table_id}' must name a sampler domain, "
+                f"not '{domain_id}'"
+            )
+        if slot < 0 or count <= 0 or slot + count > int(domain.get("capacity", 0)):
+            raise ValueError(
+                f"sampler table '{table_id}' slots {slot}+{count} are outside "
+                f"domain '{domain_id}'"
+            )
+        if table_id in seen_ids:
+            raise ValueError(f"sampler table '{table_id}' is not unique")
+        seen_ids.add(table_id)
+        for table_slot in range(slot, slot + count):
+            if (domain_id, table_slot) in taken:
+                raise ValueError(
+                    f"sampler table '{table_id}' overlaps slot {table_slot}"
+                )
+            taken.add((domain_id, table_slot))
+
+
 def _static_sampler_index(
     sampler: Dict[str, Any], domains: List[Dict[str, Any]]
 ) -> int:
@@ -298,6 +337,30 @@ def render_cpp_static_samplers(
         lines.append(
             f"inline constexpr uint32_t k{name}SamplerIndex = "
             f"{_static_sampler_index(sampler, domains)}U;"
+        )
+    return "\n".join(lines)
+
+
+def render_cpp_static_sampler_tables(
+    tables: List[Dict[str, Any]], domains: List[Dict[str, Any]]
+) -> str:
+    """First shader-visible index and size of each sampler table, as C++ constants.
+
+    Shaders read a table's indices from their data, so HLSL gets no constant.
+    """
+    lines: List[str] = []
+    for table in tables:
+        comment = str(table.get("comment") or "").strip()
+        if comment:
+            lines.append(f"// {comment}")
+        name = _pascal_from_identifier(str(table.get("id")))
+        lines.append(
+            f"inline constexpr uint32_t k{name}SamplerTableIndex = "
+            f"{_static_sampler_index(table, domains)}U;"
+        )
+        lines.append(
+            f"inline constexpr uint32_t k{name}SamplerTableCount = "
+            f"{int(table.get('count', 0))}U;"
         )
     return "\n".join(lines)
 

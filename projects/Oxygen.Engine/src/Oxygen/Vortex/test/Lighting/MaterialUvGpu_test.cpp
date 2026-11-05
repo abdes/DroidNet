@@ -18,6 +18,7 @@
 #include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/MaterialEvaluation.h>
 
@@ -25,21 +26,23 @@ namespace oxygen::vortex::testing {
 namespace {
   struct MaterialUvInput {
     glm::vec4 uvs { 0.0F };
+    MaterialSlotSampling sampling {};
+  };
+  static_assert(sizeof(MaterialUvInput) == 48U);
+  static_assert(offsetof(MaterialUvInput, uvs) == 0U);
+  static_assert(offsetof(MaterialUvInput, sampling) == 16U);
+
+  struct MaterialUvCase {
+    glm::vec2 uv { 0.0F };
     glm::vec2 scale { 1.0F };
     glm::vec2 offset { 0.0F };
     float rotation_radians { 0.0F };
-    std::uint32_t uv_set { 0U };
   };
-  static_assert(sizeof(MaterialUvInput) == 40U);
-  static_assert(offsetof(MaterialUvInput, uvs) == 0U);
-  static_assert(offsetof(MaterialUvInput, scale) == 16U);
-  static_assert(offsetof(MaterialUvInput, offset) == 24U);
-  static_assert(offsetof(MaterialUvInput, rotation_radians) == 32U);
-  static_assert(offsetof(MaterialUvInput, uv_set) == 36U);
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, MaterialUvTransformMatchesIndependentReference)
   {
+    auto cases = std::vector<MaterialUvCase> {};
     auto inputs = std::vector<MaterialUvInput> {};
     for (const auto uv : {
            glm::vec2 { 0.0F },
@@ -57,21 +60,22 @@ namespace {
                std::numbers::pi_v<float> / 2.0F,
                std::numbers::pi_v<float>,
              }) {
+          const auto offset = glm::vec2 { -0.5F, 0.25F };
           // The set not selected holds what would show if it were read.
-          inputs.push_back({
-            .uvs = { uv, 99.0F, -99.0F },
-            .scale = scale,
-            .offset = { -0.5F, 0.25F },
-            .rotation_radians = rotation,
-            .uv_set = 0U,
-          });
-          inputs.push_back({
-            .uvs = { 99.0F, -99.0F, uv },
-            .scale = scale,
-            .offset = { -0.5F, 0.25F },
-            .rotation_radians = rotation,
-            .uv_set = 1U,
-          });
+          for (const auto uv_set : { 0U, 1U }) {
+            cases.push_back({
+              .uv = uv,
+              .scale = scale,
+              .offset = offset,
+              .rotation_radians = rotation,
+            });
+            inputs.push_back({
+              .uvs = uv_set == 0U ? glm::vec4 { uv, 99.0F, -99.0F }
+                                  : glm::vec4 { 99.0F, -99.0F, uv },
+              .sampling
+              = MakeMaterialSlotSampling(uv_set, scale, offset, rotation),
+            });
+          }
         }
       }
     }
@@ -86,12 +90,9 @@ namespace {
     double maximum_error = 0.0;
     for (std::size_t index = 0U; index < inputs.size(); ++index) {
       SCOPED_TRACE(index);
-      const auto& input = inputs.at(index);
-      const auto uv = input.uv_set == 1U
-        ? glm::vec2 { input.uvs.z, input.uvs.w }
-        : glm::vec2 { input.uvs.x, input.uvs.y };
+      const auto& input = cases.at(index);
       const auto expected
-        = reference::TransformMaterialUv({ .u = uv.x, .v = uv.y },
+        = reference::TransformMaterialUv({ .u = input.uv.x, .v = input.uv.y },
           {
             .scale = { input.scale.x, input.scale.y },
             .rotation = reference::UvRotationRadians { input.rotation_radians },
@@ -105,8 +106,10 @@ namespace {
           std::bit_cast<float>(output.at((index * 2U) + component)));
         ASSERT_TRUE(std::isfinite(actual));
         const auto error = std::abs(actual - coordinates.at(component));
+        // The binder forms the basis on the CPU in float, so a rotated term
+        // that should vanish keeps a rounding error of its largest coordinate.
         EXPECT_LE(
-          error, (1.0e-6 * std::abs(coordinates.at(component))) + 2.0e-7);
+          error, (1.0e-6 * std::abs(coordinates.at(component))) + 2.0e-6);
         maximum_error = std::max(maximum_error, error);
       }
     }

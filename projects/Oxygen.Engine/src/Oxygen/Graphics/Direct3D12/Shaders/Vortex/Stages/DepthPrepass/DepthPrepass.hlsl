@@ -79,9 +79,8 @@ struct DepthPrepassPSOutput
 DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
 
     // Prepass velocity is static; motion comes from the base-pass velocity
@@ -95,9 +94,8 @@ DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 void DepthPrepassPS(DepthPrepassVSOutput input)
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
 }
 #endif

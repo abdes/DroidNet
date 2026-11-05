@@ -10,13 +10,13 @@
 #include <memory>
 #include <optional>
 
-#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 
 namespace oxygen::vortex {
 
@@ -39,10 +39,7 @@ struct ShadowMaskedCasterRecord {
   float alpha { 1 };
   float cutoff { 0.5F };
   ShaderVisibleIndex texture { kInvalidShaderVisibleIndex };
-  glm::vec2 uv_scale { 1 };
-  glm::vec2 uv_offset { 0 };
-  float uv_rotation { 0 };
-  std::uint32_t uv_set { 0 };
+  MaterialSlotSampling sampling {};
   std::uint64_t texture_revision { 0 };
   auto operator==(const ShadowMaskedCasterRecord&) const -> bool = default;
 };

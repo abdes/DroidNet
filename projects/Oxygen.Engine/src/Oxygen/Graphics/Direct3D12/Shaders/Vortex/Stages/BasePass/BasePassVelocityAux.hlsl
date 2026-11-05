@@ -127,9 +127,8 @@ BasePassVelocityAuxVSOutput BasePassVelocityAuxVS(
 float2 BasePassVelocityAuxPS(BasePassVelocityAuxVSOutput input) : SV_Target0
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
 
     const float2 base_current_ndc = ClipToNdc(input.base_current_clip_position);

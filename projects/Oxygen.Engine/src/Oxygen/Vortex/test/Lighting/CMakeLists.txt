@@ -89,6 +89,7 @@ gtest_program(
     "ShadowRecordAbi_test.cpp"
     "ShadowAllocationRequirements_test.cpp"
     "MaterialDecodeGpu_test.cpp"
+    "MaterialSlotSamplingGpu_test.cpp"
     "MaterialUvGpu_test.cpp"
     "PhotometryGpu_test.cpp"
     "BrdfGpu_test.cpp"
@@ -167,6 +168,14 @@ oxygen_add_dxc_compute_probe(
   PROFILE cs_6_6
   CONSUMER Oxygen.Vortex.LightingGpuAbi.Tests
   DEFINITION OXYGEN_LIGHTING_ABI_PROBE
+  CAMERA_VIEW_ENTRY
+)
+oxygen_add_dxc_compute_probe(
+  oxygen-vortex-material-surface-probe
+  SOURCE "../Shaders/MaterialSurfaceProbe.hlsl"
+  PROFILE cs_6_6
+  CONSUMER Oxygen.Vortex.LightingGpuAbi.Tests
+  DEFINITION OXYGEN_MATERIAL_SURFACE_PROBE
   CAMERA_VIEW_ENTRY
 )
 target_compile_definitions(

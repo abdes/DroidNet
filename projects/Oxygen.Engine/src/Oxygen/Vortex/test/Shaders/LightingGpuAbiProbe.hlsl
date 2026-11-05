@@ -160,10 +160,7 @@ struct MomentProbeInput {
 
 struct MaterialUvProbeInput {
     float4 uvs;
-    float2 scale;
-    float2 offset;
-    float rotation_radians;
-    uint uv_set;
+    MaterialSlotSampling sampling;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -613,11 +610,6 @@ void CS(uint3 thread : SV_DispatchThreadID) {
     } else if (g_RecordKind == 20) {
         StructuredBuffer<MaterialUvProbeInput> inputs = ResourceDescriptorHeap[args.x];
         MaterialUvProbeInput value = inputs[element];
-        MaterialShadingConstants material = (MaterialShadingConstants)0;
-        material.uv_scale = value.scale;
-        material.uv_offset = value.offset;
-        material.uv_rotation_radians = value.rotation_radians;
-        material.uv_set = value.uv_set;
-        output.Store2(address, asuint(ApplyMaterialUv(value.uvs, material)));
+        output.Store2(address, asuint(ResolveSlotUv(value.uvs, value.sampling)));
     }
 }

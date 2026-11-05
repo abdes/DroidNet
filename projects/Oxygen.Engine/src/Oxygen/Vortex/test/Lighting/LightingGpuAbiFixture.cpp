@@ -65,10 +65,10 @@ namespace {
   using graphics::ShaderRequest;
   using graphics::ShaderStageFlags;
 
-  auto LoadProbe() -> std::shared_ptr<IShaderByteCode>
+  auto LoadProbe(const char* path) -> std::shared_ptr<IShaderByteCode>
   {
-    auto stream = std::ifstream(OXYGEN_LIGHTING_ABI_PROBE, std::ios::binary);
-    CHECK_F(stream.good(), "Cannot load lighting ABI probe");
+    auto stream = std::ifstream(path, std::ios::binary);
+    CHECK_F(stream.good(), "Cannot load probe {}", path);
     stream.seekg(0, std::ios::end);
     const auto size = stream.tellg();
     CHECK_GT_F(size, std::streampos { 0 });
@@ -85,28 +85,36 @@ namespace {
       std::move(code));
   }
 
+  constexpr auto kLightingAbiProbePath = "Tests/LightingGpuAbiProbe.hlsl";
+  constexpr auto kMaterialSurfaceProbePath = "Tests/MaterialSurfaceProbe.hlsl";
+
   class ProbeGraphics final : public graphics::d3d12::Graphics {
   public:
     ProbeGraphics(const SerializedBackendConfig& config,
       const SerializedPathFinderConfig& paths)
       : Graphics(config, paths)
-      , probe_(LoadProbe())
+      , probe_(LoadProbe(OXYGEN_LIGHTING_ABI_PROBE))
+      , material_surface_probe_(LoadProbe(OXYGEN_MATERIAL_SURFACE_PROBE))
     {
     }
 
     auto GetShader(const ShaderRequest& request) const
       -> std::shared_ptr<IShaderByteCode> override
     {
-      if (request.source_path == "Tests/LightingGpuAbiProbe.hlsl") {
+      if (request.source_path == kLightingAbiProbePath
+        || request.source_path == kMaterialSurfaceProbePath) {
         CHECK_F(request.stage == ShaderType::kCompute
           && request.entry_point == "CS" && request.defines.empty());
-        return probe_;
+        return request.source_path == kLightingAbiProbePath
+          ? probe_
+          : material_surface_probe_;
       }
       return Graphics::GetShader(request);
     }
 
   private:
     std::shared_ptr<IShaderByteCode> probe_;
+    std::shared_ptr<IShaderByteCode> material_surface_probe_;
   };
 
   auto ProbeRootBindings() -> std::vector<RootBindingItem>
@@ -162,7 +170,8 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
   -> std::vector<std::uint32_t>
 {
   const auto& [records, stride, record_kind, decoded_words, first_element,
-    count, indices_srv, constant_buffer_records, prepare] = request;
+    count, indices_srv, constant_buffer_records, prepare,
+    material_surface_probe] = request;
   CHECK_GT_F(stride, 0U);
   CHECK_EQ_F(records.size_bytes() % stride, 0U);
   CHECK_LE_F(static_cast<std::uint64_t>(first_element) + count,
@@ -268,21 +277,24 @@ auto LightingGpuAbiTest::Decode(const DecodeRequest& request)
       .range = { 0U, sizeof(arguments) },
       .stride = sizeof(arguments),
     });
-  const auto pipeline = ComputePipelineDesc::Builder {}
-                          .SetComputeShader({
-                            .stage = ShaderType::kCompute,
-                            .source_path = "Tests/LightingGpuAbiProbe.hlsl",
-                            .entry_point = "CS",
-                          })
-                          .SetRootBindings(ProbeRootBindings())
-                          .SetDebugName("Lighting ABI decode")
-                          .Build();
+  const auto pipeline
+    = ComputePipelineDesc::Builder {}
+        .SetComputeShader({
+          .stage = ShaderType::kCompute,
+          .source_path = material_surface_probe ? kMaterialSurfaceProbePath
+                                                : kLightingAbiProbePath,
+          .entry_point = "CS",
+        })
+        .SetRootBindings(ProbeRootBindings())
+        .SetDebugName("Lighting ABI decode")
+        .Build();
   auto readback
     = GetReadbackManager()->CreateBufferReadback("Lighting ABI result");
   SubmitCommands("Lighting ABI upload/decode/readback",
     [&](CommandRecorder& recorder) -> void {
-      if (prepare)
+      if (prepare) {
         prepare(recorder);
+      }
       EnsureTracked(recorder, input, ResourceStates::kGenericRead);
       if (source != input) {
         EnsureTracked(recorder, source, ResourceStates::kGenericRead);
@@ -375,7 +387,8 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
   });
   const auto row_size = texels.size_bytes() / height;
   for (std::uint32_t row = 0U; row < height; ++row) {
-    upload->Update(texels.data() + row * (texels.size() / height), row_size,
+    const auto width = texels.size() / height;
+    upload->Update(texels.subspan(row * width, width).data(), row_size,
       static_cast<std::uint64_t>(row) * footprint.row_pitch.get());
   }
   SubmitCommands("Lighting material texture upload",
@@ -404,6 +417,76 @@ auto LightingGpuAbiTest::PublishPackedTexture(const Format format,
   Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
     graphics::TextureViewDescription {
       .format = format,
+      .dimension = TextureType::kTexture2D,
+    });
+  return index;
+}
+
+auto LightingGpuAbiTest::PublishColorMipChain(
+  const std::span<const std::uint32_t> level_colors) -> ShaderVisibleIndex
+{
+  CHECK_F(!level_colors.empty());
+  const auto levels = static_cast<std::uint32_t>(level_colors.size());
+  const auto width = 1U << (levels - 1U);
+  auto texture = CreateRegisteredTexture({
+    .width = width,
+    .height = width,
+    .mip_levels = levels,
+    .format = Format::kRGBA8UNorm,
+    .texture_type = TextureType::kTexture2D,
+    .debug_name = "Lighting material mip chain",
+    .is_shader_resource = true,
+  });
+  for (std::uint32_t level = 0U; level < levels; ++level) {
+    const auto extent = width >> level;
+    const auto slice = graphics::TextureSlice {
+      .width = extent,
+      .height = extent,
+      .depth = 1U,
+      .mip_level = level,
+    };
+    const auto footprint
+      = graphics::ComputeLinearTextureCopyFootprint(texture->GetDescriptor(),
+        slice, SizeBytes { D3D12_TEXTURE_DATA_PITCH_ALIGNMENT });
+    auto upload = CreateRegisteredBuffer({
+      .size_bytes = footprint.total_bytes.get(),
+      .usage = BufferUsage::kNone,
+      .memory = BufferMemory::kUpload,
+      .debug_name = "Lighting material mip upload",
+    });
+    const auto row = std::vector<std::uint32_t>(extent, level_colors[level]);
+    for (std::uint32_t y = 0U; y < extent; ++y) {
+      upload->Update(row.data(), row.size() * sizeof(std::uint32_t),
+        static_cast<std::uint64_t>(y) * footprint.row_pitch.get());
+    }
+    SubmitCommands("Lighting material mip upload",
+      [&](graphics::CommandRecorder& recorder) -> void {
+        EnsureTracked(recorder, upload, ResourceStates::kGenericRead);
+        EnsureTracked(recorder, texture, ResourceStates::kCommon);
+        recorder.RequireResourceState(*texture, ResourceStates::kCopyDest);
+        recorder.FlushBarriers();
+        recorder.CopyBufferToTexture(*upload,
+          {
+            .buffer_offset = 0U,
+            .buffer_row_pitch = footprint.row_pitch.get(),
+            .buffer_slice_pitch = footprint.slice_pitch.get(),
+            .dst_slice = slice,
+          },
+          *texture);
+        recorder.RequireResourceState(
+          *texture, ResourceStates::kShaderResource);
+        recorder.FlushBarriers();
+      });
+  }
+  oxygen::Graphics& graphics_api = Backend();
+  auto& allocator = graphics_api.GetDescriptorAllocator();
+  auto handle = allocator.AllocateBindless(
+    bindless::generated::kGlobalSrvDomain, ResourceViewType::kTexture_SRV);
+  CHECK_F(handle.IsValid());
+  const auto index = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*texture, std::move(handle),
+    graphics::TextureViewDescription {
+      .format = Format::kRGBA8UNorm,
       .dimension = TextureType::kTexture2D,
     });
   return index;

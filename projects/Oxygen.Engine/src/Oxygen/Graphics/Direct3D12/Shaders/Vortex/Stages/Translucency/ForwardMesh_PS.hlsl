@@ -141,7 +141,7 @@ void ValidateRadiancePS(VSOutput input)
 {
   SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
 #ifdef ALPHA_TEST
-  ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+  ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
   const MaterialSurface surf = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
@@ -168,7 +168,7 @@ float4 PS(VSOutput input)
 
 #ifdef ALPHA_TEST
   ApplyMaskedAlphaClip(
-    EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+    EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
 
 #if 1

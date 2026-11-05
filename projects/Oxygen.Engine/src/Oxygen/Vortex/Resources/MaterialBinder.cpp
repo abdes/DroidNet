@@ -376,15 +376,21 @@ auto SerializeMaterialShadingConstants(
   // Opacity is implicitly sourced from the base color texture alpha.
   // No explicit opacity_texture_index is kept in the constant buffer.
 
+  // The cooked material holds one transform, so every slot reads it, with the
+  // default sampler.
   const auto uv_scale = material.resolved_asset->GetUvScale();
-  constants.uv_scale = { std::get<0>(uv_scale), std::get<1>(uv_scale) };
-
   const auto uv_offset = material.resolved_asset->GetUvOffset();
-  constants.uv_offset = { std::get<0>(uv_offset), std::get<1>(uv_offset) };
-
-  constants.uv_rotation_radians
-    = material.resolved_asset->GetUvRotationRadians();
-  constants.uv_set = material.resolved_asset->GetUvSet();
+  const auto sampling = oxygen::vortex::MakeMaterialSlotSampling(
+    material.resolved_asset->GetUvSet(),
+    { std::get<0>(uv_scale), std::get<1>(uv_scale) },
+    { std::get<0>(uv_offset), std::get<1>(uv_offset) },
+    material.resolved_asset->GetUvRotationRadians());
+  constants.base_color_sampling = sampling;
+  constants.normal_sampling = sampling;
+  constants.metallic_sampling = sampling;
+  constants.roughness_sampling = sampling;
+  constants.ambient_occlusion_sampling = sampling;
+  constants.emissive_sampling = sampling;
 
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();
@@ -497,8 +503,6 @@ public:
   [[nodiscard]] auto GetDirtyIndices() const noexcept
     -> std::span<const std::uint32_t>;
   auto EnsureFrameResources() -> void;
-  auto OverrideUvTransform(const data::MaterialAsset& material,
-    glm::vec2 uv_scale, glm::vec2 uv_offset) -> bool;
   [[nodiscard]] auto GetMaterialShadingSrvIndex() const -> ShaderVisibleIndex;
   [[nodiscard]] auto GetProceduralGridMaterialsSrvIndex() const
     -> ShaderVisibleIndex;
@@ -543,8 +547,6 @@ private:
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, MaterialCacheEntry> material_key_to_handle_;
-  std::unordered_map<const data::MaterialAsset*, std::uint32_t>
-    material_ptr_to_index_;
   std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
   std::vector<vortex::MaterialShadingConstants> material_shading_constants_;
   std::vector<vortex::ProceduralGridMaterialConstants>
@@ -621,12 +623,6 @@ auto MaterialBinder::Update(const vortex::sceneprep::MaterialHandle handle,
   std::shared_ptr<const data::MaterialAsset> material) -> void
 {
   impl_->Update(handle, std::move(material));
-}
-
-auto MaterialBinder::OverrideUvTransform(const data::MaterialAsset& material,
-  const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
-{
-  return impl_->OverrideUvTransform(material, uv_scale, uv_offset);
 }
 
 auto MaterialBinder::IsHandleValid(
@@ -1010,12 +1006,7 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
       ++cache_hits_;
 
-      const auto* old_ptr = materials_.at(idx).get();
-      if ((old_ptr != nullptr) && old_ptr != material.resolved_asset.get()) {
-        material_ptr_to_index_.erase(old_ptr);
-      }
       materials_.at(idx) = material.resolved_asset;
-      material_ptr_to_index_[material.resolved_asset.get()] = idx;
 
       if (texture_revisions_.at(idx)
         != texture_binder_->GetResidentContentRevision()) {
@@ -1104,7 +1095,6 @@ auto MaterialBinder::Impl::GetOrAllocate(
   material_refs_.at(index) = *ref;
   procedural_grid_material_refs_.at(index) = *grid_ref;
   material_handle_generations_.at(index) = handle.GenerationValue().get();
-  material_ptr_to_index_[material.resolved_asset.get()] = index;
   ++total_allocations_;
   ++atlas_allocations_;
 
@@ -1151,12 +1141,7 @@ auto MaterialBinder::Impl::Update(
   const auto new_procedural_grid_constants
     = SerializeProceduralGridMaterialConstants(mat_ref);
 
-  const auto* old_ptr = materials_.at(index).get();
-  if (old_ptr != nullptr && old_ptr != material.get()) {
-    material_ptr_to_index_.erase(old_ptr);
-  }
   materials_.at(index) = std::move(material);
-  material_ptr_to_index_[materials_.at(index).get()] = index;
 
   material_shading_constants_.at(index) = new_constants;
   texture_revisions_.at(index) = texture_binder_->GetResidentContentRevision();
@@ -1206,8 +1191,6 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
           material_keys_[entry_index] = 0U;
         }
       }
-
-      material_ptr_to_index_.erase(material.get());
 
       if (entry_index < material_refs_.size()) {
         materials_atlas_->Release(
@@ -1261,47 +1244,6 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
     LOG_F(INFO, "MaterialBinder: {} eviction(s) had no resident material entry",
       evictions_without_entry);
   }
-}
-
-auto MaterialBinder::Impl::OverrideUvTransform(
-  const data::MaterialAsset& material, const glm::vec2 uv_scale,
-  const glm::vec2 uv_offset) -> bool
-{
-  const auto ValidateScale = [](const glm::vec2 v) -> bool {
-    // Allow negative scale to support common mirroring operations (e.g.
-    // v' = 1 - v). Only require non-zero, finite values.
-    constexpr float kMinAbsScale = 1e-6F;
-    return std::isfinite(v.x) && std::isfinite(v.y)
-      && std::abs(v.x) > kMinAbsScale && std::abs(v.y) > kMinAbsScale;
-  };
-  const auto ValidateOffset = [](const glm::vec2 v) -> bool {
-    return std::isfinite(v.x) && std::isfinite(v.y);
-  };
-
-  if (!ValidateScale(uv_scale) || !ValidateOffset(uv_offset)) {
-    LOG_F(WARNING,
-      "OverrideUvTransform: invalid values (scale=({},{}), offset=({},{}))",
-      uv_scale.x, uv_scale.y, uv_offset.x, uv_offset.y);
-    return false;
-  }
-
-  const auto it = material_ptr_to_index_.find(&material);
-  if (it == material_ptr_to_index_.end()) {
-    DLOG_F(4, "OverrideUvTransform: material not found (asset_key={})",
-      oxygen::data::to_string(material.GetAssetKey()));
-    return false;
-  }
-
-  const auto index = it->second;
-  if (index >= material_shading_constants_.size()) {
-    return false;
-  }
-
-  auto& constants = material_shading_constants_.at(index);
-  constants.uv_scale = uv_scale;
-  constants.uv_offset = uv_offset;
-  MarkDirty(index);
-  return true;
 }
 
 auto MaterialBinder::Impl::EnsureFrameResources() -> void

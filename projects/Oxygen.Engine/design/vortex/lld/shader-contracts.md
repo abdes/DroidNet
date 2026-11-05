@@ -553,7 +553,13 @@ Static sampler slots belong to the bindless ABI: `Bindless.yaml` lists them
 under `abi.static_samplers`, the graphics backend creates them in slot order
 and checks each index, and shaders use `K_SAMPLER_LINEAR_WRAP`,
 `K_SAMPLER_SHADOW_COMPARISON`, `K_SAMPLER_POINT_CLAMP` and
-`K_SAMPLER_LINEAR_CLAMP`.
+`K_SAMPLER_LINEAR_CLAMP`. `abi.static_sampler_tables` lists runs of samplers
+shaders reach through data, not by name. The one run holds a sampler for each
+`TextureSamplerState` (`Core/Types/TextureSampling.h`), and a material holds a
+`MaterialSlotSampling` per sampled texture, with its UV set, UV transform and
+index into that run. `SampleSlot` samples through that record, and a normal map
+also goes through `SlotNormalToMeshFrame`, so its xy follows the slot's rotation
+and mirror.
 
 Hand-written headers keep what is not layout: enums and flag helpers, loaders
 with extra validation (for example the shadow publication identity check) and

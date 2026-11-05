@@ -380,7 +380,6 @@ namespace math {
 
 namespace packing {
 
-  inline constexpr uint32_t kRootConstantsMaxSize = 256;
   inline constexpr uint32_t kStructuredBufferAlignment = 16;
   inline constexpr uint32_t kShaderDataFieldAlignment = 16;
   inline constexpr uint32_t kConstantBufferAlignment = 256;

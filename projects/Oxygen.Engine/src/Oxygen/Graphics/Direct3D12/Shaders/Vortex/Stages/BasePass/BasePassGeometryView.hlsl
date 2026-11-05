@@ -44,9 +44,8 @@ static inline float4 LoadWireframeColor()
 static inline void ClipMaskedGeometry(BasePassGBufferVSOutput input)
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
 }
 

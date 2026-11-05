@@ -290,6 +290,11 @@ def validate_authored_model(doc):
     domains = abi.get("domains", []) or []
     domains_mod.validate_abi_domains(index_spaces, domains)
     domains_mod.validate_static_samplers(abi.get("static_samplers", []) or [], domains)
+    domains_mod.validate_static_sampler_tables(
+        abi.get("static_sampler_tables", []) or [],
+        abi.get("static_samplers", []) or [],
+        domains,
+    )
     domains_by_id = {str(d.get("id")): d for d in domains}
 
     backends = doc.get("backends", {}) or {}
@@ -465,6 +470,7 @@ def generate(
     src_rel = _compute_repo_rel(input_yaml)
     rep.debug("Source path (repo-relative): %s", src_rel)
     static_samplers = (doc.get("abi") or {}).get("static_samplers") or []
+    static_sampler_tables = (doc.get("abi") or {}).get("static_sampler_tables") or []
     rep.progress("Rendering C++ bindless ABI")
     abi_cpp = render_cpp_abi(
         ((doc.get("abi") or {}).get("index_spaces") or []), domains
@@ -482,6 +488,9 @@ def generate(
         domain_constants=_join_sections(
             abi_cpp["domain_constants"],
             domains_mod.render_cpp_static_samplers(static_samplers, domains),
+            domains_mod.render_cpp_static_sampler_tables(
+                static_sampler_tables, domains
+            ),
         ),
         domain_entries=abi_cpp["domain_entries"],
         domain_count=abi_cpp["domain_count"],

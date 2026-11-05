@@ -98,6 +98,7 @@ set(
   "Types/Scissors.h"
   "Types/ShaderRequestRules.h"
   "Types/ShaderType.h"
+  "Types/TextureSampling.h"
   "Types/TextureType.h"
   "Types/View.h"
   "Types/ViewHelpers.h"

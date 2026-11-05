@@ -29,7 +29,7 @@ lines.
 | Slice | Content                                  | Status      |
 | ----- | ---------------------------------------- | ----------- |
 | S1    | A second UV set through geometry         | Done        |
-| S2    | Renderer samples each slot on its own    | Not started |
+| S2    | Renderer samples each slot on its own    | Done        |
 | S3    | Cooked format, descriptors and importers | Not started |
 | S4    | Material Editor                          | Not started |
 
@@ -94,7 +94,7 @@ further through graphs and per-texture settings.
 | A binding past set 1 | The schema refuses it. glTF sets past 1 keep `mesh.uv_sets_dropped`, and that binding uses set 0 with `material.uv_dropped`                                                                                                                           | Remapping set 2 into slot 1: changes what other bindings read                                                                          |
 | Where sampling lives | Per slot, for all 12 slots in the cooked record, in array form                                                                                                                                                                                        | Per texture: glTF's state belongs to the reference, and one image would need duplicating. Per material: the case both issues exist for |
 | What the GPU gets    | A record for each of the 6 sampled slots. A slot joins when Vortex starts sampling it                                                                                                                                                                 | All 12 now: 192 bytes nothing reads                                                                                                    |
-| Filter state         | Mag, min and mip separately, as glTF authors them, with mip `none` as max LOD 0                                                                                                                                                                       | The issue's point, linear, trilinear: mag nearest with mipmapped min is common for pixel art and would still warn                      |
+| Filter state         | Mag, min and mip separately, as glTF authors them, with mip `none` as nearest with max LOD 0.25, because at max LOD 0 a minified pixel takes the mag filter                                                                                           | The issue's point, linear, trilinear: mag nearest with mipmapped min is common for pixel art and would still warn                      |
 | How samplers exist   | A fixed table of all 108 combinations (3 x 3 address, 2 mag, 2 min, 3 mip), created at startup. An index is computed, never looked up                                                                                                                 | Created on demand: a cache and lifetime for objects that cost one descriptor each, in a domain of 256                                  |
 | Shader UVs           | One `float4 uv` interpolator holding both sets, replacing `float2 uv` in every vertex pass                                                                                                                                                            | Resolving the set in the vertex shader: one vertex has several slots                                                                   |
 | GPU transform form   | `basis_u`, `basis_v`, `offset`, already multiplied by the binder                                                                                                                                                                                      | Scale, rotation, offset: sin and cos per pixel per slot                                                                                |
@@ -232,18 +232,20 @@ single transform, with the default sampler.
   uses it, normal maps take the frame correction, occlusion is always its own
   sample, and `MaskedAlphaTest.hlsli` loses its `linear_sampler` parameter, so
   its callers in every masked pass drop theirs.
-- `MaterialBinder` writes the records and hashes them;
-  `ShadowCasterDependencies.cpp:133` keys on the base colour record, and
-  `RuntimeMotionProducerModule.cpp:89` hashes the records.
-- `OverrideUvTransform` is deleted, and so is `kRootConstantsMaxSize` in
-  `Core/Constants.h`.
+- `MaterialBinder` writes the records, and `ShadowCasterDependencies.cpp:133`
+  keys on the base colour record. Its material key and
+  `RuntimeMotionProducerModule.cpp:89` hash the asset, which holds one transform
+  until S3.
+- `OverrideUvTransform` is deleted, with the pointer map only it read, and so is
+  `kRootConstantsMaxSize` in `Core/Constants.h`.
 
-Tests: per-slot cases in `MaterialUvGpu_test` and `MaterialRasterReference`,
-with one texture per slot, each on its own set, transform and sampler. These
-write the constants directly. Clamp does not wrap, mirror mirrors, nearest stays
-sharp, no-mip does not minify. `LightingGpuAbiProbe` and
-`MaterialEvaluation.cpp` follow the new layout. A rotated and a mirrored normal
-map match their unrotated reference.
+Tests: `MaterialSlotSamplingGpu_test` runs the production material function on
+constants it writes itself, through `MaterialSurfaceProbe.hlsl`, a compute shader
+whose 2x2 thread groups give texture sampling its derivatives. One texture per
+slot, each on its own set, transform and sampler. Clamp does not wrap, mirror
+mirrors, nearest stays sharp, no-mip does not minify. A rotated and a mirrored
+normal map match their unrotated reference. `MaterialUvGpu_test` checks the
+record's basis against the independent reference.
 
 ### S3. Cooked format, descriptors and importers
 
@@ -330,8 +332,8 @@ Counted by search, not yet edited.
 | Slice | Tests that change                                                                                                                                                                                                                                                |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S1    | `Vertex_test`, `MeshBufferRules_test`, the stride kit in `GeometryDescriptorImportJobTestSupport.h` and its 72-byte fixtures, `GeometryPipeline_functional_test`, `LodGeneration_test`, `GltfImportFidelity_functional_test`, `ImporterRevision_functional_test` |
-| S2    | `MaterialBinder_binding_test` and fixture, `MaterialUvGpu_test`, `MaterialRasterReference_test`, `LightingGpuAbiProbe.hlsl`, `MaterialEvaluation`, `MaterialTextures_test`, `IblSurface_test`, `ProceduralGridMaterial_test`, `ExposureLightingFixture`          |
-| S3    | `PakFormatLayout_render_test`, `MaterialLoader_test`, `MaterialPipeline_functional_test` (40 uses), `MaterialSource_test`, `MaterialDescriptorSchema_test`, `DroppedSourceFeatures_test`, `ImporterRevision_functional_test`                                     |
+| S2    | `MaterialBinder_binding_test`, `MaterialUvGpu_test`, `LightingGpuAbiProbe.hlsl`, `test_static_samplers.py`, new `MaterialSlotSamplingGpu_test` and `TextureSampling_test`                                                                                        |
+| S3    | `PakFormatLayout_render_test`, `MaterialLoader_test`, `MaterialPipeline_functional_test` (40 uses), `MaterialSource_test`, `MaterialDescriptorSchema_test`, `DroppedSourceFeatures_test`, `ImporterRevision_functional_test`, every test filling the asset's UVs |
 | S4    | `MaterialSourceTests` (14 uses), `Oxygen.Editor.Materials` and `MaterialEditor` suites                                                                                                                                                                           |
 
 ## Open question

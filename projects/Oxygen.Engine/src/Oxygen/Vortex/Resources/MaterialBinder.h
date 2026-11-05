@@ -9,8 +9,6 @@
 #include <memory>
 #include <span>
 
-#include <glm/vec2.hpp>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -112,8 +110,8 @@ public:
   OXGN_VRTX_API ~MaterialBinder();
 
   //! Must be called once per frame before any other operations.
-  OXGN_VRTX_API auto OnFrameStart(vortex::RendererTag, oxygen::frame::Slot slot)
-    -> void;
+  OXGN_VRTX_API auto OnFrameStart(
+    vortex::RendererTag /*tag*/, oxygen::frame::Slot slot) -> void;
 
   //! Ensures all material GPU resources are prepared for the current frame.
   //! MUST be called after OnFrameStart() and before any
@@ -167,26 +165,6 @@ public:
   //! Get read-only access to all procedural-grid material constants.
   OXGN_VRTX_NDAPI auto GetProceduralGridMaterialConstants() const noexcept
     -> std::span<const oxygen::vortex::ProceduralGridMaterialConstants>;
-
-  //! Overrides UV scale/offset for an existing material instance.
-  /*!
-   Updates the shader-visible UV transform for a material already registered
-   with this binder.
-
-   This is intended for editor/runtime authoring workflows where interactive
-   parameter tweaks must not require rebuilding geometry.
-
-    TODO: This is a stopgap for examples and editor prototyping. Prefer a
-    MaterialInstance system where overrides are attached to a per-object (or
-    per-instance) material wrapper rather than mutating a shared MaterialAsset.
-
-   @param material Material asset instance whose constants should be updated.
-   @param uv_scale UV scale (tiling). Components must be finite and > 0.
-   @param uv_offset UV offset. Components must be finite.
-   @return true if the material was found and updated; false otherwise.
-  */
-  OXGN_VRTX_API auto OverrideUvTransform(const data::MaterialAsset& material,
-    glm::vec2 uv_scale, glm::vec2 uv_offset) -> bool;
 
 private:
   class Impl;

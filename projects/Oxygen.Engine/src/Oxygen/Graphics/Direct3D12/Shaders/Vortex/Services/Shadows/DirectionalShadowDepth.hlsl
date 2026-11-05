@@ -152,11 +152,9 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
     }
     const DrawFrameBindings draw_bindings
         = LoadDrawFrameBindings(pass_constants.draw_frame_slot);
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(EvaluateMaskedAlphaTestFromSlots(input.uv,
         draw_bindings.draw_metadata_slot,
-        draw_bindings.material_shading_constants_slot, input.draw_index,
-        linear_sampler));
+        draw_bindings.material_shading_constants_slot, input.draw_index));
 #endif
 #if !defined(CUBE_SHADOW)
     out_depth = saturate(input.biased_depth);

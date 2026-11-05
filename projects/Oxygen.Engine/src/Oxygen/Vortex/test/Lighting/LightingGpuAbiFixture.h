@@ -37,6 +37,8 @@ protected:
     ShaderVisibleIndex indices_srv { kInvalidShaderVisibleIndex };
     bool constant_buffer_records { false };
     std::function<void(graphics::CommandRecorder&)> prepare;
+    //! Run `MaterialSurfaceProbe.hlsl`, which ignores `record_kind`.
+    bool material_surface_probe { false };
   };
   auto CreateBackend(const SerializedBackendConfig& config,
     const SerializedPathFinderConfig& paths)
@@ -52,6 +54,10 @@ protected:
   //! decoding.
   auto PublishPackedTexture(Format format,
     std::span<const std::uint32_t> texels, std::uint32_t height = 1U)
+    -> ShaderVisibleIndex;
+  //! Publish a square RGBA8 texture whose mip levels are each one packed color,
+  //! the first level first. Its width is 2 to the power of the last level.
+  auto PublishColorMipChain(std::span<const std::uint32_t> level_colors)
     -> ShaderVisibleIndex;
   auto PublishBrdfEnergyTexture() -> ShaderVisibleIndex;
 

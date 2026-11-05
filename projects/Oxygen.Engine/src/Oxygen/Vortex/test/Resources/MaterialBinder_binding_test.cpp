@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <vector>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ShaderReference.h>
@@ -153,7 +156,7 @@ NOLINT_TEST_F(
     .uv_scale = { 2.0F, 3.0F },
     .uv_offset = { 0.25F, -0.5F },
     .uv_rotation_radians = 0.75F,
-    .uv_set = 2U,
+    .uv_set = 1U,
   });
   ref.source_asset_key = ref.resolved_asset->GetAssetKey();
   ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
@@ -167,12 +170,28 @@ NOLINT_TEST_F(
   ASSERT_LT(static_cast<std::size_t>(handle.get()), all_constants.size());
   const auto& constants = MaterialConstants(handle);
 
-  EXPECT_FLOAT_EQ(constants.uv_scale.x, 2.0F);
-  EXPECT_FLOAT_EQ(constants.uv_scale.y, 3.0F);
-  EXPECT_FLOAT_EQ(constants.uv_offset.x, 0.25F);
-  EXPECT_FLOAT_EQ(constants.uv_offset.y, -0.5F);
-  EXPECT_FLOAT_EQ(constants.uv_rotation_radians, 0.75F);
-  EXPECT_EQ(constants.uv_set, 2U);
+  const auto c = std::cos(0.75F);
+  const auto s = std::sin(0.75F);
+  for (const auto& sampling : {
+         constants.base_color_sampling,
+         constants.normal_sampling,
+         constants.metallic_sampling,
+         constants.roughness_sampling,
+         constants.ambient_occlusion_sampling,
+         constants.emissive_sampling,
+       }) {
+    EXPECT_FLOAT_EQ(sampling.uv_basis_u.x, 2.0F * c);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_u.y, 2.0F * s);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_v.x, -3.0F * s);
+    EXPECT_FLOAT_EQ(sampling.uv_basis_v.y, 3.0F * c);
+    EXPECT_FLOAT_EQ(sampling.uv_offset.x, 0.25F);
+    EXPECT_FLOAT_EQ(sampling.uv_offset.y, -0.5F);
+    EXPECT_EQ(sampling.uv_set, 1U);
+    // Repeat with trilinear filtering, the sampler every material has used.
+    EXPECT_EQ(sampling.sampler_index.get(),
+      oxygen::bindless::generated::kTextureSamplerTableIndex
+        + oxygen::TextureSamplerOffset({}));
+  }
 }
 
 //! When TextureBinder cannot provide a texture (error index), MaterialBinder

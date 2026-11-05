@@ -35,6 +35,9 @@ From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 
 `Generated.BindlessAbi.h` and `.hlsl` also name the static samplers listed under
 `abi.static_samplers` (`k<Name>SamplerIndex`, `K_SAMPLER_<NAME>`).
+`Generated.BindlessAbi.h` alone names the runs of samplers listed under
+`abi.static_sampler_tables` (`k<Name>SamplerTableIndex`,
+`k<Name>SamplerTableCount`): shaders read an index into a table from their data.
 
 From `src/Oxygen/Vortex/Meta/ShaderContracts.yaml`, the contracts generator
 (`bindless_codegen.contracts`) generates the structs shared by Vortex C++ and

@@ -12,7 +12,19 @@
 // - Textures: specular, sheen_color, clearcoat, clearcoat_normal, transmission, thickness
 // - Scalars: ior, specular_factor, sheen_color_factor, clearcoat_factor, clearcoat_roughness,
 //            transmission_factor, thickness_factor, attenuation_color, attenuation_distance
-// ABI: must match sizeof(oxygen::engine::MaterialShadingConstants) == 112
+
+// How a material samples one of its textures.
+// ABI: must match sizeof(oxygen::vortex::MaterialSlotSampling) == 32
+struct MaterialSlotSampling
+{
+    float2 uv_basis_u;
+    float2 uv_basis_v;
+    float2 uv_offset;
+    uint uv_set;
+    uint sampler_index;
+};
+
+// ABI: must match sizeof(oxygen::vortex::MaterialShadingConstants) == 272
 struct MaterialShadingConstants
 {
     // Register 0
@@ -40,34 +52,39 @@ struct MaterialShadingConstants
     float alpha_cutoff;
     uint _pad2;
 
-    // Register 5
-    float2 uv_scale;
-    float2 uv_offset;
-
-    // Register 6
-    float uv_rotation_radians;
-    uint uv_set;
-    uint _pad0;
-    uint _pad1;
-
+    // Registers 5 to 16, one record per sampled texture slot.
+    MaterialSlotSampling base_color_sampling;
+    MaterialSlotSampling normal_sampling;
+    MaterialSlotSampling metallic_sampling;
+    MaterialSlotSampling roughness_sampling;
+    MaterialSlotSampling ambient_occlusion_sampling;
+    MaterialSlotSampling emissive_sampling;
 };
 
-// UV convention:
-// - Rotation is in radians, counter-clockwise, around the UV origin (0,0).
-// - Transform order is: scale -> rotation -> offset.
-// - uv_set selects the source UV set: `uvs` holds set 0 in xy and set 1 in zw.
-float2 ApplyMaterialUv(float4 uvs, MaterialShadingConstants mat)
+// The texture coordinate a slot reads. `uvs` holds set 0 in xy and set 1 in zw.
+// The record is already scale, then counter-clockwise rotation around the UV
+// origin, then offset.
+float2 ResolveSlotUv(float4 uvs, MaterialSlotSampling slot)
 {
-    float2 uv = mat.uv_set == 1u ? uvs.zw : uvs.xy;
+    const float2 uv = slot.uv_set == 1u ? uvs.zw : uvs.xy;
+    return slot.uv_basis_u * uv.x + slot.uv_basis_v * uv.y + slot.uv_offset;
+}
 
-    uv *= mat.uv_scale;
-    if (mat.uv_rotation_radians != 0.0f) {
-        const float c = cos(mat.uv_rotation_radians);
-        const float s = sin(mat.uv_rotation_radians);
-        uv = float2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
-    }
-    uv += mat.uv_offset;
-    return uv;
+float4 SampleSlot(uint texture_index, MaterialSlotSampling slot, float4 uvs)
+{
+    Texture2D<float4> texture = ResourceDescriptorHeap[texture_index];
+    SamplerState samp = SamplerDescriptorHeap[slot.sampler_index];
+    return texture.Sample(samp, ResolveSlotUv(uvs, slot));
+}
+
+// A normal map's xy runs along its texture's axes, and the tangent frame along
+// the mesh's. Takes xy back through the slot's rotation and mirror, not its
+// tiling, whose only effect on a direction is to stretch it.
+float2 SlotNormalToMeshFrame(float2 xy, MaterialSlotSampling slot)
+{
+    const float2 u_axis = slot.uv_basis_u / max(length(slot.uv_basis_u), 1e-6f);
+    const float2 v_axis = slot.uv_basis_v / max(length(slot.uv_basis_v), 1e-6f);
+    return float2(dot(u_axis, xy), dot(v_axis, xy));
 }
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_MATERIALSHADINGCONSTANTS_HLSLI

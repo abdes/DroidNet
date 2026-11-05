@@ -180,7 +180,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
   SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
 #if defined(ALPHA_TEST) || defined(DEBUG_MASKED_ALPHA_COVERAGE)
   const MaskedAlphaTestResult alpha_test
-    = EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler);
+    = EvaluateMaskedAlphaTest(input.uv, input.draw_index);
 #endif
 
 #if defined(ALPHA_TEST) && !defined(DEBUG_MASKED_ALPHA_COVERAGE)

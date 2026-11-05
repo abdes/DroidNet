@@ -14,9 +14,8 @@
 uint2 VortexViewPickPS(DepthPrepassVSOutput input) : SV_Target0
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index));
 #endif
     return uint2(input.draw_index + 1u, asuint(input.position.z));
 }

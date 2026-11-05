@@ -90,6 +90,17 @@ abi:
         Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would
         pull energy from the opposite edge
 
+  # Runs of samplers the graphics backend creates after the static samplers, in
+  # slot order. Shaders read an index into a table from their data.
+  static_sampler_tables:
+    - id: texture
+      domain: samplers
+      slot: 4
+      count: 108
+      comment: >-
+        One sampler per texture sampling state, ordered by TextureSamplerOffset
+        in Core/Types/TextureSampling.h
+
 backends:
   d3d12:
     strategy:

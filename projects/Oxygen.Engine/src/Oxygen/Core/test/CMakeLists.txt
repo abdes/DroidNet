@@ -55,6 +55,7 @@ m_gtest_program(NodeFrame SOURCES "NodeFrame_test.cpp")
 m_gtest_program(PhaseRegistry SOURCES "PhaseRegistry_test.cpp")
 m_gtest_program(ScriptCompileMode SOURCES "ScriptCompileMode_test.cpp")
 m_gtest_program(ShaderRequestRules SOURCES "ShaderRequestRules_test.cpp")
+m_gtest_program(TextureSampling SOURCES "TextureSampling_test.cpp")
 m_gtest_program(TextureType SOURCES "TextureType_test.cpp")
 m_gtest_program(
   Time

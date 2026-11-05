@@ -78,8 +78,8 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
       .transform_generation = draw.transform_generation,
       .submesh = data::SubmeshIndex { draw.submesh_index },
     };
-    std::copy_n(
-      scene.world_matrices.data() + transform_offset, 16, record.world.begin());
+    const auto world = scene.world_matrices.subspan(transform_offset, 16U);
+    std::ranges::copy(world, record.world.begin());
     if (!std::ranges::all_of(record.world,
           [](float value) -> bool { return std::isfinite(value); })) {
       continue;
@@ -99,9 +99,7 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
     HashCombine(hash, draw.vertex_count);
     HashCombine(hash, draw.transform_generation);
     HashCombine(hash, record.submesh);
-    HashCombine(hash,
-      ComputeFNV1a64(
-        scene.world_matrices.data() + transform_offset, 16U * sizeof(float)));
+    HashCombine(hash, ComputeFNV1a64(world.data(), world.size_bytes()));
     const auto raster
       = vortex::internal::ResolveMeshRasterState({ &draw, 1U }, 0U);
     record.double_sided = raster.double_sided;
@@ -130,10 +128,7 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
         .alpha = material.base_color.w,
         .cutoff = material.alpha_cutoff,
         .texture = material.base_color_texture_index,
-        .uv_scale = material.uv_scale,
-        .uv_offset = material.uv_offset,
-        .uv_rotation = material.uv_rotation_radians,
-        .uv_set = material.uv_set,
+        .sampling = material.base_color_sampling,
         .texture_revision = samples_texture ? texture_revision : 0U,
       };
       HashCombine(hash, source.material_generation);
@@ -141,12 +136,15 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
       HashCombine(hash, material.base_color.w);
       HashCombine(hash, material.alpha_cutoff);
       HashCombine(hash, material.base_color_texture_index.get());
-      HashCombine(hash, material.uv_scale.x);
-      HashCombine(hash, material.uv_scale.y);
-      HashCombine(hash, material.uv_offset.x);
-      HashCombine(hash, material.uv_offset.y);
-      HashCombine(hash, material.uv_rotation_radians);
-      HashCombine(hash, material.uv_set);
+      const auto& sampling = material.base_color_sampling;
+      HashCombine(hash, sampling.uv_basis_u.x);
+      HashCombine(hash, sampling.uv_basis_u.y);
+      HashCombine(hash, sampling.uv_basis_v.x);
+      HashCombine(hash, sampling.uv_basis_v.y);
+      HashCombine(hash, sampling.uv_offset.x);
+      HashCombine(hash, sampling.uv_offset.y);
+      HashCombine(hash, sampling.uv_set);
+      HashCombine(hash, sampling.sampler_index.get());
       HashCombine(hash, record.masked->texture_revision);
     }
     dependency.record = Intern(std::move(record), hash);

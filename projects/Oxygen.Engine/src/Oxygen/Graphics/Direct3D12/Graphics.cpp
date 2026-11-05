@@ -44,6 +44,7 @@
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/TextureSampling.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -301,6 +302,54 @@ extern "C" __declspec(dllexport) auto GetGraphicsModuleApi() -> void*
 
 namespace {
 
+constexpr auto ToD3d12Address(const oxygen::TextureAddress address) noexcept
+  -> D3D12_TEXTURE_ADDRESS_MODE
+{
+  switch (address) {
+  case oxygen::TextureAddress::kMirror:
+    return D3D12_TEXTURE_ADDRESS_MODE_MIRROR;
+  case oxygen::TextureAddress::kClamp:
+    return D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+  case oxygen::TextureAddress::kRepeat:
+    break;
+  }
+  return D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+}
+
+constexpr auto ToD3d12Filter(const oxygen::TextureFilter filter) noexcept
+  -> D3D12_FILTER_TYPE
+{
+  return filter == oxygen::TextureFilter::kLinear ? D3D12_FILTER_TYPE_LINEAR
+                                                  : D3D12_FILTER_TYPE_POINT;
+}
+
+auto MakeTextureSamplerDesc(const oxygen::TextureSamplerState& state) noexcept
+  -> D3D12_SAMPLER_DESC
+{
+  // D3D12 always has a mip filter, so `kNone` is the nearest one kept on the
+  // first level. The limit is above 0 because a level clamped to 0 selects the
+  // mag filter for minified pixels; below 0.5 the nearest level is still 0.
+  constexpr auto kFirstLevelOnly = 0.25F;
+  const auto no_mips = state.mip_filter == oxygen::TextureMipFilter::kNone;
+  const auto mip_filter = state.mip_filter == oxygen::TextureMipFilter::kLinear
+    ? D3D12_FILTER_TYPE_LINEAR
+    : D3D12_FILTER_TYPE_POINT;
+  return D3D12_SAMPLER_DESC {
+    .Filter = D3D12_ENCODE_BASIC_FILTER(ToD3d12Filter(state.min_filter),
+      ToD3d12Filter(state.mag_filter), mip_filter,
+      D3D12_FILTER_REDUCTION_TYPE_STANDARD),
+    .AddressU = ToD3d12Address(state.address_u),
+    .AddressV = ToD3d12Address(state.address_v),
+    .AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP,
+    .MipLODBias = 0.0F,
+    .MaxAnisotropy = 1,
+    .ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER,
+    .BorderColor = { 0.0F, 0.0F, 0.0F, 0.0F },
+    .MinLOD = 0.0F,
+    .MaxLOD = no_mips ? kFirstLevelOnly : D3D12_FLOAT32_MAX,
+  };
+}
+
 class DescriptorAllocatorComponent : public oxygen::Component {
   OXYGEN_COMPONENT(DescriptorAllocatorComponent)
   OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::d3d12::DeviceManager)
@@ -484,6 +533,27 @@ protected:
             linear_clamp_sampler_.GetBindlessHandle().get());
         }
       }
+
+      if (texture_samplers_.empty()) {
+        texture_samplers_.reserve(oxygen::kTextureSamplerCount);
+        for (std::uint32_t offset = 0U; offset < oxygen::kTextureSamplerCount;
+          ++offset) {
+          auto handle = allocator_->AllocateBindless(
+            oxygen::bindless::generated::kSamplersDomain,
+            ResourceViewType::kSampler);
+          CHECK_F(handle.IsValid()
+              && allocator_->GetShaderVisibleIndex(handle)
+                == oxygen::ShaderVisibleIndex { oxygen::bindless::generated::
+                                                  kTextureSamplerTableIndex
+                  + offset },
+            "Texture sampler allocated out of its ABI slot");
+          const auto sampler_desc
+            = MakeTextureSamplerDesc(oxygen::TextureSamplerStateAt(offset));
+          device->CreateSampler(
+            &sampler_desc, allocator_->GetCpuHandle(handle));
+          texture_samplers_.push_back(std::move(handle));
+        }
+      }
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
         ex.what());
@@ -496,6 +566,7 @@ private:
   oxygen::graphics::DescriptorAllocationHandle shadow_comparison_sampler_;
   oxygen::graphics::DescriptorAllocationHandle point_clamp_sampler_;
   oxygen::graphics::DescriptorAllocationHandle linear_clamp_sampler_;
+  std::vector<oxygen::graphics::DescriptorAllocationHandle> texture_samplers_;
 };
 
 } // namespace

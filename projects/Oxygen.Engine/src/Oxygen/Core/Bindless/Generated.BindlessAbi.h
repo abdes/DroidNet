@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-10-13 18:08:18
+// Generated: 2026-11-05 16:11:51
 
 #pragma once
 
@@ -117,6 +117,11 @@ inline constexpr uint32_t kPointClampSamplerIndex = 2U;
 // Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would pull
 // energy from the opposite edge
 inline constexpr uint32_t kLinearClampSamplerIndex = 3U;
+
+// One sampler per texture sampling state, ordered by TextureSamplerOffset in
+// Core/Types/TextureSampling.h
+inline constexpr uint32_t kTextureSamplerTableIndex = 4U;
+inline constexpr uint32_t kTextureSamplerTableCount = 108U;
 
 inline constexpr std::array<DomainDesc, 4> kDomainTable = {
   {

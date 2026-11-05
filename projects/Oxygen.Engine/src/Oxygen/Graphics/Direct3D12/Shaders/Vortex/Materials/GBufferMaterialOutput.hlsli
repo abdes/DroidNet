@@ -45,9 +45,8 @@ static inline BasePassMaterial LoadClippedBasePassMaterial(
         discard;
     }
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     material.alpha_test = EvaluateMaskedAlphaTestForMaterial(
-        uvs, material.draw_material.constants, linear_sampler);
+        uvs, material.draw_material.constants);
     ApplyMaskedAlphaClip(material.alpha_test);
 #endif
     return material;
