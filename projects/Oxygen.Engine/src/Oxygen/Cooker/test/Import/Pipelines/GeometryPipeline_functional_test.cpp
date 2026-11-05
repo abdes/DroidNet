@@ -73,6 +73,7 @@ namespace {
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> normals;
     std::vector<glm::vec2> texcoords;
+    std::vector<glm::vec2> texcoords1;
     std::vector<glm::vec3> tangents;
     std::vector<glm::vec3> bitangents;
     std::vector<glm::vec4> colors;
@@ -150,6 +151,8 @@ namespace {
         buffers.normals.data(), buffers.normals.size()),
       .texcoords = std::span<const glm::vec2>(
         buffers.texcoords.data(), buffers.texcoords.size()),
+      .texcoords1 = std::span<const glm::vec2>(
+        buffers.texcoords1.data(), buffers.texcoords1.size()),
       .tangents = std::span<const glm::vec3>(
         buffers.tangents.data(), buffers.tangents.size()),
       .bitangents = std::span<const glm::vec3>(
@@ -809,6 +812,112 @@ namespace {
     EXPECT_EQ(result.cooked->lods.front().index_buffer.data.Size(),
       3U * sizeof(uint32_t));
     EXPECT_EQ(VerticesOf(result.cooked->lods.front()).size(), 3U);
+  }
+
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, SecondUvSetIsKept)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->texcoords1 = {
+      glm::vec2 { 0.5F, 0.0F },
+      glm::vec2 { 0.5F, 1.0F },
+      glm::vec2 { 1.0F, 0.0F },
+    };
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    const auto vertices = VerticesOf(result.cooked->lods.front());
+    ASSERT_EQ(vertices.size(), buffers->texcoords1.size());
+    for (const auto& vertex : vertices) {
+      EXPECT_TRUE(std::ranges::contains(buffers->texcoords1, vertex.texcoord1));
+    }
+  }
+
+  //! A texture that reads the second set of a mesh without one samples the
+  //! first.
+  NOLINT_TEST_F(
+    GeometryPipelineSourceDataTest, MissingSecondUvSetRepeatsTheFirst)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      EXPECT_EQ(vertex.texcoord1, vertex.texcoord);
+    }
+  }
+
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, NonFiniteSecondUvSetIsZeroed)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->texcoords1 = buffers->texcoords;
+    buffers->texcoords1.at(1).x = std::numeric_limits<float>::infinity();
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_TRUE(
+      HasDiagnosticCode(result.diagnostics, import_codes::kMeshInvalidUvs));
+    for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+      EXPECT_TRUE(std::isfinite(vertex.texcoord1.x));
+      EXPECT_TRUE(std::isfinite(vertex.texcoord1.y));
+    }
+  }
+
+  //! Two corners that differ only in the second set are two vertices: a seam
+  //! of a lightmap or detail layout survives welding.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, SecondUvSetSeamSurvivesWelding)
+  {
+    const auto buffers = MakeTriangleMeshBuffers();
+    buffers->positions.push_back(buffers->positions.at(1));
+    buffers->positions.emplace_back(1.0F, 1.0F, 0.0F);
+    buffers->normals.push_back(buffers->normals.at(1));
+    buffers->normals.push_back(buffers->normals.at(1));
+    buffers->texcoords.push_back(buffers->texcoords.at(1));
+    buffers->texcoords.emplace_back(1.0F, 1.0F);
+    buffers->texcoords1 = buffers->texcoords;
+    buffers->texcoords1.at(3) = glm::vec2 { 0.5F, 0.5F };
+    buffers->indices = { 0U, 1U, 2U, 3U, 4U, 2U };
+    buffers->ranges.front().index_count = 6;
+
+    const auto result = Cook(MakeWorkItem(buffers));
+
+    ASSERT_TRUE(result.success);
+    ASSERT_HAS_VALUE(result.cooked);
+    EXPECT_EQ(VerticesOf(result.cooked->lods.front()).size(), 5U);
+  }
+
+  //! Generated tangents follow the UV set the surface's normal texture reads.
+  NOLINT_TEST_F(GeometryPipelineSourceDataTest, TangentsFollowTheNormalsUvSet)
+  {
+    for (const auto [uv_set, along_u] : {
+           std::pair { uint8_t { 0 }, glm::vec3 { 1.0F, 0.0F, 0.0F } },
+           std::pair { uint8_t { 1 }, glm::vec3 { 0.0F, 1.0F, 0.0F } },
+         }) {
+      SCOPED_TRACE(static_cast<int>(uv_set));
+      const auto buffers = MakeTriangleMeshBuffers();
+      buffers->texcoords1 = {
+        glm::vec2 { 0.0F, 0.0F },
+        glm::vec2 { 0.0F, 1.0F },
+        glm::vec2 { 1.0F, 0.0F },
+      };
+      buffers->ranges.front().tangent_uv_set = uv_set;
+      auto item = MakeWorkItem(buffers);
+      item.request.options.tangent_policy
+        = GeometryAttributePolicy::kAlwaysRecalculate;
+
+      const auto result = Cook(std::move(item));
+
+      ASSERT_TRUE(result.success);
+      ASSERT_HAS_VALUE(result.cooked);
+      for (const auto& vertex : VerticesOf(result.cooked->lods.front())) {
+        EXPECT_NEAR(glm::dot(vertex.tangent, along_u), 1.0F, 0.0001F);
+      }
+    }
   }
 
   NOLINT_TEST_F(GeometryPipelineSourceDataTest, NonFiniteUvsAreZeroed)

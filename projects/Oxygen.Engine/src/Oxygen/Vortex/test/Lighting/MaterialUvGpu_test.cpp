@@ -15,6 +15,7 @@
 #include <vector>
 
 #include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Lighting/LightingGpuAbiFixture.h>
@@ -23,18 +24,18 @@
 namespace oxygen::vortex::testing {
 namespace {
   struct MaterialUvInput {
-    glm::vec2 uv { 0.0F };
+    glm::vec4 uvs { 0.0F };
     glm::vec2 scale { 1.0F };
     glm::vec2 offset { 0.0F };
     float rotation_radians { 0.0F };
-    std::uint32_t reserved { 0U };
+    std::uint32_t uv_set { 0U };
   };
-  static_assert(sizeof(MaterialUvInput) == 32U);
-  static_assert(offsetof(MaterialUvInput, uv) == 0U);
-  static_assert(offsetof(MaterialUvInput, scale) == 8U);
-  static_assert(offsetof(MaterialUvInput, offset) == 16U);
-  static_assert(offsetof(MaterialUvInput, rotation_radians) == 24U);
-  static_assert(offsetof(MaterialUvInput, reserved) == 28U);
+  static_assert(sizeof(MaterialUvInput) == 40U);
+  static_assert(offsetof(MaterialUvInput, uvs) == 0U);
+  static_assert(offsetof(MaterialUvInput, scale) == 16U);
+  static_assert(offsetof(MaterialUvInput, offset) == 24U);
+  static_assert(offsetof(MaterialUvInput, rotation_radians) == 32U);
+  static_assert(offsetof(MaterialUvInput, uv_set) == 36U);
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, MaterialUvTransformMatchesIndependentReference)
@@ -56,11 +57,20 @@ namespace {
                std::numbers::pi_v<float> / 2.0F,
                std::numbers::pi_v<float>,
              }) {
+          // The set not selected holds what would show if it were read.
           inputs.push_back({
-            .uv = uv,
+            .uvs = { uv, 99.0F, -99.0F },
             .scale = scale,
             .offset = { -0.5F, 0.25F },
             .rotation_radians = rotation,
+            .uv_set = 0U,
+          });
+          inputs.push_back({
+            .uvs = { 99.0F, -99.0F, uv },
+            .scale = scale,
+            .offset = { -0.5F, 0.25F },
+            .rotation_radians = rotation,
+            .uv_set = 1U,
           });
         }
       }
@@ -77,8 +87,11 @@ namespace {
     for (std::size_t index = 0U; index < inputs.size(); ++index) {
       SCOPED_TRACE(index);
       const auto& input = inputs.at(index);
+      const auto uv = input.uv_set == 1U
+        ? glm::vec2 { input.uvs.z, input.uvs.w }
+        : glm::vec2 { input.uvs.x, input.uvs.y };
       const auto expected
-        = reference::TransformMaterialUv({ .u = input.uv.x, .v = input.uv.y },
+        = reference::TransformMaterialUv({ .u = uv.x, .v = uv.y },
           {
             .scale = { input.scale.x, input.scale.y },
             .rotation = reference::UvRotationRadians { input.rotation_radians },

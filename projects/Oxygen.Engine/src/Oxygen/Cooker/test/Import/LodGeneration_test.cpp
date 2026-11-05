@@ -134,6 +134,35 @@ namespace {
     return indices.size() / 3U;
   }
 
+  //! Simplification weighs the second UV set when told it is one of its own, so
+  //! a layout of its own changes what collapses.
+  NOLINT_TEST(LodGenerationTest, SecondUvSetTakesPartInSimplification)
+  {
+    auto surfaces = std::vector { Sphere() };
+    for (auto& vertex : surfaces.front().vertices) {
+      vertex.texcoord1
+        = glm::vec2 { vertex.position.x * 8.0F, vertex.position.z * 8.0F };
+    }
+    const auto generate = [&](const bool weighed) -> GeneratedLods {
+      return internal::GenerateLods(surfaces, Options(1U, 50.0F),
+        SimplifiedAttributes {
+          .normals = true,
+          .texcoords = false,
+          .texcoords1 = weighed,
+          .colors = false,
+        },
+        std::stop_token {});
+    };
+
+    const auto ignored = generate(false);
+    const auto weighed = generate(true);
+
+    ASSERT_EQ(ignored.lods.size(), 1U);
+    ASSERT_EQ(weighed.lods.size(), 1U);
+    EXPECT_NE(ignored.lods.front().surface_indices,
+      weighed.lods.front().surface_indices);
+  }
+
   //! Each level of a sphere keeps at most three quarters of the previous
   //! level's triangles, indexes LOD 0's vertices, and reports an error that
   //! grows with the level.

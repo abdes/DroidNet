@@ -28,7 +28,7 @@ struct BasePassMaterial
 };
 
 static inline BasePassMaterial LoadClippedBasePassMaterial(
-    float2 uv0, uint draw_index)
+    float4 uvs, uint draw_index)
 {
     BasePassMaterial material = (BasePassMaterial)0;
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
@@ -47,7 +47,7 @@ static inline BasePassMaterial LoadClippedBasePassMaterial(
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     material.alpha_test = EvaluateMaskedAlphaTestForMaterial(
-        uv0, material.draw_material.constants, linear_sampler);
+        uvs, material.draw_material.constants, linear_sampler);
     ApplyMaskedAlphaClip(material.alpha_test);
 #endif
     return material;
@@ -55,10 +55,10 @@ static inline BasePassMaterial LoadClippedBasePassMaterial(
 
 static inline MaterialSurface EvaluateBasePassSurface(BasePassMaterial material,
     float3 world_pos, float3 world_normal, float3 world_tangent,
-    float3 world_bitangent, float2 uv0, bool is_front_face)
+    float3 world_bitangent, float4 uvs, bool is_front_face)
 {
     return EvaluateMaterialSurfaceForMaterial(world_pos, world_normal,
-        world_tangent, world_bitangent, uv0, material.has_material,
+        world_tangent, world_bitangent, uvs, material.has_material,
         material.draw_material,
         material.procedural_grid_material_constants_slot, is_front_face);
 }
@@ -105,12 +105,12 @@ static inline GBufferOutput PackGBufferOutput(MaterialSurface surface,
 }
 
 static inline GBufferOutput EvaluateGBufferMaterialOutput(float3 world_pos,
-    float3 world_normal, float3 world_tangent, float3 world_bitangent, float2 uv0,
+    float3 world_normal, float3 world_tangent, float3 world_bitangent, float4 uvs,
     uint draw_index, bool is_front_face)
 {
-    const BasePassMaterial material = LoadClippedBasePassMaterial(uv0, draw_index);
+    const BasePassMaterial material = LoadClippedBasePassMaterial(uvs, draw_index);
     const MaterialSurface surface = EvaluateBasePassSurface(material, world_pos,
-        world_normal, world_tangent, world_bitangent, uv0, is_front_face);
+        world_normal, world_tangent, world_bitangent, uvs, is_front_face);
     const float3 geometric_normal = ComputeShadowSurfaceNormal(
         world_pos, world_normal, is_front_face);
     return PackGBufferOutput(surface, ResolveVortexShadingModel(material),

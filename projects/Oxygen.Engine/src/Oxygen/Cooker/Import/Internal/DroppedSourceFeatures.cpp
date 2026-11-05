@@ -213,8 +213,8 @@ namespace {
       }
     }
     drop(conflicting,
-      "The material's textures use different UV sets or transforms, which are "
-      "not imported; every texture uses those of the first one.",
+      "The material's textures use different UV sets or transforms, which a "
+      "material does not hold; every texture uses those of the first one.",
       path);
     drop(custom_sampling,
       "The material's texture wrap and filter modes are not imported; its "
@@ -417,8 +417,9 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
       source_path, "/Deformers/Skin", diagnostics, NameOf(skin->name));
   }
   for (const auto* mesh : std::span(source.meshes.data, source.meshes.count)) {
-    Drop(mesh->uv_sets.count > 1U,
-      "UV sets past the first are not imported; the mesh keeps its first.",
+    Drop(mesh->uv_sets.count > 2U,
+      "A mesh keeps two UV sets: its first, and the one its textures name or "
+      "else its second.",
       source_path, "/Geometry", diagnostics, NameOf(mesh->name));
     Drop(mesh->color_sets.count > 1U,
       "Vertex color sets past the first are not imported; the mesh keeps its "

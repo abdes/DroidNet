@@ -563,7 +563,7 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxLostInfluencesAndSetsAreReported)
   skin.max_weights_per_vertex = 6;
   auto* skin_pointer = &skin;
   auto mesh = ufbx_mesh {};
-  mesh.uv_sets.count = 2;
+  mesh.uv_sets.count = 3;
   mesh.color_sets.count = 2;
   auto* mesh_pointer = &mesh;
   auto source = ufbx_scene {};
@@ -579,9 +579,26 @@ NOLINT_TEST(DroppedSourceFeaturesTest, FbxLostInfluencesAndSetsAreReported)
       [&](const auto& issue) -> bool { return issue.message.contains(text); });
   };
   EXPECT_TRUE(says("Up to 6 joints"));
-  EXPECT_TRUE(says("UV sets past the first"));
+  EXPECT_TRUE(says("A mesh keeps two UV sets"));
   EXPECT_TRUE(says("Vertex color sets past the first"));
   EXPECT_TRUE(says("no skeleton"));
+}
+
+//! A mesh holds two UV sets: a second one loses nothing.
+NOLINT_TEST(DroppedSourceFeaturesTest, FbxSecondUvSetIsNotReported)
+{
+  auto mesh = ufbx_mesh {};
+  mesh.uv_sets.count = 2;
+  auto* mesh_pointer = &mesh;
+  auto source = ufbx_scene {};
+  source.meshes = { .data = &mesh_pointer, .count = 1 };
+  auto diagnostics = std::vector<ImportDiagnostic> {};
+
+  ReportDroppedSourceFeatures(source, "two_sets.fbx", diagnostics);
+
+  EXPECT_FALSE(std::ranges::any_of(diagnostics, [](const auto& issue) -> bool {
+    return issue.message.contains("UV sets");
+  }));
 }
 
 //! glTF: a second joint or colour set is lost, and a skin's weights are kept.

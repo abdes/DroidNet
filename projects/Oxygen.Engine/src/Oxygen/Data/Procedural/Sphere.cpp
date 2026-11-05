@@ -89,6 +89,7 @@ auto oxygen::data::MakeSphereMeshAsset(
         buffers, latitudes, longitude_segments)) {
     return std::nullopt;
   }
+  procedural::RepeatFirstUvSet(buffers.vertices);
   return std::make_pair(
     std::move(buffers.vertices), std::move(buffers.indices));
 }

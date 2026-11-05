@@ -24,6 +24,7 @@ namespace {
     std::vector<data::Vertex>&
       vertices; // NOLINT(*-avoid-const-or-ref-data-members)
     std::vector<uint32_t> triangles;
+    uint8_t uv_set = 0;
   };
 
   auto MeshOf(const SMikkTSpaceContext* context) -> MikkMesh&
@@ -74,7 +75,8 @@ namespace {
   auto GetTexCoord(const SMikkTSpaceContext* context, float* out,
     const int face, const int vertex) -> void
   {
-    const auto& texcoord = CornerOf(context, face, vertex).texcoord;
+    const auto& texcoord = data::TexcoordOf(
+      CornerOf(context, face, vertex), MeshOf(context).uv_set);
     const auto target = std::span<float, 2>(out, 2);
     target[0] = texcoord.x;
     target[1] = texcoord.y;
@@ -100,9 +102,10 @@ namespace {
 } // namespace
 
 auto GenerateMikkTSpaceTangents(std::vector<data::Vertex>& vertices,
-  const std::span<const uint32_t> triangles) -> void
+  const std::span<const uint32_t> triangles, const uint8_t uv_set) -> void
 {
-  auto mesh = MikkMesh { .vertices = vertices, .triangles = {} };
+  auto mesh
+    = MikkMesh { .vertices = vertices, .triangles = {}, .uv_set = uv_set };
   mesh.triangles.reserve(triangles.size());
   for (size_t first = 0; first + 3U <= triangles.size(); first += 3U) {
     const auto corners = triangles.subspan(first, 3U);

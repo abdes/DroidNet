@@ -225,7 +225,7 @@ def build_report(controller, report, capture_path, report_path):
                         rd.ShaderStage.Vertex, True
                     )
                 ]
-                vertices = [x for x in vertex_reads if x.elementByteSize == 72]
+                vertices = [x for x in vertex_reads if x.elementByteSize == 80]
                 if len(vertices) != 1:
                     raise RuntimeError("Missing card vertex data")
                 vertex = vertices[0]
@@ -236,7 +236,7 @@ def build_report(controller, report, capture_path, report_path):
                 )
                 if any(
                     struct.unpack_from("<3f", data, i + 12) != (0, -1, 0)
-                    for i in range(0, len(data), 72)
+                    for i in range(0, len(data), 80)
                 ):
                     raise RuntimeError("Card normals must face away from the sun")
                 report.append(

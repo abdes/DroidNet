@@ -116,7 +116,10 @@ auto CheckVertexValues(const std::span<const std::byte> vertices) -> void
       vertex.normal.z,
     };
     const auto texcoord = std::array { vertex.texcoord.x, vertex.texcoord.y };
-    if (!finite(position) || !finite(normal) || !finite(texcoord)) {
+    const auto texcoord1
+      = std::array { vertex.texcoord1.x, vertex.texcoord1.y };
+    if (!finite(position) || !finite(normal) || !finite(texcoord)
+      || !finite(texcoord1)) {
       throw CookedFormatError(CookedDefect::kInvalidValue,
         fmt::format("Vertex {} has a position, normal or texture coordinate "
                     "that is NaN or infinite",

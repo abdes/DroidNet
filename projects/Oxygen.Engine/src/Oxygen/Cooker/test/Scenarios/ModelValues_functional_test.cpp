@@ -37,6 +37,7 @@
 #include <variant>
 #include <vector>
 
+#include <fmt/format.h>
 #include <glm/common.hpp>
 #include <glm/ext/matrix_float3x3.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
@@ -470,6 +471,99 @@ protected:
     verify(model);
   }
 };
+
+//! An FBX mesh keeps its first UV set and the one its normal texture names,
+//! which need not be its second, and generates its tangents on that one.
+NOLINT_TEST_F(ModelValuesTest, FbxKeepsTheUvSetItsNormalTextureNames)
+{
+  const auto root = MakeTempDir("named_uv_set");
+  std::filesystem::copy_file(
+    TestModelsDirFromFile() / "static_tangent_normal.png",
+    root / "static_tangent_normal.png");
+  auto text = std::string {};
+  {
+    std::ifstream input(TestModelsDirFromFile() / "static_normal_triangle.fbx");
+    text.assign(
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>());
+  }
+  const auto insert_before = [&text](const std::string_view anchor,
+                               const std::string_view added) -> void {
+    const auto at = text.find(anchor);
+    ASSERT_NE(at, std::string::npos) << anchor;
+    text.insert(at, added);
+  };
+  const auto uv_layer = [](const int index, const std::string_view name,
+                          const std::string_view uvs) -> std::string {
+    return fmt::format(
+      "LayerElementUV: {} {{\n"
+      "            Version: 101\n"
+      "            Name: \"{}\"\n"
+      "            MappingInformationType: \"ByPolygonVertex\"\n"
+      "            ReferenceInformationType: \"IndexToDirect\"\n"
+      "            UV: *6 {{ a: {} }}\n"
+      "            UVIndex: *3 {{ a: 0,1,2 }}\n"
+      "        }}\n        ",
+      index, name, uvs);
+  };
+  insert_before("LayerElementMaterial: 0 {",
+    uv_layer(1, "Extra", "0,0,0,0,0,0") + uv_layer(2, "Detail", "0,0,1,0,0,1"));
+  insert_before("Layer: 0 {",
+    "Layer: 1 {\n"
+    "            Version: 100\n"
+    "            LayerElement: {\n"
+    "                Type: \"LayerElementUV\"\n"
+    "                TypedIndex: 1\n"
+    "            }\n"
+    "        }\n"
+    "        Layer: 2 {\n"
+    "            Version: 100\n"
+    "            LayerElement: {\n"
+    "                Type: \"LayerElementUV\"\n"
+    "                TypedIndex: 2\n"
+    "            }\n"
+    "        }\n        ");
+  insert_before("TextureName: \"Texture::Checker\"",
+    "Properties70: {\n"
+    "            P: \"UVSet\", \"KString\", \"\", \"\", \"Detail\"\n"
+    "        }\n        ");
+  const auto source = root / "named_uv_set.fbx";
+  {
+    std::ofstream output(source);
+    output << text;
+  }
+
+  oxygen::content::import::ImportRequest request {};
+  request.source_path = source;
+  request.asset_virtual_path
+    = oxygen::cooker::test::ModelVirtualPath(request.source_path);
+  request.source_mount_path
+    = oxygen::cooker::test::SourceMountPath(request.source_path);
+  request.cooked_root = root / "cooked";
+  request.options.coordinate.bake_transforms_into_meshes = false;
+  request.options.tangent_policy
+    = oxygen::content::import::GeometryAttributePolicy::kGenerateMissing;
+  ImportAndVerifyCleanCopy(
+    std::move(request), [](const CookedModel& model) -> void {
+      const auto& vertices = model.vertices;
+      ASSERT_EQ(vertices.size(), 3U);
+      // "Detail" swaps the first set's U and V. The source's V grew up and is
+      // flipped on import, in each set.
+      for (const auto& vertex : vertices) {
+        const auto source
+          = glm::vec2 { vertex.texcoord.x, 1.0F - vertex.texcoord.y };
+        EXPECT_EQ(vertex.texcoord1, glm::vec2(source.y, 1.0F - source.x));
+      }
+      const auto e1 = vertices[1].position - vertices[0].position;
+      const auto e2 = vertices[2].position - vertices[0].position;
+      const auto d1 = vertices[1].texcoord1 - vertices[0].texcoord1;
+      const auto d2 = vertices[2].texcoord1 - vertices[0].texcoord1;
+      const auto along_u = glm::normalize((e1 * d2.y) - (e2 * d1.y))
+        * glm::sign((d1.x * d2.y) - (d1.y * d2.x));
+      for (const auto& vertex : vertices) {
+        ExpectVec3Near(vertex.tangent, along_u);
+      }
+    });
+}
 
 NOLINT_TEST_F(ModelValuesTest, FbxGeneratesMissingNormalMapTangents)
 {
@@ -2667,6 +2761,7 @@ NOLINT_TEST_F(ModelFormatsTest, GltfDefaultsAreGltfs)
       EXPECT_NEAR(vertex.color.r, 0.5F, 0.0001F);
       EXPECT_FLOAT_EQ(vertex.color.a, 1.0F);
       EXPECT_NEAR(vertex.texcoord.x, 0.25F, 0.0001F);
+      EXPECT_NEAR(vertex.texcoord1.x, 0.75F, 0.0001F);
     }
     EXPECT_NEAR(model.material->GetMetalness(), 1.0F, 0.001F);
     EXPECT_NEAR(model.material->GetRoughness(), 1.0F, 0.001F);

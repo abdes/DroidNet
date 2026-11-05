@@ -350,8 +350,9 @@ Architectural split:
 
 6. **Pipeline Types - Stream View:** `oxygen::content::import::MeshStreamView`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
-   - fields: spans over positions, normals, texcoords, tangents, bitangents,
-     colors, joint indices, joint weights.
+   - fields: spans over positions, normals, texcoords, texcoords1 (UV set 1,
+     empty when it repeats set 0), tangents, bitangents, colors, joint indices,
+     joint weights.
 
 7. **Pipeline Types - Triangle Mesh:** `oxygen::content::import::TriangleMesh`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
@@ -566,7 +567,7 @@ Example (`woodfloor_tile.geometry.json`):
       "source": "woodfloor_tile.vb",
       "virtual_path": "woodfloor_tile.vb.obuf",
       "usage_flags": 1,
-      "element_stride": 72,
+      "element_stride": 80,
       "views": [
         { "name": "all_verts", "element_offset": 0, "element_count": 2048 }
       ]

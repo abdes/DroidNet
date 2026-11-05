@@ -72,5 +72,6 @@ auto oxygen::data::MakeQuadMeshAsset(const float width, const float height)
   // (p(0, 0), p(0, 1), p(1, 0)) winds counter-clockwise seen from the front.
   std::vector<uint32_t> indices = { 0, 2, 1, 1, 2, 3 };
 
+  procedural::RepeatFirstUvSet(vertices);
   return { { std::move(vertices), std::move(indices) } };
 }

@@ -31,14 +31,15 @@ namespace detail {
     glm::vec3 dpdv;
   };
 
-  [[nodiscard]] inline auto UvDerivativesOf(
-    const data::Vertex& v0, const data::Vertex& v1, const data::Vertex& v2)
+  [[nodiscard]] inline auto UvDerivativesOf(const data::Vertex& v0,
+    const data::Vertex& v1, const data::Vertex& v2, const uint8_t uv_set)
     -> std::optional<UvDerivatives>
   {
     const glm::vec3 e1 = v1.position - v0.position;
     const glm::vec3 e2 = v2.position - v0.position;
-    const glm::vec2 d1 = v1.texcoord - v0.texcoord;
-    const glm::vec2 d2 = v2.texcoord - v0.texcoord;
+    const auto& uv0 = data::TexcoordOf(v0, uv_set);
+    const glm::vec2 d1 = data::TexcoordOf(v1, uv_set) - uv0;
+    const glm::vec2 d2 = data::TexcoordOf(v2, uv_set) - uv0;
 
     const float denom = (d1.x * d2.y) - (d1.y * d2.x);
     if (!std::isfinite(denom) || std::abs(denom) < 1e-8F) {
@@ -67,12 +68,17 @@ namespace detail {
  @param vertices The corners, each used by one triangle (modified in place).
  @param triangles Corner indices, three per triangle; triangles naming a
         corner outside `vertices` are skipped.
+ @param uv_set The UV set the frames follow.
 */
 auto GenerateMikkTSpaceTangents(std::vector<data::Vertex>& vertices,
-  std::span<const uint32_t> triangles) -> void;
+  std::span<const uint32_t> triangles, uint8_t uv_set) -> void;
 
 //! Generates tangent frames for the corners the buckets' triangles index.
 /*!
+ Each bucket's frames follow its `tangent_uv_set`, the set its normal texture
+ reads. Buckets on one set are generated together, so their frames agree where
+ they meet.
+
  @param vertices The corners, each used by one triangle (modified in place).
  @param buckets Array of index buckets, where each bucket contains
         triangle indices for a submesh.
@@ -82,18 +88,24 @@ template <typename BucketT>
 auto GenerateTangents(std::vector<data::Vertex>& vertices,
   const std::span<const BucketT> buckets) -> void
 {
-  auto triangles = std::vector<uint32_t> {};
-  for (const auto& bucket : buckets) {
-    const auto whole = bucket.indices.size() - (bucket.indices.size() % 3);
-    triangles.insert(triangles.end(), bucket.indices.begin(),
-      bucket.indices.begin() + static_cast<std::ptrdiff_t>(whole));
+  for (uint8_t uv_set = 0; uv_set < data::kUvSetCount; ++uv_set) {
+    auto triangles = std::vector<uint32_t> {};
+    for (const auto& bucket : buckets) {
+      if (bucket.tangent_uv_set != uv_set) {
+        continue;
+      }
+      const auto whole = bucket.indices.size() - (bucket.indices.size() % 3);
+      triangles.insert(triangles.end(), bucket.indices.begin(),
+        bucket.indices.begin() + static_cast<std::ptrdiff_t>(whole));
+    }
+    GenerateMikkTSpaceTangents(vertices, triangles, uv_set);
   }
-  GenerateMikkTSpaceTangents(vertices, triangles);
 }
 
 //! The share of a mesh's triangles whose tangent frames follow their UVs.
 /*!
- A triangle's frame follows its UVs when its corners' mean tangent lies within
+ A bucket's UVs are its `tangent_uv_set`. A triangle's frame follows its UVs
+ when its corners' mean tangent lies within
  45 degrees of its dP/dU and their mean bitangent within 45 degrees of its
  dP/dV, as the Tangent Frame Check debug mode shows. Triangles with degenerate
  UVs or positions do not count; a mesh without any counts as agreeing.
@@ -130,7 +142,8 @@ template <typename BucketT>
       const auto& v0 = vertices[i0];
       const auto& v1 = vertices[i1];
       const auto& v2 = vertices[i2];
-      const auto derivatives = detail::UvDerivativesOf(v0, v1, v2);
+      const auto derivatives
+        = detail::UvDerivativesOf(v0, v1, v2, bucket.tangent_uv_set);
       if (!derivatives.has_value()) {
         continue;
       }

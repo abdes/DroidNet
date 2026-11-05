@@ -80,7 +80,7 @@ static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
 }
 
 static inline float SampleMaskedMaterialAlpha(
-  float2 uv0, MaterialShadingConstants material, SamplerState linear_sampler)
+  float4 uvs, MaterialShadingConstants material, SamplerState linear_sampler)
 {
   float alpha = material.base_color.a;
   const bool no_texture_sampling
@@ -88,7 +88,7 @@ static inline float SampleMaskedMaterialAlpha(
 
   if (!no_texture_sampling
     && material.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
-    const float2 uv = ApplyMaterialUv(uv0, material);
+    const float2 uv = ApplyMaterialUv(uvs, material);
     Texture2D<float4> base_tex
       = ResourceDescriptorHeap[material.base_color_texture_index];
     alpha *= base_tex.Sample(linear_sampler, uv).a;
@@ -98,7 +98,7 @@ static inline float SampleMaskedMaterialAlpha(
 }
 
 static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestForMaterial(
-  float2 uv0, MaterialShadingConstants material, SamplerState linear_sampler)
+  float4 uvs, MaterialShadingConstants material, SamplerState linear_sampler)
 {
   MaskedAlphaTestResult result = (MaskedAlphaTestResult)0;
   result.has_material_data = true;
@@ -107,13 +107,13 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestForMaterial(
     return result;
   }
 
-  result.alpha = SampleMaskedMaterialAlpha(uv0, material, linear_sampler);
+  result.alpha = SampleMaskedMaterialAlpha(uvs, material, linear_sampler);
   result.cutoff = material.alpha_cutoff;
   return result;
 }
 
 static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestFromSlots(
-  float2 uv0, uint draw_metadata_slot, uint material_shading_constants_slot,
+  float4 uvs, uint draw_metadata_slot, uint material_shading_constants_slot,
   uint draw_index, SamplerState linear_sampler)
 {
   MaterialShadingConstants material;
@@ -121,7 +121,7 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestFromSlots(
         material_shading_constants_slot, draw_index, material)) {
     return (MaskedAlphaTestResult)0;
   }
-  return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
+  return EvaluateMaskedAlphaTestForMaterial(uvs, material, linear_sampler);
 }
 
 // Masked pixels without material data are discarded, never kept unclipped.

@@ -24,13 +24,13 @@ static inline bool TryLoadMaterialForDraw(
 }
 
 static inline MaskedAlphaTestResult EvaluateMaskedAlphaTest(
-  float2 uv0, uint draw_index, SamplerState linear_sampler)
+  float4 uvs, uint draw_index, SamplerState linear_sampler)
 {
   MaterialShadingConstants material;
   if (!TryLoadMaterialForDraw(draw_index, material)) {
     return (MaskedAlphaTestResult)0;
   }
-  return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
+  return EvaluateMaskedAlphaTestForMaterial(uvs, material, linear_sampler);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_MASKEDALPHATESTVIEW_HLSLI

@@ -63,6 +63,9 @@ namespace {
     if (attributes.texcoords) {
       weights.insert(weights.end(), 2, kTexcoordWeight);
     }
+    if (attributes.texcoords1) {
+      weights.insert(weights.end(), 2, kTexcoordWeight);
+    }
     if (attributes.colors) {
       weights.insert(weights.end(), 4, kColorWeight);
     }
@@ -81,6 +84,9 @@ namespace {
       }
       if (attributes.texcoords) {
         packed.insert(packed.end(), { vertex.texcoord.x, vertex.texcoord.y });
+      }
+      if (attributes.texcoords1) {
+        packed.insert(packed.end(), { vertex.texcoord1.x, vertex.texcoord1.y });
       }
       if (attributes.colors) {
         packed.insert(packed.end(),

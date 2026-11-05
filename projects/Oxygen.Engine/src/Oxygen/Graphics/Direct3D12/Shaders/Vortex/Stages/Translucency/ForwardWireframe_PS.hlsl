@@ -23,6 +23,7 @@ struct Vertex {
   float3 tangent;
   float3 bitangent;
   float4 color;
+  float2 texcoord1;
 };
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -39,7 +40,7 @@ cbuffer RootConstants : register(b2, space0)
 struct VSOutput {
   float4 position : SV_POSITION;
   float3 color : COLOR;
-  float2 uv : TEXCOORD0;
+  float4 uv : TEXCOORD0;
   float3 world_pos : TEXCOORD1;
   float3 world_normal : NORMAL;
   float3 world_tangent : TANGENT;

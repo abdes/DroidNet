@@ -159,11 +159,11 @@ struct MomentProbeInput {
 };
 
 struct MaterialUvProbeInput {
-    float2 uv;
+    float4 uvs;
     float2 scale;
     float2 offset;
     float rotation_radians;
-    uint reserved;
+    uint uv_set;
 };
 
 cbuffer ProbeRoot : register(b2, space0) {
@@ -617,6 +617,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         material.uv_scale = value.scale;
         material.uv_offset = value.offset;
         material.uv_rotation_radians = value.rotation_radians;
-        output.Store2(address, asuint(ApplyMaterialUv(value.uv, material)));
+        material.uv_set = value.uv_set;
+        output.Store2(address, asuint(ApplyMaterialUv(value.uvs, material)));
     }
 }

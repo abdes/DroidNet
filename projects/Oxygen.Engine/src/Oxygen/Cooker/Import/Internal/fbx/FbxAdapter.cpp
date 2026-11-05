@@ -463,10 +463,63 @@ namespace {
       && stream.indices.data != nullptr;
   }
 
+  [[nodiscard]] auto SameName(
+    const ufbx_string& first, const ufbx_string& second) noexcept -> bool
+  {
+    return std::string_view(first.data, first.length)
+      == std::string_view(second.data, second.length);
+  }
+
+  //! The UV set a mesh keeps beside its first: the one a texture of `materials`
+  //! names, or else its second. Null for a mesh of one set.
+  [[nodiscard]] auto SecondUvSetOf(const ufbx_mesh& mesh,
+    const ufbx_material_list& materials) -> const ufbx_uv_set*
+  {
+    const auto sets = Items(mesh.uv_sets);
+    if (sets.size() < 2U) {
+      return nullptr;
+    }
+    const auto others = sets.subspan(1U);
+    for (const auto* material : Items(materials)) {
+      if (material == nullptr) {
+        continue;
+      }
+      for (const auto& slot : FbxMaterialTextures::From(*material).Slots()) {
+        const auto* texture = slot.Texture();
+        if (texture == nullptr) {
+          continue;
+        }
+        const auto named
+          = std::ranges::find_if(others, [&](const ufbx_uv_set& set) -> bool {
+              return SameName(set.name, texture->uv_set);
+            });
+        if (named != others.end()) {
+          return &*named;
+        }
+      }
+    }
+    return &others.front();
+  }
+
+  //! The UV set the tangents of a surface with `material` follow: 1 when its
+  //! normal texture names `second_uv_set`.
+  [[nodiscard]] auto TangentUvSetOf(
+    const ufbx_material* material, const ufbx_uv_set* second_uv_set) -> uint8_t
+  {
+    if (material == nullptr || second_uv_set == nullptr) {
+      return 0U;
+    }
+    const auto* normal = FbxMaterialTextures::From(*material).normal.Texture();
+    return normal != nullptr && SameName(second_uv_set->name, normal->uv_set)
+      ? uint8_t { 1 }
+      : uint8_t { 0 };
+  }
+
   struct TriangleMeshBuffers {
     std::vector<glm::vec3> positions;
     std::vector<glm::vec3> normals;
     std::vector<glm::vec2> texcoords;
+    std::vector<glm::vec2> texcoords1;
     std::vector<glm::vec3> tangents;
     std::vector<glm::vec3> bitangents;
     std::vector<glm::vec4> colors;
@@ -692,10 +745,31 @@ namespace {
       return std::nullopt;
     }
 
+    const ufbx_material_list* material_list = &mesh.materials;
+    if (material_node != nullptr && material_node->materials.count > 0) {
+      material_list = &material_node->materials;
+    }
+    const auto* second_uv_set = SecondUvSetOf(mesh, *material_list);
+    // Authored frames belong to one UV set, the one the normal textures read.
+    const auto* frame_uv_set
+      = std::ranges::any_of(Items(*material_list),
+          [&](const ufbx_material* material) -> bool {
+            return TangentUvSetOf(material, second_uv_set) == 1U;
+          })
+      ? second_uv_set
+      : nullptr;
+    const auto& vertex_tangent = frame_uv_set != nullptr
+      ? frame_uv_set->vertex_tangent
+      : mesh.vertex_tangent;
+    const auto& vertex_bitangent = frame_uv_set != nullptr
+      ? frame_uv_set->vertex_bitangent
+      : mesh.vertex_bitangent;
+
     TriangleMeshBuffers out;
     out.positions.reserve(mesh.num_indices);
     out.normals.reserve(mesh.num_indices);
     out.texcoords.reserve(mesh.num_indices);
+    out.texcoords1.reserve(second_uv_set != nullptr ? mesh.num_indices : 0U);
     out.tangents.reserve(mesh.num_indices);
     out.bitangents.reserve(mesh.num_indices);
     out.colors.reserve(mesh.num_indices);
@@ -733,23 +807,23 @@ namespace {
         const auto uv = ToVec2(ufbx_get_vertex_vec2(&mesh.vertex_uv, idx));
         out.texcoords.emplace_back(uv.x, 1.0F - uv.y);
       }
-      if (HasAttribute(mesh.vertex_tangent)) {
-        out.tangents.push_back(
-          ToVec3(ufbx_get_vertex_vec3(&mesh.vertex_tangent, idx)));
+      if (second_uv_set != nullptr && HasAttribute(second_uv_set->vertex_uv)) {
+        const auto uv
+          = ToVec2(ufbx_get_vertex_vec2(&second_uv_set->vertex_uv, idx));
+        out.texcoords1.emplace_back(uv.x, 1.0F - uv.y);
       }
-      if (HasAttribute(mesh.vertex_bitangent)) {
+      if (HasAttribute(vertex_tangent)) {
+        out.tangents.push_back(
+          ToVec3(ufbx_get_vertex_vec3(&vertex_tangent, idx)));
+      }
+      if (HasAttribute(vertex_bitangent)) {
         out.bitangents.push_back(
-          -ToVec3(ufbx_get_vertex_vec3(&mesh.vertex_bitangent, idx)));
+          -ToVec3(ufbx_get_vertex_vec3(&vertex_bitangent, idx)));
       }
       if (HasAttribute(mesh.vertex_color)) {
         out.colors.push_back(
           ToVec4(ufbx_get_vertex_vec4(&mesh.vertex_color, idx)));
       }
-    }
-
-    const ufbx_material_list* material_list = &mesh.materials;
-    if (material_node != nullptr && material_node->materials.count > 0) {
-      material_list = &material_node->materials;
     }
 
     std::vector face_surfaces(mesh.num_faces, UFBX_NO_INDEX);
@@ -809,9 +883,10 @@ namespace {
 
       uint32_t surface = material_key_count;
       const uint32_t source_slot = face_surfaces.at(face_i);
+      const ufbx_material* material = nullptr;
       if (material_list != nullptr && material_list->data != nullptr
         && source_slot != UFBX_NO_INDEX && source_slot < material_list->count) {
-        const auto* material = ItemAt(*material_list, source_slot);
+        material = ItemAt(*material_list, source_slot);
         if (material != nullptr) {
           if (const auto it = scene_material_index_by_ptr.find(material);
             it != scene_material_index_by_ptr.end()) {
@@ -834,6 +909,7 @@ namespace {
                      .source_slot = source_slot,
                      .first_index = 0,
                      .index_count = 0,
+                     .tangent_uv_set = TangentUvSetOf(material, second_uv_set),
                    },
                    .indices = {},
                  })
@@ -968,6 +1044,14 @@ namespace {
     if (!out.texcoords.empty()
       && out.texcoords.size() != out.positions.size()) {
       out.texcoords.clear();
+      diagnostics.push_back(
+        MakeWarningDiagnostic(std::string(import_codes::kMeshTexcoordsMismatch),
+          "FBX texcoords count does not match positions", source_id,
+          object_path));
+    }
+    if (!out.texcoords1.empty()
+      && out.texcoords1.size() != out.positions.size()) {
+      out.texcoords1.clear();
       diagnostics.push_back(
         MakeWarningDiagnostic(std::string(import_codes::kMeshTexcoordsMismatch),
           "FBX texcoords count does not match positions", source_id,
@@ -2457,6 +2541,8 @@ namespace {
               owner->normals.data(), owner->normals.size()),
             .texcoords = std::span<const glm::vec2>(
               owner->texcoords.data(), owner->texcoords.size()),
+            .texcoords1 = std::span<const glm::vec2>(
+              owner->texcoords1.data(), owner->texcoords1.size()),
             .tangents = std::span<const glm::vec3>(
               owner->tangents.data(), owner->tangents.size()),
             .bitangents = std::span<const glm::vec3>(

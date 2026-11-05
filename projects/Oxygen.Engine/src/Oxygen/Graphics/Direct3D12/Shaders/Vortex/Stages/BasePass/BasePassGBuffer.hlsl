@@ -30,7 +30,7 @@ struct BasePassGBufferVSOutput
     float4 current_clip_position : TEXCOORD2;
     float4 previous_clip_position : TEXCOORD3;
     float3 color : COLOR;
-    float2 uv : TEXCOORD0;
+    float4 uv : TEXCOORD0;
     float3 world_pos : TEXCOORD1;
     float3 world_normal : NORMAL;
     float3 world_tangent : TANGENT;
@@ -146,7 +146,7 @@ BasePassGBufferVSOutput BasePassGBufferVS(
         output.previous_clip_position = output.current_clip_position;
     }
     output.color = vertex.color.rgb;
-    output.uv = vertex.texcoord;
+    output.uv = float4(vertex.texcoord, vertex.texcoord1);
     output.world_pos = world_position.xyz;
     output.world_normal = world_normal;
     output.world_tangent = world_tangent;
@@ -166,7 +166,7 @@ GBufferOutput BasePassGBufferPS(
     material_input.world_normal = input.world_normal;
     material_input.world_tangent = input.world_tangent;
     material_input.world_bitangent = input.world_bitangent;
-    material_input.uv0 = input.uv;
+    material_input.uvs = input.uv;
     material_input.draw_index = input.draw_index;
     material_input.is_front_face = is_front_face ? 1u : 0u;
     GBufferOutput output = EvaluateBasePassMaterialOutput(material_input);

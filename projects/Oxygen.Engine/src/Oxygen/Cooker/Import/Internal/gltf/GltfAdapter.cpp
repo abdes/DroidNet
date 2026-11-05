@@ -96,6 +96,7 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneRecordDefaults.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Serio/Device.h>
 #include <Oxygen/Serio/Error.h>
 #include <Oxygen/Serio/NativeFile.h>
@@ -1071,6 +1072,16 @@ namespace {
     return view.texcoord;
   }
 
+  //! The UV set the tangents of a primitive with `material` follow: its normal
+  //! texture's, as glTF asks of generated tangents.
+  [[nodiscard]] auto TangentUvSetOf(const cgltf_material* material) -> uint8_t
+  {
+    const auto reads_second_set = material != nullptr
+      && material->normal_texture.texture != nullptr
+      && DeclaredUvSet(material->normal_texture) == 1;
+    return reads_second_set ? uint8_t { 1 } : uint8_t { 0 };
+  }
+
   //! The UV set a material binding stores. A set no binding can hold names no
   //! set a mesh has either, and the geometry warns about it.
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
@@ -1889,6 +1900,7 @@ namespace {
       const cgltf_accessor* positions = nullptr;
       const cgltf_accessor* normals = nullptr;
       const cgltf_accessor* texcoords = nullptr;
+      const cgltf_accessor* texcoords1 = nullptr;
       const cgltf_accessor* tangents = nullptr;
       const cgltf_accessor* colors = nullptr;
       const cgltf_accessor* joints = nullptr;
@@ -1898,6 +1910,7 @@ namespace {
       uint32_t index_count = 0;
       bool has_normals = false;
       bool has_texcoords = false;
+      bool has_texcoords1 = false;
       bool has_tangents = false;
       bool has_colors = false;
       bool has_skin = false;
@@ -1965,6 +1978,7 @@ namespace {
         bool all_texcoords = true;
         bool all_tangents = true;
         bool any_texcoords = false;
+        bool any_texcoords1 = false;
         bool any_colors = false;
         bool any_skin = false;
         bool has_material_textures = false;
@@ -1996,6 +2010,7 @@ namespace {
           const cgltf_accessor* positions = nullptr;
           const cgltf_accessor* normals = nullptr;
           const cgltf_accessor* texcoords = nullptr;
+          const cgltf_accessor* texcoords1 = nullptr;
           const cgltf_accessor* tangents = nullptr;
           const cgltf_accessor* colors = nullptr;
           const cgltf_accessor* joints = nullptr;
@@ -2039,44 +2054,28 @@ namespace {
           }
 
           if (!texcoords_by_index.empty()) {
-            // The UV set of each texture the material samples, in slot order.
-            std::vector<cgltf_size> preferred_uv_sets;
+            // A texture of a set the primitive lacks reads its first.
+            auto missing_uv_set = false;
             if (prim.material != nullptr) {
               VisitMaterialTextures(*prim.material,
-                [&preferred_uv_sets](const cgltf_texture_view& view,
+                [&](const cgltf_texture_view& view,
                   const TextureUsage /*usage*/) -> void {
-                  if (view.texture != nullptr) {
-                    preferred_uv_sets.push_back(
-                      static_cast<cgltf_size>(DeclaredUvSet(view)));
-                  }
+                  missing_uv_set = missing_uv_set
+                    || (view.texture != nullptr
+                      && !texcoords_by_index.contains(
+                        static_cast<cgltf_size>(DeclaredUvSet(view))));
                 });
             }
-
-            auto selected_uv_set = texcoords_by_index.begin()->first;
-            if (!preferred_uv_sets.empty()) {
-              const auto first_uv = preferred_uv_sets.front();
-              if (std::ranges::any_of(preferred_uv_sets,
-                    [first_uv](const cgltf_size uv_set) -> bool {
-                      return uv_set != first_uv;
-                    })) {
-                result.diagnostics.push_back(MakeWarningDiagnostic(
-                  std::string(import_codes::kMeshUvSetConflict),
-                  "Material uses multiple UV sets; using the first available",
-                  input.source_id_prefix, mesh_name));
-              }
-              if (texcoords_by_index.contains(first_uv)) {
-                selected_uv_set = first_uv;
-              } else {
-                result.diagnostics.push_back(MakeWarningDiagnostic(
-                  std::string(import_codes::kMeshUvSetMissing),
-                  "Material requests a UV set not present on the primitive; "
-                  "using the first available",
-                  input.source_id_prefix, mesh_name));
-              }
+            if (missing_uv_set) {
+              result.diagnostics.push_back(MakeWarningDiagnostic(
+                std::string(import_codes::kMeshUvSetMissing),
+                "Material requests a UV set not present on the primitive; "
+                "its textures of that set use the first available",
+                input.source_id_prefix, mesh_name));
             }
 
-            // A mesh keeps one UV set: what the others carry is left out.
-            if (texcoords_by_index.size() > 1U) {
+            // A mesh keeps two UV sets: what the others carry is left out.
+            if (texcoords_by_index.rbegin()->first >= data::kUvSetCount) {
               std::ostringstream message;
               message << "glTF primitive has UV sets {";
               bool first = true;
@@ -2085,16 +2084,17 @@ namespace {
                 message << (first ? "" : ",") << uv_set;
                 first = false;
               }
-              message << "}; only set " << selected_uv_set
-                      << " is imported, and textures of the other sets use it";
+              message << "}; only sets 0 and 1 are imported, and textures of "
+                         "the others use set 0";
               result.diagnostics.push_back(MakeWarningDiagnostic(
                 std::string(import_codes::kMeshUvSetsDropped), message.str(),
                 input.source_id_prefix, mesh_name));
             }
 
-            if (const auto it = texcoords_by_index.find(selected_uv_set);
+            texcoords = texcoords_by_index.begin()->second;
+            if (const auto it = texcoords_by_index.find(1U);
               it != texcoords_by_index.end()) {
-              texcoords = it->second;
+              texcoords1 = it->second;
             }
           }
 
@@ -2149,6 +2149,8 @@ namespace {
             = normals != nullptr && normals->count == positions->count;
           const bool has_texcoords
             = texcoords != nullptr && texcoords->count == positions->count;
+          const bool has_texcoords1
+            = texcoords1 != nullptr && texcoords1->count == positions->count;
           const bool has_tangents
             = tangents != nullptr && tangents->count == positions->count;
           const bool has_colors
@@ -2163,6 +2165,7 @@ namespace {
           all_texcoords = all_texcoords && has_texcoords;
           all_tangents = all_tangents && has_tangents;
           any_texcoords = any_texcoords || has_texcoords;
+          any_texcoords1 = any_texcoords1 || has_texcoords1;
           any_colors = any_colors || has_colors;
           any_skin = any_skin || has_skin;
 
@@ -2212,6 +2215,7 @@ namespace {
             .positions = positions,
             .normals = normals,
             .texcoords = texcoords,
+            .texcoords1 = texcoords1,
             .tangents = tangents,
             .colors = colors,
             .joints = joints,
@@ -2221,6 +2225,7 @@ namespace {
             .index_count = index_count,
             .has_normals = has_normals,
             .has_texcoords = has_texcoords,
+            .has_texcoords1 = has_texcoords1,
             .has_tangents = has_tangents,
             .has_colors = has_colors,
             .has_skin = has_skin,
@@ -2325,6 +2330,7 @@ namespace {
           std::vector<glm::vec3> positions;
           std::vector<glm::vec3> normals;
           std::vector<glm::vec2> texcoords;
+          std::vector<glm::vec2> texcoords1;
           std::vector<glm::vec3> tangents;
           std::vector<glm::vec3> bitangents;
           std::vector<glm::vec4> colors;
@@ -2336,6 +2342,48 @@ namespace {
           std::vector<TriangleRange> ranges;
         };
 
+        //! A primitive's UV set, warning when its range is suspicious.
+        const auto read_uvs
+          = [&](const cgltf_accessor* accessor) -> std::vector<glm::vec2> {
+          auto uvs = ReadVec2(accessor);
+          if (uvs.empty()) {
+            return uvs;
+          }
+          bool has_invalid_uv = false;
+          auto min_uv = glm::vec2 { std::numeric_limits<float>::max() };
+          auto max_uv = glm::vec2 { std::numeric_limits<float>::lowest() };
+          for (const auto& uv : uvs) {
+            if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
+              has_invalid_uv = true;
+              break;
+            }
+            min_uv = glm::min(min_uv, uv);
+            max_uv = glm::max(max_uv, uv);
+          }
+          // The mesh build zeroes and reports UVs that are not finite.
+          if (has_invalid_uv) {
+            return uvs;
+          }
+          DLOG_F(INFO,
+            "glTF mesh '{}' UV range min=({:.4f},{:.4f}) max=({:.4f},{:.4f})",
+            mesh_name, min_uv.x, min_uv.y, max_uv.x, max_uv.y);
+          constexpr float kUvAbsLimit = 10000.0F;
+          const auto max_abs = glm::max(glm::abs(min_uv), glm::abs(max_uv));
+          if (max_abs.x > kUvAbsLimit || max_abs.y > kUvAbsLimit) {
+            std::ostringstream message;
+            message.setf(std::ios::fixed);
+            message << "glTF primitive UV range is extremely large; textures "
+                       "may appear noisy ("
+                    << "min=" << std::setprecision(3) << min_uv.x << ","
+                    << min_uv.y << " max=" << max_uv.x << "," << max_uv.y
+                    << ")";
+            result.diagnostics.push_back(MakeWarningDiagnostic(
+              std::string(import_codes::kMeshUvRangeSuspicious), message.str(),
+              input.source_id_prefix, mesh_name));
+          }
+          return uvs;
+        };
+
         auto owner = std::make_shared<MeshBuffers>();
         owner->positions.reserve(total_vertices);
         if (keep_normals) {
@@ -2343,6 +2391,9 @@ namespace {
         }
         if (keep_texcoords) {
           owner->texcoords.reserve(total_vertices);
+        }
+        if (any_texcoords1) {
+          owner->texcoords1.reserve(total_vertices);
         }
         if (keep_tangents) {
           owner->tangents.reserve(total_vertices);
@@ -2394,49 +2445,18 @@ namespace {
           }
 
           if (keep_texcoords) {
-            if (prim_info.has_texcoords) {
-              auto texcoords_vec = ReadVec2(prim_info.texcoords);
-              if (!texcoords_vec.empty()) {
-                bool has_invalid_uv = false;
-                auto min_uv = glm::vec2 { std::numeric_limits<float>::max() };
-                auto max_uv
-                  = glm::vec2 { std::numeric_limits<float>::lowest() };
-                for (const auto& uv : texcoords_vec) {
-                  if (!std::isfinite(uv.x) || !std::isfinite(uv.y)) {
-                    has_invalid_uv = true;
-                    break;
-                  }
-                  min_uv = glm::min(min_uv, uv);
-                  max_uv = glm::max(max_uv, uv);
-                }
-                // The mesh build zeroes and reports UVs that are not finite.
-                if (!has_invalid_uv) {
-                  DLOG_F(INFO,
-                    "glTF mesh '{}' UV range min=({:.4f},{:.4f}) "
-                    "max=({:.4f},{:.4f})",
-                    mesh_name, min_uv.x, min_uv.y, max_uv.x, max_uv.y);
-                  constexpr float kUvAbsLimit = 10000.0F;
-                  const auto max_abs
-                    = glm::max(glm::abs(min_uv), glm::abs(max_uv));
-                  if (max_abs.x > kUvAbsLimit || max_abs.y > kUvAbsLimit) {
-                    std::ostringstream message;
-                    message.setf(std::ios::fixed);
-                    message << "glTF primitive UV range is extremely large; "
-                               "textures may appear noisy ("
-                            << "min=" << std::setprecision(3) << min_uv.x << ","
-                            << min_uv.y << " max=" << max_uv.x << ","
-                            << max_uv.y << ")";
-                    result.diagnostics.push_back(MakeWarningDiagnostic(
-                      std::string(import_codes::kMeshUvRangeSuspicious),
-                      message.str(), input.source_id_prefix, mesh_name));
-                  }
-                }
-              }
-              owner->texcoords.insert(owner->texcoords.end(),
-                texcoords_vec.begin(), texcoords_vec.end());
-            } else {
-              owner->texcoords.insert(
-                owner->texcoords.end(), positions_vec.size(), glm::vec2(0.0F));
+            const auto texcoords_vec = prim_info.has_texcoords
+              ? read_uvs(prim_info.texcoords)
+              : std::vector<glm::vec2>(positions_vec.size(), glm::vec2(0.0F));
+            owner->texcoords.insert(owner->texcoords.end(),
+              texcoords_vec.begin(), texcoords_vec.end());
+            // A primitive without set 1 repeats its set 0, as a mesh does.
+            if (any_texcoords1) {
+              const auto texcoords1_vec = prim_info.has_texcoords1
+                ? read_uvs(prim_info.texcoords1)
+                : texcoords_vec;
+              owner->texcoords1.insert(owner->texcoords1.end(),
+                texcoords1_vec.begin(), texcoords1_vec.end());
             }
           }
 
@@ -2553,6 +2573,7 @@ namespace {
               : std::numeric_limits<uint32_t>::max(),
             .first_index = first_index,
             .index_count = static_cast<uint32_t>(indices_vec.size()),
+            .tangent_uv_set = TangentUvSetOf(prim_info.prim->material),
           });
         }
 
@@ -2624,6 +2645,8 @@ namespace {
             owner->normals.data(), owner->normals.size()),
           .texcoords = std::span<const glm::vec2>(
             owner->texcoords.data(), owner->texcoords.size()),
+          .texcoords1 = std::span<const glm::vec2>(
+            owner->texcoords1.data(), owner->texcoords1.size()),
           .tangents = std::span<const glm::vec3>(
             owner->tangents.data(), owner->tangents.size()),
           .bitangents = std::span<const glm::vec3>(

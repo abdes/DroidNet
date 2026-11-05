@@ -106,6 +106,10 @@ NOLINT_TEST(MeshBufferRulesTest, VertexValuesAreFinite)
     check(with([](Vertex& v) -> void { v.texcoord.x = -kInfinity; }));
   }),
     CookedDefect::kInvalidValue);
+  EXPECT_EQ(DefectOf([&] -> void {
+    check(with([](Vertex& v) -> void { v.texcoord1.y = kNan; }));
+  }),
+    CookedDefect::kInvalidValue);
 }
 
 //! A format names the width; a buffer without one has it from its stride.

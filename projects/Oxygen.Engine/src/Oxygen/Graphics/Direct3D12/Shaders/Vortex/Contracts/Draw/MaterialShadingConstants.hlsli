@@ -55,15 +55,10 @@ struct MaterialShadingConstants
 // UV convention:
 // - Rotation is in radians, counter-clockwise, around the UV origin (0,0).
 // - Transform order is: scale -> rotation -> offset.
-// - uv_set selects the source UV set (0 = TEXCOORD0). Other sets require
-//   vertex data support; currently only uv0 is available.
-float2 ApplyMaterialUv(float2 uv0, MaterialShadingConstants mat)
+// - uv_set selects the source UV set: `uvs` holds set 0 in xy and set 1 in zw.
+float2 ApplyMaterialUv(float4 uvs, MaterialShadingConstants mat)
 {
-    float2 uv = uv0;
-    // TODO: Support selecting alternate UV sets when available.
-    if (mat.uv_set != 0u) {
-        uv = uv0;
-    }
+    float2 uv = mat.uv_set == 1u ? uvs.zw : uvs.xy;
 
     uv *= mat.uv_scale;
     if (mat.uv_rotation_radians != 0.0f) {

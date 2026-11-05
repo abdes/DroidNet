@@ -34,7 +34,7 @@ cbuffer RootConstants : register(b2, space0)
 struct ContactShadowCasterDepthVSOutput
 {
     float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
+    float4 uv : TEXCOORD0;
     nointerpolation uint draw_index : DRAW_INDEX;
 };
 
@@ -74,7 +74,7 @@ ContactShadowCasterDepthVSOutput VortexContactShadowCasterDepthVS(
         = BX_ResolveVertexIndex(metadata, vertex_id);
     const Vertex vertex
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
-    output.uv = vertex.texcoord;
+    output.uv = float4(vertex.texcoord, vertex.texcoord1);
 
     float4x4 world_matrix;
     if (!BX_TryLoadInstanceWorldMatrix(

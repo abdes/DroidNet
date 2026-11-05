@@ -756,6 +756,7 @@ auto MainModule::BuildSidednessScene() -> void
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
       .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+      .texcoord1 = { 0.0F, 0.0F },
     },
     {
       .position = { 0.75F, 0.0F, -0.7F },
@@ -764,6 +765,7 @@ auto MainModule::BuildSidednessScene() -> void
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
       .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+      .texcoord1 = { 1.0F, 0.0F },
     },
     {
       .position = { -0.35F, 0.0F, 0.8F },
@@ -772,6 +774,7 @@ auto MainModule::BuildSidednessScene() -> void
       .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = { 0.0F, 0.0F, 1.0F },
       .color = { 1.0F, 1.0F, 1.0F, 1.0F },
+      .texcoord1 = { 0.0F, 1.0F },
     },
   };
   // Asymmetric silhouette makes the mirror observable. Every non-double-sided

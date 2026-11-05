@@ -330,5 +330,6 @@ auto oxygen::data::MakeIcoSphereMeshAsset(const unsigned int subdivision_level)
     }
   }
 
+  procedural::RepeatFirstUvSet(vertices);
   return { { std::move(vertices), std::move(split_indices) } };
 }

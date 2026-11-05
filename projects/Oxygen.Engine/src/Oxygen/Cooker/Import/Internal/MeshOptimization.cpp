@@ -22,7 +22,7 @@ namespace {
   // Welding compares whole vertices bitwise: a vertex is its floats, with no
   // padding whose bytes could differ between equal corners.
   // NOLINTNEXTLINE(*-magic-numbers)
-  static_assert(sizeof(data::Vertex) == 18U * sizeof(float));
+  static_assert(sizeof(data::Vertex) == 20U * sizeof(float));
 
   //! `source` laid out by `remap` into `count` vertices; empty stays empty.
   template <typename T>

@@ -286,6 +286,7 @@ auto ExpectOrthonormalUnmirroredFrames(
     EXPECT_LE(vertex.texcoord.x, static_cast<float>(shape.max_u));
     EXPECT_GE(vertex.texcoord.y, 0.0F);
     EXPECT_LE(vertex.texcoord.y, 1.0F);
+    EXPECT_EQ(vertex.texcoord1, vertex.texcoord);
   }
 }
 

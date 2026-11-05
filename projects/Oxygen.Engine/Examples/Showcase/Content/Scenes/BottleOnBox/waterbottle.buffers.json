@@ -6,7 +6,7 @@
       "source": "../../SourceMedia/DCC/BottleOnBox/waterbottle_waterbottle_p0_vb.bin",
       "virtual_path": "waterbottle_waterbottle_p0_vb.obuf",
       "usage_flags": 1,
-      "element_stride": 72,
+      "element_stride": 80,
       "alignment": 16
     },
     {

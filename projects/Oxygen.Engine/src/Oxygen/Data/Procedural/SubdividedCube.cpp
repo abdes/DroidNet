@@ -83,6 +83,7 @@ auto oxygen::data::MakeSubdividedCubeMeshAsset(const unsigned int segments)
     }
   }
 
+  procedural::RepeatFirstUvSet(buffers.vertices);
   return std::make_pair(
     std::move(buffers.vertices), std::move(buffers.indices));
 }

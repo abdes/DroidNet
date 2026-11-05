@@ -83,8 +83,8 @@ static inline float3 TangentFrameCheckColor(BasePassGBufferVSOutput input)
 {
     const float3 dp_dx = ddx(input.world_pos);
     const float3 dp_dy = ddy(input.world_pos);
-    const float2 duv_dx = ddx(input.uv);
-    const float2 duv_dy = ddy(input.uv);
+    const float2 duv_dx = ddx(input.uv.xy);
+    const float2 duv_dy = ddy(input.uv.xy);
     const float det = duv_dx.x * duv_dy.y - duv_dx.y * duv_dy.x;
     if (abs(det) < 1e-12f)
     {
@@ -115,7 +115,7 @@ float4 BasePassGeometryDebugPS(BasePassGBufferVSOutput input) : SV_Target0
 {
     ClipMaskedGeometry(input);
 #if defined(DEBUG_TEXTURE_COORDINATES)
-    return float4(TextureCoordinatesColor(input.uv), 1.0f);
+    return float4(TextureCoordinatesColor(input.uv.xy), 1.0f);
 #else
     return float4(TangentFrameCheckColor(input), 1.0f);
 #endif

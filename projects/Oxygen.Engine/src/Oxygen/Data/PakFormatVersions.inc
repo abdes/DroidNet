@@ -15,7 +15,7 @@ OXDAT_FORMAT_VERSION(
 OXDAT_FORMAT_VERSION(
   kBufferResourceDescriptorVersion, buffer_descriptor, uint16_t, 5)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 6)
-OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 7)
+OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 8)
 OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 18)
 OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 6)
 OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 3)
@@ -34,8 +34,8 @@ OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 2)
 // stays the same, so that content an earlier revision cooked is cooked again.
 // The importer is the enumerator of `content::import::Importer`; its spec name
 // is how the ImportTool reports it.
-OXDAT_IMPORTER_REVISION(kGltf, gltf, 12)
-OXDAT_IMPORTER_REVISION(kFbx, fbx, 12)
+OXDAT_IMPORTER_REVISION(kGltf, gltf, 13)
+OXDAT_IMPORTER_REVISION(kFbx, fbx, 13)
 OXDAT_IMPORTER_REVISION(kTexture, texture, 5)
 OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 4)
 OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 4)
@@ -43,7 +43,7 @@ OXDAT_IMPORTER_REVISION(
   kPhysicsMaterialDescriptor, physics_material_descriptor, 3)
 OXDAT_IMPORTER_REVISION(
   kCollisionShapeDescriptor, collision_shape_descriptor, 3)
-OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 7)
+OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 8)
 OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 3)
 OXDAT_IMPORTER_REVISION(kScriptAsset, script, 4)
 OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 3)

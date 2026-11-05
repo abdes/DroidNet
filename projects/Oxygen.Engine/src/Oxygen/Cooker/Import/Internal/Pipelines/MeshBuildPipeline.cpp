@@ -84,6 +84,8 @@ namespace {
   struct SubmeshBucket {
     uint32_t scene_material_index = 0;
     uint32_t source_slot = 0;
+    //! The UV set the surface's tangents follow.
+    uint8_t tangent_uv_set = 0;
     data::AssetKey material_key;
     std::vector<uint32_t> indices;
     //! Triangles per mesh view, in index order; empty means one view.
@@ -272,6 +274,7 @@ namespace {
       buckets.push_back(SubmeshBucket {
         .scene_material_index = range.surface,
         .source_slot = range.source_slot,
+        .tangent_uv_set = range.tangent_uv_set,
         .material_key = material_key,
         .indices = {},
         .view_triangle_counts = {},
@@ -737,6 +740,7 @@ namespace {
     // face layout.
     vertex.normal = space::move::Up;
     vertex.texcoord = glm::vec2(0.0F, 0.0F);
+    vertex.texcoord1 = glm::vec2(0.0F, 0.0F);
     vertex.tangent = space::move::Right;
     vertex.bitangent = space::move::Forward;
     vertex.color = glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
@@ -755,6 +759,7 @@ namespace {
     const auto positions = mesh.streams.positions;
     const auto normals = mesh.streams.normals;
     const auto texcoords = mesh.streams.texcoords;
+    const auto texcoords1 = mesh.streams.texcoords1;
     const auto tangents = mesh.streams.tangents;
     const auto bitangents = mesh.streams.bitangents;
     const auto colors = mesh.streams.colors;
@@ -771,6 +776,7 @@ namespace {
 
     const bool has_normals = normals.size() == positions.size();
     const bool has_uvs = texcoords.size() == positions.size();
+    const bool has_uvs1 = texcoords1.size() == positions.size();
     const bool has_tangents = tangents.size() == positions.size();
     const bool has_bitangents = bitangents.size() == positions.size();
     const bool has_colors = colors.size() == positions.size();
@@ -865,6 +871,17 @@ namespace {
           if (std::isfinite(uv.x) && std::isfinite(uv.y)) {
             vertex.texcoord = uv;
           } else {
+            ++invalid_uv_corners;
+          }
+        }
+
+        vertex.texcoord1 = vertex.texcoord;
+        if (has_uvs1) {
+          const auto uv = oxygen::base::CheckedAt(texcoords1, source_index);
+          if (std::isfinite(uv.x) && std::isfinite(uv.y)) {
+            vertex.texcoord1 = uv;
+          } else {
+            vertex.texcoord1 = glm::vec2(0.0F, 0.0F);
             ++invalid_uv_corners;
           }
         }
@@ -1442,6 +1459,10 @@ namespace {
     lod.authored_attributes = internal::SimplifiedAttributes {
       .normals = final_has_normals && !lod.generation.normals,
       .texcoords = has_uvs,
+      .texcoords1 = std::ranges::any_of(corners,
+        [](const data::Vertex& corner) -> bool {
+          return corner.texcoord1 != corner.texcoord;
+        }),
       .colors = mesh.streams.colors.size() == mesh.streams.positions.size(),
     };
 

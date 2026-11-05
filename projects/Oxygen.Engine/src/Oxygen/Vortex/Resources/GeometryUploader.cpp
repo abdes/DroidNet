@@ -93,8 +93,9 @@ constexpr oxygen::vortex::upload::Priority kCriticalUploadPriority { 1 };
       return false;
     }
 
-    if (!std::isfinite(vertex.texcoord.x)
-      || !std::isfinite(vertex.texcoord.y)) {
+    if (!std::isfinite(vertex.texcoord.x) || !std::isfinite(vertex.texcoord.y)
+      || !std::isfinite(vertex.texcoord1.x)
+      || !std::isfinite(vertex.texcoord1.y)) {
       error_msg
         = "Vertex " + std::to_string(i) + " has invalid texture coordinates";
       return false;

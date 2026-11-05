@@ -53,7 +53,7 @@ struct ForwardLightingTerms {
 struct VSOutput {
   float4 position : SV_POSITION;
   float3 color : COLOR;
-  float2 uv : TEXCOORD0;
+  float4 uv : TEXCOORD0;
   float3 world_pos : TEXCOORD1;
   float3 world_normal : NORMAL;
   float3 world_tangent : TANGENT;

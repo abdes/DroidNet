@@ -46,6 +46,8 @@ struct MeshStreamView {
   std::span<const glm::vec3> positions;
   std::span<const glm::vec3> normals;
   std::span<const glm::vec2> texcoords;
+  //! UV set 1; empty repeats `texcoords`.
+  std::span<const glm::vec2> texcoords1;
   std::span<const glm::vec3> tangents;
   std::span<const glm::vec3> bitangents;
   std::span<const glm::vec4> colors;
@@ -59,6 +61,8 @@ struct TriangleRange {
   uint32_t source_slot = 0;
   uint32_t first_index = 0;
   uint32_t index_count = 0;
+  //! The UV set of the surface's normal texture, which its tangents follow.
+  uint8_t tangent_uv_set = 0;
 };
 
 //! Axis-aligned bounds for geometry.

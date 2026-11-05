@@ -70,10 +70,10 @@ Notes:
   textures, index `0` refers to the fallback texture (`kFallbackResourceIndex`).
   Use `assigned=false` to indicate a truly missing texture slot; `assigned=true`
   means the slot should be sampled (including placeholder or fallback).
-- A material has one UV transform and vertices have one UV set: the first assigned
-  texture's transform is written, and the others use it. glTF and FBX adapters warn
-  of what they drop, and descriptors warn `material.uv_dropped`. Issue #113 tracks
-  per-slot transforms and a second set.
+- A material has one UV transform and one UV set: the first assigned texture's
+  are written, and the others use them. glTF and FBX adapters warn of what they
+  drop, and descriptors warn `material.uv_dropped`. Issue #113 tracks per-slot
+  transforms and sets.
 - `shader_requests` is optional; when empty, the pipeline synthesizes default
   stage bindings for the resolved domain and flags.
 - `orm_policy` controls `kMaterialFlag_GltfOrmPacked`, the only thing that says a
@@ -290,8 +290,8 @@ Renderer convention:
 - `uv_rotation_radians` is counter-clockwise rotation in UV space.
 - Rotation is around the UV origin (0,0), not the center of the texture.
 - Transform order is: scale → rotation → offset.
-- `uv_set` selects the source UV set (0 = TEXCOORD0). Additional sets require
-  vertex payload support; the current renderer only provides uv0.
+- `uv_set` selects the source UV set: 0 is `Vertex::texcoord`, 1 is
+  `Vertex::texcoord1`, and any other reads as 0.
 
 ---
 

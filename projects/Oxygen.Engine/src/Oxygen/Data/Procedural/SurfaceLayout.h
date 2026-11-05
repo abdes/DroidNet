@@ -33,6 +33,14 @@ struct MeshBuffers final {
   std::vector<uint32_t> indices;
 };
 
+//! Gives vertices of one UV set the second set a mesh without one has.
+inline auto RepeatFirstUvSet(std::vector<Vertex>& vertices) -> void
+{
+  for (auto& vertex : vertices) {
+    vertex.texcoord1 = vertex.texcoord;
+  }
+}
+
 //! The most vertices a cooked or generated vertex buffer holds.
 inline constexpr uint64_t kMaxMeshVertices
   = uint64_t { pak::core::kDataBlobMaxSize } / sizeof(Vertex);

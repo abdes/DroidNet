@@ -28,7 +28,7 @@ cbuffer RootConstants : register(b2, space0)
 struct ShadowDepthVSOutput
 {
     float4 position : SV_POSITION;
-    float2 uv : TEXCOORD0;
+    float4 uv : TEXCOORD0;
 #if !defined(CUBE_SHADOW)
     float biased_depth : TEXCOORD1;
 #endif
@@ -79,7 +79,7 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
         BX_ResolveVertexIndex(metadata, vertex_id);
     const Vertex vertex =
         BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
-    output.uv = vertex.texcoord;
+    output.uv = float4(vertex.texcoord, vertex.texcoord1);
 
     float4x4 world_matrix;
     if (!BX_TryLoadInstanceWorldMatrix(

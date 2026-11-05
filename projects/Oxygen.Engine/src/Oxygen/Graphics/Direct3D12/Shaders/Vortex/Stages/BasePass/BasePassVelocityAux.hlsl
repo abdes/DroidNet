@@ -30,7 +30,7 @@ struct BasePassVelocityAuxVSOutput
     float4 base_previous_clip_position : TEXCOORD1;
     float4 mv_current_clip_position : TEXCOORD2;
     float4 mv_previous_clip_position : TEXCOORD3;
-    float2 uv : TEXCOORD4;
+    float4 uv : TEXCOORD4;
     nointerpolation uint draw_index : DRAW_INDEX;
 };
 
@@ -62,7 +62,7 @@ BasePassVelocityAuxVSOutput BasePassVelocityAuxVS(
         = BX_ResolveVertexIndex(metadata, vertex_id);
     const Vertex vertex
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
-    output.uv = vertex.texcoord;
+    output.uv = float4(vertex.texcoord, vertex.texcoord1);
 
     float4x4 world_matrix;
     if (!BX_TryLoadInstanceWorldMatrix(

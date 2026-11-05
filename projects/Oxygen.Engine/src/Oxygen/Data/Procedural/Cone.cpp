@@ -76,6 +76,7 @@ auto oxygen::data::MakeConeMeshAsset(
         })) {
     return std::nullopt;
   }
+  procedural::RepeatFirstUvSet(buffers.vertices);
   return std::make_pair(
     std::move(buffers.vertices), std::move(buffers.indices));
 }

@@ -15,7 +15,7 @@ struct BasePassMaterialTemplateInput
     float3 world_normal;
     float3 world_tangent;
     float3 world_bitangent;
-    float2 uv0;
+    float4 uvs;
     uint draw_index;
     uint is_front_face;
 };
@@ -24,7 +24,7 @@ static inline GBufferOutput EvaluateBasePassMaterialOutput(
     BasePassMaterialTemplateInput input)
 {
     return EvaluateGBufferMaterialOutput(input.world_pos, input.world_normal,
-        input.world_tangent, input.world_bitangent, input.uv0,
+        input.world_tangent, input.world_bitangent, input.uvs,
         input.draw_index, input.is_front_face != 0u);
 }
 

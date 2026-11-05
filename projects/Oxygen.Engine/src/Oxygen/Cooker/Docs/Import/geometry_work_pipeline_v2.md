@@ -414,7 +414,7 @@ draws nothing. So the build repairs what it can and warns:
 | ----------------------------------------- | -------------------------------------------- | ------------------------ |
 | Position that is not finite               | Drops the triangles using it                 | `mesh.invalid_positions` |
 | Authored normal zero or not finite        | Takes the generated normal, that corner only | `mesh.invalid_normals`   |
-| UV that is not finite                     | Zeroes it                                    | `mesh.invalid_uvs`       |
+| UV of either set that is not finite       | Zeroes it                                    | `mesh.invalid_uvs`       |
 | Surface left with no triangle, in any LOD | Drops the submesh; its surface ID is kept    | `mesh.surface_empty`     |
 
 ### Mesh Types
@@ -565,7 +565,7 @@ coverage.
     for triangle-list primitives and emit a warning diagnostic.
 - **Attributes**
   - Required: `POSITION`.
-  - Optional: `NORMAL`, `TEXCOORD_0`, `COLOR_0`.
+  - Optional: `NORMAL`, `TEXCOORD_0`, `TEXCOORD_1`, `COLOR_0`.
   - `TANGENT` is `vec4`; glTF's bitangent, `cross(normal, tangent.xyz) *
 tangent.w`, points up the image, so the engine's is its negation.
 - **Skinning**

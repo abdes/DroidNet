@@ -23,6 +23,8 @@ namespace oxygen::content::import::internal {
 struct SimplifiedAttributes final {
   bool normals = false;
   bool texcoords = false;
+  //! UV set 1, when it is not a repeat of set 0.
+  bool texcoords1 = false;
   bool colors = false;
 };
 

@@ -77,10 +77,8 @@ namespace {
     }
   };
 
-  //! A mesh keeps one UV set. A primitive with two, whose material's occlusion
-  //! map reads the second, reports both losses: the dropped set, and the
-  //! material's textures reading different sets.
-  NOLINT_TEST_F(GltfImportFidelityTest, DroppedUvSetIsReported)
+  //! A mesh keeps two UV sets: a primitive with two loses neither.
+  NOLINT_TEST_F(GltfImportFidelityTest, SecondUvSetIsKept)
   {
     const auto fixture
       = oxygen::cooker::test::ModelPath("static_textured_triangle.gltf");
@@ -95,11 +93,53 @@ namespace {
 
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+    EXPECT_FALSE(
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetsDropped))
+      << DiagnosticSummary(report->diagnostics);
+    EXPECT_FALSE(
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetConflict))
+      << DiagnosticSummary(report->diagnostics);
+    EXPECT_FALSE(
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetMissing))
+      << DiagnosticSummary(report->diagnostics);
+  }
+
+  //! A set past the two a mesh keeps is reported as lost.
+  NOLINT_TEST_F(GltfImportFidelityTest, ThirdUvSetIsReported)
+  {
+    const auto fixture
+      = oxygen::cooker::test::ModelPath("static_textured_triangle.gltf");
+    auto document = json::parse(ReadText(fixture));
+    auto& primitive = document["meshes"].at(0)["primitives"].at(0);
+    primitive["attributes"]["TEXCOORD_1"]
+      = primitive["attributes"]["TEXCOORD_0"];
+    primitive["attributes"]["TEXCOORD_2"]
+      = primitive["attributes"]["TEXCOORD_0"];
+
+    const auto report = Cook(document, "three_uv_sets.gltf");
+
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
     EXPECT_TRUE(
       HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetsDropped))
       << DiagnosticSummary(report->diagnostics);
+  }
+
+  //! A texture of a set the primitive lacks reads its first, and says so.
+  NOLINT_TEST_F(GltfImportFidelityTest, MissingUvSetIsReported)
+  {
+    const auto fixture
+      = oxygen::cooker::test::ModelPath("static_textured_triangle.gltf");
+    auto document = json::parse(ReadText(fixture));
+    document["materials"].at(0)["occlusionTexture"]
+      = { { "index", 0 }, { "texCoord", 1 } };
+
+    const auto report = Cook(document, "missing_uv_set.gltf");
+
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
     EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetConflict))
+      HasDiagnosticCode(report->diagnostics, import_codes::kMeshUvSetMissing))
       << DiagnosticSummary(report->diagnostics);
   }
 

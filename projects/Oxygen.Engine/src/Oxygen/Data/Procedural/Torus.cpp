@@ -124,5 +124,6 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
     }
   }
 
+  procedural::RepeatFirstUvSet(vertices);
   return { { std::move(vertices), std::move(indices) } };
 }

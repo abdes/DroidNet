@@ -207,6 +207,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 0, 1 },
   });
   vertices.push_back(Vertex {
     .position = { -1, 1, 0 },
@@ -215,6 +216,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 0, 0 },
   });
   vertices.push_back(Vertex {
     .position = { 1, -1, 0 },
@@ -223,6 +225,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 1, 1 },
   });
   vertices.push_back(Vertex {
     .position = { 1, 1, 0 },
@@ -231,6 +234,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 1, 0 },
   });
   // Keep triangle winding consistent with the authored +Z normals. The
   // previous ordering faced -Z, which made the double-sided shading path treat
@@ -299,6 +303,7 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 0, 1 },
   });
   vertices.push_back(Vertex {
     .position = { -1, 1, 0 },
@@ -307,6 +312,7 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 0, 0 },
   });
   vertices.push_back(Vertex {
     .position = { 1, -1, 0 },
@@ -315,6 +321,7 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 1, 1 },
   });
   vertices.push_back(Vertex {
     .position = { 1, 1, 0 },
@@ -323,6 +330,7 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
+    .texcoord1 = { 1, 0 },
   });
 
   std::vector<uint32_t> indices { 0, 2, 1, 2, 3, 1 };

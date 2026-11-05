@@ -512,8 +512,8 @@ class CapturedInputBatchCliTests(unittest.TestCase):
 
     def test_geometry_and_scene_resolve_cooked_references_outside_capture_map(self):
         self.capture("material.json", '{"name":"Stone"}')
-        # A data::Vertex is 18 floats: its position, then its other attributes.
-        vertex_floats = 18
+        # A data::Vertex is 20 floats: its position, then its other attributes.
+        vertex_floats = 20
         vertices = b"".join(
             struct.pack(f"<{vertex_floats}f", *position, *([0] * (vertex_floats - 3)))
             for position in ((0, 0, 0), (1, 0, 0), (0, 1, 0))

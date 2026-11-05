@@ -108,5 +108,6 @@ auto oxygen::data::MakePlaneMeshAsset(
     }
   }
 
+  procedural::RepeatFirstUvSet(vertices);
   return { { std::move(vertices), std::move(indices) } };
 }

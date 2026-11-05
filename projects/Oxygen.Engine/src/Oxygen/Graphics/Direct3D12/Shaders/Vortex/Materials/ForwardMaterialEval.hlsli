@@ -123,7 +123,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
     float3 world_normal,
     float3 world_tangent,
     float3 world_bitangent,
-    float2 uv0,
+    float4 uvs,
     bool   has_material,
     DrawMaterial draw_material,
     uint   procedural_grid_material_constants_slot,
@@ -165,7 +165,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
 
         // UV convention (see ApplyMaterialUv in Vortex/Contracts/Draw/MaterialShadingConstants.hlsli):
         // scale -> rotation (radians, CCW around origin) -> offset.
-        const float2 uv = ApplyMaterialUv(uv0, mat);
+        const float2 uv = ApplyMaterialUv(uvs, mat);
 
         const bool no_texture_sampling =
             (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
@@ -328,7 +328,7 @@ MaterialSurface EvaluateMaterialSurface(
     float3 world_normal,
     float3 world_tangent,
     float3 world_bitangent,
-    float2 uv0,
+    float4 uvs,
     uint   draw_index,
     bool   is_front_face)
 {
@@ -344,7 +344,7 @@ MaterialSurface EvaluateMaterialSurface(
         discard;
     }
     return EvaluateMaterialSurfaceForMaterial(world_pos, world_normal,
-        world_tangent, world_bitangent, uv0, has_material, draw_material,
+        world_tangent, world_bitangent, uvs, has_material, draw_material,
         draw_bindings.procedural_grid_material_constants_slot, is_front_face);
 }
 

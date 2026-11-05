@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/epsilon.hpp>
 
@@ -21,15 +23,20 @@ namespace oxygen::data {
  and -0 are equal and a NaN component equals nothing. AlmostEqual compares
  with a tolerance.
 
- @see Mesh, MeshView
+ A vertex holds two UV sets, which is what a material's texture can choose from.
+ A mesh without a second set repeats its first in `texcoord1`, so a texture that
+ reads the second set then samples the first.
+
+ @see Mesh, MeshView, TexcoordOf
 */
 struct Vertex {
   glm::vec3 position; //!< Object-space position
   glm::vec3 normal; //!< Object-space normal
-  glm::vec2 texcoord; //!< Texture coordinates (UV)
+  glm::vec2 texcoord; //!< Texture coordinates (UV), set 0
   glm::vec3 tangent; //!< Tangent vector (optional, for normal mapping)
   glm::vec3 bitangent; //!< Bitangent vector (optional, for normal mapping)
   glm::vec4 color; //!< Vertex color (optional, for per-vertex tinting)
+  glm::vec2 texcoord1; //!< Texture coordinates (UV), set 1
   // Skinning is not part of the vertex: a skinned mesh carries its joint
   // indices and weights in streams of their own (pak::geometry::
   // SkinnedMeshInfo). Morph targets have no stream yet; theirs take a new
@@ -37,6 +44,17 @@ struct Vertex {
 
   [[nodiscard]] auto operator==(const Vertex&) const -> bool = default;
 };
+
+//! The UV sets a vertex holds.
+inline constexpr uint8_t kUvSetCount = 2;
+
+//! The coordinates of UV set `uv_set`; a set the vertex does not hold reads as
+//! the first.
+[[nodiscard]] constexpr auto TexcoordOf(
+  const Vertex& vertex, const uint8_t uv_set) noexcept -> const glm::vec2&
+{
+  return uv_set == 1U ? vertex.texcoord1 : vertex.texcoord;
+}
 
 //! Default tolerance of AlmostEqual.
 /*!
@@ -68,7 +86,8 @@ inline auto AlmostEqual(const Vertex& lhs, const Vertex& rhs,
     && glm::all(glm::epsilonEqual(lhs.texcoord, rhs.texcoord, epsilon))
     && glm::all(glm::epsilonEqual(lhs.tangent, rhs.tangent, epsilon))
     && glm::all(glm::epsilonEqual(lhs.bitangent, rhs.bitangent, epsilon))
-    && glm::all(glm::epsilonEqual(lhs.color, rhs.color, epsilon));
+    && glm::all(glm::epsilonEqual(lhs.color, rhs.color, epsilon))
+    && glm::all(glm::epsilonEqual(lhs.texcoord1, rhs.texcoord1, epsilon));
 }
 
 } // namespace oxygen::data

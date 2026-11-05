@@ -19,6 +19,7 @@ struct Vertex {
     float3 tangent;
     float3 bitangent;
     float4 color;
+    float2 texcoord1;
 };
 
 #endif // OXYGEN_RENDERER_VERTEX_HLSLI

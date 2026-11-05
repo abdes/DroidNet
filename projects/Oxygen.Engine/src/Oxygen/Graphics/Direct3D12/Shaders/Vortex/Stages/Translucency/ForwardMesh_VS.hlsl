@@ -37,7 +37,7 @@ cbuffer RootConstants : register(b2, space0)
 struct VSOutput {
     float4 position : SV_POSITION;
     float3 color : COLOR;
-    float2 uv : TEXCOORD0;
+    float4 uv : TEXCOORD0;
     float3 world_pos : TEXCOORD1;
     float3 world_normal : NORMAL;
     float3 world_tangent : TANGENT;
@@ -112,7 +112,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
     precise float4 proj_pos = mul(projection_matrix, mul(view_matrix, world_pos));
     output.position = proj_pos;
     output.color = vertex.color.rgb;
-    output.uv = vertex.texcoord;
+    output.uv = float4(vertex.texcoord, vertex.texcoord1);
     output.world_pos = world_pos.xyz;
     output.world_normal = NN;
     output.world_tangent = T;

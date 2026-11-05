@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
 #include <limits>
 
 #include <Oxygen/Data/Vertex.h>
@@ -14,6 +15,7 @@ namespace {
 
 using oxygen::data::AlmostEqual;
 using oxygen::data::kVertexEpsilon;
+using oxygen::data::TexcoordOf;
 using oxygen::data::Vertex;
 
 constexpr Vertex kBase {
@@ -24,6 +26,34 @@ constexpr Vertex kBase {
   .bitangent = { 0.0F, 0.0F, 1.0F },
   .color = { 0.9F, 0.8F, 0.7F, 1.0F },
 };
+
+//! The layout the shaders' `Vertex` and every cooked vertex buffer share.
+NOLINT_TEST(VertexTest, LayoutMatchesTheShaders)
+{
+  EXPECT_EQ(sizeof(Vertex), 80U);
+  EXPECT_EQ(offsetof(Vertex, texcoord), 24U);
+  EXPECT_EQ(offsetof(Vertex, color), 56U);
+  EXPECT_EQ(offsetof(Vertex, texcoord1), 72U);
+}
+
+NOLINT_TEST(VertexTest, UvSetsAreReadByNumber)
+{
+  auto vertex = kBase;
+  vertex.texcoord1 = { 0.75F, 0.125F };
+
+  EXPECT_EQ(TexcoordOf(vertex, 0U), vertex.texcoord);
+  EXPECT_EQ(TexcoordOf(vertex, 1U), vertex.texcoord1);
+  EXPECT_EQ(TexcoordOf(vertex, 2U), vertex.texcoord);
+}
+
+//! A second set counts when comparing with a tolerance too.
+NOLINT_TEST(VertexTest, AlmostEqualComparesTheSecondUvSet)
+{
+  auto next = kBase;
+  next.texcoord1.y += 1.0F;
+
+  EXPECT_FALSE(AlmostEqual(kBase, next));
+}
 
 NOLINT_TEST(VertexTest, EqualityIsExact)
 {
@@ -46,6 +76,7 @@ NOLINT_TEST(VertexTest, EveryComponentTakesPartInEquality)
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.position.z += 1.0F; }));
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.normal.y -= 1.0F; }));
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.texcoord.y += 1.0F; }));
+  EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.texcoord1.x += 1.0F; }));
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.tangent.x -= 1.0F; }));
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.bitangent.z -= 1.0F; }));
   EXPECT_NE(kBase, changed([](Vertex& v) -> void { v.color.a -= 1.0F; }));
