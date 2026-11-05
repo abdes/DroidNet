@@ -27,12 +27,22 @@
       "depends_on": ["/Showcase/Scenes/Instancing/MatInstanced.omat"]
     },
     {
+      "id": "/Showcase/Scenes/Instancing/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/Instancing/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/Instancing/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/Instancing/InstancingTestScene.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/Instancing/InstancingTestScene.scene.json",
       "virtual_path": "/Showcase/Scenes/Instancing/InstancingTestScene.oscene",
       "name": "InstancingTestScene",
-      "depends_on": ["/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo"]
+      "depends_on": [
+        "/Showcase/Scenes/Instancing/GeoInstancedCube.ogeo",
+        "/Showcase/Scenes/Instancing/Ground.omat"
+      ]
     }
   ]
 }

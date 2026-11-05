@@ -42,6 +42,13 @@
       "depends_on": ["/Showcase/Materials/cube_red.omat"]
     },
     {
+      "id": "/Showcase/Scenes/PointShadowValidation/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/PointShadowValidation/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/PointShadowValidation/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/PointShadowValidation/PointShadowValidation.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/PointShadowValidation/PointShadowValidation.scene.json",
@@ -49,7 +56,8 @@
       "name": "PointShadowValidation",
       "depends_on": [
         "/Showcase/Geometry/floor.ogeo",
-        "/Showcase/Geometry/cube.ogeo"
+        "/Showcase/Geometry/cube.ogeo",
+        "/Showcase/Scenes/PointShadowValidation/Ground.omat"
       ]
     }
   ]

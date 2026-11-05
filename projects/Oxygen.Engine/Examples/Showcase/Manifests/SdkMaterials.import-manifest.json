@@ -110,6 +110,13 @@
       "depends_on": ["/Showcase/Scenes/SdkMaterials/SdkWood.omat"]
     },
     {
+      "id": "/Showcase/Scenes/SdkMaterials/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/SdkMaterials/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/SdkMaterials/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/SdkMaterials/SdkMaterials.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/SdkMaterials/SdkMaterials.scene.json",
@@ -119,7 +126,8 @@
         "/Showcase/Scenes/SdkMaterials/SdkCube.ogeo",
         "/Showcase/Scenes/SdkMaterials/SdkCubeB.ogeo",
         "/Showcase/Scenes/SdkMaterials/SdkCubeC.ogeo",
-        "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo"
+        "/Showcase/Scenes/SdkMaterials/SdkCubeD.ogeo",
+        "/Showcase/Scenes/SdkMaterials/Ground.omat"
       ]
     }
   ]

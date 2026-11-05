@@ -121,7 +121,7 @@ function script.on_gameplay(self, dt_seconds)
   local color_b = lerp(0.55, warm_b, day01)
   local color_rgb = omath.vec3(color_r, color_g, color_b)
 
-  local lux = lerp(0.001, 120000.0, sun_above_horizon * sun_above_horizon)
+  local lux = lerp(0.001, 25000.0, sun_above_horizon * sun_above_horizon)
 
   local sun_node = find_sun_node()
   if valid(sun_node) then

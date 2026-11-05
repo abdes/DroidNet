@@ -35,6 +35,13 @@
       "script_storage": "external"
     },
     {
+      "id": "/Showcase/Scenes/ProcCubes/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ProcCubes/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/ProcCubes/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/ProcCubes/SceneProcCubes.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/ProcCubes/SceneProcCubes.scene.json",
@@ -43,7 +50,8 @@
       "depends_on": [
         "/Showcase/Scenes/ProcCubes/ProcCubeBaseMat.omat",
         "/Showcase/Scenes/ProcCubes/ProcCubeAccentMat.omat",
-        "/Showcase/Scenes/ProcCubes/proc_cubes.oscript"
+        "/Showcase/Scenes/ProcCubes/proc_cubes.oscript",
+        "/Showcase/Scenes/ProcCubes/Ground.omat"
       ]
     },
     {

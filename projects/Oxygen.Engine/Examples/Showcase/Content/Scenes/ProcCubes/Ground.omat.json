@@ -1,0 +1,10 @@
+{
+  "name": "Ground",
+  "domain": "opaque",
+  "alpha_mode": "opaque",
+  "parameters": {
+    "base_color": [0.3, 0.27, 0.23, 1.0],
+    "roughness": 0.92,
+    "metalness": 0.0
+  }
+}

@@ -58,6 +58,13 @@
       "name": "KcFloor"
     },
     {
+      "id": "/Showcase/Scenes/KenneyCharacters/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/KenneyCharacters/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/KenneyCharacters/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/KenneyCharacters/KenneyCharacters.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/KenneyCharacters/KenneyCharacters.scene.json",
@@ -67,7 +74,8 @@
         "/Showcase/Models/KenneyAnimatedCharacters/Model/characterMedium.fbx",
         "/Showcase/Scenes/KenneyCharacters/SkinSurvivor.omat",
         "/Showcase/Scenes/KenneyCharacters/SkinZombie.omat",
-        "/Showcase/Scenes/KenneyCharacters/KcFloor.omat"
+        "/Showcase/Scenes/KenneyCharacters/KcFloor.omat",
+        "/Showcase/Scenes/KenneyCharacters/Ground.omat"
       ]
     }
   ]

@@ -60,6 +60,13 @@
       ]
     },
     {
+      "id": "/Showcase/Scenes/CompressedTextures/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/CompressedTextures/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/CompressedTextures/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/CompressedTextures/CompressedTextures.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/CompressedTextures/CompressedTextures.scene.json",
@@ -69,7 +76,8 @@
         "/Showcase/Models/ChronographWatch-ktx2/ChronographWatch.gltf",
         "/Showcase/Models/ChronographWatch-webp/ChronographWatch.gltf",
         "/Showcase/Models/AnisotropyBarnLamp-ktx2/AnisotropyBarnLamp.gltf",
-        "/Showcase/Scenes/CompressedTextures/Rock030.omat"
+        "/Showcase/Scenes/CompressedTextures/Rock030.omat",
+        "/Showcase/Scenes/CompressedTextures/Ground.omat"
       ]
     }
   ]

@@ -208,6 +208,21 @@
         "translation": [6.0, -60.0, 1.0],
         "scale": [1.5, 1.5, 1.5]
       }
+    },
+    {
+      "id": "ac247481-b65a-5795-b663-715baba90345",
+      "name": "Ground",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "off",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, -0.02],
+        "scale": [2000.0, 2000.0, 1.0]
+      }
     }
   ],
   "renderables": [
@@ -302,6 +317,22 @@
     {
       "node": 21,
       "geometry_ref": "../../Models/LodNamedSiblings.gltf/Sphere.ogeo"
+    },
+    {
+      "node": 22,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "Ground.omat"
+            }
+          }
+        ]
+      }
     }
   ],
   "cameras": {
@@ -381,6 +412,13 @@
       "lower_hemisphere_color": [0.03, 0.03, 0.03],
       "volumetric_scattering_intensity": 1.5,
       "affect_reflections": true
+    },
+    "post_process_volume": {
+      "enabled": true,
+      "exposure_enabled": true,
+      "exposure_mode": 2,
+      "auto_exposure_speed_up": 10.0,
+      "auto_exposure_speed_down": 10.0
     }
   },
   "references": {
@@ -396,7 +434,8 @@
       "../../Models/LodStacked.gltf/mat1.omat",
       "../../Models/LodStacked.gltf/mat2.omat",
       "../../Models/LodNamedSiblings.gltf/mat1.omat",
-      "../../Models/LodNamedSiblings.gltf/mat2.omat"
+      "../../Models/LodNamedSiblings.gltf/mat2.omat",
+      "Ground.omat"
     ],
     "scripts": ["model_lods.oscript"]
   }

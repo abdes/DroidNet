@@ -73,6 +73,13 @@
       "name": "MatCubeD"
     },
     {
+      "id": "/Showcase/Scenes/EngineAssets/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/EngineAssets/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/EngineAssets/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/EngineAssets/EngineAssets.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/EngineAssets/EngineAssets.scene.json",
@@ -83,7 +90,8 @@
         "/Showcase/Scenes/EngineAssets/MatCube.omat",
         "/Showcase/Scenes/EngineAssets/MatCubeB.omat",
         "/Showcase/Scenes/EngineAssets/MatCubeC.omat",
-        "/Showcase/Scenes/EngineAssets/MatCubeD.omat"
+        "/Showcase/Scenes/EngineAssets/MatCubeD.omat",
+        "/Showcase/Scenes/EngineAssets/Ground.omat"
       ]
     }
   ]

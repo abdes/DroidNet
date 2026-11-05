@@ -110,6 +110,13 @@
       "depends_on": ["/Showcase/Scenes/Emissive/MatReference.omat"]
     },
     {
+      "id": "/Showcase/Scenes/Emissive/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/Emissive/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/Emissive/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/Emissive/EmissiveScene.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/Emissive/EmissiveScene.scene.json",
@@ -121,7 +128,8 @@
         "/Showcase/Scenes/Emissive/GeoEmissiveBlue.ogeo",
         "/Showcase/Scenes/Emissive/GeoEmissiveTextured.ogeo",
         "/Showcase/Scenes/Emissive/GeoEmissiveMasked.ogeo",
-        "/Showcase/Scenes/Emissive/GeoReference.ogeo"
+        "/Showcase/Scenes/Emissive/GeoReference.ogeo",
+        "/Showcase/Scenes/Emissive/Ground.omat"
       ]
     }
   ]

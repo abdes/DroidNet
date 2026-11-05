@@ -18,6 +18,9 @@
         "visible": "shown",
         "casts_shadows": "on",
         "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, 1.0]
       }
     },
     {
@@ -40,8 +43,11 @@
       "name": "MainCamera",
       "parent": 0,
       "transform": {
-        "translation": [0.0, -10.0, 0.0],
-        "rotation": [0.0, 0.0, 1.0, 0.0],
+        "translation": [0.0, -10.0, 2.5],
+        "rotation": [
+          7.462345065765172e-18, 0.12186934340514748, 0.992546151641322,
+          6.077592338067842e-17
+        ],
         "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
@@ -56,7 +62,10 @@
       "parent": 0,
       "transform": {
         "translation": [0.0, 5.0, 8.0],
-        "rotation": [0.5, 0.0, 0.0, 0.8660254],
+        "rotation": [
+          0.1391121249605866, -0.3822074221015613, -0.8584519252992376,
+          0.3124509483574361
+        ],
         "scale": [1.0, 1.0, 1.0]
       },
       "flags": {
@@ -79,6 +88,21 @@
         "casts_shadows": "on",
         "receives_shadows": "on"
       }
+    },
+    {
+      "id": "20303e6b-8c8f-599c-bc4a-e72b92ba64f8",
+      "name": "Ground",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "static": true,
+        "casts_shadows": "off",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.0, 0.0, -1.02],
+        "scale": [2000.0, 2000.0, 1.0]
+      }
     }
   ],
   "cameras": {
@@ -89,7 +113,7 @@
         "aspect_ratio": 1.777778,
         "aspect_mode": "fixed",
         "near_plane": 0.1,
-        "far_plane": 100.0
+        "far_plane": 2000.0
       }
     ]
   },
@@ -99,7 +123,7 @@
         "node": 3,
         "common": {
           "affects_world": true,
-          "color_rgb": [1.0, 0.98, 0.92],
+          "color_rgb": [1.0, 0.9, 0.78],
           "casts_shadows": true,
           "shadow": {
             "bias": 0.03
@@ -107,12 +131,16 @@
         },
         "angular_size_radians": 0.00935,
         "atmosphere_light_slot": 1,
-        "intensity_lux": 120000.0
+        "intensity_lux": 25000.0
       }
     ]
   },
   "references": {
-    "materials": ["ScriptedCubeMat.omat", "CompanionOrbMat.omat"],
+    "materials": [
+      "ScriptedCubeMat.omat",
+      "CompanionOrbMat.omat",
+      "Ground.omat"
+    ],
     "scripts": ["orbit-shapes.oscript", "day-night.oscript"],
     "input_actions": [
       "multi_script_scene.input/CycleShapeAction.oiact",
@@ -126,5 +154,69 @@
     "input_mapping_contexts": [
       "multi_script_scene.input/RotateRuntimeInputContext.oimap"
     ]
-  }
+  },
+  "environment": {
+    "sky_atmosphere": {
+      "enabled": true,
+      "planet_radius_m": 6360000.0,
+      "atmosphere_height_m": 100000.0,
+      "ground_albedo_rgb": [0.16, 0.15, 0.14],
+      "rayleigh_scattering_rgb": [5.802e-6, 1.3558e-5, 3.31e-5],
+      "rayleigh_scale_height_m": 8000.0,
+      "mie_scattering_rgb": [3.996e-6, 3.996e-6, 3.996e-6],
+      "mie_absorption_rgb": [4.405e-7, 4.405e-7, 4.405e-7],
+      "mie_scale_height_m": 1200.0,
+      "mie_anisotropy": 0.8,
+      "ozone_absorption_rgb": [6.5e-7, 1.881e-6, 8.5e-8],
+      "ozone_density_profile": [10000.0, 25000.0, 40000.0],
+      "multi_scattering_factor": 1.0,
+      "sky_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "sky_and_aerial_perspective_luminance_factor_rgb": [1.0, 1.0, 1.0],
+      "aerial_perspective_distance_scale": 1.0,
+      "aerial_scattering_strength": 1.0,
+      "aerial_perspective_start_depth_m": 40.0,
+      "height_fog_contribution": 1.0,
+      "trace_sample_count_scale": 1.0,
+      "transmittance_min_light_elevation_deg": -90.0,
+      "sun_disk_enabled": true,
+      "holdout": false,
+      "render_in_main_pass": true
+    },
+    "sky_light": {
+      "enabled": true,
+      "source": 0,
+      "intensity": 1.0,
+      "tint_rgb": [0.95, 0.96, 1.0],
+      "diffuse_intensity": 1.0,
+      "specular_intensity": 0.5,
+      "lower_hemisphere_color": [0.03, 0.03, 0.03],
+      "volumetric_scattering_intensity": 1.5,
+      "affect_reflections": true
+    },
+    "post_process_volume": {
+      "enabled": true,
+      "exposure_enabled": true,
+      "exposure_mode": 2,
+      "auto_exposure_speed_up": 10.0,
+      "auto_exposure_speed_down": 10.0
+    }
+  },
+  "renderables": [
+    {
+      "node": 5,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "overrides": {
+        "parts": [
+          {
+            "kind": "surface",
+            "id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+            "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6",
+            "values": {
+              "/material": "Ground.omat"
+            }
+          }
+        ]
+      }
+    }
+  ]
 }

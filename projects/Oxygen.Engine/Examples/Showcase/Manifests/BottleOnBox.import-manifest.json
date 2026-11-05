@@ -115,6 +115,13 @@
       ]
     },
     {
+      "id": "/Showcase/Scenes/BottleOnBox/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/BottleOnBox/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/BottleOnBox/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/BottleOnBox/BottleOnBox.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/BottleOnBox/BottleOnBox.scene.json",
@@ -124,7 +131,8 @@
         "/Showcase/Geometry/floor.ogeo",
         "/Showcase/Geometry/cube.ogeo",
         "/Showcase/Geometry/sphere.ogeo",
-        "/Showcase/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo"
+        "/Showcase/Scenes/BottleOnBox/waterbottle_waterbottle_p0_geo.ogeo",
+        "/Showcase/Scenes/BottleOnBox/Ground.omat"
       ]
     },
     {

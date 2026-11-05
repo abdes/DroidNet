@@ -27,12 +27,22 @@
       "depends_on": ["/Showcase/Materials/cube_red.omat"]
     },
     {
+      "id": "/Showcase/Scenes/VsmTwoCubes/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/VsmTwoCubes/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/VsmTwoCubes/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.scene.json",
       "virtual_path": "/Showcase/Scenes/VsmTwoCubes/VsmTwoCubes.oscene",
       "name": "VsmTwoCubes",
-      "depends_on": ["/Showcase/Geometry/cube.ogeo"]
+      "depends_on": [
+        "/Showcase/Geometry/cube.ogeo",
+        "/Showcase/Scenes/VsmTwoCubes/Ground.omat"
+      ]
     }
   ]
 }

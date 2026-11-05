@@ -30,7 +30,10 @@
       "name": "Sun",
       "parent": 0,
       "transform": {
-        "rotation": [0.3535534, -0.1464466, 0.3535534, 0.8535534]
+        "rotation": [
+          0.38220742210156133, 0.13911212496058656, 0.312450948357436,
+          0.8584519252992378
+        ]
       }
     }
   ],
@@ -59,7 +62,7 @@
           }
         },
         "angular_size_radians": 0.00935,
-        "intensity_lux": 120000.0
+        "intensity_lux": 25000.0
       }
     ]
   },
@@ -68,7 +71,8 @@
       "enabled": true,
       "source": 0,
       "cubemap_ref": "Sky.otex",
-      "intensity": 1.0
+      "intensity": 1.0,
+      "illuminance_lux": 12000.0
     },
     "sky_light": {
       "enabled": true,
@@ -80,7 +84,15 @@
       "specular_intensity": 1.0,
       "lower_hemisphere_color": [0.0, 0.0, 0.0],
       "volumetric_scattering_intensity": 1.0,
-      "affect_reflections": true
+      "affect_reflections": true,
+      "illuminance_lux": 12000.0
+    },
+    "post_process_volume": {
+      "enabled": true,
+      "exposure_enabled": true,
+      "exposure_mode": 2,
+      "auto_exposure_speed_up": 10.0,
+      "auto_exposure_speed_down": 10.0
     }
   }
 }

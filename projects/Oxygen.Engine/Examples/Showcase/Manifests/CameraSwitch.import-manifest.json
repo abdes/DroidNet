@@ -42,6 +42,13 @@
       "virtual_path": "/Showcase/Scenes/CameraSwitch/camera_switch.input"
     },
     {
+      "id": "/Showcase/Scenes/CameraSwitch/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/CameraSwitch/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/CameraSwitch/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/CameraSwitch/CameraSwitch.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/CameraSwitch/CameraSwitch.scene.json",
@@ -49,7 +56,8 @@
       "name": "camera_switch",
       "depends_on": [
         "/Showcase/Scenes/CameraSwitch/CameraSwitchCube.ogeo",
-        "/Showcase/Scenes/CameraSwitch/camera_switch.input"
+        "/Showcase/Scenes/CameraSwitch/camera_switch.input",
+        "/Showcase/Scenes/CameraSwitch/Ground.omat"
       ]
     },
     {

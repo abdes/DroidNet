@@ -37,6 +37,13 @@
       "virtual_path": "/Showcase/Scenes/RotatingGltf/rotate.input"
     },
     {
+      "id": "/Showcase/Scenes/RotatingGltf/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/RotatingGltf/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/RotatingGltf/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/RotatingGltf/RotatingGltf.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/RotatingGltf/RotatingGltf.scene.json",
@@ -45,7 +52,8 @@
       "depends_on": [
         "/Showcase/Models/backpack.glb",
         "/Showcase/Models/chest.glb",
-        "/Showcase/Scenes/RotatingGltf/rotate.input"
+        "/Showcase/Scenes/RotatingGltf/rotate.input",
+        "/Showcase/Scenes/RotatingGltf/Ground.omat"
       ]
     },
     {

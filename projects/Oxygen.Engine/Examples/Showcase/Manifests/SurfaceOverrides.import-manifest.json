@@ -135,6 +135,13 @@
       "virtual_path": "/Showcase/Scenes/SurfaceOverrides/surface_overrides.input"
     },
     {
+      "id": "/Showcase/Scenes/SurfaceOverrides/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/SurfaceOverrides/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/SurfaceOverrides/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/SurfaceOverrides/SurfaceOverrides.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/SurfaceOverrides/SurfaceOverrides.scene.json",
@@ -157,7 +164,8 @@
         "/Showcase/Scenes/SurfaceOverrides/SoGhost.ogeo",
         "/Showcase/Scenes/SurfaceOverrides/SoLodChain.ogeo",
         "/Showcase/Scenes/SurfaceOverrides/surface_overrides.oscript",
-        "/Showcase/Scenes/SurfaceOverrides/surface_overrides.input"
+        "/Showcase/Scenes/SurfaceOverrides/surface_overrides.input",
+        "/Showcase/Scenes/SurfaceOverrides/Ground.omat"
       ]
     },
     {

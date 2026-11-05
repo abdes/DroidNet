@@ -83,6 +83,13 @@
       "script_storage": "external"
     },
     {
+      "id": "/Showcase/Scenes/ModelLods/Ground.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/ModelLods/Ground.omat.json",
+      "virtual_path": "/Showcase/Scenes/ModelLods/Ground.omat",
+      "name": "Ground"
+    },
+    {
       "id": "/Showcase/Scenes/ModelLods/ModelLods.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/ModelLods/ModelLods.scene.json",
@@ -99,7 +106,8 @@
         "/Showcase/Scenes/ModelLods/MlLod1Green.omat",
         "/Showcase/Scenes/ModelLods/MlLod2Yellow.omat",
         "/Showcase/Scenes/ModelLods/MlLod3Red.omat",
-        "/Showcase/Scenes/ModelLods/model_lods.oscript"
+        "/Showcase/Scenes/ModelLods/model_lods.oscript",
+        "/Showcase/Scenes/ModelLods/Ground.omat"
       ]
     },
     {
