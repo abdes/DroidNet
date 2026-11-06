@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO.Abstractions;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Textures;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
@@ -45,15 +46,16 @@ public sealed class Texture
     /// <summary>Reads a texture from its descriptor file.</summary>
     /// <param name="fileSystem">The file system that holds the descriptor.</param>
     /// <param name="descriptorPath">The texture descriptor file.</param>
+    /// <param name="identity">The texture's identity.</param>
     /// <returns>The texture, or <see langword="null"/> when the descriptor cannot be read or is not a valid texture
     /// descriptor.</returns>
-    public static Texture? TryRead(IFileSystem fileSystem, FileSystemPath descriptorPath)
+    public static Texture? TryRead(IFileSystem fileSystem, FileSystemPath descriptorPath, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(descriptorPath);
         try
         {
-            return new Texture(TextureSourceReader.Read(fileSystem.File.ReadAllBytes(descriptorPath.FullPath)));
+            return new Texture(TextureSourceReader.Read(fileSystem.File.ReadAllBytes(descriptorPath.FullPath), identity));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or AssetFormatException)
         {
@@ -62,15 +64,15 @@ public sealed class Texture
     }
 
     /// <summary>Gets a value indicating whether every image the texture reads exists.</summary>
-    /// <param name="fileSystem">The file system that holds the images.</param>
-    /// <param name="descriptorPath">The texture's descriptor file, which its image paths are relative to.</param>
+    /// <param name="project">The project, which locates the images and whose file system holds them.</param>
+    /// <param name="identity">The texture's identity, which its image references are relative to.</param>
     /// <returns><see langword="true"/> when each image exists.</returns>
-    public bool HasSourceImage(IFileSystem fileSystem, FileSystemPath descriptorPath)
+    public bool HasSourceImage(ProjectContext project, AssetPath identity)
     {
-        ArgumentNullException.ThrowIfNull(fileSystem);
-        return this.Source.ResolveImages(descriptorPath, Exists).All(Exists);
+        ArgumentNullException.ThrowIfNull(project);
+        return this.Source.ResolveImages(identity, project, Exists).All(image => image.File is { } file && Exists(file));
 
-        bool Exists(FileSystemPath image) => fileSystem.File.Exists(image.FullPath);
+        bool Exists(FileSystemPath image) => project.FileSystem.File.Exists(image.FullPath);
     }
 
     /// <summary>Replaces the source, and raises <see cref="Changed"/> when it is a different one.</summary>

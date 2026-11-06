@@ -75,7 +75,7 @@ internal sealed class ContentPipelineContractTests
 
         var json = JsonSerializer.Serialize(manifest);
 
-        _ = json.Should().Contain("\"schema_version\":2");
+        _ = json.Should().Contain($"\"schema_version\":{ContentImportManifest.CurrentSchemaVersion}");
         _ = json.Should().NotContain("\"output\":", "the cooked root is an absolute folder, passed as --cooked-root");
         _ = json.Should().NotContain("\"layout\":", "a cooked root holds one mount, the one its identities name");
         _ = json.Should().NotContain("virtual_mount_root");
@@ -138,7 +138,7 @@ internal sealed class ContentPipelineContractTests
     {
         var validator = new ContentImportManifestValidator();
         var manifest = new ContentImportManifest(
-            Version: 2,
+            Version: ContentImportManifest.CurrentSchemaVersion + 1,
             Output: string.Empty,
             Jobs:
             [

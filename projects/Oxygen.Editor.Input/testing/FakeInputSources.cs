@@ -62,7 +62,8 @@ public sealed class FakeInputSources : IInputSources
     public InputContainer Add(string container, string json)
     {
         ArgumentNullException.ThrowIfNull(json);
-        var source = new InputContainer(AssetPath.Parse(container), InputSourceReader.Read(Encoding.UTF8.GetBytes(json)));
+        var identity = AssetPath.Parse(container);
+        var source = new InputContainer(identity, InputSourceReader.Read(Encoding.UTF8.GetBytes(json), identity));
         this.containers[source.Identity] = source;
         this.Changed?.Invoke(this, new InputSourceChangedEventArgs(source.Identity));
         return source;

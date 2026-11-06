@@ -14,4 +14,13 @@ public static class FileKindExtensions
     /// <param name="kind">The file kind.</param>
     /// <returns><see langword="true"/> for auxiliary files and texture descriptors.</returns>
     public static bool IsPathKeyed(this FileKind kind) => kind is FileKind.Auxiliary or FileKind.TextureDescriptor;
+
+    /// <summary>
+    /// Whether the file is a resource data file, which the index records with an all-zero digest: each of its resources
+    /// has its own digest in its table, and a writer appends to it, so it holds bytes no commit lists.
+    /// </summary>
+    /// <param name="kind">The file kind.</param>
+    /// <returns><see langword="true"/> for the data file of a resource table.</returns>
+    public static bool IsResourceData(this FileKind kind)
+        => kind is FileKind.BuffersData or FileKind.TexturesData or FileKind.ScriptsData or FileKind.PhysicsData;
 }

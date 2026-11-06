@@ -102,13 +102,12 @@ public sealed class TextureImport(IFileSystem fileSystem)
         var descriptor = new TextureSource(Path.GetFileName(target.ImagePath))
         {
             Name = request.Name,
-            VirtualPath = target.VirtualPath,
             Intent = request.Intent,
             ColorSpace = request.ColorSpace,
             Format = request.Format,
             Cube = CubeSettings(request.Cube),
         };
-        var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(TextureSourceWriter.ToJson(descriptor), JsonOptions);
+        var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(TextureSourceWriter.ToJson(descriptor, target.VirtualPath), JsonOptions);
         _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(target.ImagePath)!);
         var sources = request.Cube?.Layout == CubeLayout.SixFaces ? this.FindCubeFaces(request.SourcePath)! : [request.SourcePath];
         var imagesCreated = 0;

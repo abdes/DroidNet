@@ -53,7 +53,7 @@ public static class InputSourceFiles
 
         try
         {
-            return InputSourceReader.Check(project.FileSystem.File.ReadAllBytes(file.FullPath)).Source is { } source
+            return InputSourceReader.Check(project.FileSystem.File.ReadAllBytes(file.FullPath), container).Source is { } source
                 ? new InputContainer(container, source)
                 : null;
         }

@@ -20,7 +20,8 @@ namespace Oxygen.Editor.Models;
 /// </remarks>
 public sealed record ModelImportSession
 {
-    private const int ManifestVersion = 2;
+    /// <summary>The import manifest version the ImportTool reads.</summary>
+    public const int ManifestVersion = 2;
 
     private static readonly JsonWriterOptions WriterOptions = new()
     {

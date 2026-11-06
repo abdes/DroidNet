@@ -19,7 +19,7 @@ public sealed record ContentImportManifest(
     [property: JsonPropertyName("jobs")] IReadOnlyList<ContentImportJob> Jobs)
 {
     /// <summary>The manifest version the ImportTool reads.</summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = Oxygen.Editor.Models.ModelImportSession.ManifestVersion;
 
     /// <summary>Gets the project's source mounts: the folders the job sources resolve in; null when the manifest declares none.</summary>
     [JsonPropertyName("mounts")]

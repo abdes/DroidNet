@@ -14,9 +14,10 @@ public static class InputSourceWriter
 {
     /// <summary>
     /// Renames an action or a mapping context. A renamed action is renamed wherever the source names it by its name;
-    /// references by virtual path, here and in other files, follow the product's new identity through relocation.
+    /// references, here and in other files, follow the product's new identity through relocation.
     /// </summary>
     /// <param name="jsonUtf8">The source bytes.</param>
+    /// <param name="identity">The source's identity, which its references are relative to.</param>
     /// <param name="extension">The product's cooked extension: <see cref="AssetFileTypes.InputAction"/> or
     /// <see cref="AssetFileTypes.InputMappingContext"/>.</param>
     /// <param name="name">The product's name.</param>
@@ -27,7 +28,7 @@ public static class InputSourceWriter
     /// declares the new name, also in another case (<see cref="InputSourceCodes.ProductNameTaken"/>), or the new name
     /// breaks the segment rule (the rule's <c>vpath.*</c> code).
     /// </exception>
-    public static JsonObject RenameProduct(ReadOnlySpan<byte> jsonUtf8, string extension, string name, string newName)
+    public static JsonObject RenameProduct(ReadOnlySpan<byte> jsonUtf8, AssetPath identity, string extension, string name, string newName)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentException.ThrowIfNullOrEmpty(newName);
@@ -38,7 +39,7 @@ public static class InputSourceWriter
             _ => throw new ArgumentException("Only actions and mapping contexts are named inside an input source.", nameof(extension)),
         };
 
-        var source = InputSourceReader.Read(jsonUtf8);
+        var source = InputSourceReader.Read(jsonUtf8, identity);
         var declared = isAction ? source.Actions.Select(static action => action.Name) : source.Contexts.Select(static context => context.Name);
         if (!declared.Contains(name, StringComparer.Ordinal))
         {

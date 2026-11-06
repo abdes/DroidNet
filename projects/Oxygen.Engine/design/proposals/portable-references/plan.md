@@ -38,7 +38,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6d   | Done                                                           |
 | S6e   | Done                                                           |
 | S6f   | Done                                                           |
-| S7    | Not started                                                    |
+| S7    | Done, committed                                                |
 | S8    | Not started                                                    |
 | S9    | Not started                                                    |
 | S10   | Not started                                                    |
@@ -518,13 +518,30 @@ writer, `IFileReferenceLocator`, the record suffix in `AssetFileTypes`
 and accepts only a zero digest for resource data files; it, `CookedIndexSnapshot`,
 `CookedInventoryReport` and `CookRootImage` treat `container.writer.lock` and
 `.leases` as reserved, and retired files as listed;
-`TextureDescriptorFile` reads version 2 with the 63-byte row, and
+`TextureDescriptorFile` reads version 3 with the 63-byte row, and
 `NativeInventoryFixture` lists data files without a digest and reports the
 `resource_*` and `uncommitted*` reasons.
 
 The 10 production reader call sites and `AuthoredReferenceFormat`'s identity
 field use are changed in this slice so it compiles; their behaviour change is
-S10 and S12.
+S10 and S12. Because a saved material now spells its references relatively,
+`AuthoredReferenceFormat` resolves engine-format references against the file's
+identity and respells them when the file moves or is copied; without that a
+rename would miss its referrers until S12. `ProjectContext.LocateReference` lands
+here too, as the one implementation of `IFileReferenceLocator` that S7's callers
+need. S8 extends it to pak and generation mounts, and S12 keeps the rest of
+relocation. Editing a texture binding, the occlusion mode and the grid in the
+Material Editor is texture-slots S4; this slice gives them their format, model,
+writer and overlay annotations. The managed pak reader, which no slice named,
+moves to format 12 here, and `CookedFormatConformanceTests` compares every managed
+cooked reader with the installed version table.
+
+Integration tests left by this slice, of 565 in ContentPipeline: 65 fail because
+a model record still writes `virtual_path` (S9); 36 because
+`SceneDescriptorGenerator` and hand-written samples spell absolute references
+into their own mount (S10); 6 because they expect a cooked file at its old name,
+not its content name (S20); 18 assert on a failed cook without printing why, and
+S20 diagnoses them as failures its table does not predict.
 
 Unit tests: the moved format tests with relative cases; `AssetFileTypesTests`
 record rows. Docs: `Oxygen.Managed.Assets/README.md`, `texture-editor.md`,
@@ -570,10 +587,11 @@ moved to the Models kit in S1. Docs: `Oxygen.Editor.Models/README.md`,
 
 Deletes: the `Imports/` cook path branch, `ContentImportJob.Record`, absolute
 spelling in `SceneDescriptorGenerator`, the "non-source mount resolves"
-shortcut in `ReferenceCheck`, `.build/references.json` version 1. Adds: model
+shortcut in `ReferenceCheck`. Adds: model
 cook input from the record, manifests with `Cooked` mounts, analysis
 diagnostics with written, resolved and looked-up forms, library-aware
-reference check, `reference.into_project_mount`, `references.json` version 2.
+reference check, `reference.into_project_mount`, written forms in
+`references.json`, at its next version.
 Also does the inventory reasons, job status, failed report rows and Inspector
 refusals rows of [what R16 leaves for the editor](#what-r16-leaves-for-the-editor).
 
@@ -735,8 +753,8 @@ done only when its rows are gone from the code.
 | Old form                                                                                                      | Where                                                                                                                                                              | Slice        |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ |
 | Absolute-only references, no anchor                                                                           | Material, texture, input readers and writers; 10 reader call sites                                                                                                 | S7           |
-| Material descriptors without per-binding `sampler`, `uv_set` above 1 accepted                                 | `oxygen.material-descriptor.editor.schema.json`, `MaterialSourceWriter`, `MaterialSource.cs`, `MaterialDescriptors.cs`                                             | S7           |
-| Material descriptors without `ambient_occlusion_mode`, `procedural_grid`; omitted `alpha_mode` read as opaque | `oxygen.material-descriptor.editor.schema.json`, `MaterialSourceWriter`, `MaterialSource.cs:149`, `MaterialDescriptors.cs`                                         | S7           |
+| Material descriptors without per-binding `sampler`, `uv_set` above 1 accepted                                 | `oxygen.material-descriptor.editor.schema.json`, `MaterialSourceWriter`, `MaterialSource.cs`                                                                       | S7           |
+| Material descriptors without `ambient_occlusion_mode`, `procedural_grid`; omitted `alpha_mode` read as opaque | `oxygen.material-descriptor.editor.schema.json`, `MaterialSourceWriter`, `MaterialSource.cs:149`                                                                   | S7           |
 | `AssetFileType.IdentityField`                                                                                 | `AssetFileTypes.cs:144`, `AuthoredReferenceFormat`                                                                                                                 | S7           |
 | Loose index version 7, whole-file data digests, `.otex` version 1                                             | `Oxygen.Managed.Assets` `LooseCookedIndex`, `TextureDescriptorFile`; `NativeInventoryFixture`                                                                      | S7           |
 | `TextureSource.VirtualPath`, `VirtualPathInvalid`                                                             | Texture model, reader, writer, `TextureImport.cs:105`                                                                                                              | S7, S13      |

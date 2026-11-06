@@ -18,7 +18,7 @@ public static class PakIndex
     public const int BrowseHeaderSize = 24;
     public const int BrowseEntrySize = 24;
     public const int BrowseTextureEntrySize = 12;
-    public const ushort Version = 10;
+    public const ushort Version = 12;
     public const uint BrowseIndexVersion = 2;
 
     private const int FooterTextureTableOffset = 104;

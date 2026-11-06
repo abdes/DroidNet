@@ -72,6 +72,12 @@ public sealed class AssetFeedWorkloadBenchmarks
         content.VerifyNoOtherCalls();
     }
 
+    private static string IdentityOf(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return normalized[normalized.LastIndexOf("/Content/", StringComparison.Ordinal)..^".json".Length];
+    }
+
     private static void WriteMaterial(string path)
     {
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -89,6 +95,7 @@ public sealed class AssetFeedWorkloadBenchmarks
                     roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
-                doubleSided: false));
+                doubleSided: false),
+            AssetPath.Parse(IdentityOf(path)));
     }
 }

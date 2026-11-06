@@ -56,7 +56,7 @@ public sealed record MountBindings(ImmutableSortedDictionary<string, string?> Ch
     /// <param name="projectRoot">The project root.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>The changes that undo this write: each changed mount's previous binding, or its removal.</returns>
-    /// <exception cref="InvalidDataException">The existing file is not a mounts file of schema_version 2.</exception>
+    /// <exception cref="InvalidDataException">The existing file is not a mounts file of the current schema version.</exception>
     /// <exception cref="StorageWriteConflictException">The file changed while it was being written.</exception>
     public async Task<MountBindings> WriteAsync(IAtomicFileStore files, FileSystemPath projectRoot, CancellationToken cancellationToken)
     {

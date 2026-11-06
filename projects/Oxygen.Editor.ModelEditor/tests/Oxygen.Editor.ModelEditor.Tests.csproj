@@ -10,6 +10,7 @@
     <ItemGroup>
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testing\Oxygen.Managed.Assets.Testing.csproj" />
         <ProjectReference Include="..\src\Oxygen.Editor.ModelEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testing\Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />

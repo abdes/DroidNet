@@ -6,6 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
 
@@ -41,7 +42,7 @@ public sealed class LibraryMetadataCacheTests
         var source = Guid.Parse("aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa");
         var material = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var report = $$"""
-            { "schema_version": 4, "source_key": "{{source}}", "assets": [
+            { "schema_version": {{EngineSchemaVersions.Dependencies}}, "source_key": "{{source}}", "assets": [
               { "asset_key": "{{material}}", "asset_type": 1, "virtual_path": "/Art/Materials/Tile.omat",
                 "dependencies": [], "key_references": [], "resource_bindings": [] } ] }
             """;

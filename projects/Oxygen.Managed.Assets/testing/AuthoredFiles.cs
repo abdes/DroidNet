@@ -20,12 +20,12 @@ public static class AuthoredFiles
     /// <summary>Gets the text an authored file whose identity is <paramref name="anchor"/> writes to name <paramref name="target"/>.</summary>
     /// <param name="anchor">The identity of the file that writes the reference.</param>
     /// <param name="target">The identity the reference names.</param>
-    /// <returns>Today, the target's absolute virtual path.</returns>
+    /// <returns>The reference, as every writer spells it.</returns>
     public static string SpellReference(AssetPath anchor, AssetPath target)
     {
         ArgumentNullException.ThrowIfNull(anchor);
         ArgumentNullException.ThrowIfNull(target);
-        return target.VirtualPath;
+        return target.ToReference(anchor);
     }
 
     /// <summary>Starts a material descriptor (<c>*.omat.json</c>).</summary>

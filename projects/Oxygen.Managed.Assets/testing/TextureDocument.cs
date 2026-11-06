@@ -17,8 +17,4 @@ public sealed class TextureDocument : AuthoredDocument<TextureDocument>
         : base(identity, new JsonObject { ["source"] = source })
     {
     }
-
-    /// <summary>Repeats the identity in the descriptor's <c>virtual_path</c>.</summary>
-    /// <returns>This document.</returns>
-    public TextureDocument WithIdentityField() => this.Set("/virtual_path", this.Identity.VirtualPath);
 }

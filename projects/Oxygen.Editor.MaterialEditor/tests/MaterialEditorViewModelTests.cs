@@ -108,7 +108,7 @@ public sealed partial class MaterialEditorViewModelTests
         await editor.PrepareForCloseAsync().ConfigureAwait(false);
         _ = (await editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
 
-        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false), MaterialDocuments.IdentityOf("Wood"));
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.4f);
     }
 

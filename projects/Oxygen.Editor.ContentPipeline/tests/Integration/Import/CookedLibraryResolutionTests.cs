@@ -102,7 +102,7 @@ public sealed class CookedLibraryResolutionTests
                 pbrMetallicRoughness: new MaterialPbrMetallicRoughness(baseColorR: 1, baseColorG: 1, baseColorB: 1, baseColorA: 1, metallicFactor: 0, roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
-                doubleSided: false).WithTextureReference("base_color", AssetPath.Parse("/Art/Textures/Surface.otex")));
+                doubleSided: false).WithTextureReference("base_color", AssetPath.Parse("/Art/Textures/Surface.otex")), AssetPath.Parse("/Content/Materials/Tiled.omat"));
         }
 
         var service = CreateService(consumer, api, compatibility: compatibility);

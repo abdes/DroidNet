@@ -31,7 +31,7 @@ internal sealed class CookPathsTests
         _ = this.fileSystem.Directory.CreateDirectory(Path.Combine(Studio, "Materials"));
         this.fileSystem.File.WriteAllText(Path.Combine(Root, "Content", "Materials", "Red.omat.json"), "{}");
         this.fileSystem.File.WriteAllText(Path.Combine(Studio, "Materials", "Brick.omat.json"), "{}");
-        this.fileSystem.File.WriteAllText(Path.Combine(Root, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Studio":"D:/Studio/Shared"}}""");
+        this.fileSystem.File.WriteAllText(Path.Combine(Root, ProjectMounts.FileName), $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Studio":"D:/Studio/Shared"}}""");
         // Opened as saved, so the committed Media folder is not created: it is missing on this machine.
         var info = new ProjectInfo(Guid.NewGuid(), "Demo", Category.Games, Root)
         {

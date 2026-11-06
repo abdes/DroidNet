@@ -203,5 +203,9 @@ internal sealed partial class CookOutputReadLease : IAsyncDisposable, IDisposabl
     }
 
     private IEnumerable<string> ContentPaths() => Directory.EnumerateFiles(this.root, "*", SearchOption.AllDirectories)
-        .Where(path => !string.Equals(Path.GetRelativePath(this.root, path), CookedGeneration.MarkerFileName, StringComparison.Ordinal));
+        .Where(path =>
+        {
+            var relative = Path.GetRelativePath(this.root, path).Replace('\\', '/');
+            return !string.Equals(relative, CookedGeneration.MarkerFileName, StringComparison.Ordinal) && !LooseCookedIndex.IsWriterProtocolPath(relative);
+        });
 }

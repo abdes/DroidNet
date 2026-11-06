@@ -71,18 +71,29 @@ internal sealed class CookStagingArea : IAsyncDisposable
                     throw new IOException($"Cooked file disappeared before staging '{root.Mount}/{path}'. Retry the cook.");
                 }
 
+                // A resource data file records no digest of its own: its resources do, which the inventory has checked.
+                var isData = expected.Kind?.IsResourceData() == true;
                 if (!emptyRoots.Contains(root.Mount) && !damaged.Contains(path)
-                    && (actual.Size != expected.Size || !string.Equals(actual.Sha256, expected.Sha256, StringComparison.OrdinalIgnoreCase)))
+                    && (actual.Size != expected.Size || (!isData && !string.Equals(actual.Sha256, expected.Sha256, StringComparison.OrdinalIgnoreCase))))
                 {
                     throw new IOException($"Cooked file changed after verification: '{root.Mount}/{path}'. Retry the cook.");
                 }
             }
 
-            if (root.Before.Files.Keys.Any(path => path is not (LooseCookedIndex.FileName or LooseCookedIndex.GenerationLeaseFileName) && !inventory.Files.ContainsKey(path)))
+            // A retired file is listed by an earlier commit, and goes when no reader holds that commit.
+            var retired = ReadRetired(root.Path);
+            if (root.Before.Files.Keys.Any(path => !LooseCookedIndex.IsReservedPath(path) && !inventory.Files.ContainsKey(path) && !retired.Contains(path)))
             {
                 throw new IOException($"Cooked membership changed before staging '{root.Mount}'. Retry the cook.");
             }
         }
+    }
+
+    // Called with a root the inventory has read, so its index is there and well formed.
+    private static HashSet<string> ReadRetired(string root)
+    {
+        using var index = File.OpenRead(Path.Combine(root, LooseCookedIndex.FileName));
+        return LooseCookedIndex.Read(index).Retired.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
     }
 
     public async ValueTask DisposeAsync()

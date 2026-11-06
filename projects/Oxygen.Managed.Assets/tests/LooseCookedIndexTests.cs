@@ -318,12 +318,122 @@ public sealed class LooseCookedIndexTests
             Sha256: System.Security.Cryptography.SHA256.HashData("texture"u8),
             VirtualPath: virtualPath);
 
+    [TestMethod]
+    public void WriteThenRead_ShouldRoundTripCommitRetiredFilesAndRequirements()
+    {
+        var engineKey = new AssetKey(0x4142434445464748UL, 0x5152535455565758UL);
+        var document = CreateSampleDocument() with
+        {
+            Commit = 5,
+            Retired =
+            [
+                new RetiredFile(FileKind.TextureDescriptor, "resources/Old.otex", 4),
+                new RetiredFile(FileKind.AssetDescriptor, "assets/Materials/Old.mat", 5),
+            ],
+            Requirements =
+            [
+                new AssetRequirement(0, "Engine", IsTexture: false, engineKey, AssetType: 1),
+                new AssetRequirement(1, "Props", IsTexture: true, engineKey, AssetType: 0),
+            ],
+        };
+
+        var read = RoundTrip(document);
+
+        _ = read.Commit.Should().Be(5);
+        _ = read.Retired.Should().Equal(document.Retired);
+        _ = read.Requirements.Should().Equal(document.Requirements);
+    }
+
+    [TestMethod]
+    [DataRow(FileKind.BuffersData, 3UL, DisplayName = "a data file is never retired")]
+    [DataRow(FileKind.Unknown, 3UL, DisplayName = "an unknown kind")]
+    [DataRow(FileKind.Auxiliary, 0UL, DisplayName = "no commit")]
+    [DataRow(FileKind.Auxiliary, 6UL, DisplayName = "a commit past the index")]
+    public void Read_WithAnImpossibleRetiredFile_ShouldThrow(FileKind kind, ulong retiredAt)
+    {
+        var document = CreateSampleDocument() with { Commit = 5, Retired = [new RetiredFile(kind, "resources/Old.bin", retiredAt)] };
+
+        var read = () => RoundTrip(document);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Read_WithARetiredPathTheIndexLists_ShouldThrow()
+    {
+        var document = CreateSampleDocument() with { Commit = 5, Retired = [new RetiredFile(FileKind.BuffersTable, "resources/buffers.table", 3)] };
+
+        var read = () => RoundTrip(document);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Read_WithRequirementsOutOfAssetOrder_ShouldThrow()
+    {
+        var key = new AssetKey(1, 2);
+        var document = CreateSampleDocument() with
+        {
+            Requirements = [new AssetRequirement(1, "Engine", IsTexture: false, key, 1), new AssetRequirement(0, "Engine", IsTexture: false, key, 1)],
+        };
+
+        var read = () => RoundTrip(document);
+
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Read_WithADigestOnADataFile_ShouldThrow()
+    {
+        var sample = CreateSampleDocument();
+        var document = sample with
+        {
+            Files = [.. sample.Files.Select(static file => file.Kind == FileKind.BuffersData ? file with { Sha256 = System.Security.Cryptography.SHA256.HashData("data"u8) } : file)],
+        };
+
+        var read = () => RoundTrip(document);
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*records no digest*");
+    }
+
+    [TestMethod]
+    public void Read_WithNoDigestOnATable_ShouldThrow()
+    {
+        var sample = CreateSampleDocument();
+        var document = sample with
+        {
+            Files = [.. sample.Files.Select(static file => file.Kind == FileKind.BuffersTable ? file with { Sha256 = new byte[LooseCookedIndex.Sha256Size] } : file)],
+        };
+
+        var read = () => RoundTrip(document);
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*missing its SHA-256*");
+    }
+
+    [TestMethod]
+    [DataRow(LooseCookedIndex.FileName, true)]
+    [DataRow(LooseCookedIndex.GenerationLeaseFileName, true)]
+    [DataRow(LooseCookedIndex.WriterLockFileName, true)]
+    [DataRow(LooseCookedIndex.LeasesFolderName, true)]
+    [DataRow(".leases/3.lock", true)]
+    [DataRow(".leasesish/3.lock", false)]
+    [DataRow("resources/buffers.table", false)]
+    public void IsReservedPath_ShouldKnowTheRootsOwnFiles(string path, bool reserved)
+        => _ = LooseCookedIndex.IsReservedPath(path).Should().Be(reserved);
+
+    private static Document RoundTrip(Document document)
+    {
+        using var stream = new MemoryStream();
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, document);
+        stream.Position = 0;
+        return LooseCookedIndex.Read(stream);
+    }
+
     private static Document CreateSampleDocument()
     {
         var shaA = System.Security.Cryptography.SHA256.HashData("descriptor-a"u8);
         var shaB = System.Security.Cryptography.SHA256.HashData("descriptor-b"u8);
         var shaF1 = System.Security.Cryptography.SHA256.HashData("file-1"u8);
-        var shaF2 = System.Security.Cryptography.SHA256.HashData("file-2"u8);
 
         return new Document(
             ContentVersion: 7,
@@ -361,7 +471,7 @@ public sealed class LooseCookedIndexTests
                     Kind: FileKind.BuffersData,
                     RelativePath: "resources/buffers.data",
                     Size: 2000,
-                    Sha256: shaF2),
+                    Sha256: new byte[LooseCookedIndex.Sha256Size]),
             ]);
     }
 }

@@ -55,7 +55,7 @@ public sealed class InputSourceTests
     [TestMethod]
     public void ReadDeclaresActionsAndContextsWithTheirPositions()
     {
-        var source = InputSourceReader.Read(Encoding.UTF8.GetBytes(Player));
+        var source = InputSourceReader.Read(Encoding.UTF8.GetBytes(Player), Source);
 
         _ = source.Actions.Should().Equal(
             new InputActionDeclaration("Jump", "bool") { ConsumesInput = true, Position = new SourcePosition(4, 15) },
@@ -71,13 +71,52 @@ public sealed class InputSourceTests
     [TestMethod]
     public void ReferencesNameEveryActionAMappingUses()
     {
-        var source = InputSourceReader.Read(Encoding.UTF8.GetBytes(Player));
+        var source = InputSourceReader.Read(Encoding.UTF8.GetBytes(Player), Source);
 
         _ = source.ActionReferences.Select(static reference => reference.Text).Should().Equal(
             "Jump", FireAction, "Move", "Jump", "Jump");
         _ = source.ActionReferences.First().Position.Should().Be(new SourcePosition(12, 21));
         var actions = source.ActionReferences.Select(reference => reference.TryGetAction(Source, out var action) ? action.VirtualPath : null);
         _ = actions.Should().StartWith(["/Content/Input/Player.input/Jump.oiact", FireIdentity]);
+    }
+
+    [TestMethod]
+    [DataRow("Jump", false, "/Content/Input/Player.input/Jump.oiact")]
+    [DataRow("Player.input/Jump.oiact", true, "/Content/Input/Player.input/Jump.oiact")]
+    [DataRow("../Shared.input/Use.oiact", true, "/Content/Shared.input/Use.oiact")]
+    [DataRow("/Props/Input/Shared.input/Use.oiact", true, "/Props/Input/Shared.input/Use.oiact")]
+    public void AnActionIsANameOrAReferenceByItsSuffix(string text, bool isReference, string identity)
+    {
+        var reference = new InputActionReference(text);
+
+        _ = reference.IsReference.Should().Be(isReference);
+        _ = reference.TryGetAction(Source, out var action).Should().BeTrue();
+        _ = action.Should().Be(AssetPath.Parse(identity));
+    }
+
+    [TestMethod]
+    [DataRow("../../../Far.input/Use.oiact", "vpath.reference_outside_mount")]
+    [DataRow("/Content/Input/Common.input/Fire.oiact", "vpath.reference_self_absolute")]
+    public void AReferenceThatDoesNotResolveIsReportedWhereItIs(string reference, string code)
+    {
+        var document = AuthoredFiles.Input(Source.VirtualPath).Context("OnFoot", priority: 0)
+            .Append("/contexts/0/mappings", new JsonObject { ["action"] = reference, ["slot"] = "F" });
+
+        var report = InputSourceReader.Check(document.Bytes, Source);
+
+        _ = report.Source.Should().NotBeNull();
+        var problem = report.Problems.Should().ContainSingle().Subject;
+        _ = problem.Code.Should().Be(code);
+        _ = problem.Line.Should().NotBeNull();
+        _ = new InputActionReference(reference).TryGetAction(Source, out _).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void AnActionNamedLikeAReferenceIsRefusedByTheSchema()
+    {
+        var report = InputSourceReader.Check("""{ "actions": [ { "name": "Jump.oiact", "type": "bool" } ] }"""u8, Source);
+
+        _ = report.Problems.Should().NotBeEmpty().And.OnlyContain(static problem => problem.Code == InputSourceCodes.SchemaMismatch);
     }
 
     [TestMethod]
@@ -88,12 +127,12 @@ public sealed class InputSourceTests
     [DataRow("""{ "actions": [ { "name": "Jump", "type": "bool" } ] }""")]
     [DataRow("{}")]
     public void ASourceMayDeclareOnlyActionsOrNothing(string json)
-        => _ = InputSourceReader.Check(Encoding.UTF8.GetBytes(json)).Problems.Should().BeEmpty();
+        => _ = InputSourceReader.Check(Encoding.UTF8.GetBytes(json), Source).Problems.Should().BeEmpty();
 
     [TestMethod]
     public void NotJsonIsReportedAtItsPosition()
     {
-        var problem = InputSourceReader.Check("{\n  \"actions\": [ }"u8).Problems.Should().ContainSingle().Subject;
+        var problem = InputSourceReader.Check("{\n  \"actions\": [ }"u8, Source).Problems.Should().ContainSingle().Subject;
 
         _ = problem.Code.Should().Be(InputSourceCodes.NotJson);
         _ = problem.Line.Should().Be(2);
@@ -108,7 +147,7 @@ public sealed class InputSourceTests
                 { "name": "OnFoot", "mappings": [ { "action": "Jump", "slot": "NotAKey" } ] }
               ]
             }
-            """u8);
+            """u8, Source);
 
         _ = report.Source.Should().BeNull();
         _ = report.Problems.Should().NotBeEmpty().And.OnlyContain(static problem => problem.Code == InputSourceCodes.SchemaMismatch);
@@ -120,7 +159,7 @@ public sealed class InputSourceTests
     {
         var report = InputSourceReader.Check("""
             { "contexts": [ { "name": "OnFoot", "mappings": [ { "action": "/Content/Input/Common.input/Menu.oimap", "slot": "F" } ] } ] }
-            """u8);
+            """u8, Source);
 
         _ = report.Problems.Should().NotBeEmpty().And.OnlyContain(static problem => problem.Code == InputSourceCodes.SchemaMismatch);
     }
@@ -136,7 +175,7 @@ public sealed class InputSourceTests
                 { "name": "OnFoot", "mappings": [] }
               ]
             }
-            """u8);
+            """u8, Source);
 
         _ = report.Source.Should().NotBeNull();
         _ = report.Problems.Select(static problem => (problem.Code, problem.Line)).Should().Equal(
@@ -148,9 +187,9 @@ public sealed class InputSourceTests
     [TestMethod]
     public void RenamingAnActionRenamesItsLocalReferences()
     {
-        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputAction, "Jump", "Leap");
+        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, Source, AssetFileTypes.InputAction, "Jump", "Leap");
 
-        var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed));
+        var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed), Source);
         _ = source.Actions.Select(static action => action.Name).Should().Equal("Leap", "Move");
         _ = source.ActionReferences.Select(static reference => reference.Text).Should().Equal(
             "Leap", FireAction, "Move", "Leap", "Leap");
@@ -160,9 +199,9 @@ public sealed class InputSourceTests
     [TestMethod]
     public void RenamingAContextKeepsTheActions()
     {
-        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputMappingContext, "OnFoot", "Driving");
+        var renamed = InputSourceWriter.RenameProduct(PlayerDocument().Bytes, Source, AssetFileTypes.InputMappingContext, "OnFoot", "Driving");
 
-        var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed));
+        var source = InputSourceReader.Read(JsonSerializer.SerializeToUtf8Bytes(renamed), Source);
         _ = source.Contexts.Select(static context => context.Name).Should().Equal("Driving");
         _ = source.ActionReferences.Select(static reference => reference.Text).Should().StartWith(["Jump"]);
     }
@@ -173,7 +212,7 @@ public sealed class InputSourceTests
     [DataRow("Jump", "Le:ap", "vpath.segment.reserved_character")]
     public void ARenameTheSourceCannotTakeIsRefused(string name, string newName, string code)
     {
-        var refuse = () => InputSourceWriter.RenameProduct(PlayerDocument().Bytes, AssetFileTypes.InputAction, name, newName);
+        var refuse = () => InputSourceWriter.RenameProduct(PlayerDocument().Bytes, Source, AssetFileTypes.InputAction, name, newName);
 
         _ = refuse.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(code);
     }

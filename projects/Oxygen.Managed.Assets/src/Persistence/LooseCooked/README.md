@@ -17,6 +17,14 @@ its `TextureResourceRecord`; the loose catalog lists each texture by its engine
 key (`AssetKey.FromVirtualPath`) with that record. The reader accepts only the
 current format; recook older content with current native tools.
 
+An index is one commit of its root. `Retired` lists the files an earlier commit
+listed and this one does not: they may still be there, and belong to no one
+reading this commit. `Requirements` lists what the assets need of other mounts.
+A resource data file records an all-zero digest, because each resource has its
+own in its table, and may hold bytes past its committed length.
+`IsReservedPath` names the root's own machinery, which is never content: the
+index, the generation lock, the writer lock and the `.leases` folder.
+
 The native format is owned by
 [LooseCookedIndexFormat.h](../../../../Oxygen.Engine/src/Oxygen/Data/LooseCookedIndexFormat.h).
 Complete payload verification is owned by

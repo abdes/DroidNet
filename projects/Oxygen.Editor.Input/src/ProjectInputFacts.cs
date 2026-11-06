@@ -156,7 +156,7 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
                 return known;
             }
 
-            var report = InputSourceReader.Check(bytes);
+            var report = InputSourceReader.Check(bytes, identity);
             return new InputSourceEntry(file, report.Source is { } source ? new InputContainer(identity, source) : null, report.Problems, hash);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)

@@ -26,8 +26,8 @@ public sealed class InputRulesTests
           "contexts": [
             { "name": "Gameplay", "priority": 3, "mappings": [
               { "action": "Jump", "slot": "Space", "trigger": "pressed" },
-              { "action": "/Content/Common/Common.input/Fire.oiact", "slot": "F" },
-              { "action": "/Content/Common/Common.input/Missing.oiact", "slot": "G" },
+              { "action": "../Common/Common.input/Fire.oiact", "slot": "F" },
+              { "action": "../Common/Common.input/Missing.oiact", "slot": "G" },
               { "action": "/Engine/Input/Engine.input/Pause.oiact", "slot": "Escape" }
             ] }
           ]
@@ -67,7 +67,7 @@ public sealed class InputRulesTests
     [TestMethod]
     public void TheNewSourceTemplateChecksClean()
     {
-        var report = InputSourceReader.Check(Encoding.UTF8.GetBytes(InputTemplates.New("Player")));
+        var report = InputSourceReader.Check(Encoding.UTF8.GetBytes(InputTemplates.New("Player")), AssetPath.Parse("/Content/Input/Player.input"));
 
         _ = report.Problems.Should().BeEmpty();
         _ = report.Source!.Contexts.Should().ContainSingle().Which.Name.Should().Be("Player");

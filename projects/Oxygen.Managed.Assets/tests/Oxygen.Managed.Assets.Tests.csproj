@@ -18,4 +18,10 @@
         <PackageReference Include="Testably.Abstractions.Testing" />
 
     </ItemGroup>
+
+    <ItemGroup>
+        <None Include="$(OxygenSdkSchemasDir)\oxygen.*.schema.json" Link="Schemas\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(OxygenSdkDir)\include\Oxygen\Data\PakFormatVersions.inc" Link="Installed\PakFormatVersions.inc" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(OxygenSdkDataDir)\engine.pak" Link="Installed\engine.pak" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
 </Project>

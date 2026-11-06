@@ -5,6 +5,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets.Testing;
 
 namespace Oxygen.Editor.Models.Tests;
 
@@ -22,7 +23,7 @@ public sealed class ModelImportDefaultsTests
     public void AGeometryAnchorIsFoundByTheCookedGeometrysKey()
     {
         var key = Guid.Parse("1b3c5d7e-9f00-4a1b-8c2d-3e4f5a6b7c8d");
-        using var provenance = JsonDocument.Parse($$"""{"schema_version":2,"geometries":[{"geometry_asset_key":"{{key:D}}","source_geometry_anchor":"meshes/Body"}]}""");
+        using var provenance = JsonDocument.Parse($$"""{"schema_version":{{EngineSchemaVersions.SurfaceProvenance}},"geometries":[{"geometry_asset_key":"{{key:D}}","source_geometry_anchor":"meshes/Body"}]}""");
 
         _ = ModelGeometryDefaults.AnchorOf(provenance.RootElement, key).Should().Be("meshes/Body");
         _ = ModelGeometryDefaults.AnchorOf(provenance.RootElement, Guid.NewGuid()).Should().BeNull();

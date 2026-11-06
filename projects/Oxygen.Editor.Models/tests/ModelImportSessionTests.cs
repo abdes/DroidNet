@@ -69,9 +69,9 @@ public sealed class ModelImportSessionTests
     [TestMethod]
     public void JobsThatAreNotModelsAreLeftOutAndNamed()
     {
-        const string manifest = """
+        var manifest = $$"""
             {
-              "schema_version": 2,
+              "schema_version": {{ModelImportSession.ManifestVersion}},
               "jobs": [
                 { "id": "crate", "type": "gltf", "source": "Crate.gltf", "virtual_path": "/Content/Props/Crate/Crate.gltf", "name": "Crate", "import_cameras": false },
                 { "id": "albedo", "type": "texture", "source": "Albedo.png", "virtual_path": "/Content/Textures/Albedo.otex" }
@@ -92,7 +92,7 @@ public sealed class ModelImportSessionTests
     public void AFileThatIsNotAnImportManifestIsRefused()
     {
         var notJson = () => ModelImportSession.Read(ManifestPath, Encoding.UTF8.GetBytes("Car.fbx"));
-        var offSchema = () => ModelImportSession.Read(ManifestPath, Encoding.UTF8.GetBytes("""{ "schema_version": 2 }"""));
+        var offSchema = () => ModelImportSession.Read(ManifestPath, Encoding.UTF8.GetBytes($$"""{ "schema_version": {{ModelImportSession.ManifestVersion}} }"""));
 
         _ = notJson.Should().Throw<InvalidDataException>();
         _ = offSchema.Should().Throw<InvalidDataException>();

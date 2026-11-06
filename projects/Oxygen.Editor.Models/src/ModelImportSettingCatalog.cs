@@ -131,6 +131,7 @@ public static class ModelImportSettingCatalog
         Key = "max_size",
         Kind = ModelImportSettingKind.WholeNumber,
         Minimum = 1,
+        Maximum = uint.MaxValue,
     };
 
     /// <summary>Gets the BC7 encoding quality.</summary>

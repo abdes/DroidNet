@@ -18,15 +18,18 @@ public static class MaterialSourceReader
 
     /// <summary>Reads schema-valid source while retaining all unedited native fields.</summary>
     /// <param name="jsonUtf8">Canonical UTF-8 descriptor bytes.</param>
+    /// <param name="identity">The material's identity, which its references are relative to.</param>
     /// <returns>The immutable authoring snapshot.</returns>
     /// <exception cref="AssetFormatException">
-    /// The content is not a material: its problem has one of the <see cref="MaterialSourceCodes"/>.
+    /// The content is not a material: its problem has one of the <see cref="MaterialSourceCodes"/>, or the <c>vpath.*</c>
+    /// code of a reference that does not resolve.
     /// </exception>
-    public static MaterialSource Read(ReadOnlySpan<byte> jsonUtf8)
+    public static MaterialSource Read(ReadOnlySpan<byte> jsonUtf8, AssetPath identity)
     {
+        ArgumentNullException.ThrowIfNull(identity);
         using var document = DescriptorFormat.Parse(jsonUtf8, MaterialSourceCodes.NotJson, "The material is not valid JSON.");
         var descriptor = document.RootElement;
-        Validate(descriptor);
+        Validate(descriptor, identity);
         var parameters = descriptor.TryGetProperty("parameters", out var values) ? values : default;
         var textures = descriptor.TryGetProperty("textures", out var bindings) ? bindings : default;
         var baseColor = Vector(parameters, "base_color", [1.0f, 1.0f, 1.0f, 1.0f]);
@@ -46,14 +49,19 @@ public static class MaterialSourceReader
             Descriptor = descriptor.Clone(),
             NormalScale = Scalar(parameters, "normal_scale", 1.0f),
             OcclusionStrength = Scalar(parameters, "ambient_occlusion", 1.0f),
-            TextureReferences = ReadTextureReferences(textures),
+            AmbientOcclusionMode = descriptor.TryGetProperty("ambient_occlusion_mode", out var occlusion) && occlusion.GetString() == "strength"
+                ? MaterialAmbientOcclusionMode.Strength
+                : MaterialAmbientOcclusionMode.Factor,
+            ProceduralGrid = descriptor.TryGetProperty("procedural_grid", out var grid) ? ReadGrid(grid) : null,
+            TextureBindings = ReadTextureBindings(textures, identity),
         };
     }
 
-    /// <summary>Checks a descriptor against the engine schema and the engine's storage of numbers and paths.</summary>
+    /// <summary>Checks a descriptor against the engine schema, whose bounds keep each number in a finite 32-bit float, and that each reference resolves.</summary>
     /// <param name="descriptor">The descriptor.</param>
+    /// <param name="identity">The material's identity.</param>
     /// <exception cref="AssetFormatException">The descriptor has a problem.</exception>
-    internal static void Validate(JsonElement descriptor)
+    internal static void Validate(JsonElement descriptor, AssetPath identity)
     {
         var evaluation = Schema.Value.Evaluate(descriptor, new EvaluationOptions { OutputFormat = OutputFormat.List });
         if (!evaluation.IsValid)
@@ -64,87 +72,99 @@ public static class MaterialSourceReader
                 DescriptorFormat.Describe(evaluation));
         }
 
-        if (descriptor.TryGetProperty("parameters", out var parameters))
-        {
-            ValidateFloat32(parameters);
-        }
-
         if (descriptor.TryGetProperty("textures", out var textures))
         {
             foreach (var texture in textures.EnumerateObject())
             {
-                var binding = texture.Value;
-                var path = binding.GetProperty("virtual_path").GetString()!;
-                if (!AssetPath.TryParse(path, out var texturePath) || texturePath.IsMount)
+                var reference = texture.Value.GetProperty("virtual_path").GetString()!;
+                if (!AssetPath.TryResolveReference(identity, reference, VirtualPathRuleSet.Authored, out _, out var error))
                 {
-                    throw DescriptorFormat.Problem(MaterialSourceCodes.TexturePathInvalid, $"The {texture.Name} texture '{path}' is not a canonical absolute virtual path below a mount point.");
-                }
-
-                if (binding.TryGetProperty("uv_transform", out var transform))
-                {
-                    ValidateFloat32(transform);
+                    throw DescriptorFormat.Problem(error.Value.ToCode(), $"The {texture.Name} texture '{reference}' cannot be resolved: {error.Value.ToMessage()}");
                 }
             }
         }
     }
 
-    private static void ValidateFloat32(JsonElement value)
-    {
-        switch (value.ValueKind)
-        {
-            case JsonValueKind.Number when !value.TryGetSingle(out var number) || !float.IsFinite(number):
-                throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, "A material number does not fit a finite 32-bit float.");
-            case JsonValueKind.Array:
-                foreach (var element in value.EnumerateArray())
-                {
-                    ValidateFloat32(element);
-                }
-
-                break;
-            case JsonValueKind.Object:
-                foreach (var property in value.EnumerateObject())
-                {
-                    ValidateFloat32(property.Value);
-                }
-
-                break;
-        }
-    }
-
     private static float Scalar(JsonElement parent, string name, float fallback)
-    {
-        var value = parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var property)
-            ? property.GetSingle() : fallback;
-        return float.IsFinite(value) ? value
-            : throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
-    }
+        => parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var property) ? property.GetSingle() : fallback;
 
     private static float[] Vector(JsonElement parent, string name, float[] fallback)
-    {
-        if (parent.ValueKind != JsonValueKind.Object || !parent.TryGetProperty(name, out var property))
-        {
-            return fallback;
-        }
+        => parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var property)
+            ? [.. property.EnumerateArray().Select(static item => item.GetSingle())]
+            : fallback;
 
-        var result = property.EnumerateArray().Select(static item => item.GetSingle()).ToArray();
-        return result.All(float.IsFinite) ? result
-            : throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
-    }
-
-    private static IReadOnlyDictionary<string, AssetPath> ReadTextureReferences(JsonElement textures)
+    private static FrozenDictionary<string, MaterialTextureBinding> ReadTextureBindings(JsonElement textures, AssetPath identity)
     {
-        var references = new Dictionary<string, AssetPath>(StringComparer.Ordinal);
+        var bindings = new Dictionary<string, MaterialTextureBinding>(StringComparer.Ordinal);
         if (textures.ValueKind == JsonValueKind.Object)
         {
             foreach (var channel in MaterialSource.TextureChannels)
             {
                 if (textures.TryGetProperty(channel, out var binding))
                 {
-                    references.Add(channel, AssetPath.Parse(binding.GetProperty("virtual_path").GetString()!));
+                    bindings.Add(channel, ReadBinding(binding, identity));
                 }
             }
         }
 
-        return references.ToFrozenDictionary(StringComparer.Ordinal);
+        return bindings.ToFrozenDictionary(StringComparer.Ordinal);
     }
+
+    // Validate has resolved the reference and checked the rest against the schema.
+    private static MaterialTextureBinding ReadBinding(JsonElement binding, AssetPath identity)
+    {
+        _ = AssetPath.TryResolveReference(identity, binding.GetProperty("virtual_path").GetString()!, VirtualPathRuleSet.Authored, out var texture, out _);
+        return new MaterialTextureBinding(texture!)
+        {
+            UvSet = binding.TryGetProperty("uv_set", out var set) ? set.GetInt32() : 0,
+            UvTransform = binding.TryGetProperty("uv_transform", out var transform) ? ReadTransform(transform) : MaterialUvTransform.Identity,
+            Sampler = binding.TryGetProperty("sampler", out var sampler) ? ReadSampler(sampler) : MaterialTextureSampler.Default,
+        };
+    }
+
+    private static MaterialUvTransform ReadTransform(JsonElement transform)
+        => new(
+            Pair(transform, "scale") ?? Vector2.One,
+            Pair(transform, "offset") ?? Vector2.Zero,
+            OptionalScalar(transform, "rotation_radians") ?? 0.0f);
+
+    private static MaterialTextureSampler ReadSampler(JsonElement sampler)
+        => new()
+        {
+            AddressU = Parse(sampler, "address_u", MaterialTextureAddress.Repeat),
+            AddressV = Parse(sampler, "address_v", MaterialTextureAddress.Repeat),
+            MagFilter = Parse(sampler, "mag_filter", MaterialTextureFilter.Linear),
+            MinFilter = Parse(sampler, "min_filter", MaterialTextureFilter.Linear),
+            MipFilter = Parse(sampler, "mip_filter", MaterialTextureMipFilter.Linear),
+        };
+
+    private static MaterialProceduralGrid ReadGrid(JsonElement grid)
+        => new()
+        {
+            Spacing = Pair(grid, "spacing"),
+            MajorEvery = grid.TryGetProperty("major_every", out var every) ? every.GetUInt32() : null,
+            LineThickness = OptionalScalar(grid, "line_thickness"),
+            MajorThickness = OptionalScalar(grid, "major_thickness"),
+            AxisThickness = OptionalScalar(grid, "axis_thickness"),
+            FadeStart = OptionalScalar(grid, "fade_start"),
+            FadeEnd = OptionalScalar(grid, "fade_end"),
+            MinorColor = Color(grid, "minor_color"),
+            MajorColor = Color(grid, "major_color"),
+            AxisColorX = Color(grid, "axis_color_x"),
+            AxisColorY = Color(grid, "axis_color_y"),
+            OriginColor = Color(grid, "origin_color"),
+        };
+
+    private static float? OptionalScalar(JsonElement parent, string name)
+        => parent.TryGetProperty(name, out var value) ? value.GetSingle() : null;
+
+    private static Vector2? Pair(JsonElement parent, string name)
+        => parent.TryGetProperty(name, out var value) ? new Vector2(value[0].GetSingle(), value[1].GetSingle()) : null;
+
+    private static Vector4? Color(JsonElement parent, string name)
+        => parent.TryGetProperty(name, out var value) ? new Vector4(value[0].GetSingle(), value[1].GetSingle(), value[2].GetSingle(), value[3].GetSingle()) : null;
+
+    private static T Parse<T>(JsonElement parent, string name, T fallback)
+        where T : struct, Enum
+        => parent.TryGetProperty(name, out var value) ? Enum.Parse<T>(value.GetString()!, ignoreCase: true) : fallback;
 }

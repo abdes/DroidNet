@@ -9,6 +9,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.ImportAdapterScenario;
@@ -176,7 +177,7 @@ public sealed class SourceAnalysisAdapterTests
                 var job = report["jobs"]![0]!;
                 switch (failure)
                 {
-                    case "version": report["schema_version"] = 5; break;
+                    case "version": report["schema_version"] = EngineSchemaVersions.SourceAnalysis + 1; break;
                     case "path": job["observations"]![0]!["path"] = "relative.json"; break;
                     case "absence": job["observations"]![0]!["exists"] = false; break;
                     case "completion": job["complete"] = false; break;
@@ -376,7 +377,7 @@ public sealed class SourceAnalysisAdapterTests
                 });
             }
 
-            var report = new JsonObject { ["schema_version"] = 4, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs, ["diagnostics"] = new JsonArray() };
+            var report = new JsonObject { ["schema_version"] = EngineSchemaVersions.SourceAnalysis, ["producer_version"] = "display-only-version", ["complete"] = this.ExitCode == 0, ["jobs"] = jobs, ["diagnostics"] = new JsonArray() };
             this.RewriteReport?.Invoke(report);
             await File.WriteAllTextAsync(this.ReportPath, report.ToJsonString(), cancellationToken).ConfigureAwait(false);
             return this.Failure is { } failure ? throw failure : new(this.ExitCode, string.Empty, string.Empty);

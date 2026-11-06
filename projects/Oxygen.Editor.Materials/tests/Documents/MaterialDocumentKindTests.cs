@@ -57,7 +57,7 @@ public sealed class MaterialDocumentKindTests
         var copy = MaterialDocuments.FileOf("Wood Copy");
         _ = (await document.SaveCopyAsync(copy, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
 
-        var written = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(copy.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var written = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(copy.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false), copy.Asset);
         _ = written.Name.Should().Be("Wood Copy");
         _ = written.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = document.IsDirty.Should().BeTrue();

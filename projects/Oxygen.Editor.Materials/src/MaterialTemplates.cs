@@ -6,12 +6,16 @@ using System.Text;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials;
 
 /// <summary>The source of a new material, and the template New Material creates it from.</summary>
 public static class MaterialTemplates
 {
+    // A new material references nothing, so it reads the same from anywhere.
+    private static readonly AssetPath NoReferences = AssetPath.Parse("/Content/New.omat");
+
     /// <summary>Gets the template of New Material: a material source in <c>Materials</c>, named after its file.</summary>
     public static AuthoredAssetTemplate Asset { get; } = new()
     {
@@ -40,7 +44,7 @@ public static class MaterialTemplates
             alphaCutoff: 0.5f,
             doubleSided: false);
         using var memory = new MemoryStream();
-        MaterialSourceWriter.Write(memory, source);
+        MaterialSourceWriter.Write(memory, source, NoReferences);
         return Encoding.UTF8.GetString(memory.ToArray());
     }
 }

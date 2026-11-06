@@ -64,7 +64,7 @@ public sealed class MountsFileWatcherTests : IDisposable
     public async Task ABindingInTheProjectsOwnFile_IsAppliedWithTheDeclarationsAsTheyAre()
     {
         using var watcher = this.CreateWatcher();
-        this.fileSystem.File.WriteAllText(Path.Combine(Root, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Shared":"D:/Shared"}}""");
+        this.fileSystem.File.WriteAllText(Path.Combine(Root, ProjectMounts.FileName), $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Shared":"D:/Shared"}}""");
 
         var changed = await watcher.ApplyAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -82,7 +82,7 @@ public sealed class MountsFileWatcherTests : IDisposable
     {
         using var watcher = this.CreateWatcher();
 
-        this.fileSystem.File.WriteAllText(Path.Combine(folder, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Shared":"D:/Shared"}}""");
+        this.fileSystem.File.WriteAllText(Path.Combine(folder, ProjectMounts.FileName), $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Shared":"D:/Shared"}}""");
 
         var (_, candidate, _) = await this.applied.Task.WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = MountChange.CandidateContext(this.session.Context, candidate).Mounts.Single(static mount => mount.Name == "Shared").Location

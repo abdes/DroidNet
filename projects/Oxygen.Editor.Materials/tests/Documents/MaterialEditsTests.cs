@@ -187,7 +187,7 @@ public sealed class MaterialEditsTests
 
         _ = document.History.UndoStack.Should().ContainSingle();
         _ = document.IsDirty.Should().BeFalse();
-        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false), MaterialDocuments.IdentityOf("Wood"));
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.5f);
     }
 

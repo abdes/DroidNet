@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -16,20 +17,24 @@ public static class MaterialSourceWriter
     /// <summary>Writes the source using the same descriptor consumed by native cooking.</summary>
     /// <param name="output">The destination stream.</param>
     /// <param name="material">The immutable source snapshot.</param>
+    /// <param name="identity">The material's identity, which its references are spelled from.</param>
     /// <exception cref="AssetFormatException">The source does not make a valid descriptor.</exception>
-    public static void Write(Stream output, MaterialSource material)
+    public static void Write(Stream output, MaterialSource material, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(output);
-        JsonSerializer.Serialize(output, ToJson(material), Serialization.Options);
+        JsonSerializer.Serialize(output, ToJson(material, identity), Serialization.Options);
     }
 
     /// <summary>Creates an independently owned, schema-validated canonical descriptor.</summary>
     /// <param name="material">The source snapshot.</param>
-    /// <returns>The descriptor, including preserved texture and native fields.</returns>
+    /// <param name="identity">The material's identity, which its references are spelled from.</param>
+    /// <returns>The descriptor, including preserved native fields. A binding field or the occlusion mode that holds the
+    /// engine's default is not written.</returns>
     /// <exception cref="AssetFormatException">The source does not make a valid descriptor.</exception>
-    public static JsonObject ToJson(MaterialSource material)
+    public static JsonObject ToJson(MaterialSource material, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(material);
+        ArgumentNullException.ThrowIfNull(identity);
         var descriptor = material.Descriptor is { } saved
             ? JsonNode.Parse(saved.GetRawText())!.AsObject() : new JsonObject();
         if (material.Name is { Length: > 0 } name)
@@ -87,9 +92,11 @@ public static class MaterialSourceWriter
             parameters["ambient_occlusion"] = material.OcclusionStrength;
         }
 
-        ApplyTextureReferences(descriptor, material.TextureReferences);
+        ApplyTextureBindings(descriptor, material.TextureBindings, identity);
+        Set(descriptor, "ambient_occlusion_mode", material.AmbientOcclusionMode == MaterialAmbientOcclusionMode.Strength ? "strength" : null);
+        Set(descriptor, "procedural_grid", material.ProceduralGrid is { } grid ? ToJson(grid) : null);
 
-        MaterialSourceReader.Validate(JsonSerializer.SerializeToElement(descriptor));
+        MaterialSourceReader.Validate(JsonSerializer.SerializeToElement(descriptor), identity);
         return descriptor;
     }
 
@@ -105,36 +112,84 @@ public static class MaterialSourceWriter
         return original.GetSingle() != value;
     }
 
-    private static void ApplyTextureReferences(JsonObject descriptor, IReadOnlyDictionary<string, AssetPath> references)
+    private static void ApplyTextureBindings(JsonObject descriptor, IReadOnlyDictionary<string, MaterialTextureBinding> bindings, AssetPath identity)
     {
-        var textures = descriptor["textures"] is JsonObject original
-            ? (JsonObject)original.DeepClone()
-            : new JsonObject();
+        var textures = new JsonObject();
         foreach (var channel in MaterialSource.TextureChannels)
         {
-            if (!references.TryGetValue(channel, out var texture))
+            if (bindings.TryGetValue(channel, out var binding))
             {
-                _ = textures.Remove(channel);
-                continue;
-            }
-
-            if (textures[channel] is JsonObject existing)
-            {
-                existing["virtual_path"] = texture.VirtualPath;
-            }
-            else
-            {
-                textures[channel] = new JsonObject { ["virtual_path"] = texture.VirtualPath };
+                textures[channel] = ToJson(binding, identity);
             }
         }
 
-        if (textures.Count == 0)
+        Set(descriptor, "textures", textures.Count == 0 ? null : textures);
+    }
+
+    private static JsonObject ToJson(MaterialTextureBinding binding, AssetPath identity)
+    {
+        var json = new JsonObject { ["virtual_path"] = binding.Texture.ToReference(identity) };
+        Set(json, "uv_set", binding.UvSet == 0 ? null : binding.UvSet);
+        Set(json, "uv_transform", binding.UvTransform == MaterialUvTransform.Identity ? null : ToJson(binding.UvTransform));
+        Set(json, "sampler", binding.Sampler == MaterialTextureSampler.Default ? null : ToJson(binding.Sampler));
+        return json;
+    }
+
+    private static JsonObject ToJson(MaterialUvTransform transform)
+    {
+        var json = new JsonObject();
+        Set(json, "scale", transform.Scale == Vector2.One ? null : Array(transform.Scale));
+        Set(json, "offset", transform.Offset == Vector2.Zero ? null : Array(transform.Offset));
+        Set(json, "rotation_radians", transform.RotationRadians == 0.0f ? null : transform.RotationRadians);
+        return json;
+    }
+
+    private static JsonObject ToJson(MaterialTextureSampler sampler)
+    {
+        var json = new JsonObject();
+        Set(json, "address_u", sampler.AddressU == MaterialTextureSampler.Default.AddressU ? null : Name(sampler.AddressU));
+        Set(json, "address_v", sampler.AddressV == MaterialTextureSampler.Default.AddressV ? null : Name(sampler.AddressV));
+        Set(json, "mag_filter", sampler.MagFilter == MaterialTextureSampler.Default.MagFilter ? null : Name(sampler.MagFilter));
+        Set(json, "min_filter", sampler.MinFilter == MaterialTextureSampler.Default.MinFilter ? null : Name(sampler.MinFilter));
+        Set(json, "mip_filter", sampler.MipFilter == MaterialTextureSampler.Default.MipFilter ? null : Name(sampler.MipFilter));
+        return json;
+    }
+
+    private static JsonObject ToJson(MaterialProceduralGrid grid)
+    {
+        var json = new JsonObject();
+        Set(json, "spacing", grid.Spacing is { } spacing ? Array(spacing) : null);
+        Set(json, "major_every", grid.MajorEvery);
+        Set(json, "line_thickness", grid.LineThickness);
+        Set(json, "major_thickness", grid.MajorThickness);
+        Set(json, "axis_thickness", grid.AxisThickness);
+        Set(json, "fade_start", grid.FadeStart);
+        Set(json, "fade_end", grid.FadeEnd);
+        Set(json, "minor_color", grid.MinorColor is { } minor ? Array(minor) : null);
+        Set(json, "major_color", grid.MajorColor is { } major ? Array(major) : null);
+        Set(json, "axis_color_x", grid.AxisColorX is { } axisX ? Array(axisX) : null);
+        Set(json, "axis_color_y", grid.AxisColorY is { } axisY ? Array(axisY) : null);
+        Set(json, "origin_color", grid.OriginColor is { } origin ? Array(origin) : null);
+        return json;
+    }
+
+    private static JsonArray Array(Vector2 value) => new(value.X, value.Y);
+
+    private static JsonArray Array(Vector4 value) => new(value.X, value.Y, value.Z, value.W);
+
+    private static string Name<T>(T value)
+        where T : struct, Enum
+        => value.ToString().ToLowerInvariant();
+
+    private static void Set(JsonObject parent, string name, JsonNode? value)
+    {
+        if (value is null)
         {
-            _ = descriptor.Remove("textures");
+            _ = parent.Remove(name);
         }
         else
         {
-            descriptor["textures"] = textures;
+            parent[name] = value;
         }
     }
 }

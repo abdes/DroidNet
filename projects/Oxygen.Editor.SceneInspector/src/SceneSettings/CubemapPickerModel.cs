@@ -97,7 +97,7 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     // The value is whether the cube keeps float radiance, or null when the asset is not a cube.
     private static bool? DescribeCube(IFileSystem? files, AssetEntry asset)
         => asset.DescriptorPath is { } descriptorPath
-            ? files is not null && Texture.TryRead(files, descriptorPath) is { IsCube: true } texture ? texture.StoresRadiance : null
+            ? files is not null && Texture.TryRead(files, descriptorPath, asset.Identity) is { IsCube: true } texture ? texture.StoresRadiance : null
             : asset.CookedMetadata?.Texture is { IsCube: true } cooked ? cooked.StoresRadiance : null;
 
     private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)

@@ -15,34 +15,56 @@ namespace Oxygen.Managed.Assets.Tests;
 [TestClass]
 public sealed class TextureSourceTests
 {
+    private static readonly AssetPath Wood = AssetPath.Parse("/Content/Textures/Wood.otex");
+
+    private static readonly FileSystemPath Project = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Project"));
+
+    private static readonly MountFileLocator Locator = new(new Dictionary<string, FileSystemPath>(StringComparer.Ordinal)
+    {
+        ["Content"] = Project.Combine("Content"),
+        ["RawMedia"] = Project.Combine("Media"),
+    });
+
     [TestMethod]
     public void ReadNamesEveryImageTheCookerReads()
     {
         var texture = TextureSourceReader.Read(
             AuthoredFiles.Texture("/Content/Textures/Terrain.otex", "Grass.png")
-                .WithIdentityField()
                 .Append("/sources", new JsonObject { ["file"] = "Rock.png", ["layer"] = 1 })
                 .Append("/sources", new JsonObject { ["file"] = "../Shared/Snow.png", ["layer"] = 2, ["mip"] = 0 })
-                .Bytes);
+                .Bytes, Wood);
 
         _ = texture.Images.Should().Equal("Grass.png", "Rock.png", "../Shared/Snow.png");
         _ = texture.Sources[1].Should().Be(new TextureSourceMapping("../Shared/Snow.png") { Layer = 2, Mip = 0 });
-        _ = texture.VirtualPath.Should().Be(AssetPath.Parse("/Content/Textures/Terrain.otex"));
     }
 
     [TestMethod]
-    public void ImagesResolveAgainstTheDescriptorFolder()
+    public void ImagesResolveAgainstTheTexturesIdentityAndInOtherMounts()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "Project", "Content", "Textures");
-        var rooted = Path.Combine(Path.GetTempPath(), "Elsewhere", "Sky.hdr");
-        var texture = new TextureSource("Grass.png") { Sources = [new("../Shared/Snow.png"), new(rooted)] };
+        var texture = new TextureSource("Grass.png") { Sources = [new("../Shared/Snow.png"), new("/RawMedia/Sky.hdr")] };
 
-        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Terrain.otex.json")), static _ => true);
+        var images = texture.ResolveImages(AssetPath.Parse("/Content/Textures/Terrain.otex"), Locator, static _ => true);
 
-        _ = images.Select(static image => image.FullPath).Should().Equal(
-            Path.Combine(folder, "Grass.png"),
-            Path.GetFullPath(Path.Combine(folder, "..", "Shared", "Snow.png")),
-            rooted);
+        _ = images.Should().Equal(
+            new TextureImageFile("Grass.png", Project.Combine("Content/Textures/Grass.png")),
+            new TextureImageFile("../Shared/Snow.png", Project.Combine("Content/Shared/Snow.png")),
+            new TextureImageFile("/RawMedia/Sky.hdr", Project.Combine("Media/Sky.hdr")));
+    }
+
+    [TestMethod]
+    public void AnImageInAMountThatIsNotBoundNamesNoFile()
+    {
+        var images = new TextureSource("/Elsewhere/Sky.hdr").ResolveImages(Wood, Locator, static _ => true);
+
+        _ = images.Should().Equal(new TextureImageFile("/Elsewhere/Sky.hdr", File: null));
+    }
+
+    [TestMethod]
+    public void ASixFaceCubeInAMountThatIsNotBoundNamesNoFaces()
+    {
+        var texture = new TextureSource("/Elsewhere/Sky_px.hdr") { Cube = new TextureCubeSettings { Cubemap = true } };
+
+        _ = texture.ResolveImages(Wood, Locator, static _ => true).Should().Equal(new TextureImageFile("/Elsewhere/Sky_px.hdr", File: null));
     }
 
     [TestMethod]
@@ -51,25 +73,24 @@ public sealed class TextureSourceTests
     [DataRow("Sky.hdr", new[] { "Sky_right.hdr", "Sky_left.hdr", "Sky_top.hdr", "Sky_bottom.hdr", "Sky_front.hdr", "Sky_back.hdr" })]
     public void ASixFaceCubeReadsTheFirstCompleteSetOfFacesAsTheCookerFindsThem(string source, string[] existing)
     {
-        var folder = Path.Combine(Path.GetTempPath(), "Project", "Content", "Sky");
-        var files = existing.Select(name => Path.Combine(folder, name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var folder = Project.Combine("Content/Sky");
+        var files = existing.Select(name => folder.Combine(name).FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var texture = new TextureSource(source) { Cube = new TextureCubeSettings { Cubemap = true } };
 
-        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Sky.otex.json")), image => files.Contains(image.FullPath));
+        var images = texture.ResolveImages(AssetPath.Parse("/Content/Sky/Sky.otex"), Locator, image => files.Contains(image.FullPath));
 
         _ = texture.IsSixFaceCube.Should().BeTrue();
-        _ = images.Select(static image => image.Name).Should().Equal(existing);
+        _ = images.Select(static image => image.File!.Name).Should().Equal(existing);
     }
 
     [TestMethod]
     public void ASixFaceCubeWithoutACompleteSetReadsTheFirstSetSoTheMissingFacesAreReported()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "Project", "Content", "Sky");
         var texture = new TextureSource("Sky_px.hdr") { Cube = new TextureCubeSettings { Cubemap = true } };
 
-        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Sky.otex.json")), static _ => false);
+        var images = texture.ResolveImages(AssetPath.Parse("/Content/Sky/Sky.otex"), Locator, static _ => false);
 
-        _ = images.Select(static image => image.Name).Should().Equal("Sky_px.hdr", "Sky_nx.hdr", "Sky_py.hdr", "Sky_ny.hdr", "Sky_pz.hdr", "Sky_nz.hdr");
+        _ = images.Select(static image => image.File!.Name).Should().Equal("Sky_px.hdr", "Sky_nx.hdr", "Sky_py.hdr", "Sky_ny.hdr", "Sky_pz.hdr", "Sky_nz.hdr");
     }
 
     [TestMethod]
@@ -79,7 +100,7 @@ public sealed class TextureSourceTests
     [DataRow("""{ "source": "Sky_px.hdr", "sources": [ { "file": "Sky_nx.hdr", "layer": 1 } ], "cube": { "cubemap": true } }""")]
     [DataRow("""{ "source": "Sky_px.hdr" }""")]
     public void OnlyACubeWithoutLayoutProjectionOrOtherSourcesIsMadeOfSixFaceFiles(string json)
-        => _ = TextureSourceReader.Read(Encoding.UTF8.GetBytes(json)).IsSixFaceCube.Should().BeFalse();
+        => _ = TextureSourceReader.Read(Encoding.UTF8.GetBytes(json), Wood).IsSixFaceCube.Should().BeFalse();
 
     [TestMethod]
     [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true, "cube_face_size": 512 } }""", true, true)]
@@ -89,7 +110,7 @@ public sealed class TextureSourceTests
     [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" } }""", false, true)]
     public void CubeAndRadianceComeFromTheCubeAndOutputSettings(string json, bool isCube, bool storesRadiance)
     {
-        var texture = TextureSourceReader.Read(Encoding.UTF8.GetBytes(json));
+        var texture = TextureSourceReader.Read(Encoding.UTF8.GetBytes(json), Wood);
 
         _ = texture.IsCube.Should().Be(isCube);
         _ = texture.StoresRadiance.Should().Be(storesRadiance);
@@ -99,17 +120,20 @@ public sealed class TextureSourceTests
     [DataRow("""{ "source": "Wood.png" """, TextureSourceCodes.NotJson)]
     [DataRow("""{ "virtual_path": "/Content/Textures/Wood.otex" }""", TextureSourceCodes.SchemaMismatch)]
     [DataRow("""{ "source": "Wood.png", "mips": { "policy": "max" } }""", TextureSourceCodes.SchemaMismatch)]
-    [DataRow("""{ "source": "Wood.png", "virtual_path": "/Content/Textures/../Wood.otex" }""", TextureSourceCodes.VirtualPathInvalid)]
+    [DataRow("""{ "source": "Wood.png", "virtual_path": "/Content/Textures/Wood.otex" }""", TextureSourceCodes.SchemaMismatch)]
+    [DataRow("""{ "source": "../../../Wood.png" }""", "vpath.reference_outside_mount")]
+    [DataRow("""{ "source": "/Content/Wood.png" }""", "vpath.reference_self_absolute")]
+    [DataRow("""{ "source": "Wood.png", "sources": [ { "file": "../../../Other.png", "layer": 1 } ] }""", "vpath.reference_outside_mount")]
     public void ReadRefusesWhatTheCookerRefuses(string json, string code)
     {
-        var read = () => TextureSourceReader.Read(Encoding.UTF8.GetBytes(json));
+        var read = () => TextureSourceReader.Read(Encoding.UTF8.GetBytes(json), Wood);
 
         _ = read.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(code);
     }
 
     [TestMethod]
     public void ReadAcceptsAByteOrderMark()
-        => _ = TextureSourceReader.Read([.. Encoding.UTF8.Preamble, .. AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").Bytes]).Source.Should().Be("Wood.png");
+        => _ = TextureSourceReader.Read([.. Encoding.UTF8.Preamble, .. AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").Bytes], Wood).Source.Should().Be("Wood.png");
 
     [TestMethod]
     public void WriteKeepsTheFieldsTheModelDoesNotName()
@@ -121,9 +145,9 @@ public sealed class TextureSourceTests
                 .Set("/decode", JsonNode.Parse("""{ "color_space": "srgb", "flip_y": true }"""))
                 .Set("/mips", JsonNode.Parse("""{ "policy": "full", "filter": "kaiser" }"""))
                 .Set("/output", JsonNode.Parse("""{ "format": "bc7_srgb", "bc7_quality": "high" }"""))
-                .Bytes);
+                .Bytes, Wood);
 
-        var written = TextureSourceWriter.ToJson(texture with { Source = "../Wood.png", Format = "rgba8_srgb", ColorSpace = null });
+        var written = TextureSourceWriter.ToJson(texture with { Source = "../Wood.png", Format = "rgba8_srgb", ColorSpace = null }, Wood);
 
         _ = written["source"]!.GetValue<string>().Should().Be("../Wood.png");
         _ = written["output"]!["format"]!.GetValue<string>().Should().Be("rgba8_srgb");
@@ -139,7 +163,6 @@ public sealed class TextureSourceTests
         var texture = new TextureSource("Sky_px.hdr")
         {
             Name = "Sky",
-            VirtualPath = AssetPath.Parse("/Content/Textures/Sky.otex"),
             Sources = [new("Sky_mip1.hdr") { Mip = 1 }],
             Intent = "hdr_env",
             ColorSpace = "linear",
@@ -147,10 +170,9 @@ public sealed class TextureSourceTests
             Cube = new() { Cubemap = true },
         };
 
-        var reread = TextureSourceReader.Read(Encoding.UTF8.GetBytes(TextureSourceWriter.ToJson(texture).ToJsonString()));
+        var reread = TextureSourceReader.Read(Encoding.UTF8.GetBytes(TextureSourceWriter.ToJson(texture, Wood).ToJsonString()), Wood);
 
         _ = reread.Name.Should().Be("Sky");
-        _ = reread.VirtualPath.Should().Be(texture.VirtualPath);
         _ = reread.Images.Should().Equal("Sky_px.hdr", "Sky_mip1.hdr");
         _ = reread.Sources.Single().Mip.Should().Be(1);
         _ = reread.Intent.Should().Be("hdr_env");
@@ -165,15 +187,15 @@ public sealed class TextureSourceTests
         var texture = TextureSourceReader.Read(
             AuthoredFiles.Texture("/Content/Textures/Sky.otex", "Sky.hdr")
                 .Set("/cube", JsonNode.Parse("""{ "equirect_to_cube": true, "cube_face_size": 256 }"""))
-                .Bytes);
+                .Bytes, Wood);
 
-        _ = TextureSourceWriter.ToJson(texture with { Cube = null }).ContainsKey("cube").Should().BeFalse();
+        _ = TextureSourceWriter.ToJson(texture with { Cube = null }, Wood).ContainsKey("cube").Should().BeFalse();
     }
 
     [TestMethod]
     public void WriteRefusesSettingsTheCookerRefuses()
     {
-        var write = () => TextureSourceWriter.ToJson(new TextureSource("Wood.png") { Format = "dxt1" });
+        var write = () => TextureSourceWriter.ToJson(new TextureSource("Wood.png") { Format = "dxt1" }, Wood);
 
         _ = write.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(TextureSourceCodes.SchemaMismatch);
     }

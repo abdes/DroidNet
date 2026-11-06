@@ -16,19 +16,21 @@ public static class TextureSourceReader
 
     /// <summary>Reads a texture descriptor, keeping the fields the model does not name.</summary>
     /// <param name="jsonUtf8">The descriptor bytes.</param>
+    /// <param name="identity">The texture's identity, which its references are relative to.</param>
     /// <returns>The texture's source.</returns>
     /// <exception cref="AssetFormatException">
-    /// The content is not a texture: its problem has one of the <see cref="TextureSourceCodes"/>.
+    /// The content is not a texture: its problem has one of the <see cref="TextureSourceCodes"/>, or the <c>vpath.*</c>
+    /// code of a reference that does not resolve.
     /// </exception>
-    public static TextureSource Read(ReadOnlySpan<byte> jsonUtf8)
+    public static TextureSource Read(ReadOnlySpan<byte> jsonUtf8, AssetPath identity)
     {
+        ArgumentNullException.ThrowIfNull(identity);
         using var document = DescriptorFormat.Parse(jsonUtf8, TextureSourceCodes.NotJson, "The texture is not valid JSON.");
         var descriptor = document.RootElement;
-        var virtualPath = Validate(descriptor);
+        Validate(descriptor, identity);
         return new TextureSource(descriptor.GetProperty("source").GetString()!)
         {
             Name = Text(descriptor, "name"),
-            VirtualPath = virtualPath,
             Sources = descriptor.TryGetProperty("sources", out var sources) ? [.. sources.EnumerateArray().Select(ReadMapping)] : [],
             Intent = Text(descriptor, "intent"),
             ColorSpace = descriptor.TryGetProperty("decode", out var decode) ? Text(decode, "color_space") : null,
@@ -38,11 +40,11 @@ public static class TextureSourceReader
         };
     }
 
-    /// <summary>Checks a descriptor against the engine schema and the identity rules of its virtual path.</summary>
+    /// <summary>Checks a descriptor against the engine schema and that each file reference resolves.</summary>
     /// <param name="descriptor">The descriptor.</param>
-    /// <returns>The texture's virtual path, or <see langword="null"/> when it has none.</returns>
+    /// <param name="identity">The texture's identity.</param>
     /// <exception cref="AssetFormatException">The descriptor has a problem.</exception>
-    internal static AssetPath? Validate(JsonElement descriptor)
+    internal static void Validate(JsonElement descriptor, AssetPath identity)
     {
         var evaluation = Schema.Value.Evaluate(descriptor, new EvaluationOptions { OutputFormat = OutputFormat.List });
         if (!evaluation.IsValid)
@@ -53,15 +55,22 @@ public static class TextureSourceReader
                 DescriptorFormat.Describe(evaluation));
         }
 
-        if (!descriptor.TryGetProperty("virtual_path", out var value))
+        ValidateReference(descriptor.GetProperty("source").GetString()!, identity);
+        if (descriptor.TryGetProperty("sources", out var sources))
         {
-            return null;
+            foreach (var mapping in sources.EnumerateArray())
+            {
+                ValidateReference(mapping.GetProperty("file").GetString()!, identity);
+            }
         }
+    }
 
-        var path = value.GetString()!;
-        return AssetPath.TryParse(path, out var virtualPath) && !virtualPath.IsMount
-            ? virtualPath
-            : throw DescriptorFormat.Problem(TextureSourceCodes.VirtualPathInvalid, $"The texture's virtual path '{path}' is not a canonical absolute virtual path below a mount point.");
+    private static void ValidateReference(string reference, AssetPath identity)
+    {
+        if (!AssetPath.TryResolveReference(identity, reference, VirtualPathRuleSet.Cooked, out _, out var error))
+        {
+            throw DescriptorFormat.Problem(error.Value.ToCode(), $"The texture's image '{reference}' cannot be resolved: {error.Value.ToMessage()}");
+        }
     }
 
     private static TextureSourceMapping ReadMapping(JsonElement mapping)

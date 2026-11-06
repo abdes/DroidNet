@@ -13,13 +13,15 @@ namespace Oxygen.Editor.Materials.Tests;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers these public test classes using the repository's default discovery configuration.")]
 public sealed class MaterialTests
 {
+    private static AssetPath Identity { get; } = AssetPath.Parse("/Content/Materials/Oak.omat");
+
     private static MaterialSource Oak { get; } = MaterialSourceReader.Read(
-        """{"name":"Oak","textures":{"base_color":{"virtual_path":"/Content/Textures/Oak.otex"},"normal":{"virtual_path":"/Content/Textures/OakNormal.otex"}}}"""u8);
+        """{"name":"Oak","textures":{"base_color":{"virtual_path":"../Textures/Oak.otex"},"normal":{"virtual_path":"../Textures/OakNormal.otex"}}}"""u8, Identity);
 
     [TestMethod]
     public void Replace_ADifferentSource_RaisesChangedOnce()
     {
-        var material = new Material(Oak);
+        var material = new Material(Oak, Identity);
         var changes = 0;
         material.Changed += (_, _) => changes++;
         var edited = Oak with { DoubleSided = true };
@@ -50,10 +52,10 @@ public sealed class MaterialTests
     [TestMethod]
     public void AreSame_ComparesWhatSavingWrites()
     {
-        var reread = MaterialSourceReader.Read(Material.Serialize(Oak));
+        var reread = MaterialSourceReader.Read(Material.Serialize(Oak, Identity), Identity);
 
-        _ = Material.AreSame(Oak, reread).Should().BeTrue();
-        _ = Material.AreSame(Oak, Oak with { AlphaCutoff = 0.25f }).Should().BeFalse();
+        _ = new Material(Oak, Identity).IsSameAs(reread).Should().BeTrue();
+        _ = new Material(Oak, Identity).IsSameAs(Oak with { AlphaCutoff = 0.25f }).Should().BeFalse();
     }
 
     [TestMethod]

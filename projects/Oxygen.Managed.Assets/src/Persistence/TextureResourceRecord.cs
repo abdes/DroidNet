@@ -18,7 +18,7 @@ namespace Oxygen.Managed.Assets.Persistence;
 public sealed record TextureResourceRecord(byte TextureType, byte Format, uint Width, uint Height, ushort ArrayLayers)
 {
     /// <summary>The size of the native record.</summary>
-    public const int Size = 39;
+    public const int Size = 63;
 
     // Engine TextureType (Oxygen/Core/Types/TextureType.h) and Format (Oxygen/Core/Types/Format.h) values.
     private const byte Texture2D = 3;

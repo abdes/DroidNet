@@ -26,6 +26,7 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -359,7 +360,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
     private static JsonElement Provenance()
         => JsonSerializer.SerializeToElement(new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["schema_version"] = 3,
+            ["schema_version"] = EngineSchemaVersions.SurfaceProvenance,
             ["geometries"] = new[]
             {
                 new Dictionary<string, object>(StringComparer.Ordinal)

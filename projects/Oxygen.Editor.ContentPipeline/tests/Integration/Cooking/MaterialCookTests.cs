@@ -215,13 +215,19 @@ internal sealed partial class MaterialCookTests
     private static MaterialCookService CreateService(MaterialWorkspace workspace)
         => new(workspace.NativePipeline.Pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
+    private static AssetPath IdentityOf(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return AssetPath.Parse("/Content" + normalized[normalized.LastIndexOf("/Materials/", StringComparison.Ordinal)..^".json".Length]);
+    }
+
     private static async Task WriteMaterialAsync(string path, MaterialSource material)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var stream = File.Create(path);
         await using (stream.ConfigureAwait(false))
         {
-            MaterialSourceWriter.Write(stream, material);
+            MaterialSourceWriter.Write(stream, material, IdentityOf(path));
         }
     }
 

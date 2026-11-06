@@ -41,6 +41,9 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     // The field of a model import record that names its source.
     private const string SourceProperty = "$.source";
 
+    /// <summary>The version of the file tools read.</summary>
+    internal const int ReferencesFileVersion = 2;
+
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     private readonly IProjectSession session;
@@ -178,7 +181,7 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     // Writes the list beside the project's other build output, replacing the previous list in one move.
     private static async Task WriteAsync(ProjectContext project, string path, ImmutableArray<UnresolvedReference> found, CancellationToken cancellationToken)
     {
-        var document = new ReferencesFile(1, [.. found.Select(reference => new ReferencesFile.Entry(
+        var document = new ReferencesFile(ReferencesFileVersion, [.. found.Select(reference => new ReferencesFile.Entry(
             CookPaths.TryOf(project, reference.File) ?? reference.File.FullPath,
             reference.Property,
             reference.MountPath,
@@ -222,7 +225,7 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
 
     // The file tools read: each unresolved reference by the cook path of its file, its field, the mount path and the code.
     private sealed record ReferencesFile(
-        [property: JsonPropertyName("version")] int Version,
+        [property: JsonPropertyName("schema_version")] int Version,
         [property: JsonPropertyName("references")] IReadOnlyList<ReferencesFile.Entry> References)
     {
         /// <summary>One unresolved reference.</summary>

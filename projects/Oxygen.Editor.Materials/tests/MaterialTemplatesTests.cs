@@ -6,6 +6,7 @@ using System.Text;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials.Tests;
 
@@ -17,7 +18,7 @@ public sealed class MaterialTemplatesTests
     [TestMethod]
     public void NewMaterialReadsAsAnOpaqueSingleSidedSourceNamedAfterItsFile()
     {
-        var source = MaterialSourceReader.Read(Encoding.UTF8.GetBytes(MaterialTemplates.New("Wood")));
+        var source = MaterialSourceReader.Read(Encoding.UTF8.GetBytes(MaterialTemplates.New("Wood")), AssetPath.Parse("/Content/Materials/Wood.omat"));
 
         _ = source.Name.Should().Be("Wood");
         _ = source.AlphaMode.Should().Be(MaterialAlphaMode.Opaque);

@@ -118,7 +118,7 @@ public sealed class UnsavedCookInputsTests
         _ = box.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Parse("/Content/Geometry/Box.ogeo") });
         scene.RootNodes.Add(box);
         _ = await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json", scene, token).ConfigureAwait(false);
-        var geometry = AuthoredFiles.Geometry("/Content/Geometry/Box.ogeo").SubmeshMaterial(0, 0, "/Content/Materials/A.omat").WithIdentityField();
+        var geometry = AuthoredFiles.Geometry("/Content/Geometry/Box.ogeo").SubmeshMaterial(0, 0, "/Content/Materials/A.omat");
         _ = workspace.Write("Content/Geometry/Box.ogeo.json", geometry.Append("/buffers", new JsonObject { ["source"] = "mesh.bin", ["virtual_path"] = geometry.Spell("/Content/Geometry/Box.obuf") }).Text);
         _ = workspace.Write("Content/Geometry/mesh.bin", "bin");
         _ = workspace.Write(MaterialA, AuthoredFiles.Material("/Content/Materials/A.omat").Text);

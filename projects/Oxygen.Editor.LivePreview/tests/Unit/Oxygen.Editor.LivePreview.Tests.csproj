@@ -10,6 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testing\Oxygen.Managed.Assets.Testing.csproj" />
         <ProjectReference Include="..\..\src\Oxygen.Editor.LivePreview.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />

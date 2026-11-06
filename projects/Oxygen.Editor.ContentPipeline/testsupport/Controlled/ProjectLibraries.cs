@@ -34,7 +34,7 @@ internal static class ProjectLibraries
             .Concat(libraries)
             .ToDictionary(static binding => binding.Name, static binding => binding.Location.Replace('\\', '/'), StringComparer.Ordinal);
         var mountsFile = context.ProjectRoot.Combine(ProjectMounts.FileName).FullPath;
-        context.FileSystem.File.WriteAllText(mountsFile, JsonSerializer.Serialize(new { version = 1, mounts = bindings }));
+        context.FileSystem.File.WriteAllText(mountsFile, JsonSerializer.Serialize(new { schema_version = ProjectMounts.SchemaVersion, mounts = bindings }));
         var table = ProjectMounts.Resolve(context.FileSystem, context.ProjectRoot, declared);
         return context with { Mounts = table.Mounts, MountFindings = table.Findings };
     }

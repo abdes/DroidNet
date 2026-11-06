@@ -5,6 +5,7 @@
 using System.Text.Json;
 using Json.Schema;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Assets.Authoring.Input;
@@ -19,26 +20,29 @@ public static class InputSourceReader
 
     /// <summary>Reads an input source.</summary>
     /// <param name="jsonUtf8">The source bytes.</param>
+    /// <param name="identity">The source's identity, which its references are relative to.</param>
     /// <returns>The source.</returns>
     /// <exception cref="AssetFormatException">
     /// The content is not JSON or does not match the engine's input schema: its problem has one of the
     /// <see cref="InputSourceCodes"/>.
     /// </exception>
-    public static InputSource Read(ReadOnlySpan<byte> jsonUtf8)
+    public static InputSource Read(ReadOnlySpan<byte> jsonUtf8, AssetPath identity)
     {
-        var report = Check(jsonUtf8);
+        var report = Check(jsonUtf8, identity);
         return report.Source ?? throw new AssetFormatException(report.Problems[0]);
     }
 
     /// <summary>
-    /// Checks an input source as the cooker will: JSON, the engine's input schema, one declaration per name, and every
-    /// action named by its name declared in the source. A reference by virtual path is resolved by its consumer, which
-    /// knows the project.
+    /// Checks an input source as the cooker will: JSON, the engine's input schema, one declaration per name, every action
+    /// named by its name declared in the source, and every reference resolving. Whether the action a reference resolves
+    /// to exists is for its consumer, which knows the project.
     /// </summary>
     /// <param name="jsonUtf8">The source bytes.</param>
+    /// <param name="identity">The source's identity, which its references are relative to.</param>
     /// <returns>The source, when it is JSON that matches the schema, and every problem with its position.</returns>
-    public static InputSourceReport Check(ReadOnlySpan<byte> jsonUtf8)
+    public static InputSourceReport Check(ReadOnlySpan<byte> jsonUtf8, AssetPath identity)
     {
+        ArgumentNullException.ThrowIfNull(identity);
         JsonDocument document;
         try
         {
@@ -59,7 +63,7 @@ public static class InputSourceReader
             }
 
             var source = ReadSource(document.RootElement, positions);
-            return new InputSourceReport(source, [.. DeclarationProblems(source)]);
+            return new InputSourceReport(source, [.. DeclarationProblems(source), .. ReferenceProblems(source, identity)]);
         }
     }
 
@@ -128,12 +132,23 @@ public static class InputSourceReader
             yield return Problem(InputSourceCodes.ContextDuplicate, $"The mapping context '{context.Name}' is declared more than once.", context.Position);
         }
 
-        foreach (var reference in source.ActionReferences.Where(reference => !reference.IsPath && source.FindAction(reference.Text) is null))
+        foreach (var reference in source.ActionReferences.Where(reference => !reference.IsReference && source.FindAction(reference.Text) is null))
         {
             yield return Problem(
                 InputSourceCodes.ActionUndeclared,
-                $"The source declares no action '{reference.Text}'. Declare it, or name an action of another input source by its virtual path.",
+                $"The source declares no action '{reference.Text}'. Declare it, or name an action of another input source by a reference ending with {AssetFileTypes.InputAction}.",
                 reference.Position);
+        }
+    }
+
+    private static IEnumerable<AssetProblem> ReferenceProblems(InputSource source, AssetPath identity)
+    {
+        foreach (var reference in source.ActionReferences.Where(static reference => reference.IsReference))
+        {
+            if (!AssetPath.TryResolveReference(identity, reference.Text, VirtualPathRuleSet.Authored, out _, out var error))
+            {
+                yield return Problem(error.Value.ToCode(), $"The action reference '{reference.Text}' cannot be resolved: {error.Value.ToMessage()}", reference.Position);
+            }
         }
     }
 

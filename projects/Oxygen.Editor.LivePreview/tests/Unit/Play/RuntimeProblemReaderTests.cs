@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -38,7 +39,7 @@ public sealed class RuntimeProblemReaderTests
     public void Read_WithoutRenderableSource_FallsBackToTheCodeSeverityAndSlot(string severity, DiagnosticSeverity expected, string label)
     {
         var diagnostic = JsonNode.Parse($$"""
-            { "schema_version": 2, "severity": "{{severity}}", "code": "S9999", "message": "m", "labels": [], "notes": [],
+            { "schema_version": {{EngineSchemaVersions.ScriptDiagnostic}}, "severity": "{{severity}}", "code": "S9999", "message": "m", "labels": [], "notes": [],
               "slot": { "node": "Player", "slot_index": 2, "hook": "on_update" } }
             """)!.AsObject();
 
@@ -63,8 +64,8 @@ public sealed class RuntimeProblemReaderTests
     public void Read_SpanInAProjectScript_ResolvesTheFileAndPosition()
     {
         var file = this.Write("Content/move.lua", Script);
-        var diagnostic = JsonNode.Parse("""
-            { "schema_version": 2, "severity": "error", "code": "S0701", "family": "runtime", "message": "attempt to index nil",
+        var diagnostic = JsonNode.Parse($$$"""
+            { "schema_version": {{{EngineSchemaVersions.ScriptDiagnostic}}}, "severity": "error", "code": "S0701", "family": "runtime", "message": "attempt to index nil",
               "labels": [ { "span": { "source": "/Content/move.lua", "begin": { "line": 3, "column": 1 }, "end": { "line": 3, "column": 2 } },
                 "message": "this is nil", "primary": true } ],
               "notes": [] }

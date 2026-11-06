@@ -49,7 +49,6 @@ public sealed class TextureImportTests
         _ = (await this.fileSystem.File.ReadAllBytesAsync(this.project.PathOf("/Content/Textures/Wood.png").FullPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal([1, 2, 3]);
         using var descriptor = this.ReadJson("/Content/Textures/Wood.otex.json");
         _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("Wood.png");
-        _ = descriptor.RootElement.GetProperty("virtual_path").GetString().Should().Be("/Content/Textures/Wood.otex");
         _ = descriptor.RootElement.GetProperty("intent").GetString().Should().Be("albedo");
         _ = descriptor.RootElement.GetProperty("decode").GetProperty("color_space").GetString().Should().Be("srgb");
         _ = descriptor.RootElement.GetProperty("output").GetProperty("format").GetString().Should().Be("rgba8_srgb");
@@ -130,7 +129,7 @@ public sealed class TextureImportTests
         var descriptor = this.project.WriteFile("/Content/Sky.otex.json", document.Bytes);
 
         // A descriptor without a source image is no texture, so it is no cube either.
-        var radiance = Texture.TryRead(this.fileSystem, descriptor) is { IsCube: true } texture ? texture.StoresRadiance : (bool?)null;
+        var radiance = Texture.TryRead(this.fileSystem, descriptor, AssetPath.Parse("/Content/Sky.otex")) is { IsCube: true } texture ? texture.StoresRadiance : (bool?)null;
 
         _ = radiance.Should().Be(cube ? storesRadiance : null);
     }
@@ -152,7 +151,8 @@ public sealed class TextureImportTests
             _ = this.project.WriteFile("/Content/Shared/Rock.png", [2]);
         }
 
-        _ = Texture.TryRead(this.fileSystem, descriptor)!.HasSourceImage(this.fileSystem, descriptor).Should().Be(expected);
+        var identity = AssetPath.Parse("/Content/Textures/Terrain.otex");
+        _ = Texture.TryRead(this.fileSystem, descriptor, identity)!.HasSourceImage(this.project.Context, identity).Should().Be(expected);
     }
 
     [TestMethod]

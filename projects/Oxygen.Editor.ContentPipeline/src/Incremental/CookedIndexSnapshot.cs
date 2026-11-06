@@ -73,14 +73,18 @@ internal sealed class CookedIndexSnapshot
     /// <summary>Checks the protected member list and sizes, without hashing their contents.</summary>
     /// <param name="actual">The files actually held by the read lease, with their sizes.</param>
     /// <exception cref="InvalidDataException">A file's size differs from the index, or an indexed file is missing.</exception>
+    /// <remarks>A retired file may still be there or already gone, and a resource data file may hold bytes past the
+    /// committed length.</remarks>
     public void ValidateMetadata(IReadOnlyList<CookedFileEntry> actual)
     {
         var expected = this.Index.Assets.Select(static asset => (Path: asset.DescriptorRelativePath, Size: asset.DescriptorSize))
             .Concat(this.Index.Files.Select(static file => (Path: file.RelativePath, file.Size)))
             .ToDictionary(static file => file.Path, static file => file.Size, StringComparer.Ordinal);
-        foreach (var file in actual.Where(static file => file.RelativePath is not (LooseCookedIndex.FileName or LooseCookedIndex.GenerationLeaseFileName)))
+        var data = this.Index.Files.Where(static file => file.Kind.IsResourceData()).Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
+        var retired = this.Index.Retired.Select(static file => file.RelativePath).ToHashSet(StringComparer.Ordinal);
+        foreach (var file in actual.Where(file => !LooseCookedIndex.IsReservedPath(file.RelativePath) && !retired.Contains(file.RelativePath)))
         {
-            if (!expected.Remove(file.RelativePath, out var size) || file.Size != size)
+            if (!expected.Remove(file.RelativePath, out var size) || (data.Contains(file.RelativePath) ? file.Size < size : file.Size != size))
             {
                 throw new InvalidDataException($"Cooked content metadata does not match its index: {file.RelativePath}.");
             }

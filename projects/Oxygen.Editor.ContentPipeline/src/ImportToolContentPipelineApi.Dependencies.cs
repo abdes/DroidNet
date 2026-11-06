@@ -11,6 +11,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>Uses the installed Inspector under the same native ownership boundary as cooking.</summary>
 public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInspector, ICookedAssetKeyProvider, ICookedGeometryInspector, ICookedScriptInspector
 {
+    // The version of the asset key request the Inspector reads.
+    private const int AssetKeyRequestVersion = 2;
+
     /// <inheritdoc />
     public Task<CookedGeometryReport> InspectGeometryAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
         => this.RunInspectorAsync(operationRoot, ["geometries", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedGeometryReport.Parse, artifacts, cancellationToken);
@@ -26,7 +29,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
     /// <inheritdoc />
     public async Task<CookedAssetKeyMap> ResolveAssetKeysAsync(string operationRoot, IReadOnlyList<string> virtualPaths, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
     {
-        var request = JsonSerializer.Serialize(new { schema_version = 2, virtual_paths = virtualPaths });
+        var request = JsonSerializer.Serialize(new { schema_version = AssetKeyRequestVersion, virtual_paths = virtualPaths });
         var report = await this.RunInspectorAsync(operationRoot, ["asset-keys"], request, CookedAssetKeyMap.Parse, artifacts, cancellationToken).ConfigureAwait(false);
         report.ValidatePaths(virtualPaths);
         return report;

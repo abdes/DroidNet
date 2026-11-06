@@ -24,4 +24,7 @@ public enum FileKind : ushort
     PhysicsData = 8,
     Auxiliary = 11,
     TextureDescriptor = 12,
+
+    /// <summary>An asset descriptor; only a retired record names one, since an asset entry lists a current descriptor.</summary>
+    AssetDescriptor = 13,
 }

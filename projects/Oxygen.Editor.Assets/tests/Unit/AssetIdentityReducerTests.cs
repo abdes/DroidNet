@@ -318,6 +318,12 @@ public sealed partial class AssetIdentityReducerTests
     private static ProjectCookScope CreateCookScope(TempWorkspace workspace, ProjectContext project)
         => new(project.ProjectId, project.ProjectRoot);
 
+    private static string IdentityOf(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return normalized[normalized.LastIndexOf("/Content/", StringComparison.Ordinal)..^".json".Length];
+    }
+
     private static void WriteMaterial(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -335,7 +341,8 @@ public sealed partial class AssetIdentityReducerTests
                     roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
-                doubleSided: false));
+                doubleSided: false),
+            AssetPath.Parse(IdentityOf(path)));
     }
 
     private sealed partial class TempWorkspace : IDisposable

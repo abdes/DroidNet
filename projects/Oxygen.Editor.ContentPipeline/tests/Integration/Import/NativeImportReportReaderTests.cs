@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
@@ -40,7 +41,7 @@ public sealed class NativeImportReportReaderTests
 
         _ = result.Succeeded.Should().BeTrue();
         var update = result.ModelImports["model.gltf"];
-        _ = update.GetProperty("surface_provenance").GetProperty("schema_version").GetInt32().Should().Be(2);
+        _ = update.GetProperty("surface_provenance").GetProperty("schema_version").GetInt32().Should().Be(EngineSchemaVersions.SurfaceProvenance);
         _ = update.GetProperty("published_nodes").GetArrayLength().Should().Be(1);
         _ = update.GetProperty("source_fingerprint").GetProperty("files").GetArrayLength().Should().Be(0);
     }
@@ -111,7 +112,7 @@ public sealed class NativeImportReportReaderTests
         var (execution, report) = CreateReport();
         switch (invalid)
         {
-            case "version": report["schema_version"] = 1; break;
+            case "version": report["schema_version"] = EngineSchemaVersions.ImportReport - 1; break;
             case "index": report["jobs"]![0]!["index"] = 2; break;
             case "path": report["jobs"]![0]!["outputs"]![0]!["path"] = "../outside.ogeo"; break;
             case "products": _ = report["jobs"]![0]!.AsObject().Remove("products"); break;
@@ -180,8 +181,8 @@ public sealed class NativeImportReportReaderTests
         {
             MountsFile = ContentImportMountsFile.Empty,
         };
-        var report = JsonNode.Parse("""
-            {"schema_version":6,"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
+        var report = JsonNode.Parse($$$"""
+            {"schema_version":{{{EngineSchemaVersions.ImportReport}}},"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
              "summary":{"jobs_total":1,"jobs_succeeded":1,"jobs_failed":0,"jobs_skipped":0,"jobs_cancelled":0,"time_ms_total":0,"time_ms_io":0,"time_ms_cpu":0},"jobs":[
               {"index":1,"type":"gltf","importer":{"name":"gltf","revision":1},"work_items":[],"stats":{"time_ms_total":0,"time_ms_io":0,"time_ms_source_load":0,"time_ms_decode":0,"time_ms_load":0,"time_ms_cook":0,"time_ms_emit":0,"time_ms_finalize":0},"status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
                "products":[
@@ -206,16 +207,16 @@ public sealed class NativeImportReportReaderTests
             MountsFile = ContentImportMountsFile.Empty,
         };
         var update = includeUpdate
-            ? """
-              ,"model_import":{"surface_provenance":{"schema_version":2,"geometries":[]},
+            ? $$$"""
+              ,"model_import":{"surface_provenance":{"schema_version":{{{EngineSchemaVersions.SurfaceProvenance}}},"geometries":[]},
                 "published_nodes":[{"anchor":"Body","node_id":"00000000-0000-7000-8000-000000000002"}],
                 "source_fingerprint":{"size":2,"sha256":"%HASH%","files":[]}}
               """.Replace("%HASH%", new string('a', 64), StringComparison.Ordinal)
             : string.Empty;
 
         // The engine reports a model job as the gltf or fbx job its record runs.
-        var report = JsonNode.Parse("""
-            {"schema_version":6,"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
+        var report = JsonNode.Parse($$$"""
+            {"schema_version":{{{EngineSchemaVersions.ImportReport}}},"session":{"id":"session","started_utc":"2026-01-01T00:00:00Z","ended_utc":"2026-01-01T00:00:00Z","tool_version":"1.0","command_line":"tool batch","cooked_root":""},
              "summary":{"jobs_total":1,"jobs_succeeded":1,"jobs_failed":0,"jobs_skipped":0,"jobs_cancelled":0,"time_ms_total":0,"time_ms_io":0,"time_ms_cpu":0},"jobs":[
               {"index":1,"type":"gltf","work_items":[],"stats":{"time_ms_total":0,"time_ms_io":0,"time_ms_source_load":0,"time_ms_decode":0,"time_ms_load":0,"time_ms_cook":0,"time_ms_emit":0,"time_ms_finalize":0},"status":"succeeded","outputs":[],"products":[],"diagnostics":[]
             """ + update + "}]}")!;

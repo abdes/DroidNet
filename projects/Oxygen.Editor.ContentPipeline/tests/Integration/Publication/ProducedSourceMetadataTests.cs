@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Models;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.PublicationScenario;
 
@@ -247,7 +248,7 @@ public sealed class ProducedSourceMetadataTests
         {
             surface_provenance = new
             {
-                schema_version = 3,
+                schema_version = EngineSchemaVersions.SurfaceProvenance,
                 geometries = new[]
                 {
                     new

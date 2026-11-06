@@ -2,13 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Security.Cryptography;
 using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
@@ -140,6 +144,86 @@ public sealed partial class CookStagingTests
         _ = staging.Roots.Single().Before.Matches(current).Should().BeFalse();
     }
 
+    /// <summary>A file an earlier commit listed is no change of membership, and goes when no reader holds that commit.</summary>
+    /// <returns>The asynchronous regression.</returns>
+    [TestMethod]
+    public async Task AcceptedInventoryAllowsARetiredFileAndADataFileWithoutADigest()
+    {
+        using var project = new StagingProject();
+        var inventory = await this.PublishRootAsync(project).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var lifetime = staging.ConfigureAwait(false);
+
+        var verify = () => staging.VerifyAcceptedInventories(new Dictionary<string, CookedInventoryReport>(StringComparer.Ordinal) { ["Content"] = inventory }, new HashSet<string>(StringComparer.Ordinal));
+
+        _ = verify.Should().NotThrow();
+    }
+
+    /// <summary>A file no commit lists is a change of membership.</summary>
+    /// <returns>The asynchronous regression.</returns>
+    [TestMethod]
+    public async Task AcceptedInventoryRefusesAFileNoCommitLists()
+    {
+        using var project = new StagingProject();
+        var inventory = await this.PublishRootAsync(project).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(project.PublishedRoot, "resources", "Stray.bin"), "stray", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var lifetime = staging.ConfigureAwait(false);
+
+        var verify = () => staging.VerifyAcceptedInventories(new Dictionary<string, CookedInventoryReport>(StringComparer.Ordinal) { ["Content"] = inventory }, new HashSet<string>(StringComparer.Ordinal));
+
+        _ = verify.Should().Throw<IOException>().WithMessage("*membership changed*");
+    }
+
+    /// <summary>Only a resource data file goes without its bytes compared; the inventory checks its resources.</summary>
+    /// <param name="file">The file that changes after the inventory read it.</param>
+    /// <param name="refused">Whether the change is refused.</param>
+    /// <returns>The asynchronous regression.</returns>
+    [TestMethod]
+    [DataRow("buffers.table", true, DisplayName = "A table's bytes are compared")]
+    [DataRow("buffers.data", false, DisplayName = "A data file's bytes are not")]
+    public async Task AcceptedInventoryComparesBytesOfEverythingButDataFiles(string file, bool refused)
+    {
+        using var project = new StagingProject();
+        var inventory = await this.PublishRootAsync(project).ConfigureAwait(false);
+        var path = Path.Combine(project.PublishedRoot, "resources", file);
+        var bytes = await File.ReadAllBytesAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
+        bytes[0] ^= 0xFF;
+        await File.WriteAllBytesAsync(path, bytes, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var lifetime = staging.ConfigureAwait(false);
+
+        var verify = () => staging.VerifyAcceptedInventories(new Dictionary<string, CookedInventoryReport>(StringComparer.Ordinal) { ["Content"] = inventory }, new HashSet<string>(StringComparer.Ordinal));
+
+        if (refused)
+        {
+            _ = verify.Should().Throw<IOException>().WithMessage("*changed after verification*");
+        }
+        else
+        {
+            _ = verify.Should().NotThrow();
+        }
+    }
+
+    /// <summary>A data file holding bytes past its committed length is no change: they belong to no commit.</summary>
+    /// <returns>The asynchronous regression.</returns>
+    [TestMethod]
+    public async Task AcceptedInventoryAllowsADataFilesUncommittedTail()
+    {
+        using var project = new StagingProject();
+        _ = await this.PublishRootAsync(project).ConfigureAwait(false);
+        var path = Path.Combine(project.PublishedRoot, "resources", "buffers.data");
+        await File.AppendAllTextAsync(path, "tail", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inventory = NativeInventoryFixture.Read(project.PublishedRoot);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var lifetime = staging.ConfigureAwait(false);
+
+        var verify = () => staging.VerifyAcceptedInventories(new Dictionary<string, CookedInventoryReport>(StringComparer.Ordinal) { ["Content"] = inventory }, new HashSet<string>(StringComparer.Ordinal));
+
+        _ = inventory.Issues.Should().ContainSingle().Which.Reason.Should().Be("uncommitted_tail");
+        _ = verify.Should().NotThrow();
+    }
+
     /// <summary>Traversal and Windows path aliases are rejected before staging is created.</summary>
     /// <param name="mount">The invalid mount name.</param>
     /// <returns>The asynchronous path-scope regression.</returns>
@@ -154,6 +238,37 @@ public sealed partial class CookStagingTests
         Func<Task> prepare = () => project.StageAsync([mount], this.TestContext.CancellationToken);
         _ = await prepare.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         _ = File.Exists(Path.Combine(project.Root, ".build", "cook", project.Operation.OperationId.ToString("N"), "publication.json")).Should().BeFalse();
+    }
+
+    // A root at its fourth commit: a table, its data file with no digest of its own, and a file the third commit retired.
+    private async Task<CookedInventoryReport> PublishRootAsync(StagingProject project)
+    {
+        var token = this.TestContext.CancellationToken;
+        var root = project.PublishedRoot;
+        _ = Directory.CreateDirectory(Path.Combine(root, "resources"));
+        byte[] table = [1, 2, 3, 4];
+        await File.WriteAllBytesAsync(Path.Combine(root, "resources", "buffers.table"), table, token).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(Path.Combine(root, "resources", "buffers.data"), [5, 6, 7, 8], token).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(Path.Combine(root, "resources", "Old.otex"), [9], token).ConfigureAwait(false);
+        var index = File.Create(Path.Combine(root, LooseCookedIndex.FileName));
+        await using (index.ConfigureAwait(false))
+        {
+            LooseCookedIndexFixture.Write(index, new Document(
+                1,
+                IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords,
+                project.SourceKey,
+                [],
+                [
+                    new FileRecord(FileKind.BuffersTable, "resources/buffers.table", (ulong)table.Length, SHA256.HashData(table)),
+                    new FileRecord(FileKind.BuffersData, "resources/buffers.data", 4, new byte[LooseCookedIndex.Sha256Size]),
+                ])
+            {
+                Commit = 4,
+                Retired = [new RetiredFile(FileKind.TextureDescriptor, "resources/Old.otex", 3)],
+            });
+        }
+
+        return NativeInventoryFixture.Read(root);
     }
 
     private sealed partial class StagingProject : IDisposable
@@ -179,6 +294,8 @@ public sealed partial class CookStagingTests
 
         public string PublishedRoot => CookPublicationPaths.Generation(this.Root, this.sourceKey);
 
+        public Guid SourceKey => this.sourceKey;
+
         public async Task<CookStagingArea> StageAsync(IEnumerable<string> mounts, CancellationToken token)
         {
             var captured = await this.CaptureBaselineAsync(token).ConfigureAwait(false);
@@ -193,7 +310,11 @@ public sealed partial class CookStagingTests
                 using var gate = await CookOutputLease.AcquireWriteAsync(this.Operation.Project.ProjectRoot, token).ConfigureAwait(false);
                 if (Directory.Exists(this.PublishedRoot))
                 {
-                    NativeInventoryFixture.WriteIndex(this.PublishedRoot, [], this.sourceKey);
+                    if (!File.Exists(Path.Combine(this.PublishedRoot, LooseCookedIndex.FileName)))
+                    {
+                        NativeInventoryFixture.WriteIndex(this.PublishedRoot, [], this.sourceKey);
+                    }
+
                     File.WriteAllBytes(Path.Combine(this.PublishedRoot, CookedGeneration.MarkerFileName), []);
                     var digest = NativeInventoryFixture.Read(this.PublishedRoot).IndexSha256;
                     var document = new CookPublicationDocument(

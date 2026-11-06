@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -126,9 +127,9 @@ public sealed class GeometryMetadataTests
         _ = read.Should().Throw<InvalidDataException>().WithMessage("*could not read*");
     }
 
-    private static string SurfaceReport() => """
+    private static string SurfaceReport() => $$$"""
         {
-          "schema_version": 2,
+          "schema_version": {{{EngineSchemaVersions.Geometries}}},
           "complete": true,
           "geometries": [{
             "geometry_asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",

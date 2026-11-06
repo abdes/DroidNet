@@ -9,4 +9,14 @@ public sealed record Document(
     IndexFeatures Flags,
     Guid SourceGuid,
     IReadOnlyList<AssetEntry> Assets,
-    IReadOnlyList<FileRecord> Files);
+    IReadOnlyList<FileRecord> Files)
+{
+    /// <summary>Gets the commit this index is: 1 for a root's first, one more for each publication after it.</summary>
+    public ulong Commit { get; init; } = 1;
+
+    /// <summary>Gets the files an earlier commit listed and this one does not.</summary>
+    public IReadOnlyList<RetiredFile> Retired { get; init; } = [];
+
+    /// <summary>Gets what the assets require of other mounts, in asset order.</summary>
+    public IReadOnlyList<AssetRequirement> Requirements { get; init; } = [];
+}

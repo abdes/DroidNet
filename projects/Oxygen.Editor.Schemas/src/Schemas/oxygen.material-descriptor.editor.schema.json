@@ -34,6 +34,108 @@
       "x-editor-advanced": true,
       "x-editor-tooltip": "Occlusion/Roughness/Metalness packing policy used by the cooker."
     },
+    "ambient_occlusion_mode": {
+      "x-editor-label": "Occlusion Mode",
+      "x-editor-group": "Identity",
+      "x-editor-order": 4,
+      "x-editor-renderer": "enum-dropdown",
+      "x-editor-advanced": true,
+      "x-editor-tooltip": "How Ambient Occlusion combines with its texture: 'factor' multiplies the sample; 'strength' blends from unoccluded to the sample, and is unoccluded without a texture."
+    },
+    "procedural_grid": {
+      "x-editor-label": "Procedural Grid",
+      "x-editor-group": "Surface",
+      "x-editor-order": 30,
+      "x-editor-renderer": "section",
+      "x-editor-advanced": true,
+      "x-editor-tooltip": "Shades the material with a world-space grid on any surface. Its presence turns the grid on.",
+      "properties": {
+        "spacing": {
+          "x-editor-label": "Spacing",
+          "x-editor-group": "Surface",
+          "x-editor-order": 0,
+          "x-editor-renderer": "vector2",
+          "x-editor-tooltip": "World units between minor lines, along each axis of a plane."
+        },
+        "major_every": {
+          "x-editor-label": "Major Every",
+          "x-editor-group": "Surface",
+          "x-editor-order": 1,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "Minor cells per major line."
+        },
+        "line_thickness": {
+          "x-editor-label": "Line Thickness",
+          "x-editor-group": "Surface",
+          "x-editor-order": 2,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "Thickness of minor lines."
+        },
+        "major_thickness": {
+          "x-editor-label": "Major Thickness",
+          "x-editor-group": "Surface",
+          "x-editor-order": 3,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "Thickness of major lines."
+        },
+        "axis_thickness": {
+          "x-editor-label": "Axis Thickness",
+          "x-editor-group": "Surface",
+          "x-editor-order": 4,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "Thickness of the axis lines."
+        },
+        "fade_start": {
+          "x-editor-label": "Fade Start",
+          "x-editor-group": "Surface",
+          "x-editor-order": 5,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "View distance at which the grid starts to fade."
+        },
+        "fade_end": {
+          "x-editor-label": "Fade End",
+          "x-editor-group": "Surface",
+          "x-editor-order": 6,
+          "x-editor-renderer": "numberbox",
+          "x-editor-tooltip": "View distance at which the grid is gone; it does not fade when this is not past Fade Start."
+        },
+        "minor_color": {
+          "x-editor-label": "Minor Color",
+          "x-editor-group": "Surface",
+          "x-editor-order": 7,
+          "x-editor-renderer": "color-rgba",
+          "x-editor-tooltip": "Color of minor lines."
+        },
+        "major_color": {
+          "x-editor-label": "Major Color",
+          "x-editor-group": "Surface",
+          "x-editor-order": 8,
+          "x-editor-renderer": "color-rgba",
+          "x-editor-tooltip": "Color of major lines."
+        },
+        "axis_color_x": {
+          "x-editor-label": "Axis X Color",
+          "x-editor-group": "Surface",
+          "x-editor-order": 9,
+          "x-editor-renderer": "color-rgba",
+          "x-editor-tooltip": "Color of the X axis line."
+        },
+        "axis_color_y": {
+          "x-editor-label": "Axis Y Color",
+          "x-editor-group": "Surface",
+          "x-editor-order": 10,
+          "x-editor-renderer": "color-rgba",
+          "x-editor-tooltip": "Color of the Y axis line."
+        },
+        "origin_color": {
+          "x-editor-label": "Origin Color",
+          "x-editor-group": "Surface",
+          "x-editor-order": 11,
+          "x-editor-renderer": "color-rgba",
+          "x-editor-tooltip": "Color at the origin."
+        }
+      }
+    },
     "parameters": {
       "x-editor-label": "Parameters",
       "x-editor-group": "Surface",

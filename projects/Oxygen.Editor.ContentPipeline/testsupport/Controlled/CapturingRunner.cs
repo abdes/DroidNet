@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Managed.Assets.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -29,7 +30,7 @@ internal sealed class CapturingRunner(ContentPipelineProcessResult result) : ICo
             var reportPath = request.Arguments[request.Arguments.ToList().IndexOf("--report") + 1];
             var report = JsonSerializer.Serialize(new
             {
-                schema_version = 6,
+                schema_version = EngineSchemaVersions.ImportReport,
                 session = new
                 {
                     id = "session",

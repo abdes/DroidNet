@@ -17,4 +17,16 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-inventory.schema.json" LogicalName="oxygen.cooked-inventory.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.import-report.schema.json" LogicalName="oxygen.import-report.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-dependencies.schema.json" LogicalName="oxygen.cooked-dependencies.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-geometries.schema.json" LogicalName="oxygen.cooked-geometries.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.cooked-scripts.schema.json" LogicalName="oxygen.cooked-scripts.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.source-analysis.schema.json" LogicalName="oxygen.source-analysis.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.asset-key-map.schema.json" LogicalName="oxygen.asset-key-map.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.script-diagnostic.schema.json" LogicalName="oxygen.script-diagnostic.schema.json" />
+        <EmbeddedResource Include="$(OxygenSdkSchemasDir)\oxygen.surface-provenance.schema.json" LogicalName="oxygen.surface-provenance.schema.json" />
+    </ItemGroup>
+
 </Project>

@@ -43,7 +43,6 @@ public sealed class SharedMountTests
         _ = workspace.FileSystem.File.Exists(Path.Combine(Studio, "Textures", "Brick.otex.json")).Should().BeFalse();
         _ = workspace.ReadJson("Content/Materials/Wall.omat.json")["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>()
             .Should().Be(AuthoredFiles.SpellReference(AssetPath.Parse("/Content/Materials/Wall.omat"), AssetPath.Parse("/Studio/Textures/Stone.otex")));
-        _ = JsonNode.Parse(workspace.FileSystem.File.ReadAllText(Path.Combine(Studio, "Textures", "Stone.otex.json")))!["virtual_path"]!.GetValue<string>().Should().Be("/Studio/Textures/Stone.otex");
     }
 
     /// <summary>
@@ -68,7 +67,7 @@ public sealed class SharedMountTests
         _ = reference.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         _ = check.Problems.Should().ContainSingle().Which.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         var written = ReadReferences(workspace);
-        _ = written["schema_version"]!.GetValue<int>().Should().Be(2);
+        _ = written["schema_version"]!.GetValue<int>().Should().Be(ReferenceCheck.ReferencesFileVersion);
         var entry = written["references"]!.AsArray().Should().ContainSingle().Subject!;
         _ = entry["file"]!.GetValue<string>().Should().Be("/Content/Materials/Wall.omat.json");
         _ = entry["property"]!.GetValue<string>().Should().Be("$.textures.base_color.virtual_path");
@@ -102,7 +101,7 @@ public sealed class SharedMountTests
     {
         var workspace = new RelocationWorkspace();
         workspace.MountOutside("Studio", Studio);
-        workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.otex.json"), AuthoredFiles.Texture("/Studio/Textures/Brick.otex", "Brick.png").WithIdentityField().Set("/name", "Brick").Text);
+        workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.otex.json"), AuthoredFiles.Texture("/Studio/Textures/Brick.otex", "Brick.png").Set("/name", "Brick").Text);
         workspace.WriteOutside(Path.Combine(Studio, "Textures", "Brick.png"), "png");
         _ = workspace.Write("Content/Materials/Wall.omat.json", WallMaterial("/Studio/Textures/Brick.otex").Text);
         return workspace;

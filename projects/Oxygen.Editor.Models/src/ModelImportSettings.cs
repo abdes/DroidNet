@@ -27,6 +27,9 @@ public sealed record ModelImportSettings
     /// <summary>The record version this editor reads and writes.</summary>
     public const int CurrentSchemaVersion = 1;
 
+    /// <summary>The version of the surface provenance a new record holds, before any import.</summary>
+    public const int SurfaceProvenanceVersion = 3;
+
     /// <summary>The folder of the project root that holds the records.</summary>
     public const string RecordsFolder = "Imports";
 
@@ -400,5 +403,5 @@ public sealed record ModelImportSettings
             && path[1..].Split('/').All(static segment => segment is not ("" or "." or ".."));
 
     private static JsonElement EmptyProvenance()
-        => JsonSerializer.SerializeToElement(new { schema_version = 3, geometries = Array.Empty<object>() });
+        => JsonSerializer.SerializeToElement(new { schema_version = SurfaceProvenanceVersion, geometries = Array.Empty<object>() });
 }

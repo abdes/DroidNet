@@ -473,7 +473,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 foreach (var (source, target) in pairs)
                 {
                     var content = await fileSystem.File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
-                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map) : content;
+                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(project, source, target, content, map) : content;
                     _ = fileSystem.Directory.CreateDirectory(target.Parent!.FullPath);
                     _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
                     created.Add(target.FullPath);

@@ -50,9 +50,17 @@ internal static partial class NativeInventoryFixture
         LooseCookedIndexFixture.Write(index, new Document(0, IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords, sourceKey ?? Guid.CreateVersion7(), entries, files));
     }
 
+    // A writer names what it publishes after its content: a dot and 16 hexadecimal digits end the name.
+    private static bool IsContentName(string relativePath)
+        => Path.GetExtension(relativePath) is { Length: 17 } extension && extension.Skip(1).All(char.IsAsciiHexDigitLower);
+
     public static CookedInventoryReport Read(string root, bool forceFailure = false)
         => CookedInventoryReport.Parse(ReadJson(root, forceFailure));
 
+    /// <summary>Reports a root's inventory as the Inspector does.</summary>
+    /// <param name="root">The cooked root.</param>
+    /// <param name="forceFailure">Whether to report a file as missing.</param>
+    /// <returns>The report's JSON.</returns>
     public static string ReadJson(string root, bool forceFailure = false)
     {
         var indexBytes = File.ReadAllBytes(Path.Combine(root, "container.index.bin"));
@@ -64,21 +72,24 @@ internal static partial class NativeInventoryFixture
         foreach (var member in members)
         {
             var path = Path.Combine(root, member.Path);
-            var reason = !File.Exists(path) ? "missing" : (ulong)new FileInfo(path).Length != member.Size ? "size_mismatch"
-                : !SHA256.HashData(File.ReadAllBytes(path)).AsSpan().SequenceEqual(member.Digest.Span) ? "digest_mismatch" : null;
+            var isData = member.Kind?.IsResourceData() == true;
+            var reason = !File.Exists(path) ? "missing"
+                : isData && (ulong)new FileInfo(path).Length > member.Size ? "uncommitted_tail"
+                : (ulong)new FileInfo(path).Length != member.Size ? "size_mismatch"
+                : !isData && !SHA256.HashData(File.ReadAllBytes(path)).AsSpan().SequenceEqual(member.Digest.Span) ? "digest_mismatch" : null;
             if (reason is not null)
             {
                 issues.Add(new { relative_path = member.Path, reason });
             }
         }
 
-        var expected = members.Select(static member => member.Path).ToHashSet(StringComparer.Ordinal);
+        var expected = members.Select(static member => member.Path).Concat(index.Retired.Select(static file => file.RelativePath)).ToHashSet(StringComparer.Ordinal);
         foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
         {
             var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
-            if (relative is not ("container.index.bin" or ".generation.lock") && !expected.Contains(relative))
+            if (!LooseCookedIndex.IsReservedPath(relative) && !expected.Contains(relative))
             {
-                issues.Add(new { relative_path = relative, reason = "unexpected" });
+                issues.Add(new { relative_path = relative, reason = IsContentName(relative) ? "uncommitted" : "unexpected" });
             }
         }
 
@@ -89,7 +100,7 @@ internal static partial class NativeInventoryFixture
 
         return JsonSerializer.Serialize(new
         {
-            schema_version = 2,
+            schema_version = EngineSchemaVersions.Inventory,
             source_key = index.SourceGuid,
             index_size = indexBytes.Length,
             index_sha256 = Convert.ToHexStringLower(SHA256.HashData(indexBytes)),

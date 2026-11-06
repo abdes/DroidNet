@@ -186,6 +186,12 @@ public sealed partial class AssetFeedTests
         return new(identity) { Cooked = new(root, descriptor, Guid.NewGuid(), new(1, 2), type, 6, new string('0', 64)) { VirtualPath = identity } };
     }
 
+    private static string IdentityOf(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return normalized[normalized.LastIndexOf("/Content/", StringComparison.Ordinal)..^".json".Length];
+    }
+
     private static void WriteMaterial(string path)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -203,7 +209,8 @@ public sealed partial class AssetFeedTests
                     roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
-                doubleSided: false));
+                doubleSided: false),
+            AssetPath.Parse(IdentityOf(path)));
     }
 
     private AssetFeed Own(AssetFeed feed)

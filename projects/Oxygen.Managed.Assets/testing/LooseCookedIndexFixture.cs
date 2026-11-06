@@ -66,6 +66,16 @@ public static class LooseCookedIndexFixture
             _ = Add(SourceOf(file.VirtualPath, file.SourcePath));
         }
 
+        foreach (var file in document.Retired)
+        {
+            _ = Add(file.RelativePath);
+        }
+
+        foreach (var requirement in document.Requirements)
+        {
+            _ = Add(requirement.Mount);
+        }
+
         var header = new byte[LooseCookedIndex.HeaderSize];
         "OXLCIDX\0"u8.CopyTo(header);
         BinaryPrimitives.WriteUInt16LittleEndian(header.AsSpan(8), LooseCookedIndex.Version);
@@ -82,12 +92,21 @@ public static class LooseCookedIndexFixture
         BinaryPrimitives.WriteUInt64LittleEndian(header.AsSpan(64), checked((ulong)(header.Length + strings.Length + (document.Assets.Count * LooseCookedIndex.AssetEntrySize))));
         BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(72), checked((uint)document.Files.Count));
         BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(76), LooseCookedIndex.FileRecordSize);
+        var retiredOffset = checked((ulong)(header.Length + strings.Length
+            + (document.Assets.Count * LooseCookedIndex.AssetEntrySize)
+            + (document.Files.Count * LooseCookedIndex.FileRecordSize)));
+        var requirementOffset = checked(retiredOffset + ((ulong)document.Retired.Count * LooseCookedIndex.RetiredRecordSize));
+        BinaryPrimitives.WriteUInt64LittleEndian(header.AsSpan(80), document.Commit);
+        BinaryPrimitives.WriteUInt64LittleEndian(header.AsSpan(88), retiredOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(96), checked((uint)document.Retired.Count));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(100), LooseCookedIndex.RetiredRecordSize);
+        BinaryPrimitives.WriteUInt64LittleEndian(header.AsSpan(104), requirementOffset);
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(112), checked((uint)document.Requirements.Count));
+        BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(116), LooseCookedIndex.RequirementRecordSize);
         destination.SetLength(0);
         destination.Write(header);
         destination.Write(strings.ToArray());
-        var referenceOffset = checked((ulong)(header.Length + strings.Length
-            + (document.Assets.Count * LooseCookedIndex.AssetEntrySize)
-            + (document.Files.Count * LooseCookedIndex.FileRecordSize)));
+        var referenceOffset = checked(requirementOffset + ((ulong)document.Requirements.Count * LooseCookedIndex.RequirementRecordSize));
         foreach (var asset in document.Assets)
         {
             var entry = new byte[LooseCookedIndex.AssetEntrySize];
@@ -122,6 +141,26 @@ public static class LooseCookedIndexFixture
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(14), offsets[file.VirtualPath ?? string.Empty]);
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(18), offsets[SourceOf(file.VirtualPath, file.SourcePath) ?? string.Empty]);
             file.Sha256.Span.CopyTo(entry.AsSpan(22));
+            destination.Write(entry);
+        }
+
+        foreach (var file in document.Retired)
+        {
+            var entry = new byte[LooseCookedIndex.RetiredRecordSize];
+            BinaryPrimitives.WriteUInt16LittleEndian(entry, (ushort)file.Kind);
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(2), offsets[file.RelativePath]);
+            BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(6), file.RetiredAt);
+            destination.Write(entry);
+        }
+
+        foreach (var requirement in document.Requirements)
+        {
+            var entry = new byte[LooseCookedIndex.RequirementRecordSize];
+            BinaryPrimitives.WriteUInt32LittleEndian(entry, requirement.AssetIndex);
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(4), offsets[requirement.Mount]);
+            entry[8] = requirement.IsTexture ? LooseCookedIndex.RequirementKindTexture : LooseCookedIndex.RequirementKindAsset;
+            requirement.Key.WriteBytes(entry.AsSpan(9, 16));
+            entry[25] = requirement.AssetType;
             destination.Write(entry);
         }
 

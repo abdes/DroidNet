@@ -70,11 +70,22 @@ public sealed record MaterialSource
     }
 
     /// <summary>
-    /// Gets the texture of each assigned channel: the one place a material holds its textures. Change it with
-    /// <see cref="WithTextureReference"/>, which checks the channel; the descriptor spells each one as its virtual path.
+    /// Gets the binding of each assigned channel: the one place a material holds its textures. Change it with
+    /// <see cref="WithTextureReference"/> or <see cref="WithTextureBinding"/>, which check the channel; the descriptor
+    /// spells each texture as a reference from the material's identity.
     /// </summary>
-    public IReadOnlyDictionary<string, AssetPath> TextureReferences { get; internal init; }
-        = FrozenDictionary<string, AssetPath>.Empty;
+    public IReadOnlyDictionary<string, MaterialTextureBinding> TextureBindings { get; internal init; }
+        = FrozenDictionary<string, MaterialTextureBinding>.Empty;
+
+    /// <summary>Gets the texture of each assigned channel.</summary>
+    public IReadOnlyDictionary<string, AssetPath> TextureReferences
+        => this.TextureBindings.ToFrozenDictionary(static binding => binding.Key, static binding => binding.Value.Texture, StringComparer.Ordinal);
+
+    /// <summary>Gets how the ambient occlusion value combines with an ambient occlusion texture.</summary>
+    public MaterialAmbientOcclusionMode AmbientOcclusionMode { get; init; }
+
+    /// <summary>Gets the material's procedural grid, or <see langword="null"/> when it shows none.</summary>
+    public MaterialProceduralGrid? ProceduralGrid { get; init; }
 
     /// <summary>Gets the normal-map scale, kept whether or not a normal texture is assigned.</summary>
     public float NormalScale { get; init; } = 1.0f;
@@ -112,7 +123,10 @@ public sealed record MaterialSource
     public static bool IsTextureChannel([NotNullWhen(true)] string? channel)
         => channel is not null && TextureChannels.Contains(channel, StringComparer.Ordinal);
 
-    /// <summary>Returns a copy of this material with one texture channel assigned or cleared.</summary>
+    /// <summary>
+    /// Returns a copy of this material with one texture channel assigned or cleared. A channel that already has a texture
+    /// keeps how it reads it.
+    /// </summary>
     /// <param name="channel">One of <see cref="TextureChannels"/>.</param>
     /// <param name="texture">The texture, or <see langword="null"/> to clear the channel.</param>
     /// <returns>The updated immutable material snapshot.</returns>
@@ -120,28 +134,46 @@ public sealed record MaterialSource
     /// <paramref name="channel"/> is not a texture channel, or <paramref name="texture"/> is a mount.
     /// </exception>
     public MaterialSource WithTextureReference(string channel, AssetPath? texture)
+        => this.WithTextureBinding(
+            channel,
+            texture is null ? null : this.TextureBindings.GetValueOrDefault(channel) is { } kept ? kept with { Texture = texture } : new MaterialTextureBinding(texture));
+
+    /// <summary>Returns a copy of this material with one texture channel bound or cleared.</summary>
+    /// <param name="channel">One of <see cref="TextureChannels"/>.</param>
+    /// <param name="binding">The binding, or <see langword="null"/> to clear the channel.</param>
+    /// <returns>The updated immutable material snapshot.</returns>
+    /// <exception cref="ArgumentException">
+    /// <paramref name="channel"/> is not a texture channel, or the binding's texture is a mount.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">The binding reads a UV set a vertex does not hold.</exception>
+    public MaterialSource WithTextureBinding(string channel, MaterialTextureBinding? binding)
     {
         if (!IsTextureChannel(channel))
         {
             throw new ArgumentException($"'{channel}' is not a material texture channel.", nameof(channel));
         }
 
-        if (texture?.IsMount == true)
+        if (binding?.Texture.IsMount == true)
         {
-            throw new ArgumentException($"'{texture}' is a mount, not a texture below one.", nameof(texture));
+            throw new ArgumentException($"'{binding.Texture}' is a mount, not a texture below one.", nameof(binding));
         }
 
-        var references = new Dictionary<string, AssetPath>(this.TextureReferences, StringComparer.Ordinal);
-        if (texture is null)
+        if (binding is { UvSet: < 0 or >= MaterialTextureBinding.UvSetCount })
         {
-            _ = references.Remove(channel);
+            throw new ArgumentOutOfRangeException(nameof(binding), binding.UvSet, "A vertex holds UV sets 0 and 1.");
+        }
+
+        var bindings = new Dictionary<string, MaterialTextureBinding>(this.TextureBindings, StringComparer.Ordinal);
+        if (binding is null)
+        {
+            _ = bindings.Remove(channel);
         }
         else
         {
-            references[channel] = texture;
+            bindings[channel] = binding;
         }
 
-        return this with { TextureReferences = references.ToFrozenDictionary(StringComparer.Ordinal) };
+        return this with { TextureBindings = bindings.ToFrozenDictionary(StringComparer.Ordinal) };
     }
 
     internal static MaterialAlphaMode ResolveAlphaMode(JsonElement descriptor)

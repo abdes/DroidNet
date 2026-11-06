@@ -224,8 +224,8 @@ boundaries; ordinary catalog reads and mounts use metadata admission. The
 [content pipeline contract](content-pipeline.md) owns freshness, verification
 and repair policy.
 
-Texture descriptors are resource sidecars, not keyed Script assets. A named
-texture's native `virtual_path` fixes its descriptor location under the mount.
+Texture descriptors are resource sidecars, not keyed Script assets. A
+texture's identity is its descriptor's location under the mount.
 ContentPipeline records the native physical descriptor path alongside the source
 association; resource-table indices remain generation-local. Native inventory
 keeps resource descriptors separate from keyed asset entries. Textures use the

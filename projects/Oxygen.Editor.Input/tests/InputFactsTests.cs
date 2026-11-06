@@ -129,7 +129,7 @@ public sealed partial class InputFactsTests : IDisposable
     [TestMethod]
     public async Task DeclaringAnActionClearsTheProblemsOfTheSourcesThatNameIt()
     {
-        _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player").Replace("\"action\": \"Jump\"", "\"action\": \"/Content/Input/Common.input/Fire.oiact\"", StringComparison.Ordinal));
+        _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player").Replace("\"action\": \"Jump\"", "\"action\": \"Common.input/Fire.oiact\"", StringComparison.Ordinal));
         await this.OpenAsync().ConfigureAwait(false);
         _ = this.facts.Problems.Should().ContainSingle().Which.Code.Should().Be(InputSourceCodes.ActionMissing);
 

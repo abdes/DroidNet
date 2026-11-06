@@ -38,10 +38,6 @@ public sealed class GeometryDocument : AuthoredDocument<GeometryDocument>
         _ = this.SubmeshMaterial(0, 0, DefaultMaterial);
     }
 
-    /// <summary>Repeats the identity in the descriptor's <c>virtual_path</c>, as the editor's descriptors do.</summary>
-    /// <returns>This document.</returns>
-    public GeometryDocument WithIdentityField() => this.Set("/virtual_path", this.Identity.VirtualPath);
-
     /// <summary>Makes a submesh use the material <paramref name="target"/>.</summary>
     /// <param name="lod">The LOD's index.</param>
     /// <param name="submesh">The submesh's index in the LOD.</param>

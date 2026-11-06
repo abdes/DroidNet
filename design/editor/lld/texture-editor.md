@@ -85,7 +85,7 @@ this text differ, this text wins):
 
 What exists today:
 
-- **Descriptor.** The cooker accepts `name`, `virtual_path`, `content_hashing`,
+- **Descriptor.** The cooker accepts `name`,
   `source`, `sources[]` (`file`, `layer`, `mip`, `slice`), `preset` (18
   presets), `intent` (12 intents), `decode` (`color_space`, `flip_y`,
   `force_rgba`, `flip_normal_green`), `mips` (`policy` none/full/max,
@@ -105,7 +105,8 @@ What exists today:
 - **Six-file cubes** are found only by face-name suffixes next to `source`
   (`DiscoverCubeFacePaths`); a descriptor cannot name a face's file.
 - **Managed model.** `TextureSource` (Managed.Assets) models `name`,
-  `virtual_path`, `source`, `sources[]`, `intent`, `decode.color_space`,
+  `source`, `sources[]`, each image a file reference resolved through
+  `IFileReferenceLocator`, `intent`, `decode.color_space`,
   `output.format` and `cube`, and keeps every other key on a read and write.
 - **Import today.** `TextureImport` (Textures) copies the image and writes the
   modelled keys, detecting the cube layout from the image's aspect; the Content

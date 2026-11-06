@@ -45,7 +45,7 @@ public sealed class MountBindingsTests
     public async Task Bind_KeepsTheOtherBindingsAndWhatTheFileHoldsBesides()
     {
         _ = this.fileSystem.Directory.CreateDirectory(Root);
-        this.fileSystem.File.WriteAllText(this.MountsFile, """{"schema_version":2,"root":true,"mounts":{"Vendor":"E:/Vendor","Media":"H:/Media"}}""");
+        this.fileSystem.File.WriteAllText(this.MountsFile, $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"root":true,"mounts":{"Vendor":"E:/Vendor","Media":"H:/Media"}}""");
 
         _ = await this.WriteAsync(MountBindings.None.Bind("Studio", FileSystemPath.From(@"D:\Studio")).Unbind("Media")).ConfigureAwait(false);
 
@@ -59,7 +59,7 @@ public sealed class MountBindingsTests
     public async Task TheUndoOfAWrite_RestoresTheBindingsItReplaced()
     {
         _ = this.fileSystem.Directory.CreateDirectory(Root);
-        const string original = """{"schema_version":2,"mounts":{"Media":"H:/Media"}}""";
+        var original = $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Media":"H:/Media"}}""";
         this.fileSystem.File.WriteAllText(this.MountsFile, original);
 
         var undo = await this.WriteAsync(MountBindings.None.Bind("Media", FileSystemPath.From(@"G:\Media")).Bind("Studio", FileSystemPath.From(@"D:\Studio"))).ConfigureAwait(false);

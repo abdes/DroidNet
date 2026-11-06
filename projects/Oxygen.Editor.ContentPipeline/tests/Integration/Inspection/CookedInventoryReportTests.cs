@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
@@ -19,7 +20,8 @@ public sealed class CookedInventoryReportTests
     [TestMethod]
     public void EveryIndexedFileKindMatchesTheSchema()
     {
-        foreach (var kind in Enum.GetValues<FileKind>())
+        // An asset descriptor is listed by its asset; only a retired record gives it this kind.
+        foreach (var kind in Enum.GetValues<FileKind>().Where(static kind => kind != FileKind.AssetDescriptor))
         {
             var report = CookedInventoryReport.Parse(Inventory("Resources/member.bin", kind));
 
@@ -70,7 +72,7 @@ public sealed class CookedInventoryReportTests
         var indexSha = new string('a', 64);
         var fileSha = new string('b', 64);
         return $$"""
-            {"schema_version":2,"source_key":"{{sourceKey}}","index_size":256,"index_sha256":"{{indexSha}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{fileSha}}","file_kind":{{fileKind}}}],"assets":[],"resources":[],"issues":[]}
+            {"schema_version":{{EngineSchemaVersions.Inventory}},"source_key":"{{sourceKey}}","index_size":256,"index_sha256":"{{indexSha}}","files":[{"relative_path":"{{path}}","size":1,"sha256":"{{fileSha}}","file_kind":{{fileKind}}}],"assets":[],"resources":[],"issues":[]}
             """;
     }
 }

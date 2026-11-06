@@ -68,7 +68,7 @@ internal sealed class AuthoredReferenceIndex
 
             try
             {
-                descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content)));
+                descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, AssetFileTypes.ToIdentity(virtualPath), content)));
             }
             catch (Exception error) when (error is JsonException or AssetFormatException or InvalidDataException or InvalidOperationException)
             {

@@ -8,15 +8,18 @@ namespace Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 /// <summary>
 /// Reader for a loose cooked root's texture descriptor (<c>.otex</c>): the texture-table index and record of one
-/// texture, as the engine's <c>TextureResourceDescriptor</c> (<c>Oxygen/Data/TextureResourceDescriptor.h</c>) writes
-/// them.
+/// texture, as the engine's <c>TextureResourceDescriptorRecord</c> (<c>Oxygen/Data/ResourceDescriptor.h</c>) writes them.
 /// </summary>
 public static class TextureDescriptorFile
 {
-    /// <summary>The size of the file.</summary>
-    public const int Size = 12 + TextureResourceRecord.Size;
+    /// <summary>The size of the header before the record: the magic, the index and the version.</summary>
+    public const int HeaderSize = 10;
 
-    private const ushort Version = 1;
+    /// <summary>The size of the file.</summary>
+    public const int Size = HeaderSize + TextureResourceRecord.Size;
+
+    /// <summary>The format version the reader accepts.</summary>
+    public const ushort Version = 3;
 
     /// <summary>Reads a texture descriptor.</summary>
     /// <param name="bytes">The file's bytes.</param>
@@ -25,13 +28,12 @@ public static class TextureDescriptorFile
     public static TextureResourceRecord Read(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length != Size || !bytes[..4].SequenceEqual("OTEX"u8)
-            || BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(4, 2)) != Version
-            || BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(6, 2)) != 0
-            || BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(8, 4)) == 0)
+            || BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(4, 4)) == 0
+            || BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(8, 2)) != Version)
         {
             throw new InvalidDataException("The texture descriptor is not a current OTEX descriptor naming a texture.");
         }
 
-        return TextureResourceRecord.Read(bytes[12..]);
+        return TextureResourceRecord.Read(bytes[HeaderSize..]);
     }
 }

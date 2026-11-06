@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
@@ -49,7 +50,7 @@ public sealed class ScriptMetadataTests
 
     [TestMethod]
     public void AnEmptyReportHasNoDeclarations()
-        => _ = CookedScriptReport.Parse("""{ "schema_version": 2, "complete": true, "scripts": [] }""").SingleOrDefault(Script).Should().BeNull();
+        => _ = CookedScriptReport.Parse($$$"""{ "schema_version": {{{EngineSchemaVersions.Scripts}}}, "complete": true, "scripts": [] }""").SingleOrDefault(Script).Should().BeNull();
 
     [TestMethod]
     public void AReportOutsideTheSchemaOrRepeatingAParameterIsRefused()
@@ -68,7 +69,7 @@ public sealed class ScriptMetadataTests
 
     private static string Report(string parameters)
         => $$"""
-            { "schema_version": 2, "complete": true, "scripts": [
+            { "schema_version": {{EngineSchemaVersions.Scripts}}, "complete": true, "scripts": [
               { "virtual_path": "/Content/Scripts/rotate.oscript", "asset_key": "{{Key}}", "complete": true, "parameters": [ {{parameters}} ] }
             ] }
             """;

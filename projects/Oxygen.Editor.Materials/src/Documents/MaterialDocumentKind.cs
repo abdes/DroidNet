@@ -27,10 +27,11 @@ public sealed class MaterialDocumentKind(MaterialValidation validation) : IDocum
     {
         ArgumentNullException.ThrowIfNull(file);
         cancellationToken.ThrowIfCancellationRequested();
+        var identity = AssetFileTypes.ToIdentity(file.Asset);
         MaterialSource source;
         try
         {
-            source = MaterialSourceReader.Read(content.Span);
+            source = MaterialSourceReader.Read(content.Span, identity);
         }
         catch (AssetFormatException exception)
         {
@@ -38,6 +39,6 @@ public sealed class MaterialDocumentKind(MaterialValidation validation) : IDocum
         }
 
         var named = source with { Name = DocumentKinds.TitleOf(this, file.Path) };
-        return Task.FromResult(DocumentDecodeResult.Decoded(new MaterialContent(this, named, validation)));
+        return Task.FromResult(DocumentDecodeResult.Decoded(new MaterialContent(this, named, identity, validation)));
     }
 }

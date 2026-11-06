@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ProjectExplorer.Tests;
@@ -118,9 +119,10 @@ public class LocalTemplatesSourceTests
         _ = starterMaterials.Should().NotBeEmpty();
         foreach (var materialPath in starterMaterials)
         {
-            var material = MaterialSourceReader.Read(File.ReadAllBytes(materialPath));
+            var identity = AssetPath.Parse("/Content/Materials/" + Path.GetFileNameWithoutExtension(materialPath));
+            var material = MaterialSourceReader.Read(File.ReadAllBytes(materialPath), identity);
 
-            _ = MaterialSourceWriter.ToJson(material).ContainsKey("parameters").Should().BeTrue(materialPath);
+            _ = MaterialSourceWriter.ToJson(material, identity).ContainsKey("parameters").Should().BeTrue(materialPath);
         }
     }
 

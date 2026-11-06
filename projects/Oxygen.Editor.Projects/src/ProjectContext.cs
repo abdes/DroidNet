@@ -5,6 +5,7 @@
 using System.IO.Abstractions;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -12,7 +13,7 @@ namespace Oxygen.Editor.Projects;
 /// <summary>
 ///     Read-only snapshot of the active project used by editor services.
 /// </summary>
-public sealed record ProjectContext
+public sealed record ProjectContext : IFileReferenceLocator
 {
     /// <summary>
     ///     Gets the project identity.
@@ -70,6 +71,10 @@ public sealed record ProjectContext
     /// <summary>Gets the cooked folder and pak file mounts, bound or not: the project's read-only libraries.</summary>
     public IEnumerable<ResolvedMount> LibraryMounts
         => this.Mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak);
+
+    /// <inheritdoc/>
+    public FileSystemPath? LocateReference(AssetPath referrer, string text)
+        => AssetPath.TryResolveReference(referrer, text, VirtualPathRuleSet.Cooked, out var path, out _) ? this.Find(path)?.File : null;
 
     /// <summary>Gets the mounts the project commits, as <c>Project.oxy</c> declares them.</summary>
     public IEnumerable<ProjectMount> DeclaredMounts

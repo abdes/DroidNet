@@ -253,7 +253,7 @@ internal sealed partial class CookSourceAnalyzer(
         MaterialSource material;
         try
         {
-            material = MaterialSourceReader.Read(materialBytes);
+            material = MaterialSourceReader.Read(materialBytes, input.AssetUri);
         }
         catch (AssetFormatException exception)
         {
@@ -288,15 +288,15 @@ internal sealed partial class CookSourceAnalyzer(
         var textureDescriptorPath = this.ResolveTextureDescriptorPath(texture);
         return textureDescriptorPath is null || !operation.Project.FileSystem.File.Exists(textureDescriptorPath)
             ? this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath ?? texture.VirtualPath, "texture descriptor is missing", details: null)
-            : await this.ValidateTextureImagesAsync(input, channel, textureDescriptorPath, cancellationToken).ConfigureAwait(false);
+            : await this.ValidateTextureImagesAsync(input, channel, textureDescriptorPath, texture, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<DiagnosticRecord?> ValidateTextureImagesAsync(ContentCookInput input, string channel, string textureDescriptorPath, CancellationToken cancellationToken)
+    private async Task<DiagnosticRecord?> ValidateTextureImagesAsync(ContentCookInput input, string channel, string textureDescriptorPath, AssetPath identity, CancellationToken cancellationToken)
     {
         TextureSource texture;
         try
         {
-            texture = TextureSourceReader.Read(await operation.Project.FileSystem.File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false));
+            texture = TextureSourceReader.Read(await operation.Project.FileSystem.File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false), identity);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or AssetFormatException)
         {
@@ -304,8 +304,9 @@ internal sealed partial class CookSourceAnalyzer(
         }
 
         var files = operation.Project.FileSystem;
-        return texture.ResolveImages(FileSystemPath.From(textureDescriptorPath), image => files.File.Exists(image.FullPath)).FirstOrDefault(image => !files.File.Exists(image.FullPath)) is { } missing
-            ? this.CreateTextureReferenceDiagnostic(input, channel, missing.FullPath, "source image is missing", details: null)
+        return texture.ResolveImages(identity, operation.Project, image => files.File.Exists(image.FullPath))
+            .FirstOrDefault(image => image.File is not { } file || !files.File.Exists(file.FullPath)) is { } missing
+            ? this.CreateTextureReferenceDiagnostic(input, channel, missing.File?.FullPath ?? missing.Reference, "source image is missing", details: null)
             : null;
     }
 

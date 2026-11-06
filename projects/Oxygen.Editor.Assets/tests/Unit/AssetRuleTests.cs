@@ -193,6 +193,12 @@ public sealed class AssetRuleTests
     private static AssetCookStatus Status(AssetPath identity, bool available)
         => new(identity, available ? AssetCookFreshness.Current : AssetCookFreshness.NeedsCooking, available, available ? CookedOutputAvailability.Present : CookedOutputAvailability.Unknown, [], []);
 
+    private static string IdentityOf(string path)
+    {
+        var normalized = path.Replace('\\', '/');
+        return normalized[normalized.LastIndexOf("/Content/", StringComparison.Ordinal)..^".json".Length];
+    }
+
     private static void WriteMaterial(IFileSystem fileSystem, string path, float r, float g, float b, float a)
     {
         _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -204,6 +210,7 @@ public sealed class AssetRuleTests
                 new MaterialPbrMetallicRoughness(r, g, b, a, metallicFactor: 0.0f, roughnessFactor: 0.5f),
                 alphaMode: MaterialAlphaMode.Opaque,
                 alphaCutoff: 0.5f,
-                doubleSided: false));
+                doubleSided: false),
+            AssetPath.Parse(IdentityOf(path)));
     }
 }

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets.Testing;
 using static Oxygen.Editor.ContentPipeline.TestSupport.ImportAdapterScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
@@ -12,8 +13,8 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Import;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class AssetKeyRequestTests
 {
-    private const string AssetKeyReport = """
-        {"schema_version":2,"assets":[{"virtual_path":"/Game/Physics/Materials/Rubber.opmat","asset_key":"5793612a-1c25-ca81-a7a2-8e696378559e"}]}
+    private static readonly string AssetKeyReport = $$$"""
+        {"schema_version":{{{EngineSchemaVersions.AssetKeyMap}}},"assets":[{"virtual_path":"/Game/Physics/Materials/Rubber.opmat","asset_key":"5793612a-1c25-ca81-a7a2-8e696378559e"}]}
         """;
 
     public TestContext TestContext { get; set; } = null!;

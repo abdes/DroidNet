@@ -30,6 +30,18 @@ descriptor models, `*.omat.json` and `*.otex.json`, with their readers and
 writers. Both check a descriptor against the engine schema embedded in this
 library and report problems by code (`MaterialSourceCodes`,
 `TextureSourceCodes`); every editor module reads these formats through them.
+
+An authored file's identity comes from its location, so every reader and writer
+takes it: a reference resolves against it and is spelled from it through
+`AssetPath`, and one that does not resolve is refused with its `vpath.*` code. A
+file reference, such as a texture's `source`, becomes a file through
+`IFileReferenceLocator`, which the project implements. An input mapping's action
+is a reference when it ends with `.oiact`, and a local name otherwise.
+`AssetFileTypes` also owns what follows from a file's type: a model's import
+record maps to the model's identity (`Truck.fbx.import.json` is `Truck.fbx`), a
+source's companions, and each format's reference fields, which a test compares
+with the installed engine schemas.
+
 `EngineSchemaSet` builds the engine schemas an assembly embeds with one
 registry, so a schema's references to the shared name and reference
 definitions resolve to the embedded copies; an assembly embeds every schema its

@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Documents;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials.Documents;
 
@@ -20,10 +22,10 @@ public sealed class MaterialContent : IDocumentContent
     private readonly IDocumentKind kind;
     private readonly MaterialValidation validation;
 
-    internal MaterialContent(IDocumentKind kind, MaterialSource source, MaterialValidation validation)
+    internal MaterialContent(IDocumentKind kind, MaterialSource source, AssetPath identity, MaterialValidation validation)
     {
         this.kind = kind;
-        this.Material = new Material(source);
+        this.Material = new Material(source, identity);
         this.validation = validation;
     }
 
@@ -50,27 +52,28 @@ public sealed class MaterialContent : IDocumentContent
 
     /// <inheritdoc/>
     /// <remarks>A source that does not match the engine's material schema is refused.</remarks>
-    public DocumentCapture Capture() => this.CaptureOf(this.Material.Source);
+    public DocumentCapture Capture() => this.CaptureOf(this.Material.Source, this.Material.Identity);
 
     /// <inheritdoc/>
-    /// <remarks>The copy's material is named after the copy's file.</remarks>
+    /// <remarks>The copy's material is named after the copy's file, and spells its references from the copy's identity.</remarks>
     public DocumentCapture CaptureCopy(DocumentFile copy)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        return this.CaptureOf(this.Material.Source with { Name = DocumentKinds.TitleOf(this.kind, copy.Path) });
+        return this.CaptureOf(this.Material.Source with { Name = DocumentKinds.TitleOf(this.kind, copy.Path) }, AssetFileTypes.ToIdentity(copy.Asset));
     }
 
     /// <inheritdoc/>
-    /// <remarks>Texture references follow the relocation; the material takes its file's new name.</remarks>
+    /// <remarks>Texture references follow the relocation; the material takes its file's new name and identity.</remarks>
     public void ApplyRelocation(DocumentRelocation relocation)
     {
         ArgumentNullException.ThrowIfNull(relocation);
         var retargeted = Material.Retarget(this.Material.Source, relocation.MapAsset);
+        this.Material.MoveTo(AssetFileTypes.ToIdentity(relocation.File.Asset));
         this.Material.Replace(retargeted with { Name = DocumentKinds.TitleOf(this.kind, relocation.File.Path) });
     }
 
-    private DocumentCapture CaptureOf(MaterialSource source)
-        => this.validation.ValidateForSave(source) is { } problem
+    private DocumentCapture CaptureOf(MaterialSource source, AssetPath identity)
+        => this.validation.ValidateForSave(source, identity) is { } problem
             ? DocumentCapture.Refused(problem.Message)
-            : DocumentCapture.Of(_ => Task.FromResult<ReadOnlyMemory<byte>>(Material.Serialize(source)));
+            : DocumentCapture.Of(_ => Task.FromResult<ReadOnlyMemory<byte>>(Material.Serialize(source, identity)));
 }

@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
@@ -12,9 +13,9 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class CookedDependencyReportTests
 {
-    private const string ReportJson = """
+    private static readonly string ReportJson = $$$"""
         {
-          "schema_version": 4,
+          "schema_version": {{{EngineSchemaVersions.Dependencies}}},
           "source_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           "assets": [
             {
@@ -68,11 +69,12 @@ public sealed class CookedDependencyReportTests
     [TestMethod]
     public void Parse_RejectsAnotherVersion()
     {
-        var legacy = ReportJson.Replace("\"schema_version\": 4", "\"schema_version\": 3", StringComparison.Ordinal);
+        var other = EngineSchemaVersions.Dependencies - 1;
+        var legacy = ReportJson.Replace($"\"schema_version\": {EngineSchemaVersions.Dependencies}", $"\"schema_version\": {other}", StringComparison.Ordinal);
 
         var parse = () => CookedDependencyReport.Parse(legacy);
         _ = parse.Should().Throw<InvalidDataException>()
-            .WithMessage("*received schema_version 3*installed native Inspector*");
+            .WithMessage($"*received schema_version {other}*installed native Inspector*");
     }
 
     [TestMethod]

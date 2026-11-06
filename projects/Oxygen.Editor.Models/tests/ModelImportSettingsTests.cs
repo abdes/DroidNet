@@ -7,6 +7,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Testing;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Models.Tests;
@@ -75,7 +76,7 @@ public sealed class ModelImportSettingsTests
         var misplaced = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Car.import.json"), bytes);
         var named = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Content", "Car", $"{this.identity:D}.import.json"), bytes);
         var elsewhere = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Content", "Car", "Car.glb.import.json"), bytes);
-        var invalid = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes("""{ "schema_version": 1 }"""));
+        var invalid = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes($$"""{ "schema_version": {{ModelImportSettings.CurrentSchemaVersion}} }"""));
 
         _ = misplaced.Should().Throw<InvalidDataException>();
         _ = named.Should().Throw<InvalidDataException>("the file name no longer carries the source identity");
@@ -134,7 +135,7 @@ public sealed class ModelImportSettingsTests
         var fileSystem = new MockFileSystem();
         _ = fileSystem.Directory.CreateDirectory(@"D:\Assets");
         _ = fileSystem.Directory.CreateDirectory(ProjectRoot);
-        fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), """{"schema_version":2,"mounts":{"Studio":"D:/Assets"}}""");
+        fileSystem.File.WriteAllText(Path.Combine(ProjectRoot, ProjectMounts.FileName), $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Studio":"D:/Assets"}}""");
         var project = TestProject.Create(fileSystem, ProjectRoot, [new ProjectMount("Content", Path: "Content"), new ProjectMount("Studio")]).Context;
 
         var record = this.Create().WithSource("/Studio/Car.glb");
@@ -166,9 +167,9 @@ public sealed class ModelImportSettingsTests
     public void AnImportUpdateChangesOnlyWhatTheImportEstablished()
     {
         var record = this.Create() with { NodeContinuity = [new("B", "A")] };
-        using var update = JsonDocument.Parse("""
+        using var update = JsonDocument.Parse($$$"""
             {
-              "surface_provenance": { "schema_version": 2, "geometries": [] },
+              "surface_provenance": { "schema_version": {{{EngineSchemaVersions.SurfaceProvenance}}}, "geometries": [] },
               "published_nodes": [ { "anchor": "Body", "node_id": "01990000-0000-7000-8000-000000000009" } ],
               "new_nodes": [ { "anchor": "Body", "node_id": "01990000-0000-7000-8000-000000000009" } ],
               "vanished_nodes": [ { "anchor": "Body/Door_FL", "node_id": "01990000-0000-7000-8000-00000000000a" } ],

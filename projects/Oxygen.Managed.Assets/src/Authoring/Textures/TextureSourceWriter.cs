@@ -5,6 +5,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Authoring.Textures;
 
@@ -13,14 +14,15 @@ public static class TextureSourceWriter
 {
     /// <summary>Creates an independently owned, schema-validated descriptor.</summary>
     /// <param name="texture">The texture's source.</param>
+    /// <param name="identity">The texture's identity, which its references are relative to.</param>
     /// <returns>The descriptor, including the fields kept from the one it was read from.</returns>
     /// <exception cref="AssetFormatException">The source does not make a valid descriptor.</exception>
-    public static JsonObject ToJson(TextureSource texture)
+    public static JsonObject ToJson(TextureSource texture, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(texture);
+        ArgumentNullException.ThrowIfNull(identity);
         var descriptor = texture.Descriptor is { } saved ? JsonNode.Parse(saved.GetRawText())!.AsObject() : new JsonObject();
         Set(descriptor, "name", texture.Name);
-        Set(descriptor, "virtual_path", texture.VirtualPath?.VirtualPath);
         descriptor["source"] = texture.Source;
         Set(descriptor, "sources", texture.Sources.Count == 0 ? null : new JsonArray([.. texture.Sources.Select(ToJson)]));
         Set(descriptor, "intent", texture.Intent);
@@ -38,7 +40,7 @@ public static class TextureSourceWriter
             _ = descriptor.Remove("cube");
         }
 
-        _ = TextureSourceReader.Validate(JsonSerializer.SerializeToElement(descriptor));
+        TextureSourceReader.Validate(JsonSerializer.SerializeToElement(descriptor), identity);
         return descriptor;
     }
 

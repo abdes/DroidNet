@@ -46,7 +46,7 @@ internal static class MaterialPreviewReader
             return cached.Color;
         }
 
-        var color = TryRead(project.FileSystem, path);
+        var color = TryRead(project.FileSystem, path, asset.Identity);
         Cache[path] = (written, color);
         return color;
     }
@@ -54,9 +54,10 @@ internal static class MaterialPreviewReader
     /// <summary>Reads the base colour from a descriptor, optionally only when it still has the expected content hash.</summary>
     /// <param name="fileSystem">The file system that holds the descriptor.</param>
     /// <param name="descriptorPath">The material descriptor path.</param>
+    /// <param name="identity">The material's identity.</param>
     /// <param name="expectedHash">The saved-source hash the descriptor must match, or null to accept any content.</param>
     /// <returns>The base colour, or null when the descriptor is missing, changed or unreadable.</returns>
-    public static MaterialPreviewColor? TryRead(IFileSystem fileSystem, FileSystemPath? descriptorPath, string? expectedHash = null)
+    public static MaterialPreviewColor? TryRead(IFileSystem fileSystem, FileSystemPath? descriptorPath, AssetPath identity, string? expectedHash = null)
     {
         if (descriptorPath is null || !fileSystem.File.Exists(descriptorPath.FullPath))
         {
@@ -71,7 +72,7 @@ internal static class MaterialPreviewReader
                 return null;
             }
 
-            var source = MaterialSourceReader.Read(bytes);
+            var source = MaterialSourceReader.Read(bytes, identity);
             var pbr = source.PbrMetallicRoughness;
             return new MaterialPreviewColor(pbr.BaseColorR, pbr.BaseColorG, pbr.BaseColorB, pbr.BaseColorA);
         }

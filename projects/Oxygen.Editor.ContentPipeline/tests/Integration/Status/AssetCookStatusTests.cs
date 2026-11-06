@@ -248,7 +248,7 @@ internal sealed partial class AssetCookStatusTests
                 new MaterialPbrMetallicRoughness(1, 1, 1, 1, 0, roughness),
                 MaterialAlphaMode.Opaque,
                 0.5f,
-                doubleSided: false));
+                doubleSided: false), SourceUri);
             return Encoding.UTF8.GetString(buffer.ToArray());
         }
 

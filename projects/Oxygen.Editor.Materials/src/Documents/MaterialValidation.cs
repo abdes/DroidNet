@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Materials.Properties;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Materials.Documents;
@@ -40,14 +41,15 @@ public sealed partial class MaterialValidation
     ///     Checks a source about to be saved against the engine's schema.
     /// </summary>
     /// <param name="source">The source to save.</param>
+    /// <param name="identity">The material's identity.</param>
     /// <returns>
     ///     Why the source cannot be saved, with the code <see cref="MaterialDiagnosticCodes.EditRejected"/>, or
     ///     <see langword="null"/> when it can.
     /// </returns>
-    public AssetProblem? ValidateForSave(MaterialSource source)
+    public AssetProblem? ValidateForSave(MaterialSource source, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (!TryWrite(source, out var json, out var problem))
+        if (!TryWrite(source, identity, out var json, out var problem))
         {
             return problem;
         }
@@ -65,11 +67,12 @@ public sealed partial class MaterialValidation
     ///     Checks an edited source against the engine's schema and the editor's overlay.
     /// </summary>
     /// <param name="source">The edited source.</param>
+    /// <param name="identity">The material's identity.</param>
     /// <returns>Why the edit is rejected, or <see langword="null"/> when it is accepted.</returns>
-    public AssetProblem? ValidateEdited(MaterialSource source)
+    public AssetProblem? ValidateEdited(MaterialSource source, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(source);
-        if (!TryWrite(source, out var json, out var problem))
+        if (!TryWrite(source, identity, out var json, out var problem))
         {
             return problem;
         }
@@ -87,11 +90,11 @@ public sealed partial class MaterialValidation
     }
 
     // The writer checks the source against the engine schema it embeds, and refuses to write one that does not match.
-    private static bool TryWrite(MaterialSource source, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JsonObject? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out AssetProblem? problem)
+    private static bool TryWrite(MaterialSource source, AssetPath identity, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out JsonObject? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out AssetProblem? problem)
     {
         try
         {
-            json = MaterialSourceWriter.ToJson(source);
+            json = MaterialSourceWriter.ToJson(source, identity);
             problem = null;
             return true;
         }

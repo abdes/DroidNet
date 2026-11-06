@@ -114,13 +114,26 @@ public static class AssetFileTypes
             new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown)
             {
                 ProductExtensions = [InputAction, InputMappingContext],
-                ReferenceFields = [new("contexts/*/mappings/*/action")],
+                ReferenceFields =
+                [
+                    new("contexts/*/mappings/*/action"),
+                    new("contexts/*/mappings/*/triggers/*/chord_action"),
+                    new("contexts/*/mappings/*/triggers/*/combo_actions/*/action"),
+                    new("contexts/*/mappings/*/triggers/*/aux/*/action"),
+                ],
             },
-            new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown),
+            new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown)
+            {
+                ReferenceFields = [new("source") { IsFile = true }],
+            },
             new(ModelPreview, AssetFileCategory.ModelPreview, CookedExtension: null, AssetType.Unknown),
             new(LuaScript, AssetFileCategory.Script, Script, AssetType.Script),
             new(LuauScript, AssetFileCategory.Script, Script, AssetType.Script),
-            new(TextureDescriptor, AssetFileCategory.Descriptor, Texture, AssetType.Unknown) { CookedFileKind = FileKind.TextureDescriptor },
+            new(TextureDescriptor, AssetFileCategory.Descriptor, Texture, AssetType.Unknown)
+            {
+                CookedFileKind = FileKind.TextureDescriptor,
+                ReferenceFields = [new("source") { IsFile = true }, new("sources/*/file") { IsFile = true }],
+            },
             new(Texture, AssetFileCategory.Cooked, Texture, AssetType.Unknown) { CookedFileKind = FileKind.TextureDescriptor },
             new(Buffer, AssetFileCategory.Cooked, Buffer, AssetType.Unknown),
             new(PhysicsResource, AssetFileCategory.Cooked, PhysicsResource, AssetType.Unknown),
@@ -141,7 +154,6 @@ public static class AssetFileTypes
         },
         .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)
         {
-            IdentityField = entry.Extension is Material or Geometry or PhysicsMaterial or CollisionShape ? "virtual_path" : null,
             ReferenceFields = DescriptorReferenceFields(entry.Extension),
         }),
         .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension, AssetFileCategory.Cooked, entry.Extension, entry.Type)),
@@ -254,7 +266,8 @@ public static class AssetFileTypes
     /// Gets the identity of the asset a source file stands for: the cooked descriptor it is or cooks into
     /// (<c>Red.omat.json</c> and <c>Red.omat</c> are <c>Red.omat</c>, <c>Orbit.lua</c> is <c>Orbit.oscript</c>), and
     /// otherwise the file without its authoring suffix (<c>Player.input.json</c> is the container
-    /// <c>Player.input</c>). Import settings and model previews stand for no asset and keep their path.
+    /// <c>Player.input</c>). A model's import record is its model (<c>Truck.fbx.import.json</c> is <c>Truck.fbx</c>); a
+    /// model's preview stands for no asset and keeps its path, as does a record named after no model.
     /// </summary>
     /// <param name="source">The source file's path.</param>
     /// <returns>The identity.</returns>
@@ -263,6 +276,8 @@ public static class AssetFileTypes
         ArgumentNullException.ThrowIfNull(source);
         return Find(source.Name) switch
         {
+            { Category: AssetFileCategory.ImportSettings } type when Is(source.Name[..^type.Suffix.Length], AssetFileCategory.Model)
+                => source.WithName(source.Name[..^type.Suffix.Length]),
             { Category: AssetFileCategory.ImportSettings or AssetFileCategory.ModelPreview } => source,
             { CookedExtension: { } extension } type => source.WithName(source.Name[..^type.Suffix.Length] + extension),
             _ => source.WithoutAuthoringSuffix(),
@@ -272,8 +287,9 @@ public static class AssetFileTypes
     /// <summary>
     /// Gets the files that can be the source of an asset, most specific first: the authored descriptor or scripts that
     /// cook into it (<c>Red.omat.json</c> for <c>Red.omat</c>; <c>Orbit.lua</c> and <c>Orbit.luau</c> for
-    /// <c>Orbit.oscript</c>), the file with the authoring suffix (<c>Player.input.json</c> for the container
-    /// <c>Player.input</c>), and the file itself (<c>Ship.glb</c>).
+    /// <c>Orbit.oscript</c>), a model's import record (<c>Ship.glb.import.json</c> for <c>Ship.glb</c>), the file with the
+    /// authoring suffix (<c>Player.input.json</c> for the container <c>Player.input</c>), and the file itself
+    /// (<c>Ship.glb</c>).
     /// </summary>
     /// <param name="identity">The asset's identity.</param>
     /// <returns>The candidate source paths; <see cref="ToIdentity"/> maps each back to <paramref name="identity"/>.</returns>
@@ -294,6 +310,11 @@ public static class AssetFileTypes
                 .Select(type => identity.WithName(stem + type.Suffix)));
         }
 
+        if (Is(identity.Name, AssetFileCategory.Model))
+        {
+            sources.Add(identity.WithName(identity.Name + ImportSettings));
+        }
+
         if (Find(identity.WithAuthoringSuffix().Name) is not null)
         {
             sources.Add(identity.WithAuthoringSuffix());
@@ -301,6 +322,41 @@ public static class AssetFileTypes
 
         sources.Add(identity);
         return [.. sources.Distinct().Where(source => ToIdentity(source) == identity)];
+    }
+
+    /// <summary>
+    /// Gets the files that belong to an authored file, which move, are renamed, copied and deleted with it. Its source is
+    /// one when it is beside the file with the asset's name (<c>Brick.png</c> for <c>Brick.otex.json</c>) or inside a
+    /// folder of that name beside the file (<c>Truck/Truck.gltf</c> for <c>Truck.gltf.import.json</c>). A model's preview
+    /// always is one. A source anywhere else, as in another mount, is only referenced.
+    /// </summary>
+    /// <param name="file">The authored file's path.</param>
+    /// <param name="source">The file its source reference resolves to.</param>
+    /// <returns>The companions.</returns>
+    public static IReadOnlyList<AssetPath> CompanionsOf(AssetPath file, AssetPath source)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(source);
+        var identity = ToIdentity(file);
+        var stem = Path.GetFileNameWithoutExtension(identity.Name);
+        var companions = new List<AssetPath>();
+        if (file.Parent is { } folder && source != file && source.IsSameOrInside(folder))
+        {
+            var isNamedSo = source.Parent == folder
+                ? string.Equals(Path.GetFileNameWithoutExtension(source.Name), stem, StringComparison.Ordinal)
+                : source.IsSameOrInside(identity.WithName(stem));
+            if (isNamedSo)
+            {
+                companions.Add(source);
+            }
+        }
+
+        if (Is(file.Name, AssetFileCategory.ImportSettings))
+        {
+            companions.Add(identity.WithName(PreviewOf(identity.Name)));
+        }
+
+        return companions;
     }
 
     /// <summary>Gives the path of the cooked descriptor a file is or cooks into.</summary>
@@ -323,9 +379,13 @@ public static class AssetFileTypes
         Material => [new("textures/*/virtual_path")],
         Geometry =>
         [
-            new("buffers/*/virtual_path"),
-            new("lods/*/buffers/*"),
-            new("lods/*/skinning/*"),
+            new("lods/*/buffers/vb_ref"),
+            new("lods/*/buffers/ib_ref"),
+            new("lods/*/skinning/skeleton_ref"),
+            new("lods/*/skinning/joint_index_ref"),
+            new("lods/*/skinning/joint_weight_ref"),
+            new("lods/*/skinning/joint_remap_ref"),
+            new("lods/*/skinning/inverse_bind_ref"),
             new("lods/*/submeshes/*/material_ref"),
         ],
         PhysicsScene =>

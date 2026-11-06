@@ -239,7 +239,7 @@ public sealed partial class MaterialEdits(
     private void Commit(Document document, MaterialContent content, MaterialSource source, string label)
     {
         var previous = content.Material.Source;
-        if (Material.AreSame(previous, source))
+        if (content.Material.IsSameAs(source))
         {
             return;
         }
@@ -296,7 +296,7 @@ public sealed partial class MaterialEdits(
     }
 
     private MaterialEditResult? ValidateEdited(Document document, MaterialSource source)
-        => validation.ValidateEdited(source) is { } problem
+        => validation.ValidateEdited(source, ContentOf(document).Material.Identity) is { } problem
             ? this.Reject(document, problem.Code, string.IsNullOrEmpty(problem.Explanation) ? problem.Message : $"{problem.Message} {problem.Explanation}")
             : null;
 

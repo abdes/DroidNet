@@ -33,11 +33,11 @@ public static class InputRules
         ArgumentNullException.ThrowIfNull(container);
         ArgumentNullException.ThrowIfNull(findContainer);
         return container.Source.ActionReferences
-            .Where(reference => reference.IsPath && !NamesAction(project, container, reference, findContainer))
+            .Where(reference => reference.IsReference && !NamesAction(project, container, reference, findContainer))
             .Select(static reference => new AssetProblem(
                 DiagnosticSeverity.Error,
                 InputSourceCodes.ActionMissing,
-                $"No input source declares the action '{reference.Text}'. Name an action as /<input source path>/<action>.oiact.")
+                $"No input source declares the action '{reference.Text}'. Name an action as <input source path>/<action>.oiact.")
             {
                 Line = reference.Position?.Line,
                 Column = reference.Position?.Column,

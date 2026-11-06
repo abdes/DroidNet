@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.Security.Cryptography;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentPipeline.Publication;
 
@@ -42,6 +43,13 @@ internal sealed record CookRootImage(bool Exists, ImmutableDictionary<string, Co
         {
             cancellationToken.ThrowIfCancellationRequested();
             var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+
+            // A writer's lock and its readers' leases change without changing the root, and belong to it alone.
+            if (LooseCookedIndex.IsWriterProtocolPath(relative))
+            {
+                continue;
+            }
+
             if (isDirectory)
             {
                 if (copyTo is not null)

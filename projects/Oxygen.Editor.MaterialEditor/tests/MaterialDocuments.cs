@@ -51,7 +51,9 @@ internal sealed partial class MaterialDocuments : IDisposable
 
     public static string PathOf(string name) => Path.Combine(Folder, name + ".omat.json");
 
-    public static DocumentFile FileOf(string name) => new(FileSystemPath.From(PathOf(name)), AssetPath.Parse($"/Content/Materials/{name}.omat"));
+    public static AssetPath IdentityOf(string name) => AssetPath.Parse($"/Content/Materials/{name}.omat");
+
+    public static DocumentFile FileOf(string name) => new(FileSystemPath.From(PathOf(name)), IdentityOf(name));
 
     /// <summary>Writes a new material, as New Material does, and opens it.</summary>
     /// <param name="name">The material's name, which is its file's name.</param>

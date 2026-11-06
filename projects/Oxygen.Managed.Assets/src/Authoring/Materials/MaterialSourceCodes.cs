@@ -17,10 +17,4 @@ public static class MaterialSourceCodes
 
     /// <summary>The JSON does not match the engine's material descriptor schema.</summary>
     public const string SchemaMismatch = DiagnosticCodes.MaterialPrefix + "Source.SchemaMismatch";
-
-    /// <summary>A number does not fit a finite 32-bit float, which the engine stores.</summary>
-    public const string NumberOutOfRange = DiagnosticCodes.MaterialPrefix + "Source.NumberOutOfRange";
-
-    /// <summary>A texture is not named by a canonical absolute virtual path below a mount point.</summary>
-    public const string TexturePathInvalid = DiagnosticCodes.MaterialPrefix + "Source.TexturePathInvalid";
 }

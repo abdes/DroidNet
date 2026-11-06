@@ -15,8 +15,10 @@ public static class LooseCookedIndex
     public const int HeaderSize = 256;
     public const int AssetEntrySize = 85;
     public const int FileRecordSize = 54;
+    public const int RetiredRecordSize = 14;
+    public const int RequirementRecordSize = 26;
     public const int Sha256Size = 32;
-    public const ushort Version = 7;
+    public const ushort Version = 9;
 
     /// <summary>The file name of a loose cooked root's index.</summary>
     public const string FileName = "container.index.bin";
@@ -24,7 +26,39 @@ public static class LooseCookedIndex
     /// <summary>The file that marks a cooked root as a leased generation; it is never content.</summary>
     public const string GenerationLeaseFileName = ".generation.lock";
 
+    /// <summary>The file a root's one writer locks; it is never content.</summary>
+    public const string WriterLockFileName = "container.writer.lock";
+
+    /// <summary>The folder of the reader leases of a root's commits; it is never content.</summary>
+    public const string LeasesFolderName = ".leases";
+
+    /// <summary>The <c>KeyReferenceKind</c> of a requirement record that names an asset.</summary>
+    public const byte RequirementKindAsset = 1;
+
+    /// <summary>The <c>KeyReferenceKind</c> of a requirement record that names a texture.</summary>
+    public const byte RequirementKindTexture = 4;
+
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
+
+    /// <summary>Tests whether a path below a cooked root is the root's own machinery rather than content.</summary>
+    /// <param name="relativePath">The path below the root, with <c>/</c> separators.</param>
+    /// <returns><see langword="true"/> for the index, the generation lock, the writer lock, and the leases folder and what it holds.</returns>
+    public static bool IsReservedPath(string relativePath)
+    {
+        ArgumentNullException.ThrowIfNull(relativePath);
+        return relativePath is FileName or GenerationLeaseFileName
+            || IsWriterProtocolPath(relativePath);
+    }
+
+    /// <summary>Tests whether a path is what a writer and its readers coordinate through, which a copy of a root does not take.</summary>
+    /// <param name="relativePath">The path below the root, with <c>/</c> separators.</param>
+    /// <returns><see langword="true"/> for the writer lock, and the leases folder and what it holds.</returns>
+    public static bool IsWriterProtocolPath(string relativePath)
+    {
+        ArgumentNullException.ThrowIfNull(relativePath);
+        return relativePath is WriterLockFileName or LeasesFolderName
+            || relativePath.StartsWith(LeasesFolderName + "/", StringComparison.Ordinal);
+    }
 
     /// <summary>
     /// Reads the format version an index declares, without validating anything else, so that content cooked in another
@@ -57,7 +91,12 @@ public static class LooseCookedIndex
         var stringTable = ReadBlock(stream, header.StringTableOffset, checked((int)header.StringTableSize));
         var assets = ReadAssets(stream, header, stringTable);
         var files = header.FileRecordCount == 0 ? [] : ReadFiles(stream, header, stringTable);
-        var document = new Document(header.ContentVersion, header.Flags, header.SourceGuid, assets, files);
+        var document = new Document(header.ContentVersion, header.Flags, header.SourceGuid, assets, files)
+        {
+            Commit = header.Commit,
+            Retired = ReadRetired(stream, header, stringTable),
+            Requirements = ReadRequirements(stream, header, stringTable),
+        };
         ValidateDocument(document);
         return document;
     }
@@ -105,7 +144,14 @@ public static class LooseCookedIndex
             BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(60, 4)),
             BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(64, 8)),
             BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(72, 4)),
-            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(76, 4)));
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(76, 4)),
+            BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(80, 8)),
+            BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(88, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(96, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(100, 4)),
+            BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(104, 8)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(112, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(116, 4)));
     }
 
     private static void ValidateHeader(HeaderFields header, ulong length)
@@ -150,6 +196,29 @@ public static class LooseCookedIndex
                 ValidateRange(header.FileRecordsOffset, (ulong)header.FileRecordCount * header.FileRecordSize, length, "file records");
             }
         }
+
+        if (header.Commit == 0)
+        {
+            throw new InvalidDataException("The cooked index's commit must be 1 or more.");
+        }
+
+        ValidateSection(header.RetiredRecordsOffset, header.RetiredRecordCount, header.RetiredRecordSize, RetiredRecordSize, length, "retired records");
+        ValidateSection(header.RequirementRecordsOffset, header.RequirementRecordCount, header.RequirementRecordSize, RequirementRecordSize, length, "requirement records");
+    }
+
+    private static void ValidateSection(ulong offset, uint count, uint size, int expectedSize, ulong length, string label)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        if (size != expectedSize)
+        {
+            throw new InvalidDataException($"The size {size} of the {label} does not match the expected size {expectedSize}.");
+        }
+
+        ValidateRange(offset, checked((ulong)count * size), length, label);
     }
 
     private static List<AssetEntry> ReadAssets(Stream stream, HeaderFields header, byte[] stringTable)
@@ -208,7 +277,7 @@ public static class LooseCookedIndex
                 var record = buffer.AsSpan(0, checked((int)header.FileRecordSize));
                 var rawKind = BinaryPrimitives.ReadUInt16LittleEndian(record[..2]);
                 var kind = (FileKind)rawKind;
-                if (!Enum.IsDefined(kind))
+                if (!Enum.IsDefined(kind) || kind == FileKind.AssetDescriptor)
                 {
                     throw new InvalidDataException($"Unknown loose-index file kind {rawKind}.");
                 }
@@ -232,6 +301,79 @@ public static class LooseCookedIndex
         }
 
         return files;
+    }
+
+    private static List<RetiredFile> ReadRetired(Stream stream, HeaderFields header, byte[] stringTable)
+    {
+        var retired = new List<RetiredFile>(checked((int)header.RetiredRecordCount));
+        if (header.RetiredRecordCount == 0)
+        {
+            return retired;
+        }
+
+        Span<byte> record = stackalloc byte[RetiredRecordSize];
+        stream.Position = checked((long)header.RetiredRecordsOffset);
+        for (var index = 0u; index < header.RetiredRecordCount; index++)
+        {
+            stream.ReadExactly(record);
+            var kind = (FileKind)BinaryPrimitives.ReadUInt16LittleEndian(record[..2]);
+            if (!Enum.IsDefined(kind) || kind == FileKind.Unknown || kind.IsResourceData())
+            {
+                throw new InvalidDataException($"A cooked index cannot retire a file of kind {(ushort)kind}.");
+            }
+
+            var retiredAt = BinaryPrimitives.ReadUInt64LittleEndian(record.Slice(6, 8));
+            if (retiredAt == 0 || retiredAt > header.Commit)
+            {
+                throw new InvalidDataException("A retired file's commit does not precede the index.");
+            }
+
+            retired.Add(new(kind, ReadString(stringTable, BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(2, 4))), retiredAt));
+        }
+
+        return retired;
+    }
+
+    private static List<AssetRequirement> ReadRequirements(Stream stream, HeaderFields header, byte[] stringTable)
+    {
+        var requirements = new List<AssetRequirement>(checked((int)header.RequirementRecordCount));
+        if (header.RequirementRecordCount == 0)
+        {
+            return requirements;
+        }
+
+        Span<byte> record = stackalloc byte[RequirementRecordSize];
+        stream.Position = checked((long)header.RequirementRecordsOffset);
+        var previousAsset = 0u;
+        for (var index = 0u; index < header.RequirementRecordCount; index++)
+        {
+            stream.ReadExactly(record);
+            var asset = BinaryPrimitives.ReadUInt32LittleEndian(record[..4]);
+            if (asset >= header.AssetCount || asset < previousAsset)
+            {
+                throw new InvalidDataException("Requirement records must name assets in asset order.");
+            }
+
+            previousAsset = asset;
+            var mount = ReadString(stringTable, BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(4, 4)));
+            var kind = record[8];
+            var assetType = record[25];
+            var isTexture = kind == RequirementKindTexture && assetType == 0;
+            if (mount.Length == 0 || mount.Contains('/') || (kind != RequirementKindAsset && !isTexture))
+            {
+                throw new InvalidDataException("A requirement names no mount, or another kind than an asset or a texture.");
+            }
+
+            var requirement = new AssetRequirement(asset, mount, isTexture, AssetKey.FromBytes(record.Slice(9, 16)), assetType);
+            if (requirements.Contains(requirement))
+            {
+                throw new InvalidDataException("A requirement is listed twice.");
+            }
+
+            requirements.Add(requirement);
+        }
+
+        return requirements;
     }
 
     private static void ValidateDocument(Document document)
@@ -261,7 +403,8 @@ public static class LooseCookedIndex
 
         foreach (var file in document.Files)
         {
-            ValidateMember(file.RelativePath, file.Sha256, paths);
+            ValidatePath(file.RelativePath, paths);
+            ValidateFileDigest(file);
             var pathKeyed = file.Kind.IsPathKeyed();
             if (file.Kind == FileKind.Unknown || (!pathKeyed && !roles.Add(file.Kind)))
             {
@@ -290,20 +433,43 @@ public static class LooseCookedIndex
                 throw new InvalidDataException($"The cooked index must contain both {table} and {data}.");
             }
         }
+
+        // A retired path is no listed one, and is retired once.
+        foreach (var file in document.Retired)
+        {
+            ValidatePath(file.RelativePath, paths);
+        }
     }
 
     private static void ValidateMember(string path, ReadOnlyMemory<byte> digest, HashSet<string> paths)
     {
-        if (string.IsNullOrEmpty(path) || path.Contains('\\') || path.Contains(':')
-            || path.Split('/').Any(static segment => segment is "" or "." or "..")
-            || path is FileName or GenerationLeaseFileName || !paths.Add(path))
-        {
-            throw new InvalidDataException($"The cooked index contains an invalid or duplicate member path: {path}.");
-        }
-
-        if (digest.Length != Sha256Size || digest.Span.IndexOfAnyExcept((byte)0) < 0)
+        ValidatePath(path, paths);
+        if (!HasDigest(digest))
         {
             throw new InvalidDataException($"The cooked member is missing its SHA-256 digest: {path}.");
+        }
+    }
+
+    private static void ValidateFileDigest(FileRecord file)
+    {
+        if (file.Sha256.Length != Sha256Size || HasDigest(file.Sha256) == file.Kind.IsResourceData())
+        {
+            throw new InvalidDataException(file.Kind.IsResourceData()
+                ? $"A resource data file records no digest of its own: {file.RelativePath}."
+                : $"The cooked member is missing its SHA-256 digest: {file.RelativePath}.");
+        }
+    }
+
+    private static bool HasDigest(ReadOnlyMemory<byte> digest)
+        => digest.Length == Sha256Size && digest.Span.IndexOfAnyExcept((byte)0) >= 0;
+
+    private static void ValidatePath(string path, HashSet<string> paths)
+    {
+        if (string.IsNullOrEmpty(path) || path.Contains('\\') || path.Contains(':')
+            || path.Split('/').Any(static segment => segment is "" or "." or "..")
+            || IsReservedPath(path) || !paths.Add(path))
+        {
+            throw new InvalidDataException($"The cooked index contains an invalid or duplicate member path: {path}.");
         }
     }
 
@@ -369,5 +535,12 @@ public static class LooseCookedIndex
         uint AssetEntrySize,
         ulong FileRecordsOffset,
         uint FileRecordCount,
-        uint FileRecordSize);
+        uint FileRecordSize,
+        ulong Commit,
+        ulong RetiredRecordsOffset,
+        uint RetiredRecordCount,
+        uint RetiredRecordSize,
+        ulong RequirementRecordsOffset,
+        uint RequirementRecordCount,
+        uint RequirementRecordSize);
 }

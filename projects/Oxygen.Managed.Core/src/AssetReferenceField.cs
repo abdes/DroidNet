@@ -23,6 +23,11 @@ public sealed record AssetReferenceField(string Path)
     private const string AnyDepth = "**";
 
     /// <summary>
+    /// Gets a value indicating whether the field names a file rather than an asset, such as a texture's <c>source</c>.
+    /// </summary>
+    public bool IsFile { get; init; }
+
+    /// <summary>
     /// Gets the property of the field's object that must hold <see cref="WhenValue"/> for the field to be a reference,
     /// such as the <c>Type</c> of a script parameter value; null when the field always is one.
     /// </summary>

@@ -148,4 +148,42 @@ public sealed class AssetFileTypesTests
         _ = preview.Should().Be("/Content/Models/Crate.glb" + AssetFileTypes.ModelPreview, "it keeps the model's whole name, so Crate.glb and Crate.fbx each have their own");
         _ = AssetFileTypes.ToIdentity(AssetPath.Parse(preview)).Should().Be(AssetPath.Parse(preview), "a preview is no asset of its own");
     }
+
+    [TestMethod]
+    [DataRow("/Content/Cars/Truck.fbx.import.json", "/Content/Cars/Truck.fbx")]
+    [DataRow("/Content/Cars/Lantern.glb.import.json", "/Content/Cars/Lantern.glb")]
+    [DataRow("/Content/Cars/Lantern.GLTF.import.json", "/Content/Cars/Lantern.GLTF")]
+    [DataRow("/Content/Cars/Notes.import.json", "/Content/Cars/Notes.import.json")]
+    public void ARecordIsItsModelsAuthoredFile(string record, string identity)
+        => _ = AssetFileTypes.ToIdentity(AssetPath.Parse(record)).Should().Be(AssetPath.Parse(identity));
+
+    [TestMethod]
+    public void AModelsSourcesAreItsRecordThenItsFile()
+        => _ = AssetFileTypes.SourcesOf(AssetPath.Parse("/Content/Cars/Truck.fbx")).Should().Equal(
+            AssetPath.Parse("/Content/Cars/Truck.fbx.import.json"),
+            AssetPath.Parse("/Content/Cars/Truck.fbx"));
+
+    [TestMethod]
+    [DataRow("/Content/Textures/Brick.otex.json", "/Content/Textures/Brick.png", true)]
+    [DataRow("/Content/Textures/Brick.otex.json", "/Content/Textures/Brick/Brick.png", true)]
+    [DataRow("/Content/Textures/Brick.otex.json", "/Content/Textures/Wall.png", false)]
+    [DataRow("/Content/Textures/Brick.otex.json", "/Content/Media/Brick.png", false)]
+    [DataRow("/Content/Textures/Brick.otex.json", "/RawMedia/Walls/Brick.png", false)]
+    public void ASourceIsACompanionBesideItsAssetWithItsNameOrInAFolderOfThatName(string file, string source, bool isCompanion)
+    {
+        var companions = AssetFileTypes.CompanionsOf(AssetPath.Parse(file), AssetPath.Parse(source));
+
+        _ = companions.Contains(AssetPath.Parse(source)).Should().Be(isCompanion);
+    }
+
+    [TestMethod]
+    public void ARecordsCompanionsAreItsSourceAndItsPreview()
+        => _ = AssetFileTypes.CompanionsOf(AssetPath.Parse("/Content/Cars/Truck.fbx.import.json"), AssetPath.Parse("/Content/Cars/Truck.fbx")).Should().Equal(
+            AssetPath.Parse("/Content/Cars/Truck.fbx"),
+            AssetPath.Parse("/Content/Cars/Truck.fbx.preview.json"));
+
+    [TestMethod]
+    public void ARecordsSourceInAnotherMountIsNoCompanion()
+        => _ = AssetFileTypes.CompanionsOf(AssetPath.Parse("/Content/Cars/Truck.fbx.import.json"), AssetPath.Parse("/RawMedia/Cars/Truck.fbx")).Should().Equal(
+            AssetPath.Parse("/Content/Cars/Truck.fbx.preview.json"));
 }

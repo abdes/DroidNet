@@ -38,7 +38,7 @@ public sealed class SharedMountCatalogTests
             var studio = Path.Combine(folder.FullName, "Studio");
             _ = Directory.CreateDirectory(Path.Combine(studio, "Materials"));
             await File.WriteAllTextAsync(Path.Combine(studio, "Materials", "Brick.omat.json"), "{}", this.TestContext.CancellationToken).ConfigureAwait(false);
-            var project = CreateProject(folder.FullName, $$$"""{"schema_version":2,"mounts":{"Studio":"{{{studio.Replace('\\', '/')}}}","Vendor":"{{{Path.Combine(folder.FullName, "Gone").Replace('\\', '/')}}}"}}""");
+            var project = CreateProject(folder.FullName, $$$"""{"schema_version":{{{ProjectMounts.SchemaVersion}}},"mounts":{"Studio":"{{{studio.Replace('\\', '/')}}}","Vendor":"{{{Path.Combine(folder.FullName, "Gone").Replace('\\', '/')}}}"}}""");
             using var session = new TestSession(project);
             await using var catalog = CreateCatalog(session);
             var added = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

@@ -177,7 +177,7 @@ internal sealed class AssetIdentityReducer
 
         if (descriptor is not null)
         {
-            (primaryState, derivedState) = this.ReadDescriptorState(project.FileSystem, descriptorPath, cookedPath, diagnostics);
+            (primaryState, derivedState) = this.ReadDescriptorState(project.FileSystem, descriptorPath, identity, cookedPath, diagnostics);
         }
         else if (cooked is not null && (cookedPath is null || !project.FileSystem.File.Exists(cookedPath.FullPath)))
         {
@@ -205,7 +205,7 @@ internal sealed class AssetIdentityReducer
         };
     }
 
-    private bool CanReadMaterialDescriptor(IFileSystem fileSystem, FileSystemPath descriptorPath)
+    private bool CanReadMaterialDescriptor(IFileSystem fileSystem, FileSystemPath descriptorPath, AssetPath identity)
     {
         if (!descriptorPath.Name.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.Ordinal))
         {
@@ -235,7 +235,7 @@ internal sealed class AssetIdentityReducer
         bool canRead;
         try
         {
-            _ = MaterialSourceReader.Read(bytes);
+            _ = MaterialSourceReader.Read(bytes, identity);
             canRead = true;
         }
         catch (AssetFormatException)
@@ -251,9 +251,9 @@ internal sealed class AssetIdentityReducer
         return canRead;
     }
 
-    private (AssetState Primary, AssetState? Derived) ReadDescriptorState(IFileSystem fileSystem, FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
+    private (AssetState Primary, AssetState? Derived) ReadDescriptorState(IFileSystem fileSystem, FileSystemPath? descriptorPath, AssetPath identity, FileSystemPath? cookedPath, List<string> diagnostics)
     {
-        if (descriptorPath is null || !fileSystem.File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(fileSystem, descriptorPath))
+        if (descriptorPath is null || !fileSystem.File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(fileSystem, descriptorPath, identity))
         {
             diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
             return (AssetState.Broken, null);

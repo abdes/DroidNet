@@ -17,7 +17,4 @@ public static class TextureSourceCodes
 
     /// <summary>The JSON does not match the engine's texture descriptor schema.</summary>
     public const string SchemaMismatch = DiagnosticCodes.TexturePrefix + "Source.SchemaMismatch";
-
-    /// <summary>The texture's <c>virtual_path</c> is not a canonical absolute virtual path below a mount point.</summary>
-    public const string VirtualPathInvalid = DiagnosticCodes.TexturePrefix + "Source.VirtualPathInvalid";
 }

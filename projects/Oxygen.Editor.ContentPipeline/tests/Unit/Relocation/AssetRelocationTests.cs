@@ -144,7 +144,7 @@ public sealed class AssetRelocationTests
     /// <summary>A texture and its image move together; the descriptor keeps a valid source and a new identity.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public async Task RenamingTextureRenamesItsImageAndRewritesIdentityAndReferrers()
+    public async Task RenamingTextureRenamesItsImageAndRewritesReferrers()
     {
         using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -153,7 +153,6 @@ public sealed class AssetRelocationTests
         _ = workspace.Exists("Content/Textures/Wood.png").Should().BeFalse();
         var texture = workspace.ReadJson("Content/Textures/Oak.otex.json");
         _ = texture["source"]!.GetValue<string>().Should().Be("Oak.png");
-        _ = texture["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Oak.otex");
         _ = WoodOf(workspace.ReadJson("Content/Materials/Red.omat.json")).Should().Be(Spell("/Content/Materials/Red.omat", "/Content/Textures/Oak.otex"));
         var scene = await workspace.ReadSceneAsync("Content/Scenes/Main.oscene.json", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = scene.Environment.PostProcess.AutoExposureMeteringMask.Should().Be(AssetPath.Parse("/Content/Textures/Oak.otex"));
@@ -172,7 +171,6 @@ public sealed class AssetRelocationTests
 
         var moved = workspace.ReadJson("Content/Props/Shared/far.otex.json");
         _ = moved["source"]!.GetValue<string>().Should().Be("../../Textures/Wood.png");
-        _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Props/Shared/far.otex");
     }
 
     /// <summary>Every image of a multi-source texture follows a move, and its settings stay.</summary>
@@ -182,7 +180,6 @@ public sealed class AssetRelocationTests
     {
         using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var layers = AuthoredFiles.Texture("/Content/Shared/layers.otex", "../Textures/Wood.png")
-            .WithIdentityField()
             .Append("/sources", new JsonObject { ["file"] = "../Textures/Wood.png", ["layer"] = 1 })
             .Set("/mips/policy", "none");
         _ = workspace.Write("Content/Shared/layers.otex.json", layers.Text);
@@ -193,7 +190,6 @@ public sealed class AssetRelocationTests
         _ = moved["sources"]![0]!["file"]!.GetValue<string>().Should().Be("../Wood.png");
         _ = moved["sources"]![0]!["layer"]!.GetValue<int>().Should().Be(1);
         _ = moved["mips"]!["policy"]!.GetValue<string>().Should().Be("none");
-        _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Shared/layers.otex");
     }
 
     /// <summary>Moving or renaming a model rewrites the source and virtual path of its import record and moves the record to the place of the new virtual path.</summary>
@@ -622,17 +618,43 @@ public sealed class AssetRelocationTests
     /// <summary>Copies get unique names and their own identity; referrers keep pointing at the original.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public async Task CopyCreatesUniqueCopiesWithTheirOwnIdentity()
+    public async Task CopyCreatesUniqueCopies()
     {
         using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var copies = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Textures/Wood.otex.json")], AssetPath.Parse("/Content/Textures"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = copies.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Content/Textures/Wood (2).otex.json"));
         var copy = workspace.ReadJson("Content/Textures/Wood (2).otex.json");
-        _ = copy["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Wood (2).otex");
         _ = copy["source"]!.GetValue<string>().Should().Be("Wood (2).png");
         _ = workspace.Exists("Content/Textures/Wood (2).png").Should().BeTrue();
         _ = WoodOf(workspace.ReadJson("Content/Materials/Red.omat.json")).Should().Be(Spell("/Content/Materials/Red.omat", "/Content/Textures/Wood.otex"));
+    }
+
+    /// <summary>A file that moves respells its references from where it now is; they name the same assets.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingAMaterialRespellsItsReferencesFromItsNewPlace()
+    {
+        using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        workspace.CreateFolder("Content/Deep/Folder");
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Deep/Folder/Red.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = WoodOf(workspace.ReadJson("Content/Deep/Folder/Red.omat.json")).Should().Be("../../Textures/Wood.otex");
+    }
+
+    /// <summary>A copy references what the original does, spelled from where the copy is.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ACopyInAnotherFolderSpellsItsReferencesFromThere()
+    {
+        using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        workspace.CreateFolder("Content/Deep/Folder");
+
+        _ = await workspace.Service.CopyAsync([AssetPath.Parse("/Content/Materials/Red.omat.json")], AssetPath.Parse("/Content/Deep/Folder"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = WoodOf(workspace.ReadJson("Content/Deep/Folder/Red.omat.json")).Should().Be("../../Textures/Wood.otex");
+        _ = WoodOf(workspace.ReadJson("Content/Materials/Red.omat.json")).Should().Be("../Textures/Wood.otex");
     }
 
     /// <summary>Delete recycles an asset's companions, and a model's whole folder with its import record.</summary>
@@ -755,7 +777,7 @@ public sealed class AssetRelocationTests
     public async Task DeleteKeepsImageSharedWithAnotherTexture()
     {
         using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = workspace.Write("Content/Textures/Oak.otex.json", AuthoredFiles.Texture("/Content/Textures/Oak.otex", "Wood.png").WithIdentityField().Set("/name", "Oak").Text);
+        _ = workspace.Write("Content/Textures/Oak.otex.json", AuthoredFiles.Texture("/Content/Textures/Oak.otex", "Wood.png").Set("/name", "Oak").Text);
         var recycled = new List<string>();
 
         await workspace.Service.DeleteAsync(
@@ -936,7 +958,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Materials/Red.omat.json", RedMaterial().Text);
         _ = workspace.Write("Content/Geometry/Box.ogeo.json", BoxGeometry().Text);
         _ = workspace.Write("Content/Geometry/mesh.bin", "bin");
-        _ = workspace.Write("Content/Textures/Wood.otex.json", AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").WithIdentityField().Set("/name", "Wood").Text);
+        _ = workspace.Write("Content/Textures/Wood.otex.json", AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").Set("/name", "Wood").Text);
         _ = workspace.Write("Content/Textures/Wood.png", "png");
         _ = await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json", MainScene(), token).ConfigureAwait(false);
         return workspace;
@@ -993,12 +1015,12 @@ public sealed class AssetRelocationTests
     // The box geometry in a folder, with a buffer of its own and one material.
     private static GeometryDocument BoxGeometry(string folder = "Geometry", string name = "Box", string material = "/Content/Materials/Red.omat")
     {
-        var geometry = AuthoredFiles.Geometry($"/Content/{folder}/{name}.ogeo").SubmeshMaterial(0, 0, material).WithIdentityField();
+        var geometry = AuthoredFiles.Geometry($"/Content/{folder}/{name}.ogeo").SubmeshMaterial(0, 0, material);
         return geometry.Append("/buffers", new JsonObject { ["source"] = "mesh.bin", ["virtual_path"] = geometry.Spell($"/Content/{folder}/{name}.obuf") });
     }
 
     private static TextureDocument FarTexture()
-        => AuthoredFiles.Texture("/Content/Shared/far.otex", "../Textures/Wood.png").WithIdentityField();
+        => AuthoredFiles.Texture("/Content/Shared/far.otex", "../Textures/Wood.png");
 
     private static string WoodOf(JsonNode material) => material["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>();
 
@@ -1024,7 +1046,7 @@ public sealed class AssetRelocationTests
             _ = workspace.Write($"{folder}/{face}", face);
         }
 
-        _ = workspace.Write($"{folder}/Pisa.otex.json", AuthoredFiles.Texture($"/{folder}/Pisa.otex", "Pisa_px.hdr").WithIdentityField().Set("/name", "Pisa").Set("/cube/cubemap", true).Text);
+        _ = workspace.Write($"{folder}/Pisa.otex.json", AuthoredFiles.Texture($"/{folder}/Pisa.otex", "Pisa_px.hdr").Set("/name", "Pisa").Set("/cube/cubemap", true).Text);
         return faces;
     }
 

@@ -308,6 +308,9 @@ order applies again.
 
 - Each texture slot shows and edits UV set, transform, wrap U, wrap V and the
   three filters, with undo, dirty state, save and reload.
+- The material shows and edits `ambient_occlusion_mode` and `procedural_grid`
+  the same way. Portable-references S7 gives them and every slot field their
+  format, model and writer.
 - `MaterialEdits`, `MaterialValidation`, `MaterialDescriptors` and
   `MaterialSourceWriter`, using the existing Inspector controls.
 - Tests: round trip of every field, no field written when it holds its default,
