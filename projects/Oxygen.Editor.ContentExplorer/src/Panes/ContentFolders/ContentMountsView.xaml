@@ -15,337 +15,358 @@
         </Style>
     </UserControl.Resources>
 
-    <!--  The dialog is opened wide (MaxWidth 900); this width keeps every column readable inside it.  -->
-    <StackPanel MinWidth="720" Spacing="12">
+    <!--
+        The dialog is opened wide (MaxWidth 900); this width keeps every column readable inside it. The dialog caps its
+        height and does not scroll, so the list takes the height left and scrolls, and the Add button stays in view.
+    -->
+    <Grid MinWidth="720" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="116" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Text="Project.oxy commits each mount with a relative path or as a placeholder; .mounts.json binds it on this machine. Unmounting removes the registration, never the files."
             TextWrapping="Wrap" />
 
-        <!--  Current mounts: name and committed path, kind, where it is on this machine, and its actions.  -->
-        <ItemsControl AutomationProperties.Name="Content mounts" ItemsSource="{x:Bind ViewModel.Mounts}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="local:ContentMountRow">
-                    <Grid
-                        Margin="0,0,0,4"
-                        Padding="10,6"
-                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                        BorderThickness="1"
-                        ColumnSpacing="8"
-                        CornerRadius="6">
-                        <!--  Fixed kind, binding and action columns keep every row's controls aligned.  -->
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="56" />
-                            <ColumnDefinition Width="200" />
-                            <ColumnDefinition Width="96" />
-                            <ColumnDefinition Width="32" />
-                            <ColumnDefinition Width="32" />
-                            <ColumnDefinition Width="32" />
-                        </Grid.ColumnDefinitions>
-                        <FontIcon
-                            VerticalAlignment="Center"
-                            FontSize="18"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Glyph="{x:Bind Glyph}" />
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock
-                                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                                Text="{x:Bind Name, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis"
-                                Visibility="{x:Bind IsNotRenaming, Mode=OneWay}" />
-                            <TextBox
-                                AutomationProperties.Name="Rename mount"
-                                Text="{x:Bind NameDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                Visibility="{x:Bind IsRenaming, Mode=OneWay}" />
-                            <TextBlock
-                                FontFamily="Consolas"
+        <ScrollViewer Grid.Row="1">
+            <ItemsControl
+                x:Name="MountList"
+                Margin="0,0,16,0"
+                AutomationProperties.Name="Content mounts"
+                ItemsSource="{x:Bind ViewModel.Mounts}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="local:ContentMountRow">
+                        <Grid
+                            Margin="0,0,0,4"
+                            Padding="10,6"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            ColumnSpacing="8"
+                            CornerRadius="6">
+                            <!--  Fixed kind, binding and action columns keep every row's controls aligned.  -->
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="56" />
+                                <ColumnDefinition Width="200" />
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="32" />
+                                <ColumnDefinition Width="32" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon
+                                VerticalAlignment="Center"
+                                FontSize="18"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                IsTextSelectionEnabled="True"
-                                Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind CommittedText}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap"
-                                ToolTipService.ToolTip="{x:Bind CommittedText}" />
-                        </StackPanel>
-                        <TextBlock
-                            Grid.Column="2"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="{x:Bind KindLabel}" />
-                        <StackPanel
-                            Grid.Column="3"
-                            VerticalAlignment="Center"
-                            ToolTipService.ToolTip="{x:Bind BindingToolTip, Mode=OneWay}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon
-                                    FontSize="12"
-                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                    Glyph="&#xE7BA;"
-                                    Visibility="{x:Bind ShowsCaution, Mode=OneWay}" />
-                                <FontIcon
-                                    FontSize="12"
-                                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
-                                    Glyph="&#xEA39;"
-                                    Visibility="{x:Bind ShowsInvalid, Mode=OneWay}" />
+                                Glyph="{x:Bind Glyph}" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock
+                                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                    Text="{x:Bind Name, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    Visibility="{x:Bind IsNotRenaming, Mode=OneWay}" />
+                                <TextBox
+                                    AutomationProperties.Name="Rename mount"
+                                    Text="{x:Bind NameDraft, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                    Visibility="{x:Bind IsRenaming, Mode=OneWay}" />
+                                <TextBlock
+                                    FontFamily="Consolas"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    IsTextSelectionEnabled="True"
                                     Style="{ThemeResource CaptionTextBlockStyle}"
-                                    Text="{x:Bind BindingText, Mode=OneWay}"
-                                    TextTrimming="CharacterEllipsis" />
+                                    Text="{x:Bind CommittedText}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap"
+                                    ToolTipService.ToolTip="{x:Bind CommittedText}" />
                             </StackPanel>
                             <TextBlock
-                                FontFamily="Consolas"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                IsTextSelectionEnabled="True"
                                 Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind BindingDetail, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis"
-                                TextWrapping="NoWrap" />
-                        </StackPanel>
-                        <Button
-                            Grid.Column="4"
-                            HorizontalAlignment="Stretch"
-                            Command="{x:Bind BindCommand}"
-                            Content="{x:Bind BindActionText, Mode=OneWay}"
-                            Style="{ThemeResource AccentButtonStyle}"
-                            Visibility="{x:Bind IsBindButtonVisible, Mode=OneWay}" />
-                        <Button
-                            Grid.Column="4"
-                            HorizontalAlignment="Right"
-                            AutomationProperties.Name="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
-                            Command="{x:Bind BindCommand}"
-                            Style="{StaticResource MountRowButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
-                            Visibility="{x:Bind IsChangeBindingVisible, Mode=OneWay}">
-                            <FontIcon FontSize="14" Glyph="&#xE8DA;" />
-                        </Button>
-                        <Button
-                            Grid.Column="4"
-                            HorizontalAlignment="Stretch"
-                            Content="{x:Bind BindActionText, Mode=OneWay}"
-                            Style="{ThemeResource AccentButtonStyle}"
-                            Visibility="{x:Bind IsLibraryBindButtonVisible, Mode=OneWay}">
-                            <Button.Flyout>
-                                <MenuFlyout>
-                                    <MenuFlyoutItem Command="{x:Bind BindPakCommand}" Text="Pak file…" />
-                                    <MenuFlyoutItem Command="{x:Bind BindCommand}" Text="Cooked folder…" />
-                                </MenuFlyout>
-                            </Button.Flyout>
-                        </Button>
-                        <Button
-                            Grid.Column="4"
-                            HorizontalAlignment="Right"
-                            AutomationProperties.Name="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
-                            Style="{StaticResource MountRowButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
-                            Visibility="{x:Bind IsLibraryChangeBindingVisible, Mode=OneWay}">
-                            <FontIcon FontSize="14" Glyph="&#xE8DA;" />
-                            <Button.Flyout>
-                                <MenuFlyout>
-                                    <MenuFlyoutItem Command="{x:Bind BindPakCommand}" Text="Pak file…" />
-                                    <MenuFlyoutItem Command="{x:Bind BindCommand}" Text="Cooked folder…" />
-                                </MenuFlyout>
-                            </Button.Flyout>
-                        </Button>
-                        <Button
-                            Grid.Column="5"
-                            AutomationProperties.Name="Remove the binding on this machine"
-                            Command="{x:Bind RemoveBindingCommand}"
-                            Style="{StaticResource MountRowButtonStyle}"
-                            ToolTipService.ToolTip="Remove the binding on this machine"
-                            Visibility="{x:Bind IsRemoveBindingVisible, Mode=OneWay}">
-                            <FontIcon FontSize="14" Glyph="&#xE8CD;" />
-                        </Button>
-                        <Button
-                            Grid.Column="6"
-                            AutomationProperties.Name="{x:Bind RenameToolTip, Mode=OneWay}"
-                            Command="{x:Bind RenameCommand}"
-                            Style="{StaticResource MountRowButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind RenameToolTip, Mode=OneWay}"
-                            Visibility="{x:Bind IsRenameVisible}">
-                            <Grid>
-                                <FontIcon
-                                    FontSize="14"
-                                    Glyph="&#xE70F;"
-                                    Visibility="{x:Bind IsNotRenaming, Mode=OneWay}" />
-                                <FontIcon
-                                    FontSize="14"
-                                    Glyph="&#xE73E;"
-                                    Visibility="{x:Bind IsRenaming, Mode=OneWay}" />
-                            </Grid>
-                        </Button>
-                        <Button
-                            Grid.Column="7"
-                            AutomationProperties.Name="{x:Bind UnmountToolTip, Mode=OneWay}"
-                            Command="{x:Bind UnmountCommand}"
-                            Style="{StaticResource MountRowButtonStyle}"
-                            ToolTipService.ToolTip="{x:Bind UnmountToolTip, Mode=OneWay}"
-                            Visibility="{x:Bind HasActions}">
-                            <FontIcon FontSize="14" Glyph="&#xE711;" />
-                        </Button>
-                        <FontIcon
-                            Grid.Column="7"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            AutomationProperties.Name="{x:Bind local:ContentMountRow.LockedToolTip}"
-                            FontSize="14"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Glyph="&#xE72E;"
-                            ToolTipService.ToolTip="{x:Bind local:ContentMountRow.LockedToolTip}"
-                            Visibility="{x:Bind IsLocked}" />
-                    </Grid>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-
-        <!--  Add a mount: a known derived location, a source folder with its name, or a library named by what it holds.  -->
-        <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Add a mount" />
-        <Grid ColumnSpacing="8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="2*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <ComboBox
-                MinWidth="150"
-                Header="Location"
-                ItemsSource="{x:Bind ViewModel.Kinds}"
-                SelectedItem="{x:Bind ViewModel.SelectedKind, Mode=TwoWay}" />
-            <TextBox
-                Grid.Column="1"
-                Header="Mount point name"
-                PlaceholderText="Art"
-                Text="{x:Bind ViewModel.NewMountName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}" />
-            <TextBox
-                Grid.Column="1"
-                Grid.ColumnSpan="2"
-                Header="{x:Bind ViewModel.PathHeader, Mode=OneWay}"
-                PlaceholderText="{x:Bind ViewModel.PathPlaceholder, Mode=OneWay}"
-                Text="{x:Bind ViewModel.NewMountPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                Visibility="{x:Bind ViewModel.IsLibrary, Mode=OneWay}" />
-            <TextBox
-                Grid.Column="2"
-                Header="{x:Bind ViewModel.PathHeader, Mode=OneWay}"
-                PlaceholderText="{x:Bind ViewModel.PathPlaceholder, Mode=OneWay}"
-                Text="{x:Bind ViewModel.NewMountPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}" />
-            <Button
-                Grid.Column="3"
-                Width="32"
-                Height="32"
-                Padding="0"
-                VerticalAlignment="Bottom"
-                AutomationProperties.Name="Browse for a folder"
-                Command="{x:Bind ViewModel.BrowseCommand}"
-                ToolTipService.ToolTip="Browse for a folder"
-                Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}">
-                <FontIcon FontSize="14" Glyph="&#xED25;" />
-            </Button>
-            <DropDownButton
-                Grid.Column="3"
-                Height="32"
-                VerticalAlignment="Bottom"
-                AutomationProperties.Name="Browse for a library"
-                Content="Browse…"
-                Visibility="{x:Bind ViewModel.IsLibrary, Mode=OneWay}">
-                <DropDownButton.Flyout>
-                    <MenuFlyout Placement="BottomEdgeAlignedRight">
-                        <MenuFlyoutItem Command="{x:Bind ViewModel.BrowsePakCommand}" Text="Pak file…" />
-                        <MenuFlyoutItem Command="{x:Bind ViewModel.BrowseCommand}" Text="Cooked folder…" />
-                    </MenuFlyout>
-                </DropDownButton.Flyout>
-            </DropDownButton>
-        </Grid>
-        <!--  What the picked library is called, what it needs and where it lands, read from it.  -->
-        <Grid
-            Padding="14,10"
-            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            ColumnSpacing="16"
-            CornerRadius="8"
-            RowSpacing="6"
-            Visibility="{x:Bind ViewModel.HasCandidate, Mode=OneWay}">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" />
-                <ColumnDefinition Width="*" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Name" />
-            <TextBlock
-                Grid.Column="1"
-                Style="{ThemeResource BodyStrongTextBlockStyle}"
-                Text="{x:Bind ViewModel.Candidate.Name, Mode=OneWay, FallbackValue=''}" />
-            <TextBlock
-                Grid.Row="1"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Form" />
-            <TextBlock
-                Grid.Row="1"
-                Grid.Column="1"
-                Text="{x:Bind ViewModel.Candidate.Form, Mode=OneWay, FallbackValue=''}" />
-            <TextBlock
-                Grid.Row="2"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Needs" />
-            <ItemsControl
-                Grid.Row="2"
-                Grid.Column="1"
-                ItemsSource="{x:Bind ViewModel.Candidate.Needs, Mode=OneWay}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="local:LibraryNeed">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                Text="{x:Bind KindLabel}" />
+                            <StackPanel
+                                Grid.Column="3"
+                                VerticalAlignment="Center"
+                                ToolTipService.ToolTip="{x:Bind BindingToolTip, Mode=OneWay}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                        Glyph="&#xE7BA;"
+                                        Visibility="{x:Bind ShowsCaution, Mode=OneWay}" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                        Glyph="&#xEA39;"
+                                        Visibility="{x:Bind ShowsInvalid, Mode=OneWay}" />
+                                    <TextBlock
+                                        Style="{ThemeResource CaptionTextBlockStyle}"
+                                        Text="{x:Bind BindingText, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <TextBlock
+                                    FontFamily="Consolas"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    IsTextSelectionEnabled="True"
+                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                    Text="{x:Bind BindingDetail, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis"
+                                    TextWrapping="NoWrap" />
+                            </StackPanel>
+                            <Button
+                                Grid.Column="4"
+                                HorizontalAlignment="Stretch"
+                                Command="{x:Bind BindCommand}"
+                                Content="{x:Bind BindActionText, Mode=OneWay}"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Visibility="{x:Bind IsBindButtonVisible, Mode=OneWay}" />
+                            <Button
+                                Grid.Column="4"
+                                HorizontalAlignment="Right"
+                                AutomationProperties.Name="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                                Command="{x:Bind BindCommand}"
+                                Style="{StaticResource MountRowButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                                Visibility="{x:Bind IsChangeBindingVisible, Mode=OneWay}">
+                                <FontIcon FontSize="14" Glyph="&#xE8DA;" />
+                            </Button>
+                            <Button
+                                Grid.Column="4"
+                                HorizontalAlignment="Stretch"
+                                Content="{x:Bind BindActionText, Mode=OneWay}"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Visibility="{x:Bind IsLibraryBindButtonVisible, Mode=OneWay}">
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Command="{x:Bind BindPakCommand}" Text="Pak file…" />
+                                        <MenuFlyoutItem Command="{x:Bind BindCommand}" Text="Cooked folder…" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button
+                                Grid.Column="4"
+                                HorizontalAlignment="Right"
+                                AutomationProperties.Name="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                                Style="{StaticResource MountRowButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind ChangeBindingToolTip, Mode=OneWay}"
+                                Visibility="{x:Bind IsLibraryChangeBindingVisible, Mode=OneWay}">
+                                <FontIcon FontSize="14" Glyph="&#xE8DA;" />
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Command="{x:Bind BindPakCommand}" Text="Pak file…" />
+                                        <MenuFlyoutItem Command="{x:Bind BindCommand}" Text="Cooked folder…" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                            <Button
+                                Grid.Column="5"
+                                AutomationProperties.Name="Remove the binding on this machine"
+                                Command="{x:Bind RemoveBindingCommand}"
+                                Style="{StaticResource MountRowButtonStyle}"
+                                ToolTipService.ToolTip="Remove the binding on this machine"
+                                Visibility="{x:Bind IsRemoveBindingVisible, Mode=OneWay}">
+                                <FontIcon FontSize="14" Glyph="&#xE8CD;" />
+                            </Button>
+                            <Button
+                                Grid.Column="6"
+                                AutomationProperties.Name="{x:Bind RenameToolTip, Mode=OneWay}"
+                                Command="{x:Bind RenameCommand}"
+                                Style="{StaticResource MountRowButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind RenameToolTip, Mode=OneWay}"
+                                Visibility="{x:Bind IsRenameVisible}">
+                                <Grid>
+                                    <FontIcon
+                                        FontSize="14"
+                                        Glyph="&#xE70F;"
+                                        Visibility="{x:Bind IsNotRenaming, Mode=OneWay}" />
+                                    <FontIcon
+                                        FontSize="14"
+                                        Glyph="&#xE73E;"
+                                        Visibility="{x:Bind IsRenaming, Mode=OneWay}" />
+                                </Grid>
+                            </Button>
+                            <Button
+                                Grid.Column="7"
+                                AutomationProperties.Name="{x:Bind UnmountToolTip, Mode=OneWay}"
+                                Command="{x:Bind UnmountCommand}"
+                                Style="{StaticResource MountRowButtonStyle}"
+                                ToolTipService.ToolTip="{x:Bind UnmountToolTip, Mode=OneWay}"
+                                Visibility="{x:Bind HasActions}">
+                                <FontIcon FontSize="14" Glyph="&#xE711;" />
+                            </Button>
                             <FontIcon
-                                FontSize="12"
-                                Foreground="{ThemeResource SystemFillColorCautionBrush}"
-                                Glyph="&#xE7BA;"
-                                Visibility="{x:Bind local:ContentMountsView.CollapsedWhen(IsMet)}" />
-                            <FontIcon
-                                FontSize="12"
-                                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
-                                Glyph="&#xE73E;"
-                                Visibility="{x:Bind IsMet}" />
-                            <TextBlock Text="{x:Bind Library}" />
-                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Detail}" />
-                        </StackPanel>
+                                Grid.Column="7"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                AutomationProperties.Name="{x:Bind local:ContentMountRow.LockedToolTip}"
+                                FontSize="14"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Glyph="&#xE72E;"
+                                ToolTipService.ToolTip="{x:Bind local:ContentMountRow.LockedToolTip}"
+                                Visibility="{x:Bind IsLocked}" />
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock
-                Grid.Row="3"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Priority" />
-            <TextBlock
-                Grid.Row="3"
-                Grid.Column="1"
-                Text="{x:Bind ViewModel.Candidate.PriorityText, Mode=OneWay, FallbackValue=''}" />
-        </Grid>
-        <InfoBar
-            IsClosable="False"
-            IsOpen="{x:Bind ViewModel.HasUnmetNeed, Mode=OneWay}"
-            Message="{x:Bind ViewModel.Candidate.UnmetText, Mode=OneWay, FallbackValue=''}"
-            Severity="Warning" />
-        <local:MountPlacementView Placement="{x:Bind ViewModel.Placement}" Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}" />
-        <InfoBar
-            IsClosable="False"
-            IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
-            Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
-            Severity="Error" />
-        <Button HorizontalAlignment="Right" Command="{x:Bind ViewModel.AddMountCommand}">
+        </ScrollViewer>
+
+        <ScrollViewer Grid.Row="2" MaxHeight="320">
+            <StackPanel Margin="0,0,16,0" Spacing="12">
+                <!--  Add a mount: a known derived location, a source folder with its name, or a library named by what it holds.  -->
+                <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Add a mount" />
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="2*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox
+                        MinWidth="150"
+                        Header="Location"
+                        ItemsSource="{x:Bind ViewModel.Kinds}"
+                        SelectedItem="{x:Bind ViewModel.SelectedKind, Mode=TwoWay}" />
+                    <TextBox
+                        Grid.Column="1"
+                        Header="Mount point name"
+                        PlaceholderText="Art"
+                        Text="{x:Bind ViewModel.NewMountName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}" />
+                    <TextBox
+                        Grid.Column="1"
+                        Grid.ColumnSpan="2"
+                        Header="{x:Bind ViewModel.PathHeader, Mode=OneWay}"
+                        PlaceholderText="{x:Bind ViewModel.PathPlaceholder, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.NewMountPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Visibility="{x:Bind ViewModel.IsLibrary, Mode=OneWay}" />
+                    <TextBox
+                        Grid.Column="2"
+                        Header="{x:Bind ViewModel.PathHeader, Mode=OneWay}"
+                        PlaceholderText="{x:Bind ViewModel.PathPlaceholder, Mode=OneWay}"
+                        Text="{x:Bind ViewModel.NewMountPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}" />
+                    <Button
+                        Grid.Column="3"
+                        Width="32"
+                        Height="32"
+                        Padding="0"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.Name="Browse for a folder"
+                        Command="{x:Bind ViewModel.BrowseCommand}"
+                        ToolTipService.ToolTip="Browse for a folder"
+                        Visibility="{x:Bind ViewModel.IsSourceFolder, Mode=OneWay}">
+                        <FontIcon FontSize="14" Glyph="&#xED25;" />
+                    </Button>
+                    <DropDownButton
+                        Grid.Column="3"
+                        Height="32"
+                        VerticalAlignment="Bottom"
+                        AutomationProperties.Name="Browse for a library"
+                        Content="Browse…"
+                        Visibility="{x:Bind ViewModel.IsLibrary, Mode=OneWay}">
+                        <DropDownButton.Flyout>
+                            <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                <MenuFlyoutItem Command="{x:Bind ViewModel.BrowsePakCommand}" Text="Pak file…" />
+                                <MenuFlyoutItem Command="{x:Bind ViewModel.BrowseCommand}" Text="Cooked folder…" />
+                            </MenuFlyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
+                </Grid>
+                <!--  What the picked library is called, what it needs and where it lands, read from it.  -->
+                <Grid
+                    Padding="14,10"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    ColumnSpacing="16"
+                    CornerRadius="8"
+                    RowSpacing="6"
+                    Visibility="{x:Bind ViewModel.HasCandidate, Mode=OneWay}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Name" />
+                    <TextBlock
+                        Grid.Column="1"
+                        Style="{ThemeResource BodyStrongTextBlockStyle}"
+                        Text="{x:Bind ViewModel.Candidate.Name, Mode=OneWay, FallbackValue=''}" />
+                    <TextBlock
+                        Grid.Row="1"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Form" />
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="1"
+                        Text="{x:Bind ViewModel.Candidate.Form, Mode=OneWay, FallbackValue=''}" />
+                    <TextBlock
+                        Grid.Row="2"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Needs" />
+                    <ItemsControl
+                        Grid.Row="2"
+                        Grid.Column="1"
+                        ItemsSource="{x:Bind ViewModel.Candidate.Needs, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="local:LibraryNeed">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                        Glyph="&#xE7BA;"
+                                        Visibility="{x:Bind local:ContentMountsView.CollapsedWhen(IsMet)}" />
+                                    <FontIcon
+                                        FontSize="12"
+                                        Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                                        Glyph="&#xE73E;"
+                                        Visibility="{x:Bind IsMet}" />
+                                    <TextBlock Text="{x:Bind Library}" />
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Detail}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock
+                        Grid.Row="3"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Priority" />
+                    <TextBlock
+                        Grid.Row="3"
+                        Grid.Column="1"
+                        Text="{x:Bind ViewModel.Candidate.PriorityText, Mode=OneWay, FallbackValue=''}" />
+                </Grid>
+                <InfoBar
+                    IsClosable="False"
+                    IsOpen="{x:Bind ViewModel.HasUnmetNeed, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.Candidate.UnmetText, Mode=OneWay, FallbackValue=''}"
+                    Severity="Warning" />
+                <local:MountPlacementView Placement="{x:Bind ViewModel.Placement}" Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}" />
+                <InfoBar
+                    IsClosable="False"
+                    IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                    Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                    Severity="Error" />
+            </StackPanel>
+        </ScrollViewer>
+        <Button
+            Grid.Row="3"
+            HorizontalAlignment="Right"
+            Command="{x:Bind ViewModel.AddMountCommand}">
             <StackPanel Orientation="Horizontal" Spacing="6">
                 <FontIcon FontSize="14" Glyph="&#xE710;" />
                 <TextBlock Text="{x:Bind ViewModel.AddText, Mode=OneWay}" />
             </StackPanel>
         </Button>
-    </StackPanel>
+    </Grid>
 </UserControl>

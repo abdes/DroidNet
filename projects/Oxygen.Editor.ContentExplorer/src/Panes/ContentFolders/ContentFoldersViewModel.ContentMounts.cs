@@ -119,6 +119,7 @@ public partial class ContentFoldersViewModel
             DefaultButton = DialogButton.Primary,
             PrimaryAction = _ => Task.FromResult(model.Validate()),
             MaxWidth = 900,
+            MaxHeight = 900,
         };
         if (await dialogService.ShowAsync(spec, session.Lifetime).ConfigureAwait(true) != DialogButton.Primary)
         {
