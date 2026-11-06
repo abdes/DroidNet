@@ -124,6 +124,10 @@ flowchart LR
 S18 (mockups) has no code dependency and starts with S1, so the owner's UX
 decisions are in before S14.
 
+The remaining slices run in the order of the
+[V0.1 recovery plan](../../../../../design/editor/plan/v01-recovery-plan.md), which
+interleaves them with the remaining engine reviews and splits S20.
+
 S6a to S6e finish the engine side of S6 and of the
 [Serio](../../../src/Oxygen/Serio/README.md) and [cooked sources](../cooked-sources/README.md)
 work. They change no editor code; editor work they require is a task of the
@@ -833,6 +837,10 @@ kinds and import manifests when Showcase needs them, Showcase as a library proje
 the check reports them, and they are the owner's to repoint.
 
 ### S20. Integration tests
+
+The [V0.1 recovery plan](../../../../../design/editor/plan/v01-recovery-plan.md)
+runs this slice in two parts: S20a, everything but the studio tests, before S16;
+S20b, the studio tests and the full lane run, after S19.
 
 Fixes every editor integration test listed in the [test impact](#test-impact)
 table, through the S1 writers, moving the remaining inline JSON to them; the

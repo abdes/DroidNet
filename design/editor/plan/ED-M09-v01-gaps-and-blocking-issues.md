@@ -9,8 +9,10 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 17.7**, Serio IO: the consumers; then
-item 19, #109: per-view draw bounds and the viewport Show menu.
+**Next:** the [V0.1 recovery plan](v01-recovery-plan.md) owns the order until the
+portable references branch merges. This ledger resumes at its step 14, with item
+17.7's consumers checked at its step 1, then item 19, #109: per-view draw bounds and
+the viewport Show menu.
 
 | Order | Item                                                                                                                                                                                                                          | Needs          | State | Commit    |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ----- | --------- |
