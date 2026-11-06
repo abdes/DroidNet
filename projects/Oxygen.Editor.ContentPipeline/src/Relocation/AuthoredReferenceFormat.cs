@@ -144,10 +144,11 @@ internal static class AuthoredReferenceFormat
     /// <param name="targetPath">The copy's location.</param>
     /// <param name="content">The original bytes.</param>
     /// <param name="map">Maps the original identity and copied companions to the copy's.</param>
+    /// <param name="closure">The assets copied because the copy needs them; the copy references those copies.</param>
     /// <returns>The copy's bytes.</returns>
     /// <exception cref="JsonException">The descriptor is not JSON.</exception>
     /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
-    public static byte[] RewriteCopy(ProjectContext project, FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map)
+    public static byte[] RewriteCopy(ProjectContext project, FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map, RelocationMap closure)
     {
         if (IsTexture(sourcePath))
         {
@@ -157,7 +158,7 @@ internal static class AuthoredReferenceFormat
         var root = JsonNode.Parse(StripBom(content.Span));
 
         // A copy references what the original does, spelled from where the copy is.
-        var changed = RewriteReferences(project, sourcePath, targetPath, ReferenceFields(sourcePath).SelectMany(field => field.Select(root)), map: null);
+        var changed = RewriteReferences(project, sourcePath, targetPath, ReferenceFields(sourcePath).SelectMany(field => field.Select(root)), closure);
 
         // A copied scene is a scene of its own: it takes a new identity, and the name of its file.
         if (root is JsonObject scene && targetPath.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal))

@@ -3,7 +3,7 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
-Last Updated: 2026-10-30
+Last Updated: 2026-11-06
 
 **Navigation:** [purpose](#1-purpose),
 [surface identity and reimport](#20-canonical-surface-identity-and-reimport),
@@ -509,11 +509,38 @@ change through the asset catalog like any other change.
   (`RelocationPaths.GetWritableMounts`), never a library, an output folder or a
   mount this machine cannot read. A move between two mounts changes identities
   and goes through the same reference review.
+- A model moves as its record, its preview and its companions: a source beside
+  the record with the model's name, or in a folder of that name, and the files it
+  read in its folder. A source elsewhere is only referenced: the record moves and
+  respells it, and the source stays. Moved into a shared mount, a model that
+  references a source in another mount can instead get its own copy
+  (`CopiesSourcesIn`), beside its record, or in a folder of its name when the source
+  reads other files. Undo removes the copy and restores the reference, and is
+  refused when the copy has changed. Moving a companion moves its model, and
+  renaming one is refused, because the source names it. A move that would still
+  part a source from a file it reads, such as one another model also reads, is
+  refused.
+- A move respells every reference from the file's new identity: relative in its
+  mount, by virtual path from another.
+- Shared content never references an own mount. A move into a shared mount takes
+  along what the moved files need from own mounts, and what that needs, each at
+  its path below its mount; a collision refuses the whole move. A move that would
+  leave shared content referencing an own mount, and that the closure cannot
+  follow, refuses with `reference.into_project_mount`. Undo reverses the closure
+  with the rest.
+- `PreviewAsync` plans a relocation without changing anything and returns what the
+  user reviews (`AssetRelocationReview`), and `FindSharedMounts` names the shared mounts among some paths.
+- A copy of a model gets a new record with a new `source_identity`, and its own
+  companions; a source it only references stays shared. Folder copies copy the
+  models inside them, and a copy into a shared mount takes its closure along.
+- Deleting a model recycles its record, preview and the companions no other asset
+  names. It spares a source that is only referenced, and leaves the folder.
 - It updates the references of the open project only. Another project that
-  mounts the same folder is neither updated nor warned: it recovers when it is
-  next opened, through the reference check (8.6). The editor writes no redirect
-  files into a shared folder; source control already records every move, and
-  redirects would pile up in the library for every project that once used it.
+  mounts the same folder is not updated: the review of a change to a shared mount
+  says so, and that project recovers when it is next opened, through the reference
+  check (8.6). The editor writes no redirect files into a shared folder; source
+  control already records every move, and redirects would pile up in the library
+  for every project that once used it.
 
 ### 8.5 Asset Authoring
 

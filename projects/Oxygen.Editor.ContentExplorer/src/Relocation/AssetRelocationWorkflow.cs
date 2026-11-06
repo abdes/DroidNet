@@ -85,7 +85,15 @@ public sealed partial class AssetRelocationWorkflow(
 
         try
         {
-            var applied = await relocation.RelocateAsync(request, title, this.history, CancellationToken.None).ConfigureAwait(true);
+            var review = await relocation.PreviewAsync(request, CancellationToken.None).ConfigureAwait(true);
+            var reviewed = await this.ReviewAsync(request, title, review).ConfigureAwait(true);
+            if (reviewed is null)
+            {
+                this.LogReviewCancelled(title, review.Referrers.Count, open: 0);
+                return null;
+            }
+
+            var applied = await relocation.RelocateAsync(reviewed, title, this.history, CancellationToken.None).ConfigureAwait(true);
             if (applied.Moves.Count == 0 && applied.RewrittenFiles.Count == 0)
             {
                 this.LogNothingToDo(title);
@@ -147,7 +155,8 @@ public sealed partial class AssetRelocationWorkflow(
         const string title = "Delete";
         var referrers = await relocation.FindReferrersOutsideAsync(sources, CancellationToken.None).ConfigureAwait(true);
         var open = this.FindOpenDocuments(sources);
-        if (referrers.Count != 0 || open.Count != 0)
+        var shared = relocation.FindSharedMounts(sources) ?? [];
+        if (referrers.Count != 0 || open.Count != 0 || shared.Count != 0)
         {
             var review = new StringBuilder();
             if (open.Count != 0)
@@ -166,6 +175,11 @@ public sealed partial class AssetRelocationWorkflow(
                 _ = review.Append(CultureInfo.CurrentCulture, $"{Describe(sources)} {(sources.Count == 1 ? "is" : "are")} used by:").AppendLine();
                 AppendList(review, referrers);
                 _ = review.AppendLine().Append("Those references will show as missing. ");
+            }
+
+            if (shared.Count != 0)
+            {
+                _ = review.AppendLine(DescribeOtherProjects(shared));
             }
 
             _ = review.Append("The files go to the Recycle Bin.");
@@ -234,6 +248,41 @@ public sealed partial class AssetRelocationWorkflow(
             : null;
     }
 
+    private static string DescribeSharedReview(AssetRelocationReview plan)
+    {
+        var review = new StringBuilder();
+        if (plan.ReferencedSources.Count != 0)
+        {
+            _ = review.AppendLine("These models read sources in other mounts. Copy each source in beside its model, or keep the reference, and the shared mount then needs those mounts:");
+            AppendList(review, plan.ReferencedSources);
+            _ = review.AppendLine();
+        }
+
+        if (plan.ClosureMoves.Count != 0)
+        {
+            _ = review.AppendLine("Shared content cannot use this project's own content, so these move with it:");
+            AppendList(review, [.. plan.ClosureMoves.Select(static move => move.Source)]);
+            _ = review.AppendLine();
+        }
+
+        if (plan.Referrers.Count != 0)
+        {
+            _ = review.AppendLine("These files are updated to use the new location:");
+            AppendList(review, plan.Referrers);
+            _ = review.AppendLine();
+        }
+
+        if (plan.SharedMounts.Count != 0)
+        {
+            _ = review.Append(DescribeOtherProjects(plan.SharedMounts));
+        }
+
+        return review.ToString();
+    }
+
+    private static string DescribeOtherProjects(IReadOnlyList<string> mounts)
+        => $"Other projects that mount {string.Join(", ", mounts.Select(static mount => $"'{mount}'"))} are not updated: their reference check reports what no longer resolves when they next open.";
+
     private static string DescribeResult(AssetRelocationPlan plan)
     {
         var moved = plan.Request.Moves.Count;
@@ -264,6 +313,32 @@ public sealed partial class AssetRelocationWorkflow(
     // A request that keeps every asset in its folder renames; any other moves.
     private static SaveBeforeOperation OperationOf(AssetRelocationRequest request)
         => request.Moves.All(static move => move.Source.Parent == move.Target.Parent) ? SaveBeforeOperation.Rename : SaveBeforeOperation.Move;
+
+    // The request to run after the review, or null when the user cancelled it.
+    private async Task<AssetRelocationRequest?> ReviewAsync(AssetRelocationRequest request, string title, AssetRelocationReview review)
+    {
+        if (review.ReferencedSources.Count != 0)
+        {
+            var spec = new DialogSpec(title, DescribeSharedReview(review))
+            {
+                PrimaryButtonText = "Copy sources in",
+                SecondaryButtonText = "Keep references",
+                CloseButtonText = "Cancel",
+                DefaultButton = DialogButton.Primary,
+            };
+            return await dialogs.ShowAsync(spec).ConfigureAwait(true) switch
+            {
+                DialogButton.Primary => request with { CopiesSourcesIn = true },
+                DialogButton.Secondary => request,
+                _ => null,
+            };
+        }
+
+        return (review.ClosureMoves.Count == 0 && review.SharedMounts.Count == 0)
+            || await dialogs.ConfirmAsync(title, DescribeSharedReview(review)).ConfigureAwait(true)
+                ? request
+                : null;
+    }
 
     // The open documents whose files a delete of the sources removes, so the delete can name them.
     private IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources)

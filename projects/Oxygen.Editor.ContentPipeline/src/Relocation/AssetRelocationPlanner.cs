@@ -6,6 +6,7 @@ using DroidNet.Storage;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
@@ -37,10 +38,15 @@ internal static class AssetRelocationPlanner
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(index);
         var map = new RelocationMap();
+        AddRemovedSourceCopies(project, index, map, request.RemovedSourceCopies);
         foreach (var move in request.Moves.Where(static move => move.Source != move.Target))
         {
-            AddMove(project, index, map, move);
+            AddRequestedMove(project, index, map, move);
         }
+
+        var closure = AddSharedClosure(project, index, map);
+        var referenced = FindReferencedSources(project, index, map);
+        var copies = request.CopiesSourcesIn ? AddSourceCopies(project, map, referenced) : [];
 
         // A file's references name the asset it stands for; a script source's name the script it cooks to. A
         // container's products are named under it, so they move with it as a folder's files do.
@@ -49,7 +55,7 @@ internal static class AssetRelocationPlanner
             var source = RelocationPaths.ToVirtual(project, move.Source)!;
             var target = RelocationPaths.ToVirtual(project, move.Target)!;
             map.AddPath(source, target, move.IsDirectory);
-            var isContainer = !move.IsDirectory && AssetFileTypes.Find(source.Name) is { ProductExtensions.Count: > 0 };
+            var isContainer = !move.IsDirectory && (HasProducts(source) || HasProducts(AssetFileTypes.ToIdentity(source)));
             map.AddIdentity(move.IsDirectory ? source : AssetFileTypes.ToIdentity(source), move.IsDirectory ? target : AssetFileTypes.ToIdentity(target), move.IsDirectory || isContainer);
         }
 
@@ -59,11 +65,19 @@ internal static class AssetRelocationPlanner
             AddProductRename(project, index, map, renames, rename);
         }
 
+        RefuseReferencesIntoOwnMounts(project, index, map);
         var edits = await PlanEditsAsync(project, index, map, renames, files, cancellationToken).ConfigureAwait(false);
         var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath) && !renames.ContainsKey(edit.OriginalPath))
             .Select(edit => RelocationPaths.ToVirtual(project, edit.OriginalPath)!)
             .Order().ToArray();
-        return new(request, map, edits, referrers);
+        var touched = map.Moves.SelectMany(move => new[] { RelocationPaths.ToVirtual(project, move.Source), RelocationPaths.ToVirtual(project, move.Target) }).OfType<AssetPath>();
+        return new(request, map, edits, referrers)
+        {
+            ClosureMoves = closure,
+            SharedMounts = RelocationPaths.SharedMountsOf(project, [.. touched, .. referrers]),
+            ReferencedSources = request.CopiesSourcesIn ? [] : [.. referenced.Select(static import => import.PrimaryVirtualPath).Distinct().Order()],
+            SourceCopies = copies,
+        };
     }
 
     /// <summary>Finds the imported model a product is named under.</summary>
@@ -72,40 +86,35 @@ internal static class AssetRelocationPlanner
     internal static AssetPath? ModelOf(AssetPath product)
         => AssetFileTypes.ContainerOf(product) is { } container && AssetFileTypes.Is(container.Name, AssetFileCategory.Model) ? container : null;
 
-    private static void AddMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move)
+    private static bool HasProducts(AssetPath path) => AssetFileTypes.Find(path.Name) is { ProductExtensions.Count: > 0 };
+
+    private static void AddRequestedMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move)
     {
-        var (source, target, isDirectory) = Resolve(project, move);
-        if (map.Moves.Any(existing => source.IsSameOrInside(existing.Source) || existing.Source.IsSameOrInside(source)))
+        if (RelocationPaths.ToPhysical(project, move.Source) is { } file
+            && map.Moves.Any(existing => file.IsSameOrInside(existing.Source) || existing.Source.IsSameOrInside(file)))
         {
             throw new AssetRelocationException("Select either a folder or the items inside it, not both.");
         }
 
-        var name = move.Source.Name;
-        foreach (var import in index.Imports)
+        AddMove(project, index, map, move, createsFolders: false);
+    }
+
+    // A model moves as its record and companions; a source file as its own files; anything else on its own.
+    private static void AddMove(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetRelocationMove move, bool createsFolders)
+    {
+        RequireMovable(project, move);
+        if (index.FindModel(move.Source) is { } model)
         {
-            var folder = import.Folder;
-            var model = import.PrimaryVirtualPath.Name;
-            if (isDirectory)
-            {
-                if (source != folder && source.IsSameOrInside(folder))
-                {
-                    throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
-                }
+            AddModelMove(project, map, model, move, createsFolders);
+            return;
+        }
 
-                continue;
-            }
-
-            if (source == import.PrimaryPath)
-            {
-                if (source.Parent != target.Parent)
-                {
-                    throw new AssetRelocationException($"'{model}' references its other files by relative path. Move the model's folder to move it.");
-                }
-            }
-            else if (import.Files.Contains(source))
-            {
-                throw new AssetRelocationException($"'{name}' is part of the imported model '{model}'. Move the model's folder instead.");
-            }
+        var (source, target, isDirectory) = Resolve(project, move, createsFolders);
+        if (!isDirectory && index.Imports.FirstOrDefault(import => import.Files.Contains(source)) is { } read)
+        {
+            AddSourceMove(project, map, read, source, target);
+            AddPreviewOfFollowingRecord(project, map, read);
+            return;
         }
 
         map.AddMove(new(source, target, isDirectory));
@@ -116,9 +125,248 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static (FileSystemPath Source, FileSystemPath Target, bool IsDirectory) Resolve(ProjectContext project, AssetRelocationMove move)
+    private static void AddModelMove(ProjectContext project, RelocationMap map, AuthoredReferenceIndex.ImportSource model, AssetRelocationMove move, bool createsFolders)
     {
-        RequireMovable(project, move);
+        var identity = AssetFileTypes.ToIdentity(move.Target);
+        if (!string.Equals(AssetFileTypes.GetSuffix(model.Identity.Name), AssetFileTypes.GetSuffix(identity.Name), StringComparison.OrdinalIgnoreCase))
+        {
+            throw new AssetRelocationException("A rename keeps the asset's type; change only its name.");
+        }
+
+        var recordMove = new AssetRelocationMove(RelocationPaths.ToVirtual(project, model.RecordPath)!, identity.WithName(identity.Name + AssetFileTypes.ImportSettings));
+        if (RelocationPaths.ToPhysical(project, recordMove.Target) is not { } target)
+        {
+            throw new AssetRelocationException($"'{model.Identity}' cannot be moved to '{identity}'.");
+        }
+
+        RequireValidTarget(project, recordMove, model.RecordPath, target, isDirectory: false, createsFolders);
+        if (model.HasCompanionSource && !map.IsRemoved(model.PrimaryPath))
+        {
+            AddSourceMove(project, map, model, model.PrimaryPath, CompanionTarget(model, target.Parent!, identity.Name));
+        }
+
+        if (project.FileSystem.File.Exists(model.Preview.FullPath) && !map.IsMoved(model.Preview))
+        {
+            AddFile(project, map, model.Preview, target.Parent!.Combine(AssetFileTypes.PreviewOf(identity.Name)));
+        }
+
+        map.AddMove(new(model.RecordPath, target, IsDirectory: false));
+    }
+
+    // A companion keeps its place below the record: beside it with the model's name, or in the folder of that name.
+    private static FileSystemPath CompanionTarget(AuthoredReferenceIndex.ImportSource model, FileSystemPath folder, string name)
+    {
+        if (model.PrimaryPath.Parent == model.RecordPath.Parent)
+        {
+            return folder.Combine(name);
+        }
+
+        var below = model.PrimaryPath.GetPathBelow(model.RecordPath.Parent!).Split('/');
+        below[0] = RelocationPaths.GetDisplayName(name);
+        return folder.Combine(string.Join('/', below));
+    }
+
+    // The files a source reads keep their places beside it, since it names them: they follow it, and it follows them.
+    private static void AddSourceMove(ProjectContext project, RelocationMap map, AuthoredReferenceIndex.ImportSource import, FileSystemPath file, FileSystemPath target)
+    {
+        var folder = FolderOfMovedSource(import, file, target);
+        var primary = file == import.PrimaryPath ? target : folder.Combine(import.PrimaryPath.Name);
+        foreach (var (source, destination) in import.SourceFiles.Select(member => (member, member == import.PrimaryPath ? primary : folder.Combine(member.GetPathBelow(import.Folder)))))
+        {
+            if (source != destination && project.FileSystem.File.Exists(source.FullPath) && !map.IsMoved(source))
+            {
+                AddFile(project, map, source, destination);
+            }
+        }
+    }
+
+    // A record beside its source follows it when the record is edited, and the preview beside the record goes with them.
+    private static void AddPreviewOfFollowingRecord(ProjectContext project, RelocationMap map, AuthoredReferenceIndex.ImportSource import)
+    {
+        if (import.Settings.Identity == import.PrimaryVirtualPath && project.FileSystem.File.Exists(import.Preview.FullPath) && !map.IsMoved(import.Preview))
+        {
+            var target = map.MapPath(import.PrimaryPath);
+            AddFile(project, map, import.Preview, target.Parent!.Combine(AssetFileTypes.PreviewOf(target.Name)));
+        }
+    }
+
+    private static FileSystemPath FolderOfMovedSource(AuthoredReferenceIndex.ImportSource import, FileSystemPath file, FileSystemPath target)
+    {
+        if (file == import.PrimaryPath)
+        {
+            return target.Parent!;
+        }
+
+        // A file the source reads keeps its name, and its place below the folder that holds the source.
+        var depth = file.Parent == import.Folder ? 0 : file.Parent!.GetPathBelow(import.Folder).Split('/').Length;
+        var folder = target.Parent;
+        for (var level = 0; level < depth && folder is not null; level++)
+        {
+            folder = folder.Parent;
+        }
+
+        return folder is not null && string.Equals(file.Name, target.Name, FileSystemPath.NameComparison)
+            && target.GetPathBelow(folder) == file.GetPathBelow(import.Folder)
+                ? folder
+                : throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' reads '{file.Name}' by its name and place. Move the model to move it.");
+    }
+
+    // Shared content never references an own mount: what a move into a shared mount needs from own mounts goes with it, at
+    // its path below its mount, and so does what that needs.
+    private static List<AssetRelocationMove> AddSharedClosure(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map)
+    {
+        var closure = new List<AssetRelocationMove>();
+        for (var added = true; added;)
+        {
+            added = false;
+            foreach (var (needed, mount) in NeededByShared(project, index, map).ToArray())
+            {
+                if (FindSource(project, needed) is { } source && !map.IsMoved(source.File))
+                {
+                    var move = new AssetRelocationMove(source.Path, AssetPath.Parse("/" + mount).Combine(source.Path.GetPathBelow(AssetPath.Parse("/" + source.Path.Mount))));
+                    AddMove(project, index, map, move, createsFolders: true);
+                    closure.Add(move);
+                    added = true;
+                }
+            }
+        }
+
+        return closure;
+    }
+
+    // The models moved into a shared mount that reference a source in another mount, which does not move with them.
+    private static List<AuthoredReferenceIndex.ImportSource> FindReferencedSources(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map)
+        => [.. index.Imports.Where(import => map.IsMoved(import.RecordPath) && !map.IsMoved(import.PrimaryPath)
+            && SharedMountAfter(project, map, import.RecordPath) is { } mount
+            && !string.Equals(import.PrimaryVirtualPath.Mount, mount, StringComparison.Ordinal)
+            && project.FileSystem.File.Exists(import.PrimaryPath.FullPath))];
+
+    // A model's own copy of its source is a companion: beside its record with its name, or in a folder of that name when the
+    // source reads other files, which keep their places beside it.
+    private static List<AssetRelocationMove> AddSourceCopies(ProjectContext project, RelocationMap map, List<AuthoredReferenceIndex.ImportSource> models)
+    {
+        var copies = new List<AssetRelocationMove>();
+        foreach (var model in models)
+        {
+            var record = map.MapPath(model.RecordPath);
+            var name = model.Identity.Name;
+            var members = model.SourceFiles.ToArray();
+            var folder = members.Length == 1 ? record.Parent! : record.Parent!.Combine(RelocationPaths.GetDisplayName(name));
+            foreach (var member in members)
+            {
+                var copy = member == model.PrimaryPath ? folder.Combine(name) : folder.Combine(member.GetPathBelow(model.Folder));
+                map.AddSourceReplacement(model.RecordPath, member, copy);
+                if (project.FileSystem.File.Exists(member.FullPath))
+                {
+                    if (project.FileSystem.File.Exists(copy.FullPath) || map.Copies.Any(existing => existing.Target == copy))
+                    {
+                        throw new AssetRelocationException($"'{copy.Name}' already exists next to the destination.");
+                    }
+
+                    map.AddCopy(member, copy);
+                    copies.Add(new(RelocationPaths.ToVirtual(project, copy)!, RelocationPaths.ToVirtual(project, member)!));
+                }
+            }
+        }
+
+        return copies;
+    }
+
+    // An undo gives a model back the source it referenced, and removes the copy only when nothing would be lost.
+    private static void AddRemovedSourceCopies(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, IReadOnlyList<AssetRelocationMove> copies)
+    {
+        var fileSystem = project.FileSystem;
+        foreach (var removal in copies)
+        {
+            if (RelocationPaths.ToPhysical(project, removal.Source) is not { } copy || RelocationPaths.ToPhysical(project, removal.Target) is not { } original
+                || !fileSystem.File.Exists(copy.FullPath) || !fileSystem.File.Exists(original.FullPath))
+            {
+                throw new AssetRelocationException($"'{removal.Source}' or the source it was copied from no longer exists.");
+            }
+
+            if (!fileSystem.File.ReadAllBytes(copy.FullPath).AsSpan().SequenceEqual(fileSystem.File.ReadAllBytes(original.FullPath)))
+            {
+                throw new AssetRelocationException($"'{removal.Source}' changed after it was copied, and removing it would lose that.");
+            }
+
+            var readers = index.Imports.Where(import => import.SourceFiles.Contains(copy)).ToArray();
+            if (readers.Length != 1)
+            {
+                throw new AssetRelocationException($"'{removal.Source}' is not read by the one model it was copied for.");
+            }
+
+            map.AddSourceReplacement(readers[0].RecordPath, copy, original);
+            map.AddRemoved(copy);
+        }
+    }
+
+    // What the files moved into a shared mount reference in an own mount, with the shared mount that needs it.
+    private static IEnumerable<(AssetPath Needed, string Mount)> NeededByShared(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map)
+    {
+        foreach (var descriptor in index.Descriptors.Where(descriptor => map.IsMoved(descriptor.Location)))
+        {
+            if (SharedMountAfter(project, map, descriptor.Location) is { } mount)
+            {
+                foreach (var reference in descriptor.References.Where(reference => RelocationPaths.RoleOf(project, reference) == MountRole.Own))
+                {
+                    yield return (reference, mount);
+                }
+            }
+        }
+
+        foreach (var import in index.Imports.Where(import => map.IsMoved(import.RecordPath)))
+        {
+            if (SharedMountAfter(project, map, import.RecordPath) is { } mount && RelocationPaths.RoleOf(project, import.PrimaryVirtualPath) == MountRole.Own)
+            {
+                yield return (import.PrimaryVirtualPath, mount);
+            }
+        }
+    }
+
+    private static string? SharedMountAfter(ProjectContext project, RelocationMap map, FileSystemPath file)
+        => RelocationPaths.ToVirtual(project, map.MapPath(file)) is { } target && RelocationPaths.RoleOf(project, target) == MountRole.Shared ? target.Mount : null;
+
+    // The file that stands for an identity, a product's being its container's.
+    private static (AssetPath Path, FileSystemPath File)? FindSource(ProjectContext project, AssetPath identity)
+    {
+        foreach (var candidate in AssetFileTypes.SourcesOf(AssetFileTypes.ContainerOf(identity) ?? identity))
+        {
+            if (RelocationPaths.ToPhysical(project, candidate) is { } file && project.FileSystem.File.Exists(file.FullPath))
+            {
+                return (candidate, file);
+            }
+        }
+
+        return null;
+    }
+
+    // A move can leave shared content referencing an own mount when the reference is not the closure's to follow: an asset
+    // moved out of a shared mount into an own one. Files a move does not touch are the reference check's to report.
+    private static void RefuseReferencesIntoOwnMounts(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map)
+    {
+        foreach (var descriptor in index.Descriptors)
+        {
+            var moved = map.IsMoved(descriptor.Location);
+            if (RelocationPaths.ToVirtual(project, map.MapPath(descriptor.Location)) is not { } place || RelocationPaths.RoleOf(project, place) != MountRole.Shared)
+            {
+                continue;
+            }
+
+            foreach (var reference in descriptor.References)
+            {
+                var mapped = map.MapIdentity(reference);
+                if ((moved || mapped is not null) && RelocationPaths.RoleOf(project, mapped ?? reference) == MountRole.Own)
+                {
+                    throw new AssetRelocationException(
+                        ReferenceCheck.ReferenceIntoProjectMount,
+                        $"'{place}' is in the shared mount '{place.Mount}' and would reference '{mapped ?? reference}' in this project's own mount. Move that asset out of the way first, or change the reference.");
+                }
+            }
+        }
+    }
+
+    private static (FileSystemPath Source, FileSystemPath Target, bool IsDirectory) Resolve(ProjectContext project, AssetRelocationMove move, bool createsFolders)
+    {
         if (RelocationPaths.ToPhysical(project, move.Source) is not { } source || RelocationPaths.ToPhysical(project, move.Target) is not { } target)
         {
             throw new AssetRelocationException($"'{move.Source}' cannot be moved to '{move.Target}'.");
@@ -131,7 +379,7 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException($"'{move.Source}' no longer exists; it was deleted or moved outside the Content Explorer.");
         }
 
-        RequireValidTarget(project, move, source, target, isDirectory);
+        RequireValidTarget(project, move, source, target, isDirectory, createsFolders);
         return (source, target, isDirectory);
     }
 
@@ -158,7 +406,7 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static void RequireValidTarget(ProjectContext project, AssetRelocationMove move, FileSystemPath source, FileSystemPath target, bool isDirectory)
+    private static void RequireValidTarget(ProjectContext project, AssetRelocationMove move, FileSystemPath source, FileSystemPath target, bool isDirectory, bool createsFolders)
     {
         var fileSystem = project.FileSystem;
         var name = move.Target.Name;
@@ -183,7 +431,7 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException($"'{name}' already exists in '{move.Target.Parent}'.");
         }
 
-        if (!fileSystem.Directory.Exists(target.Parent!.FullPath))
+        if (!createsFolders && !fileSystem.Directory.Exists(target.Parent!.FullPath))
         {
             throw new AssetRelocationException($"The destination folder '{move.Target.Parent}' does not exist.");
         }
@@ -344,13 +592,13 @@ internal static class AssetRelocationPlanner
     // any other stays where it is, or moves with its folder. Either way its source is spelled from where it now is.
     private static async Task<RelocationEdit?> PlanRecordEditAsync(ProjectContext project, AuthoredReferenceIndex.ImportSource import, RelocationMap map, IAtomicFileStore files, CancellationToken cancellationToken)
     {
-        var target = map.MapPath(import.PrimaryPath);
+        var target = map.MapSource(import.RecordPath, import.PrimaryPath);
         var folder = target.Parent!;
 
         // The primary may be renamed in its folder; the files it reads must keep their place beside it.
         if (import.Files.Any(file => file != import.PrimaryPath && !string.Equals(
             Path.GetRelativePath(import.Folder.FullPath, file.FullPath),
-            Path.GetRelativePath(folder.FullPath, map.MapPath(file).FullPath),
+            Path.GetRelativePath(folder.FullPath, map.MapSource(import.RecordPath, file).FullPath),
             StringComparison.OrdinalIgnoreCase)))
         {
             throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.");

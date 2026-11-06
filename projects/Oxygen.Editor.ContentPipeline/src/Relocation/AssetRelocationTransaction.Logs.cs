@@ -25,6 +25,12 @@ internal static partial class AssetRelocationTransaction
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
+        Message = "Copied '{Source}' to '{Target}'.")]
+    private static partial void LogCopied(ILogger logger, string source, string target);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
         Message = "Rewrote references in '{Path}'.")]
     private static partial void LogRewrote(ILogger logger, string path);
 

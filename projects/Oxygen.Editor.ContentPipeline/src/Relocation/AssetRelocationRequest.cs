@@ -15,6 +15,14 @@ public sealed record AssetRelocationRequest
     /// <summary>Gets the actions and mapping contexts to rename inside their input sources.</summary>
     public IReadOnlyList<InputProductRename> ProductRenames { get; init; } = [];
 
+    /// <summary>Gets a value indicating whether a model moved into a shared mount gets its own copy of a source it references
+    /// in another mount, instead of keeping the reference.</summary>
+    public bool CopiesSourcesIn { get; init; }
+
+    /// <summary>Gets the copied source files an undo removes: each move's source is the copy, its target the original that
+    /// the model references again.</summary>
+    public IReadOnlyList<AssetRelocationMove> RemovedSourceCopies { get; init; } = [];
+
     /// <summary>Gets the request that undoes this one.</summary>
     /// <returns>The reverse request.</returns>
     public AssetRelocationRequest Reverse() => new()

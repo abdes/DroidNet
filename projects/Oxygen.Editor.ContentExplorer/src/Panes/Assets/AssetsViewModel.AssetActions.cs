@@ -182,10 +182,10 @@ public partial class AssetsViewModel
             return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSource is not null, ModelSourcePath: asset.ImportSourcePath);
         }
 
-        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model)
-            && ModelImportRecords.TryRead(project, asset.Identity) is not null;
+        // A model is named by its identity, whichever file stands for it; relocation moves its record and companions.
+        var isModel = ModelImportRecords.TryRead(project, asset.Identity) is not null;
         return new(
-            RelocationPaths.ToVirtual(project, path),
+            RelocationPaths.ToVirtual(project, path) is { } file ? (isModel ? asset.Identity : file) : null,
             path,
             fileSystem.Directory.Exists(path.FullPath),
             IsImportedOutput: false,
@@ -226,7 +226,6 @@ public partial class AssetsViewModel
         return relocation is null ? UnavailableReason : targets.Count == 0 ? "Select items to duplicate."
             : targets.Any(static target => target.IsImportedOutput) ? "Imported assets belong to their model. Import the model again instead."
             : targets.Any(static target => target.VirtualPath is null) ? ReadOnlyReason
-            : targets.Any(static target => target.ModelSourcePath is not null) ? "Import the model again instead of duplicating it."
             : null;
     }
 

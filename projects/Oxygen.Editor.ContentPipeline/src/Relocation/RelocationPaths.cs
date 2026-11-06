@@ -59,6 +59,23 @@ public static class RelocationPaths
         return project.SourceMounts;
     }
 
+    /// <summary>Gets the role of the writable mount that holds a virtual path.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="path">The virtual path.</param>
+    /// <returns>The role, or null outside writable mounts.</returns>
+    public static MountRole? RoleOf(ProjectContext project, AssetPath path)
+        => FindWritableMount(project, path)?.Role;
+
+    /// <summary>Gets the shared mounts among those that hold some paths.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="paths">The virtual paths.</param>
+    /// <returns>The mounts' names, sorted.</returns>
+    public static IReadOnlyList<string> SharedMountsOf(ProjectContext project, IEnumerable<AssetPath> paths)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        return [.. paths.Where(path => RoleOf(project, path) == MountRole.Shared).Select(static path => path.Mount).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)];
+    }
+
     /// <summary>Resolves a virtual path in a writable authoring mount to its physical location.</summary>
     /// <param name="project">The project.</param>
     /// <param name="path">The virtual path.</param>

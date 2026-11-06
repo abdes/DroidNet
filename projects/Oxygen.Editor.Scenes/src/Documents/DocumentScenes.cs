@@ -198,7 +198,7 @@ public sealed partial class DocumentScenes : IDisposable
 
         // A write already started would put the file back.
         await this.writing.ConfigureAwait(true);
-        if (this.previewFiles is { } files && !files.Delete(ModelPreviewFiles.PathOf(document)))
+        if (this.previewFiles is { } files && !files.Delete(files.PathOf(document)))
         {
             return false;
         }
@@ -347,7 +347,7 @@ public sealed partial class DocumentScenes : IDisposable
     // The kept preview, or the default one when the model has none or it cannot be shown.
     private Scene BuildKeptPreviewScene(Document document, ModelContent model)
     {
-        var kept = this.previewFiles?.Read(ModelPreviewFiles.PathOf(document), this.previewFiles.AnchorOf(document));
+        var kept = this.previewFiles?.Read(this.previewFiles.PathOf(document), this.previewFiles.AnchorOf(document));
         var id = this.SourceIdentityOf(document) ?? kept?.Id ?? SceneId.New();
         if (kept is not null)
         {
@@ -403,7 +403,7 @@ public sealed partial class DocumentScenes : IDisposable
     {
         if (document is not null && this.previewFiles is { } files && preview.TakeUnsaved() is { } content)
         {
-            var path = ModelPreviewFiles.PathOf(document);
+            var path = files.PathOf(document);
             this.writing = WriteAfterAsync(this.writing, files, path, content);
         }
 

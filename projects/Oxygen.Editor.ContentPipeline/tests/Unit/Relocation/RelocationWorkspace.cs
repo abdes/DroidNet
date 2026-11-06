@@ -121,9 +121,12 @@ internal sealed partial class RelocationWorkspace : IDisposable
     public void MountOutside(string name, string folder)
     {
         _ = this.FileSystem.Directory.CreateDirectory(folder);
-        this.FileSystem.File.WriteAllText(
-            this.PathOf(ProjectMounts.FileName),
-            new JsonObject { ["schema_version"] = ProjectMounts.SchemaVersion, ["mounts"] = new JsonObject { [name] = folder.Replace('\\', '/') } }.ToJsonString());
+        var file = this.PathOf(ProjectMounts.FileName);
+        var bindings = this.FileSystem.File.Exists(file)
+            ? JsonNode.Parse(this.FileSystem.File.ReadAllText(file))!.AsObject()
+            : new JsonObject { ["schema_version"] = ProjectMounts.SchemaVersion, ["mounts"] = new JsonObject() };
+        bindings["mounts"]![name] = folder.Replace('\\', '/');
+        this.FileSystem.File.WriteAllText(file, bindings.ToJsonString());
         var info = TestProject.InfoOf(this.Project);
         info.Mounts.Add(new ProjectMount(name));
         this.Session.ChangeContext(TestProject.Open(info, this.FileSystem).Context with

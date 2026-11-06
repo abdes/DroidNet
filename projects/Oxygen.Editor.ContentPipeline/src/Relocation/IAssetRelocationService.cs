@@ -82,6 +82,18 @@ public interface IAssetRelocationService
     /// <exception cref="AssetRelocationException">The redo was rejected or failed; no file is left changed.</exception>
     public Task<string?> RedoAsync(HistoryKeeper history, CancellationToken cancellationToken);
 
+    /// <summary>Plans a relocation without changing anything, for its review.</summary>
+    /// <param name="request">The requested moves.</param>
+    /// <param name="cancellationToken">Cancels planning.</param>
+    /// <returns>What the user reviews.</returns>
+    /// <exception cref="AssetRelocationException">The request is not allowed.</exception>
+    public Task<AssetRelocationReview> PreviewAsync(AssetRelocationRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Gets the shared mounts among those that hold some paths, whose other projects an operation does not update.</summary>
+    /// <param name="paths">The virtual paths.</param>
+    /// <returns>The mounts' names, sorted.</returns>
+    public IReadOnlyList<string> FindSharedMounts(IReadOnlyList<AssetPath> paths);
+
     /// <summary>Finds the authored files that reference an asset, or any asset inside a folder.</summary>
     /// <param name="virtualPath">The asset or folder.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>

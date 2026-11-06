@@ -23,14 +23,14 @@ public sealed class AssetFilesChangedEventArgs(
     /// <summary>Gets the absolute locations of the files whose references were rewritten, after the moves.</summary>
     public IReadOnlyList<FileSystemPath> RewrittenFiles { get; } = rewrittenFiles;
 
-    /// <summary>Gets the absolute files and folders moved to the Recycle Bin.</summary>
+    /// <summary>Gets the absolute files and folders deleted: moved to the Recycle Bin, or a copied source an undo removed.</summary>
     public IReadOnlyList<FileSystemPath> DeletedFiles { get; } = deletedFiles;
 
     /// <summary>Gets a value indicating whether a folder moved, was created or was deleted.</summary>
     public bool FoldersChanged { get; } = foldersChanged;
 
     /// <summary>Gets the absolute files and folders created, such as copies and new scripts.</summary>
-    public IReadOnlyList<FileSystemPath> CreatedFiles { get; private init; } = [];
+    public IReadOnlyList<FileSystemPath> CreatedFiles { get; internal init; } = [];
 
     /// <summary>Reports files and folders the editor created and changed nothing else.</summary>
     /// <param name="createdFiles">The absolute files and folders created.</param>

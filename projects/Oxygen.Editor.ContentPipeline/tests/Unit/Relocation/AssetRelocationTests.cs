@@ -393,7 +393,6 @@ public sealed class AssetRelocationTests
     [DataRow("/Content/Materials/Red.omat.json", "/Content/Materials/Red.otex.json", DisplayName = "Type change")]
     [DataRow("/Content/Shared", "/Content/Shared/Inner", DisplayName = "Folder into itself")]
     [DataRow("/Content/Models/Robot/mesh.bin", "/Content/Models/Robot/body.bin", DisplayName = "Model bundle file")]
-    [DataRow("/Content/Models/Robot/robot.gltf", "/Content/Shared/robot.gltf", DisplayName = "Model out of its bundle")]
     [DataRow("/Cooked/Content/Materials/Red.omat", "/Cooked/Content/Materials/Blue.omat", DisplayName = "Derived mount")]
     public async Task ForbiddenRequestsAreRejectedWithoutChanges(string source, string target)
     {
@@ -680,7 +679,7 @@ public sealed class AssetRelocationTests
     /// <summary>Delete recycles an asset's companions, and a model's whole folder with its import record.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public async Task DeleteRecyclesCompanionsAndModelBundles()
+    public async Task DeleteRecyclesCompanionsAndModelFiles()
     {
         using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var model = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
@@ -698,7 +697,9 @@ public sealed class AssetRelocationTests
         _ = recycled.Should().BeEquivalentTo(
             workspace.PathOf("Content/Textures/Wood.otex.json"),
             workspace.PathOf("Content/Textures/Wood.png"),
-            workspace.PathOf("Content/Models/Robot"));
+            workspace.PathOf("Content/Models/Robot/robot.gltf.import.json"),
+            workspace.PathOf("Content/Models/Robot/robot.gltf"),
+            workspace.PathOf("Content/Models/Robot/mesh.bin"));
     }
 
     /// <summary>A committed relocation reports the folder it moved and the files whose references it rewrote.</summary>
@@ -761,7 +762,7 @@ public sealed class AssetRelocationTests
         var report = reports.Should().ContainSingle().Subject;
         _ = report.DeletedFiles.Should().BeEquivalentTo(recycled.Select(FileSystemPath.From));
         _ = report.Moves.Should().BeEmpty();
-        _ = report.FoldersChanged.Should().BeTrue("the model's bundle folder was recycled");
+        _ = report.FoldersChanged.Should().BeFalse("a model's folder stays when its files are recycled");
     }
 
     /// <summary>The report is posted to the synchronization context the operation was started on.</summary>

@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-04
+Last updated: 2026-11-06
 
 This plan implements the [proposal](README.md) as specified by the
 [design](design.md). It orders the work into slices, says what each slice
@@ -43,7 +43,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S9    | Done, committed                                                |
 | S10   | Done, committed                                                |
 | S11   | Done, committed                                                |
-| S12   | Not started                                                    |
+| S12   | Done, committed                                                |
 | S13   | Not started                                                    |
 | S14   | Not started (waits on S18)                                     |
 | S15   | Not started (waits on S18)                                     |
@@ -711,6 +711,23 @@ mounts, shared-mount review text, copy with new `source_identity`, delete that
 spares shared sources. Functional tests: `AssetRelocationTests` and
 `SharedMountTests` rows for every R8 row and E1 to E8, on `MockFileSystem`.
 Docs: `content-explorer-asset-identity.md` 9.5, `content-pipeline.md` 8.4.
+
+Beyond this text:
+
+- A model's preview is beside its record, so `ModelPreviewFiles` finds it from the
+  model's identity and relocation moves it with the record.
+- `PreviewAsync` plans without changing anything, so the workflow can review a
+  closure or a shared mount before the move. Undo and redo skip the review.
+- The refusal to part files stays only for what a move cannot carry: renaming a
+  member, and a file another model also reads. Moving a member moves its model.
+- A closure asset goes to its path below the target mount; a collision refuses.
+- Delete recycles a model's files, not its folder, so an emptied folder stays.
+- P3's offer, which this slice's text did not list, is here: the review offers to
+  copy a source in another mount in as a companion or keep the reference. The
+  transaction journals the copies, and an undo removes them and restores the
+  reference, refusing when a copy has changed.
+- `PreviewAsync` returns `AssetRelocationReview`, a plain record, so the workflow's
+  review has unit tests.
 
 ### S13. Import
 

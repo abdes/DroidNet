@@ -15,12 +15,48 @@ internal sealed class RelocationMap
     private readonly List<(AssetPath Source, AssetPath Target, bool IsFolder)> identities = [];
     private readonly List<(AssetPath Source, AssetPath Target, bool IsFolder)> paths = [];
     private readonly List<RelocationFileMove> moves = [];
+    private readonly List<RelocationFileMove> copies = [];
+    private readonly HashSet<FileSystemPath> removed = [];
+    private readonly Dictionary<(FileSystemPath Record, FileSystemPath File), FileSystemPath> sources = [];
 
     /// <summary>Gets the physical moves in the order they apply.</summary>
     public IReadOnlyList<RelocationFileMove> Moves => this.moves;
 
     /// <summary>Gets the identity moves: files map exactly, folders map everything below them.</summary>
     public IEnumerable<(AssetPath Source, AssetPath Target, bool IsFolder)> Identities => this.identities;
+
+    /// <summary>Gets the source files copied, after the moves.</summary>
+    public IReadOnlyList<RelocationFileMove> Copies => this.copies;
+
+    /// <summary>Gets the copied source files removed, before the moves.</summary>
+    public IReadOnlyCollection<FileSystemPath> Removed => this.removed;
+
+    /// <summary>Records a source file a model reads from now on instead of another.</summary>
+    /// <param name="record">The model's record.</param>
+    /// <param name="file">The file it reads now.</param>
+    /// <param name="replacement">The file it reads from now on.</param>
+    public void AddSourceReplacement(FileSystemPath record, FileSystemPath file, FileSystemPath replacement) => this.sources[(record, file)] = replacement;
+
+    /// <summary>Records a source file to copy.</summary>
+    /// <param name="file">The file.</param>
+    /// <param name="copy">Its copy.</param>
+    public void AddCopy(FileSystemPath file, FileSystemPath copy) => this.copies.Add(new(file, copy, IsDirectory: false));
+
+    /// <summary>Records a copied source file to remove.</summary>
+    /// <param name="copy">The copy.</param>
+    public void AddRemoved(FileSystemPath copy) => this.removed.Add(copy);
+
+    /// <summary>Tests whether a file is a copy that is removed.</summary>
+    /// <param name="file">The file.</param>
+    /// <returns>Whether the relocation removes it.</returns>
+    public bool IsRemoved(FileSystemPath file) => this.removed.Contains(file);
+
+    /// <summary>Maps a file a model reads through the relocation.</summary>
+    /// <param name="record">The model's record.</param>
+    /// <param name="file">The file.</param>
+    /// <returns>The file the model reads afterward.</returns>
+    public FileSystemPath MapSource(FileSystemPath record, FileSystemPath file)
+        => this.sources.TryGetValue((record, file), out var replacement) ? replacement : this.MapPath(file);
 
     /// <summary>Records a physical move.</summary>
     /// <param name="move">The move.</param>

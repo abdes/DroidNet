@@ -2,7 +2,7 @@
 
 Status: `ED-M06 review-ready`
 
-Last Updated: 2026-10-25
+Last Updated: 2026-11-06
 
 ## 1. Purpose
 
@@ -318,13 +318,12 @@ identity and must update every authored referrer in one transaction.
   structurally: scene component and surface-override geometry/material URIs
   (component and targeted overrides), the exposure metering mask and
   `ExtraAssets`; material texture paths; geometry descriptor material, buffer
-  and skeleton paths; texture descriptor `source`, `sources[].file` and
-  `virtual_path`; model import record `source` and `virtual_path`; input file
-  action references (mapping `action`,
-  `linked_action` and combo step `action` virtual paths), scene Play-section
-  starting input contexts and script parameter overrides of input kinds.
-  Identities compare without the scheme and `.json` suffix; a rewrite keeps the
-  field's form (full URI, virtual path or file-relative path).
+  and skeleton paths; texture descriptor `source` and `sources[].file`; model
+  import record `source`; input file action references (mapping `action`,
+  `linked_action` and combo step `action`), scene Play-section starting input
+  contexts and script parameter overrides of input kinds. Every reference is read
+  from the file's identity, and a rewrite spells it from the file's new identity:
+  relative in its mount, by virtual path from another.
 - **Input assets.** An input source is a container: each action and context it
   declares is named under the source's identity
   (`/Content/Input/Player.input/Jump.oiact`). Moving or renaming the source
@@ -332,25 +331,33 @@ identity and must update every authored referrer in one transaction.
   folder; renaming an action or context is a relocation request of its own
   (`InputProductRename`) that rewrites the source and every referrer
   ([content pipeline §24](content-pipeline.md#24-input-sources)).
-- **Plan.** Source moves with their companion files (a texture's image, the
-  files a model's import read), a folder prefix mapping and the rewritten
-  references of
-  every referrer, including a moved descriptor's own `virtual_path`. Rejected:
-  collisions, invalid names, read-only or derived targets, moves out of
-  authoring mounts or into the moved folder, renaming or moving a mount root,
-  moving a model away from the files its import read, and cooked-only imported
-  outputs.
+- **Plan.** Source moves with their companion files (a texture's image, a
+  model's record, preview and companions), a folder prefix mapping and the
+  rewritten references of every referrer. Rejected: collisions, invalid names,
+  read-only or derived targets, moves out of authoring mounts or into the moved
+  folder, renaming or moving a mount root, renaming a file a model reads, parting
+  a model from a file another model also reads, and cooked-only imported outputs.
   Rename and move ask no confirmation, only to save unsaved documents first
-  (Transaction); the result reports what moved and how many referrers were
-  updated, and offers Undo and Redo.
+  (Transaction), unless they touch a shared mount (Shared mounts); the result
+  reports what moved and how many referrers were updated, and offers Undo and
+  Redo.
+- **Shared mounts.** Shared content never references an own mount, so a move into
+  a shared mount takes along what it needs from own mounts, at its path below its
+  mount. The review lists those assets and says other projects that mount the
+  folder are not updated; a delete in a shared mount says the same. When a moved
+  model references a source in another mount, the review offers **Copy sources in**,
+  which gives the model its own companion, **Keep references**, which makes the
+  shared mount need that mount, and Cancel. A move refuses
+  with `reference.into_project_mount` when it would leave shared content
+  referencing an own mount. Undo and redo skip the review.
 - **Imported outputs.** A model is a container: its scene, geometries,
   materials and textures are named under the model's identity
   (`/Content/Ship/Ship.glb/Paint.omat`), so moving or renaming the model or its
-  folder relocates them all. The model's import record lives in
-  `<ProjectRoot>/Imports/` at the model's virtual path; the plan rewrites its
-  `source` and `virtual_path` and moves it to the place of the new virtual
-  path, so the identity (`source_identity`), and every node and surface it
-  names, survives the move. Deleting a model recycles its record.
+  folder relocates them all. The model's import record lives in its mount at the
+  model's identity (`Ship.glb.import.json`), with its preview beside it. The plan
+  moves the record to the new identity with the companions, and a source elsewhere
+  stays and is respelled. `source_identity`, and every node and surface it names,
+  survives the move. Moving a companion moves its model.
 - **Scenes.** A scene is renamed, moved and duplicated like any asset. Deleting
   the project's start scene, or a folder that holds it, is rejected until
   another scene is the start scene.
@@ -399,13 +406,15 @@ identity and must update every authored referrer in one transaction.
   changes made impossible is rejected without changing anything and stays in
   the history.
 - Copy/Paste and Duplicate create unique new paths, give copied descriptors
-  their new identity and rewrite no referrers; model sources and cooked-only
-  outputs are not copied. Delete reviews what it breaks:
+  their new identity and rewrite no referrers; cooked-only outputs are not copied.
+  A copied model gets a new record with a new `source_identity` and its own
+  companions, and keeps a source it only references. Delete reviews what it breaks:
   `IAssetRelocationService.FindReferrersOutsideAsync` lists the files outside
   the deleted items that use them, read again first, and the review names the
   open documents that close. It confirms when either exists, then moves files
   and companions to the Recycle Bin, keeping an image another texture still
-  uses; remaining referrers report the existing missing-reference diagnostics.
+  uses and a source that is only referenced. A model's folder stays. Remaining
+  referrers report the existing missing-reference diagnostics.
   The cooker treats a deleted texture as a warning: a material cooks with that
   slot unbound and a scene without its metering mask, so the rest of the project
   still cooks.

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using System.IO.Abstractions;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -46,14 +47,22 @@ internal static partial class AssetRelocationTransaction
         var fileSystem = project.FileSystem;
         await RequirePreparedStateAsync(fileSystem, plan, files, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
+        var path = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
         var journal = new Journal
         {
             Phase = Phase.Applying,
-            Moves = [.. GetFolderCaseRenames(fileSystem, plan.Moves), .. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory))],
+            Moves =
+            [
+                .. GetFolderCaseRenames(fileSystem, plan.Moves),
+
+                // A removed file waits in the journal's folder, which goes on commit, so a restore can bring it back.
+                .. plan.Map.Removed.Select((file, index) => new JournalMove(file.FullPath, Path.Combine(Path.GetDirectoryName(path)!, "removed-" + index.ToString(CultureInfo.InvariantCulture)), IsDirectory: false)),
+                .. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory)),
+            ],
+            Copies = [.. plan.Map.Copies.Select(static copy => new JournalMove(copy.Source.FullPath, copy.Target.FullPath, IsDirectory: false))],
             CreatedDirectories = [.. GetMissingParents(fileSystem, plan.Moves)],
             Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath.FullPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
         };
-        var path = ProjectOutputFolders.BuildPath(project.ProjectRoot.FullPath, JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
         _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await WriteJournalAsync(files, path, journal).ConfigureAwait(false);
         LogJournalOpened(logger, path, journal.Moves.Length, journal.Edits.Length);
@@ -155,6 +164,19 @@ internal static partial class AssetRelocationTransaction
                 throw new AssetRelocationException($"'{move.Source.Name}' or its destination changed while the move was prepared. Try again.");
             }
         }
+
+        foreach (var copy in plan.Map.Copies)
+        {
+            if (!fileSystem.File.Exists(copy.Source.FullPath) || fileSystem.File.Exists(copy.Target.FullPath))
+            {
+                throw new AssetRelocationException($"'{copy.Source.Name}' or its copy changed while the move was prepared. Try again.");
+            }
+        }
+
+        if (plan.Map.Removed.FirstOrDefault(file => !fileSystem.File.Exists(file.FullPath)) is { } missing)
+        {
+            throw new AssetRelocationException($"'{missing.Name}' changed while the move was prepared. Try again.");
+        }
     }
 
     private static async Task ApplyChangesAsync(
@@ -178,6 +200,14 @@ internal static partial class AssetRelocationTransaction
             LogMoved(logger, move.Source, move.Target);
         }
 
+        foreach (var copy in journal.Copies)
+        {
+            step();
+            _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(copy.Target)!);
+            fileSystem.File.Copy(copy.Source, copy.Target);
+            LogCopied(logger, copy.Source, copy.Target);
+        }
+
         foreach (var edit in plan.Edits)
         {
             step();
@@ -190,6 +220,7 @@ internal static partial class AssetRelocationTransaction
     {
         var errors = new List<Exception>();
         await RestoreEditsAsync(files, journal, logger, errors).ConfigureAwait(false);
+        RemoveCopies(fileSystem, journal, logger, errors);
         RestoreMoves(fileSystem, journal, logger, errors);
         RemoveCreatedDirectories(fileSystem, journal, errors);
         if (errors.Count != 0)
@@ -228,6 +259,33 @@ internal static partial class AssetRelocationTransaction
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or StorageException)
+            {
+                errors.Add(error);
+            }
+        }
+    }
+
+    // A copy goes before the moves return, so a folder of its own that it needed is empty and goes with it; the folder it
+    // was put in, if it was there before, still holds the model's record.
+    private static void RemoveCopies(IFileSystem fileSystem, Journal journal, ILogger logger, List<Exception> errors)
+    {
+        foreach (var copy in journal.Copies.AsEnumerable().Reverse())
+        {
+            try
+            {
+                if (fileSystem.File.Exists(copy.Target))
+                {
+                    fileSystem.File.Delete(copy.Target);
+                    LogRestoredFile(logger, copy.Target);
+                }
+
+                var folder = Path.GetDirectoryName(copy.Target)!;
+                if (fileSystem.Directory.Exists(folder) && !fileSystem.Directory.EnumerateFileSystemEntries(folder).Any())
+                {
+                    fileSystem.Directory.Delete(folder);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
                 errors.Add(error);
             }
@@ -378,6 +436,8 @@ internal static partial class AssetRelocationTransaction
         public Phase Phase { get; init; }
 
         public JournalMove[] Moves { get; init; } = [];
+
+        public JournalMove[] Copies { get; init; } = [];
 
         public string[] CreatedDirectories { get; init; } = [];
 

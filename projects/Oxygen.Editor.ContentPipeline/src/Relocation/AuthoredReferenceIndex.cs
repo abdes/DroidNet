@@ -90,11 +90,25 @@ internal sealed class AuthoredReferenceIndex
             var primary = FileSystemPath.From(record.SourcePath);
             if (RelocationPaths.ToVirtual(project, primary) is { } virtualPath)
             {
-                imports.Add(new(FileSystemPath.From(record.RecordPath), primary, virtualPath, record.Settings));
+                var recordPath = FileSystemPath.From(record.RecordPath);
+                imports.Add(new(recordPath, primary, virtualPath, record.Settings)
+                {
+                    HasCompanionSource = RelocationPaths.ToVirtual(project, recordPath) is { } file && AssetFileTypes.CompanionsOf(file, virtualPath).Contains(virtualPath),
+                });
             }
         }
 
         return new(descriptors, imports, unreadable);
+    }
+
+    /// <summary>Finds the imported model a path names: its identity, its record, or a source file at its identity.</summary>
+    /// <param name="path">The virtual path.</param>
+    /// <returns>The model, or null when no record is at that identity.</returns>
+    public ImportSource? FindModel(AssetPath path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        var identity = AssetFileTypes.ToIdentity(path);
+        return this.Imports.FirstOrDefault(import => import.Identity == identity);
     }
 
     /// <summary>Finds the descriptors that reference an asset, or any asset inside a folder.</summary>
@@ -145,6 +159,24 @@ internal sealed class AuthoredReferenceIndex
     /// <param name="Settings">The record's content.</param>
     internal sealed record ImportSource(FileSystemPath RecordPath, FileSystemPath PrimaryPath, AssetPath PrimaryVirtualPath, ModelImportSettings Settings)
     {
+        /// <summary>Gets the model's identity, which is where its record lives.</summary>
+        public AssetPath Identity => this.Settings.Identity;
+
+        /// <summary>Gets a value indicating whether the source belongs to the model, beside its record with its name or in
+        /// a folder of that name; a source anywhere else is only referenced.</summary>
+        public bool HasCompanionSource { get; init; }
+
+        /// <summary>Gets the model's preview, beside its record.</summary>
+        public FileSystemPath Preview => this.RecordPath.Parent!.Combine(AssetFileTypes.PreviewOf(this.Identity.Name));
+
+        /// <summary>Gets the source files that move, are copied and deleted with the model.</summary>
+        public IEnumerable<FileSystemPath> Companions
+            => this.HasCompanionSource ? this.SourceFiles : [];
+
+        /// <summary>Gets the source's own files: the primary and what it read, in the folder that holds it.</summary>
+        public IEnumerable<FileSystemPath> SourceFiles
+            => this.Files.Where(file => file.IsSameOrInside(this.Folder));
+
         /// <summary>Gets the model's folder: it references its other files relative to it.</summary>
         public FileSystemPath Folder => this.PrimaryPath.Parent!;
 

@@ -24,10 +24,13 @@ namespace Oxygen.Editor.Scenes.Documents;
 /// <param name="logger">Reports the files that could not be read or written.</param>
 internal sealed partial class ModelPreviewFiles(IProjectSession session, IAtomicFileStore store, ILogger logger)
 {
-    /// <summary>Gets the preview file of a model document, beside the model.</summary>
+    /// <summary>Gets the preview file of a model document, beside the model's record, wherever its source is.</summary>
     /// <param name="document">The model document.</param>
     /// <returns>The file's path.</returns>
-    public static FileSystemPath PathOf(Document document) => FileSystemPath.From(AssetFileTypes.PreviewOf(document.File.Path.FullPath));
+    public FileSystemPath PathOf(Document document)
+        => session.Context.Find(document.File.Asset) is { IsMountRoot: false } location
+            ? FileSystemPath.From(AssetFileTypes.PreviewOf(location.File.FullPath))
+            : FileSystemPath.From(AssetFileTypes.PreviewOf(document.File.Path.FullPath));
 
     /// <summary>Encodes what a preview scene keeps: its environment and its sun, without the model it places.</summary>
     /// <param name="scene">The preview scene, whose last root node is the sun.</param>
@@ -51,7 +54,7 @@ internal sealed partial class ModelPreviewFiles(IProjectSession session, IAtomic
     /// <param name="document">The model document.</param>
     /// <returns>The identity.</returns>
     public AssetPath AnchorOf(Document document)
-        => session.Context.FindByFilePath(PathOf(document))?.Identity ?? document.File.Asset;
+        => session.Context.FindByFilePath(this.PathOf(document))?.Identity ?? document.File.Asset;
 
     /// <summary>Reads a model's preview file.</summary>
     /// <param name="path">The file.</param>

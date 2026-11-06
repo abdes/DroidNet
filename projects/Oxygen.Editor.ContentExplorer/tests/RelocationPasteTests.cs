@@ -47,6 +47,8 @@ public sealed class RelocationPasteTests
         var request = new AssetRelocationRequest { Moves = [new(AssetPath.Parse("/Content/Materials"), AssetPath.Parse("/Content/Props/Materials"))] };
         _ = service.Setup(value => value.CreatePasteRequest(sources, AssetPath.Parse("/Content/Props"))).Returns(request);
 
+        _ = service.Setup(value => value.PreviewAsync(request, It.IsAny<CancellationToken>())).ReturnsAsync(new AssetRelocationReview([], [], [], []));
+
         // The service rejects the move, so the check is the request alone.
         _ = service.Setup(value => value.RelocateAsync(It.IsAny<AssetRelocationRequest>(), "Move", It.IsAny<HistoryKeeper>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new AssetRelocationException("Rejected by the test."));

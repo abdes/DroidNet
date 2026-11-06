@@ -9,7 +9,9 @@ using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -85,9 +87,25 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var reverse = plan.Reverse;
         history.AddChange(new AsyncSimpleAction(token => new ValueTask(this.RelocateAsync(reverse, label, history, token))) { Key = label });
         this.LogRecorded(label);
-        this.RaiseFilesChanged(caller, new(plan.Moves, plan.RewrittenFiles, [], plan.Moves.Any(static move => move.IsDirectory)));
+        this.RaiseFilesChanged(caller, new(plan.Moves, plan.RewrittenFiles, [.. plan.Map.Removed], plan.Moves.Any(static move => move.IsDirectory) || plan.Map.Copies.Count > 1)
+        {
+            CreatedFiles = [.. plan.Map.Copies.Select(static copy => copy.Target)],
+        });
         return plan;
     }
+
+    /// <inheritdoc/>
+    public Task<AssetRelocationReview> PreviewAsync(AssetRelocationRequest request, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return coordinator.RunAsync(
+            async (operation, token) => (await AssetRelocationPlanner.PlanAsync(operation.Project, request, await this.BuildIndexAsync(operation.Project, token).ConfigureAwait(false), files, token).ConfigureAwait(false)).Review,
+            cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<string> FindSharedMounts(IReadOnlyList<AssetPath> paths)
+        => RelocationPaths.SharedMountsOf(session.Context, paths);
 
     /// <inheritdoc/>
     public AssetRelocationRequest? CreatePasteRequest(IReadOnlyList<AssetPath> sources, AssetPath targetFolder)
@@ -164,7 +182,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     throw new AssetRelocationException("Choose a destination under Content or another authoring folder.");
                 }
 
-                var (map, copies) = await PlanCopiesAsync(project, index, sources, targetFolder, folder, token).ConfigureAwait(false);
+                var (map, copies, closure) = await PlanCopiesAsync(project, index, sources, targetFolder, folder, token).ConfigureAwait(false);
                 foreach (var move in map.Moves)
                 {
                     var from = RelocationPaths.ToVirtual(project, move.Source)!;
@@ -173,7 +191,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
 
                 coordinator.VerifyWriter(operation);
-                await this.WriteCopiesAsync(project, map).ConfigureAwait(false);
+                await this.WriteCopiesAsync(project, map, closure).ConfigureAwait(false);
                 this.Invalidate();
                 created = [.. map.Moves];
                 return copies;
@@ -202,6 +220,12 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     if (AssetRelocationPlanner.ModelOf(source) is { } model)
                     {
                         throw AssetRelocationException.ModelProduct(source, model);
+                    }
+
+                    if (index.FindModel(source) is { } imported)
+                    {
+                        paths.AddRange(GetDeletedModelFiles(project, index, imported));
+                        continue;
                     }
 
                     var path = ResolveExisting(project, source);
@@ -241,7 +265,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static async Task<(RelocationMap Map, List<AssetPath> Copies)> PlanCopiesAsync(
+    private static async Task<(RelocationMap Map, List<AssetPath> Copies, RelocationMap Closure)> PlanCopiesAsync(
         ProjectContext project,
         AuthoredReferenceIndex index,
         IReadOnlyList<AssetPath> sources,
@@ -254,9 +278,14 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var reserved = new HashSet<FileSystemPath>();
         foreach (var source in sources)
         {
+            if (index.FindModel(source) is { } model)
+            {
+                copies.Add(RelocationPaths.ToVirtual(project, AddModelCopy(project, map, model, folder, reserved))!);
+                continue;
+            }
+
             var path = ResolveExisting(project, source);
             var isDirectory = project.FileSystem.Directory.Exists(path.FullPath);
-            RejectImportContent(index, path, isDirectory, "Import the model again instead of copying it.");
             if (isDirectory && targetFolder.IsSameOrInside(source))
             {
                 throw new AssetRelocationException("A folder cannot be copied into itself.");
@@ -271,7 +300,118 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
         }
 
-        return (map, copies);
+        return (map, copies, await AddCopyClosureAsync(project, index, map, targetFolder, reserved, cancellationToken).ConfigureAwait(false));
+    }
+
+    // A copy of a model is a new record at a unique identity; its companions are copied with it. A file a companion reads
+    // that is already there with the copy, as in a duplicate beside the original, is read by both.
+    private static FileSystemPath AddModelCopy(ProjectContext project, RelocationMap map, AuthoredReferenceIndex.ImportSource model, FileSystemPath folder, HashSet<FileSystemPath> reserved)
+    {
+        var target = GetUniquePath(project, folder, model.Identity.Name, isDirectory: false, reserved);
+        map.AddMove(new(model.RecordPath, folder.Combine(target.Name + AssetFileTypes.ImportSettings), IsDirectory: false));
+        if (model.HasCompanionSource)
+        {
+            var nested = model.PrimaryPath.Parent != model.RecordPath.Parent;
+            var sourceFolder = nested ? folder.Combine(RelocationPaths.GetDisplayName(target.Name)) : folder;
+            foreach (var member in model.SourceFiles.Where(file => project.FileSystem.File.Exists(file.FullPath)))
+            {
+                var copy = member == model.PrimaryPath
+                    ? (nested ? sourceFolder.Combine(member.Name) : target)
+                    : sourceFolder.Combine(member.GetPathBelow(model.Folder));
+                if (project.FileSystem.File.Exists(copy.FullPath))
+                {
+                    if (copy == member)
+                    {
+                        continue;
+                    }
+
+                    throw new AssetRelocationException($"'{copy.Name}' already exists in '{sourceFolder.Name}'. Copy the model to another folder.");
+                }
+
+                map.AddMove(new(member, copy, IsDirectory: false));
+            }
+        }
+
+        if (project.FileSystem.File.Exists(model.Preview.FullPath))
+        {
+            map.AddMove(new(model.Preview, folder.Combine(AssetFileTypes.PreviewOf(target.Name)), IsDirectory: false));
+        }
+
+        return target;
+    }
+
+    // A copy into a shared mount also copies what it needs from own mounts, at its path below its mount; the map holds the
+    // identities the copies then reference instead.
+    private static async Task<RelocationMap> AddCopyClosureAsync(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetPath targetFolder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
+    {
+        var closure = new RelocationMap();
+        if (RelocationPaths.RoleOf(project, targetFolder) != MountRole.Shared)
+        {
+            return closure;
+        }
+
+        var mountRoot = AssetPath.Parse("/" + targetFolder.Mount);
+        for (var added = true; added;)
+        {
+            added = false;
+            var copied = map.Moves.ToArray();
+            var needed = index.Descriptors.Where(descriptor => copied.Any(move => descriptor.Location.IsSameOrInside(move.Source)))
+                .SelectMany(static descriptor => descriptor.References)
+                .Concat(index.Imports.Where(import => !import.HasCompanionSource && copied.Any(move => import.RecordPath.IsSameOrInside(move.Source))).Select(static import => import.PrimaryVirtualPath))
+                .Where(reference => RelocationPaths.RoleOf(project, reference) == MountRole.Own)
+                .Select(reference => AssetFileTypes.ContainerOf(reference) ?? reference)
+                .Distinct().ToArray();
+            foreach (var identity in needed.Where(identity => closure.MapIdentity(identity) is null))
+            {
+                var below = identity.GetPathBelow(AssetPath.Parse("/" + identity.Mount));
+                var destination = RelocationPaths.ToPhysical(project, mountRoot.Combine(below))!;
+                var created = await CopyOneAsync(project, index, map, identity, destination.Parent!, reserved, cancellationToken).ConfigureAwait(false);
+                if (created is not null)
+                {
+                    closure.AddIdentity(identity, AssetFileTypes.ToIdentity(RelocationPaths.ToVirtual(project, created)!), AssetFileTypes.ContainerOf(identity) is null && AssetFileTypes.Find(identity.Name) is { ProductExtensions.Count: > 0 });
+                    added = true;
+                }
+            }
+        }
+
+        return closure;
+    }
+
+    private static async Task<FileSystemPath?> CopyOneAsync(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, AssetPath identity, FileSystemPath folder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
+    {
+        if (index.FindModel(identity) is { } model)
+        {
+            return AddModelCopy(project, map, model, folder, reserved);
+        }
+
+        foreach (var candidate in AssetFileTypes.SourcesOf(identity))
+        {
+            if (RelocationPaths.ToPhysical(project, candidate) is { } file && project.FileSystem.File.Exists(file.FullPath))
+            {
+                var target = GetUniquePath(project, folder, file.Name, isDirectory: false, reserved);
+                map.AddMove(new(file, target, IsDirectory: false));
+                if (file.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
+                {
+                    await AddTextureImageCopiesAsync(project, map, file, target, folder, reserved, cancellationToken).ConfigureAwait(false);
+                }
+
+                return target;
+            }
+        }
+
+        return null;
+    }
+
+    // A copied record is a new model: it reads the same settings from where it now is, with an identity of its own, and has
+    // published nothing. What it read stays known, so its companions are.
+    private static byte[] RewriteCopiedRecord(ProjectContext project, FileSystemPath source, FileSystemPath target, byte[] content, RelocationMap map)
+    {
+        var identity = AssetFileTypes.ToIdentity(RelocationPaths.ToVirtual(project, source)!);
+        var copied = AssetFileTypes.ToIdentity(RelocationPaths.ToVirtual(project, target)!);
+        var record = ModelImportSettings.Parse(content, identity);
+        var file = record.ResolveSource(project);
+        var reference = (file is null ? null : project.ToFileReference(copied, map.MapPath(file))) ?? record.Source;
+        return (ModelImportSettings.Create(copied, reference, record.Settings) with { SourceFingerprint = record.SourceFingerprint }).ToBytes();
     }
 
     private static async Task AddTextureImageCopiesAsync(ProjectContext project, RelocationMap map, FileSystemPath path, FileSystemPath target, FileSystemPath folder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
@@ -306,37 +446,30 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private static void RejectImportContent(AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory, string advice)
+    // A model goes as its record, its preview and the companions no other asset names. A source it only references stays.
+    private static List<FileSystemPath> GetDeletedModelFiles(ProjectContext project, AuthoredReferenceIndex index, AuthoredReferenceIndex.ImportSource model)
     {
-        foreach (var import in index.Imports)
-        {
-            var folder = import.Folder;
-            var owned = isDirectory
-                ? folder.IsSameOrInside(path) || path.IsSameOrInside(folder)
-                : import.Files.Contains(path);
-            if (owned)
-            {
-                throw new AssetRelocationException($"'{path.Name}' belongs to the imported model '{import.PrimaryVirtualPath.Name}'. {advice}");
-            }
-        }
+        var fileSystem = project.FileSystem;
+        var named = index.Imports.Where(other => other.RecordPath != model.RecordPath).SelectMany(static other => other.Files)
+            .Concat(index.Descriptors.Where(static descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
+                .SelectMany(descriptor => AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath))))
+            .ToHashSet();
+        return [model.RecordPath, .. new[] { model.Preview }.Concat(model.Companions).Where(file => !named.Contains(file) && fileSystem.File.Exists(file.FullPath)).Distinct()];
     }
 
     private static List<FileSystemPath> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory)
     {
-        var fileSystem = project.FileSystem;
-        var root = project.ProjectRoot;
         var records = new List<FileSystemPath>();
         foreach (var import in index.Imports)
         {
-            var modelFolder = import.Folder;
             var model = import.PrimaryVirtualPath.Name;
-            if (isDirectory && path != modelFolder && path.IsSameOrInside(modelFolder))
-            {
-                throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
-            }
-
             if (isDirectory)
             {
+                if (!import.PrimaryPath.IsSameOrInside(path) && import.Files.Any(file => file.IsSameOrInside(path)))
+                {
+                    throw new AssetRelocationException($"'{path.Name}' holds files the imported model '{model}' reads. Delete the model instead.");
+                }
+
                 // A model deleted with its folder takes its record with it, wherever the record is.
                 if (import.PrimaryPath.IsSameOrInside(path) && !import.RecordPath.IsSameOrInside(path))
                 {
@@ -346,22 +479,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 continue;
             }
 
-            var files = import.Files;
-            if (path == import.PrimaryPath)
-            {
-                // The model's preview and its record, beside it, go with it.
-                var owned = files.ToHashSet();
-                _ = owned.Add(FileSystemPath.From(AssetFileTypes.PreviewOf(path.FullPath)));
-                _ = owned.Add(import.RecordPath);
-                var onlyThisModel = fileSystem.Directory.Exists(modelFolder.FullPath)
-                    && fileSystem.Directory.EnumerateFiles(modelFolder.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
-                // A model alone in its folder goes with the folder, unless the folder is the project's or a mount's own.
-                return onlyThisModel && modelFolder != root && !project.SourceMounts.Any(mount => mount.Location == modelFolder)
-                    ? import.RecordPath.IsSameOrInside(modelFolder) ? [modelFolder] : [modelFolder, import.RecordPath]
-                    : [.. owned.Where(file => fileSystem.File.Exists(file.FullPath))];
-            }
-
-            if (files.Contains(path))
+            if (path != import.PrimaryPath && import.Files.Contains(path))
             {
                 throw new AssetRelocationException($"'{path.Name}' is part of the imported model '{model}'. Delete the model instead.");
             }
@@ -411,7 +529,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var extension = isDirectory ? string.Empty : AssetFileTypes.GetSuffix(name);
         var stem = name[..^extension.Length];
         var candidate = folder.Combine(name);
-        for (var index = 2; fileSystem.File.Exists(candidate.FullPath) || fileSystem.Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || SourceCollisions.Find(project, candidate).Count != 0; index++)
+        for (var index = 2; fileSystem.File.Exists(candidate.FullPath) || fileSystem.File.Exists(candidate.FullPath + AssetFileTypes.ImportSettings) || fileSystem.Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || SourceCollisions.Find(project, candidate).Count != 0; index++)
         {
             candidate = folder.Combine(string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
         }
@@ -449,7 +567,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         }
     }
 
-    private async Task WriteCopiesAsync(ProjectContext project, RelocationMap map)
+    private async Task WriteCopiesAsync(ProjectContext project, RelocationMap map, RelocationMap closure)
     {
         var fileSystem = project.FileSystem;
         var created = new List<string>();
@@ -474,7 +592,9 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 foreach (var (source, target) in pairs)
                 {
                     var content = await fileSystem.File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
-                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(project, source, target, content, map) : content;
+                    var bytes = AssetFileTypes.Is(source.Name, AssetFileCategory.ImportSettings) ? RewriteCopiedRecord(project, source, target, content, map)
+                        : AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(project, source, target, content, map, closure)
+                        : content;
                     _ = fileSystem.Directory.CreateDirectory(target.Parent!.FullPath);
                     _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
                     created.Add(target.FullPath);
