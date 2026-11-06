@@ -45,7 +45,8 @@ SKIPPED_FOLDERS = {
     "Types",
     "Config",
 }
-STALE_BUILD_FOLDERS = (".build/cache/cooked-dependencies-v3",)
+# A cook's journals hold copies of Project.oxy in the old schema and name the cooked folder deleted here.
+STALE_BUILD_FOLDERS = (".build/cache/cooked-dependencies-v3", ".build/cook")
 
 # F1 Validation names two assets by where they were cooked; these are the authored assets they came from.
 OUTPUT_REFERENCES = {
@@ -374,8 +375,6 @@ def apply(project: Path, migration: Migration) -> None:
             shutil.rmtree(imports)
     for relative in (".cooked", *STALE_BUILD_FOLDERS):
         shutil.rmtree(project / relative, ignore_errors=True)
-    for inputs in (project / ".build" / "cook").glob("*/inputs/Imports"):
-        shutil.rmtree(inputs, ignore_errors=True)
 
 
 def run(root: Path, backups: Path, *, write: bool) -> list[JsonObject]:

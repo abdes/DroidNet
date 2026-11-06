@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 from tooling.migrations.portable_references.migrate import (
+    Migration,
+    apply,
     identity_of,
     load,
     migrate_tree,
@@ -259,6 +263,24 @@ class SceneTests(unittest.TestCase):
             set(),
         )
         self.assertIn("names an output folder", migration.unresolved[0])
+
+
+class GeneratedOutputTests(unittest.TestCase):
+    def test_a_cooks_journals_go_with_the_cooked_folder_and_other_build_files_stay(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            project = Path(folder)
+            journal = project / ".build/cook/1edc7a3c/publication.json"
+            journal.parent.mkdir(parents=True)
+            journal.write_text('{"SchemaVersion": 2}', encoding="utf-8")
+            kept = project / ".build/references.json"
+            kept.write_text("{}", encoding="utf-8")
+
+            apply(project, Migration())
+
+            self.assertFalse((project / ".build/cook").exists())
+            self.assertTrue(kept.exists())
 
 
 if __name__ == "__main__":
