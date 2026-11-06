@@ -49,4 +49,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Storage\src\Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
     </ItemGroup>
+    <ItemGroup>
+        <Using Include="Oxygen.Managed.Assets.Persistence.Publication" />
+    </ItemGroup>
 </Project>

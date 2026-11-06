@@ -54,10 +54,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 switch (source.Kind)
                 {
                     case CookedContentSourceKind.Cooked:
-                        await result.AddLooseFolderAsync(project.LibraryMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal) && mount.Kind == MountKind.Cooked), cancellationToken).ConfigureAwait(false);
-                        break;
-                    case CookedContentSourceKind.Pak:
-                        await result.AddPakFileAsync(project.LibraryMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal) && mount.Kind == MountKind.Pak), cancellationToken).ConfigureAwait(false);
+                        // A mount that is missing or invalid reported why when the table resolved; it joins no cook.
+                        if (project.LibraryMounts.FirstOrDefault(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)) is { } library)
+                        {
+                            await (library.Container == MountContainer.Pak ? result.AddPakFileAsync(library, cancellationToken) : result.AddLooseFolderAsync(library, cancellationToken)).ConfigureAwait(false);
+                        }
+
                         break;
                     case CookedContentSourceKind.ProjectOutput:
                         break;
@@ -393,7 +395,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     private bool ProjectHasPriority(Root root)
         => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
-            || (source.Kind == CookedContentSourceKind.Cooked && string.Equals(source.Name, root.Name, StringComparison.Ordinal))).Kind == CookedContentSourceKind.ProjectOutput;
+            || string.Equals(source.Name, root.Name, StringComparison.Ordinal)).Kind == CookedContentSourceKind.ProjectOutput;
 
     private bool ProjectSourceWins(AssetPath uri, Root root)
         => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
@@ -420,20 +422,9 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
     }
 
-    // A declared folder without an index holds no cooked library yet and is skipped.
     private async Task AddLooseFolderAsync(ResolvedMount mount, CancellationToken cancellationToken)
     {
-        if (mount.Location is not { } folder)
-        {
-            return;
-        }
-
-        var path = folder.FullPath;
-        if (!File.Exists(Path.Combine(path, LooseCookedIndex.FileName)))
-        {
-            return;
-        }
-
+        var path = mount.Location!.FullPath;
         CookOutputReadLease? files = null;
         try
         {
@@ -469,11 +460,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     // The engine verifies a pak's integrity when it mounts it; the lease keeps its bytes fixed until then.
     private async Task AddPakFileAsync(ResolvedMount mount, CancellationToken cancellationToken)
     {
-        if (mount.Location is not { } pakFile)
-        {
-            return;
-        }
-
+        var pakFile = mount.Location!;
         PakReadLease? lease = null;
         try
         {

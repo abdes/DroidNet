@@ -253,7 +253,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             byte[] bytes = [1];
             File.WriteAllBytes(Path.Combine(root, "Material.omat"), bytes);
             using var stream = File.Create(Path.Combine(root, "container.index.bin"));
-            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Material.omat", "/Content/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(AssetKey.FromVirtualPath($"/{relative}/Material.omat"), "Material.omat", $"/{relative}/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
             return root;
         }
     }

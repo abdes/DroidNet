@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Mounts;
@@ -30,8 +31,31 @@ public sealed record ResolvedMount(
     MountState State,
     bool IsExpanded = true)
 {
-    /// <summary>Gets a value indicating whether the mount has a location that exists.</summary>
+    /// <summary>Gets a value indicating whether the mount has a location that exists and can be used.</summary>
     public bool IsBound => this.State == MountState.Bound;
+
+    /// <summary>Gets whether the project owns the mount's folder. A cooked mount is always shared.</summary>
+    public MountRole Role { get; init; } = MountRole.Shared;
+
+    /// <summary>Gets why the mount is <see cref="MountState.Invalid"/>.</summary>
+    public IReadOnlyList<MountFinding> Findings { get; init; } = [];
+
+    /// <summary>Gets how a bound cooked mount's content is stored; <see cref="MountContainer.None"/> for any other.</summary>
+    public MountContainer Container { get; init; }
+
+    /// <summary>Gets what a bound cooked mount's content holds, read when the table resolved; else <see langword="null"/>.</summary>
+    public LibraryFacts? Library { get; init; }
+
+    /// <summary>
+    /// Gets what the mount is bound to, which differs from <see cref="Location"/> for a library project's
+    /// <c>.cooked</c> folder: the location is the generation it selects, the folder the engine is handed.
+    /// </summary>
+    public FileSystemPath? BoundTo { get; init; }
+
+    /// <summary>Gets a value indicating whether the mount is bound to a pak file, whether or not it can be read.</summary>
+    public bool IsPakFile => this.BoundTo is { } bound
+        ? bound.FullPath.EndsWith(".pak", StringComparison.OrdinalIgnoreCase)
+        : this.DeclaredPath?.EndsWith(".pak", StringComparison.OrdinalIgnoreCase) == true;
 
     /// <summary>Gets the declaration this mount commits, or <see langword="null"/> for a local mount.</summary>
     public ProjectMount? Declaration

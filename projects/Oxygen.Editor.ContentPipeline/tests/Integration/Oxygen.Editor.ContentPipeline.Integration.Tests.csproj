@@ -74,4 +74,7 @@
         </ItemGroup>
         <Copy SourceFiles="@(_ContentWorkerProbeFiles)" DestinationFolder="$(OutDir)WorkerProbe" SkipUnchangedFiles="true" />
     </Target>
+    <ItemGroup>
+        <Using Include="Oxygen.Managed.Assets.Persistence.Publication" />
+    </ItemGroup>
 </Project>

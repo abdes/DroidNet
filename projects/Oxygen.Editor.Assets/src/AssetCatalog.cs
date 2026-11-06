@@ -566,7 +566,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
 
         // Pak files are browsable before the project publishes; a publication catalogs the ones it selects.
-        foreach (var mount in project.LibraryMounts.Where(mount => mount is { Kind: MountKind.Pak, IsBound: true } && selected?.Roots.Any(root =>
+        foreach (var mount in project.LibraryMounts.Where(mount => mount.Container == MountContainer.Pak && selected?.Roots.Any(root =>
             root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
         {
             if (await this.TryPreparePakAsync(mount).ConfigureAwait(false) is { } pak)
@@ -575,8 +575,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             }
         }
 
-        // Preserve authored-folder browsing for external folders without cooked content.
-        foreach (var mount in project.LibraryMounts.Where(mount => mount is { Kind: MountKind.Cooked, IsBound: true } && selected?.Roots.Any(root =>
+        // A loose root or generation is browsable before the project publishes too.
+        foreach (var mount in project.LibraryMounts.Where(mount => mount.Container != MountContainer.Pak && selected?.Roots.Any(root =>
             root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
         {
             candidates.Add(await this.PrepareFolderAsync(project, mount.Name, mount.Location!, kept).ConfigureAwait(false));

@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -31,7 +32,7 @@ public static class ProjectAssetFiles
     public static string? ValidateDeclaredMountName(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
-        return !ProjectMounts.IsValidName(name) ? "A mount name starts with a letter, then letters, digits, '_' or '-', up to 64 characters."
+        return !ProjectMounts.IsValidName(name) ? "A mount name starts with a letter or '_', then letters, digits, '_' or '-'."
             : IsReservedMountName(name) ? "Every project already has a mount with this name; choose another."
             : null;
     }
@@ -55,9 +56,25 @@ public static class ProjectAssetFiles
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(path);
-        return Mounts(project).FirstOrDefault(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal)) is { } mount
-            ? new(path, path.IsMount ? mount.Root : mount.Root.Combine(path.RelativePath), mount.Root, mount.Kind)
-            : null;
+        if (Mounts(project).FirstOrDefault(mount => string.Equals(mount.Name, path.Mount, StringComparison.Ordinal)) is not { } mount)
+        {
+            return null;
+        }
+
+        if (path.IsMount)
+        {
+            return new(path, mount.Root, mount.Root, mount.Kind);
+        }
+
+        // A library's files are named by its index, not by its virtual paths; what a pak holds lies in the pak.
+        if (mount.Library is not { } library)
+        {
+            return new(path, mount.Root.Combine(path.RelativePath), mount.Root, mount.Kind);
+        }
+
+        return !library.Holds(path.VirtualPath) ? null
+            : library.DescriptorOf(path.VirtualPath) is { } descriptor ? new(path, mount.Root.Combine(descriptor), mount.Root, mount.Kind)
+            : new(path, mount.Root, mount.Root, mount.Kind);
     }
 
     /// <summary>
@@ -101,36 +118,51 @@ public static class ProjectAssetFiles
         var holder = Mounts(project)
             .Where(mount => file.IsSameOrInside(mount.Root))
             .MaxBy(static mount => mount.Root.FullPath.Length);
-        return holder is not null && AssetPath.TryCreate(holder.Name, file.GetPathBelow(holder.Root), out var virtualPath)
+        if (holder is null)
+        {
+            return null;
+        }
+
+        if (holder.Library is { } library && file != holder.Root)
+        {
+            return library.VirtualPathOfDescriptor(file.GetPathBelow(holder.Root)) is { } name && AssetPath.TryParse(name, out var named)
+                ? new(named, file, holder.Root, holder.Kind)
+                : null;
+        }
+
+        return AssetPath.TryCreate(holder.Name, file.GetPathBelow(holder.Root), out var virtualPath)
             ? new(virtualPath, file, holder.Root, holder.Kind)
             : null;
     }
 
     /// <summary>
-    /// Gets the mount path of a file in a bound source mount, inside or outside the project tree: the mount's name and
-    /// the file's path below the mount's folder, such as <c>/Content/Ship/Ship.glb</c>. Unlike a virtual path, the file's
-    /// name may be any name a file may have.
+    /// Spells a file as a reference from a referrer: relative within the referrer's source mount, absolute from another
+    /// source mount.
     /// </summary>
     /// <param name="project">The project.</param>
-    /// <param name="file">The file or folder.</param>
-    /// <returns>The mount path, or <see langword="null"/> when no bound source mount holds the file.</returns>
-    public static string? SourceMountPathOf(this ProjectContext project, FileSystemPath file)
+    /// <param name="referrer">The identity of the file that holds the reference.</param>
+    /// <param name="file">The file.</param>
+    /// <returns>The reference, or <see langword="null"/> when no bound source mount holds the file or its name is one a
+    /// reference cannot spell.</returns>
+    public static string? ToFileReference(this ProjectContext project, AssetPath referrer, FileSystemPath file)
     {
         ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(referrer);
         ArgumentNullException.ThrowIfNull(file);
 
         // Source mounts never overlap, so at most one holds the file.
         return project.SourceMounts.FirstOrDefault(mount => file != mount.Location && file.IsSameOrInside(mount.Location!)) is { } holder
-            ? "/" + holder.Name + "/" + file.GetPathBelow(holder.Location!)
+            && AssetPath.TryCreate(holder.Name, file.GetPathBelow(holder.Location!), out var target)
+            ? target.ToReference(referrer)
             : null;
     }
 
-    /// <summary>Locates a mount path in the bound source mount it names.</summary>
+    /// <summary>Gets the file a mount path names in a bound source mount.</summary>
     /// <param name="project">The project.</param>
     /// <param name="mountPath">The mount path, such as <c>/Content/Ship/Ship.glb</c>.</param>
-    /// <returns>The mount and the path below its folder, with <c>/</c> separators and empty for the mount itself; or
-    /// <see langword="null"/> when the text is not a mount path, or its mount is not a bound source mount.</returns>
-    public static (ResolvedMount Mount, string PathBelow)? LocateSourceMountPath(this ProjectContext project, string mountPath)
+    /// <returns>The file, or <see langword="null"/> when the text is not a mount path, or its mount is not a bound
+    /// source mount.</returns>
+    public static FileSystemPath? SourceFileOf(this ProjectContext project, string mountPath)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(mountPath);
@@ -142,25 +174,15 @@ public static class ProjectAssetFiles
         var end = mountPath.IndexOf('/', 1);
         var name = end < 0 ? mountPath[1..] : mountPath[1..end];
         return project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.Ordinal)) is { } mount
-            ? (mount, end < 0 ? string.Empty : mountPath[(end + 1)..])
+            ? end < 0 ? mount.Location : mount.Location!.Combine(mountPath[(end + 1)..])
             : null;
     }
 
-    /// <summary>Gets the file a mount path names in a bound source mount.</summary>
-    /// <param name="project">The project.</param>
-    /// <param name="mountPath">The mount path, such as <c>/Content/Ship/Ship.glb</c>.</param>
-    /// <returns>The file, or <see langword="null"/> when the text is not a mount path, or its mount is not a bound
-    /// source mount.</returns>
-    public static FileSystemPath? SourceFileOf(this ProjectContext project, string mountPath)
-        => project.LocateSourceMountPath(mountPath) is var (mount, below)
-            ? below.Length == 0 ? mount.Location : mount.Location!.Combine(below)
-            : null;
-
     private static IEnumerable<Mount> Mounts(ProjectContext project)
         => project.Mounts
-            .Where(static mount => mount is { IsBound: true, Kind: MountKind.Source or MountKind.Cooked })
-            .Select(static mount => new Mount(mount.Name, mount.Location!, mount.Kind == MountKind.Source ? ProjectMountKind.Authoring : ProjectMountKind.Cooked))
+            .Where(static mount => mount.IsBound)
+            .Select(static mount => new Mount(mount.Name, mount.Location!, mount.Kind == MountKind.Source ? ProjectMountKind.Authoring : ProjectMountKind.Cooked, mount.Library))
             .Append(new Mount(ProjectFilesMount, project.ProjectRoot, ProjectMountKind.ProjectFiles));
 
-    private sealed record Mount(string Name, FileSystemPath Root, ProjectMountKind Kind);
+    private sealed record Mount(string Name, FileSystemPath Root, ProjectMountKind Kind, LibraryFacts? Library = null);
 }

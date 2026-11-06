@@ -17,4 +17,13 @@ public sealed record PakDocument(
 {
     /// <summary>Gets the textures its browse index names, in browse-index order.</summary>
     public IReadOnlyList<PakTextureEntry> Textures { get; init; } = [];
+
+    /// <summary>Gets the pak's one root name, from its catalog; a game's own pak names its own mount.</summary>
+    public string Library { get; init; } = string.Empty;
+
+    /// <summary>Gets what the pak requires of other libraries, from its catalog.</summary>
+    public IReadOnlyList<LibraryDependency> Dependencies { get; init; } = [];
+
+    /// <summary>Gets the lower assets the pak deletes, from its catalog.</summary>
+    public IReadOnlyList<AssetKey> Deleted { get; init; } = [];
 }

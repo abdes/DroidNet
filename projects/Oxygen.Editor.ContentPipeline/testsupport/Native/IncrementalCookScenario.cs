@@ -33,7 +33,7 @@ internal static class IncrementalCookScenario
             return [with(StringComparer.Ordinal)];
         }
 
-        var head = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationHead>(File.ReadAllBytes(headPath), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
+        var head = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Managed.Assets.Persistence.Publication.CookPublicationHead>(File.ReadAllBytes(headPath), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
         var document = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument>(File.ReadAllBytes(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Document(projectRoot, head.PublicationId)), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
         return document.Roots.Where(static root => root.Owner == global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project).SelectMany(root => Directory.EnumerateFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories).Where(static path => !string.Equals(Path.GetFileName(path), global::Oxygen.Editor.ContentPipeline.Publication.CookedGeneration.MarkerFileName, StringComparison.Ordinal)).Select(path => (Key: root.Name + "/" + Path.GetRelativePath(root.ResolvePath(projectRoot), path).Replace('\\', '/'), Path: path))).ToDictionary(static file => file.Key, static file => (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file.Path))), File.GetLastWriteTimeUtc(file.Path)), StringComparer.Ordinal);
     }

@@ -50,7 +50,7 @@ public sealed class CookedContentOrderingTests
     {
         var info = new ProjectInfo("Paks", Category.Games)
         {
-            Mounts = [new("Folder", MountKind.Cooked), new("Props", MountKind.Pak, "Props.pak")],
+            Mounts = [new("Folder", MountKind.Cooked), new("Props", MountKind.Cooked, "Props.pak")],
         };
         info.CookedContentOrder = [.. CookedContentOrdering.Resolve(info)];
 
@@ -59,25 +59,25 @@ public sealed class CookedContentOrderingTests
 
         _ = info.CookedContentOrder.Should().Equal(
         [
-            new(CookedContentSourceKind.Cooked, "Folder"), new(CookedContentSourceKind.Pak, "Props"), new(CookedContentSourceKind.ProjectOutput),
+            new(CookedContentSourceKind.Cooked, "Folder"), new(CookedContentSourceKind.Cooked, "Props"), new(CookedContentSourceKind.ProjectOutput),
         ]);
         _ = restored.Mounts.Should().Equal(info.Mounts);
         _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).DeclaredMounts.Should().Equal(info.Mounts);
         _ = CookedContentOrdering.Resolve(restored).Should().Equal(info.CookedContentOrder);
     }
 
-    /// <summary>A mount name identifies one library, and the saved order must name each library with its own kind.</summary>
+    /// <summary>A mount name identifies one library, and the saved order names declared libraries only.</summary>
     [TestMethod]
-    public void LibrariesAreIdentifiedByNameAndKind()
+    public void LibrariesAreIdentifiedByName()
     {
-        ProjectMount[] libraries = [new("Props", MountKind.Cooked), new("Props", MountKind.Pak)];
-        ProjectMount[] pak = [new("Pak", MountKind.Pak)];
+        ProjectMount[] libraries = [new("Props", MountKind.Cooked), new("Props", MountKind.Cooked)];
+        ProjectMount[] one = [new("Props", MountKind.Cooked)];
 
         Action shared = () => _ = CookedContentOrdering.Resolve(libraries, []);
-        Action mislabeled = () => _ = CookedContentOrdering.Resolve(pak, [new(CookedContentSourceKind.Cooked, "Pak")]);
+        Action undeclared = () => _ = CookedContentOrdering.Resolve(one, [new(CookedContentSourceKind.Cooked, "Vehicles")]);
 
         _ = shared.Should().Throw<InvalidDataException>();
-        _ = mislabeled.Should().Throw<InvalidDataException>();
+        _ = undeclared.Should().Throw<InvalidDataException>();
     }
 
     /// <summary>Malformed order entries are reported rather than changing precedence silently.</summary>

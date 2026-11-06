@@ -5,6 +5,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.Pak;
 
 namespace Oxygen.Managed.Assets.Testing;
@@ -80,7 +81,7 @@ public static class PakFixture
 
         var browseSize = browseIndex ? checked((ulong)destination.Position) - browseOffset : 0;
         var catalogOffset = checked((ulong)destination.Position);
-        destination.Write(new byte[8]);
+        destination.Write(EncodeCatalog(document));
         destination.Write(Convert.FromHexString(document.CatalogDigest));
         var catalogSize = checked((ulong)destination.Position) - catalogOffset;
         var footer = new byte[PakIndex.FooterSize];
@@ -112,6 +113,77 @@ public static class PakFixture
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(24), record.ArrayLayers);
         bytes[28] = record.Format;
         return bytes;
+    }
+
+    // A pak names its library; without one, the fixture takes the mount of its first asset.
+    private static string LibraryOf(PakDocument document)
+    {
+        if (document.Library.Length != 0)
+        {
+            return document.Library;
+        }
+
+        return document.Assets.Count == 0 ? "Fixture" : document.Assets[0].VirtualPath.Split('/', StringSplitOptions.RemoveEmptyEntries)[0];
+    }
+
+    private static void WriteName(MemoryStream stream, string name)
+    {
+        var bytes = Encoding.UTF8.GetBytes(name);
+        stream.WriteByte(checked((byte)bytes.Length));
+        stream.Write(bytes);
+    }
+
+    private static void WriteCount(MemoryStream stream, int count)
+    {
+        var bytes = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, checked((uint)count));
+        stream.Write(bytes);
+    }
+
+    private static byte[] EncodeCatalog(PakDocument document)
+    {
+        using var stream = new MemoryStream();
+        var version = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(version, PakIndex.CatalogVersion);
+        stream.Write(version);
+        stream.Write(document.SourceIdentity.ToByteArray(bigEndian: true));
+        var contentVersion = new byte[sizeof(ushort)];
+        BinaryPrimitives.WriteUInt16LittleEndian(contentVersion, document.ContentVersion);
+        stream.Write(contentVersion);
+        WriteCount(stream, document.Assets.Count);
+        WriteCount(stream, document.Deleted.Count);
+        WriteCount(stream, 0);
+        WriteCount(stream, document.Dependencies.Count);
+        WriteName(stream, LibraryOf(document));
+        var key = new byte[PakIndex.CatalogKeySize];
+        foreach (var asset in document.Assets)
+        {
+            asset.AssetKey.WriteBytes(key);
+            stream.Write(key);
+            stream.WriteByte(asset.AssetType);
+            stream.Write(new byte[2 * PakIndex.CatalogDigestSize]);
+        }
+
+        foreach (var deleted in document.Deleted)
+        {
+            deleted.WriteBytes(key);
+            stream.Write(key);
+        }
+
+        foreach (var dependency in document.Dependencies)
+        {
+            WriteName(stream, dependency.Library);
+            WriteCount(stream, dependency.Requirements.Count);
+            foreach (var requirement in dependency.Requirements)
+            {
+                stream.WriteByte(requirement.IsTexture ? LooseCookedIndex.RequirementKindTexture : LooseCookedIndex.RequirementKindAsset);
+                requirement.Key.WriteBytes(key);
+                stream.Write(key);
+                stream.WriteByte(requirement.AssetType);
+            }
+        }
+
+        return stream.ToArray();
     }
 
     private static byte[] EncodeBrowseIndex(

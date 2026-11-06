@@ -59,7 +59,7 @@ public sealed partial class ContentExplorerViewModel
 
     private static AssetPath? LibraryFolder(ProjectContext project, AssetEntry item)
         => item.CookedMetadata is { } source
-            && project.LibraryMounts.FirstOrDefault(mount => mount.Kind == MountKind.Cooked && mount.Location == source.ContainerPath) is { } library
+            && project.LibraryMounts.FirstOrDefault(mount => mount.Container != MountContainer.Pak && mount.Location == source.ContainerPath) is { } library
             && AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location)
                 ? location.Parent
                 : null;

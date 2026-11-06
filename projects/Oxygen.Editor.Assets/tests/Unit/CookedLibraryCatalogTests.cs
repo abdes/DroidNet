@@ -33,30 +33,6 @@ public sealed partial class CookedLibraryCatalogTests
     /// <summary>Gets or sets the running test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>A library's own copy of an overridden asset explains the source used by assignments.</summary>
-    /// <returns>The asynchronous physical-library composition regression.</returns>
-    [TestMethod]
-    public async Task OverriddenLibraryCopyExplainsTheSourceUsedByAssignments()
-    {
-        this.fixture.Publish(this.fixture.FirstRoot, this.fixture.SecondRoot, this.fixture.ProjectRoot);
-        var catalog = this.fixture.CreateCatalog();
-        var records = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var rows = this.fixture.Reduce(records);
-        _ = rows.Where(static row => row.Kind == AssetKind.Material).Should().ContainSingle();
-        var effective = rows.Single(static row => row.Kind == AssetKind.Material);
-        _ = effective.CookedMetadata!.ContainerPath.Should().Be(this.fixture.ProjectOutput);
-        _ = effective.OverriddenCookedSources.Should().HaveCount(2);
-        var library = this.fixture.LibraryCopy(effective, this.fixture.First);
-        _ = library.DisplayPath.Should().Be("/First/payloads/shared.bin");
-        _ = library.CookedMetadata!.ContainerPath.Should().Be(this.fixture.First);
-        _ = library.PrimaryBadge.Should().Be("Overridden");
-        _ = library.PrimaryBadgeTooltip.Should().Contain("project output");
-        _ = library.DescriptorPath.Should().BeNull();
-        _ = library.SourcePath.Should().BeNull();
-        _ = library.CanCook.Should().BeFalse();
-        _ = library.Identity.Should().Be(AssetPath.Parse("/Content/Shared.omat"));
-    }
-
     /// <summary>A new publication order changes the effective source, and a restarted catalog keeps it.</summary>
     /// <returns>The asynchronous ordering and reinitialization regression.</returns>
     [TestMethod]

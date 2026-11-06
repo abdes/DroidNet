@@ -111,7 +111,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         await fixture.OpenAsync().ConfigureAwait(true);
         var library = Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, ".cooked", "main");
         _ = Directory.CreateDirectory(library);
-        await File.WriteAllBytesAsync(Path.Combine(library, "container.index.bin"), [], this.TestContext.CancellationToken).ConfigureAwait(true);
+        await File.WriteAllBytesAsync(Path.Combine(library, "container.index.bin"), Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/Examples/Materials/Red.omat"), this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
             .Returns((DialogSpec spec, CancellationToken _) =>
             {

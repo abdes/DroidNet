@@ -235,15 +235,15 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         var root = Path.Combine(this.directory.FullName, "Library");
         _ = Directory.CreateDirectory(Path.Combine(root, "Materials"));
         File.WriteAllBytes(Path.Combine(root, "Materials/Shared.omat"), [1]);
-        File.WriteAllBytes(Path.Combine(root, "container.index.bin"), [1]);
-        var item = CreateNavigationAsset("/Art/Shared.omat", AssetKind.Material) with
+        File.WriteAllBytes(Path.Combine(root, "container.index.bin"), Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/Library/Materials/Shared.omat"));
+        var item = CreateNavigationAsset("/Library/Materials/Shared.omat", AssetKind.Material) with
         {
             SourcePath = null,
             DescriptorPath = null,
             PrimaryState = AssetState.Cooked,
             CookedMetadata = new(FileSystemPath.From(root), "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64))
             {
-                VirtualPath = AssetPath.Parse("/Art/Shared.omat"),
+                VirtualPath = AssetPath.Parse("/Library/Materials/Shared.omat"),
             },
         };
         var withLibrary = TestProject.InfoOf(this.Session.Context);

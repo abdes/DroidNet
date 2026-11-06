@@ -30,7 +30,7 @@ public static class CookedContentOrdering
     }
 
     /// <summary>Expands the saved order with newly declared libraries directly below project output.</summary>
-    /// <param name="mounts">The declared mounts; their cooked folders and pak files, in declaration order, oldest first.</param>
+    /// <param name="mounts">The declared mounts; their cooked mounts, in declaration order, oldest first.</param>
     /// <param name="savedOrder">Explicit source priority in mount order, lowest first.</param>
     /// <returns>A complete mount order; callers omit folders that do not contain cooked content.</returns>
     /// <exception cref="InvalidDataException">A library has no name, two libraries share a name, or the saved order names a duplicate or undeclared source.</exception>
@@ -38,10 +38,8 @@ public static class CookedContentOrdering
     {
         ArgumentNullException.ThrowIfNull(mounts);
         ArgumentNullException.ThrowIfNull(savedOrder);
-        var libraries = mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak)
-            .Select(static mount => new CookedContentSource(
-                mount.Kind == MountKind.Cooked ? CookedContentSourceKind.Cooked : CookedContentSourceKind.Pak,
-                mount.Name))
+        var libraries = mounts.Where(static mount => mount.Kind == MountKind.Cooked)
+            .Select(static mount => new CookedContentSource(CookedContentSourceKind.Cooked, mount.Name))
             .ToArray();
         if (libraries.Any(static library => string.IsNullOrWhiteSpace(library.Name)))
         {

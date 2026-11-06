@@ -39,7 +39,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6e   | Done                                                           |
 | S6f   | Done                                                           |
 | S7    | Done, committed                                                |
-| S8    | Not started                                                    |
+| S8    | Done, committed                                                |
 | S9    | Not started                                                    |
 | S10   | Not started                                                    |
 | S11   | Not started                                                    |
@@ -565,6 +565,30 @@ Unit and functional tests: `MountTableCasesTests` with library recipes,
 `Oxygen.Editor.Projects/README.md` and testing README,
 `project-layout-and-templates.md` mounts, `project-services.md`.
 
+Beyond this text: the engine's table treated a requirement of `/Engine/...` as
+unprovided, which would mark any library using an engine material `Invalid`; both
+tables now take the engine's content as below every mount, with a shared case.
+`SourceFileOf` and the `CookPaths` mount path stay until S9 and S10 replace a
+record's `source` and the cook path with references; `ToFileReference` is S9's to
+call. `ResolvedMount.Location` is what is read and `BoundTo` what the mount names.
+With one root per library, a library can no longer hold a copy of a project's
+asset: the two tests of that case are deleted, and the code is S14's (see the
+ledger).
+
+Integration tests this slice breaks, for S20: eight bind a cooked mount whose
+index holds another root, or expect a stale library in `Unreadable` rather than
+`Invalid`: `StaleLibraryIsLeftOutWhileTheRestMounts`,
+`DamagedMaskedLibraryFailsBeforeMountAndReleasesReaders`,
+`RecookedLibraryFailsAdmissionNamingTheChangedRoot`,
+`RecookedLibraryFailsCatalogOpeningNamingBothIdentities`,
+`LocalInspectionUsesTheDeclaredRootWithoutInventingSourceOwnership`,
+`MaterialCookUsesDeclaredCookedLibraryTexture`,
+`LibraryGeometryUsesProjectPriorityForTheSameNativeMaterialKey` and
+`ALibraryScriptReportsItsCookedDeclarations`. They move to library fixtures whose
+root is the mount's name. ContentPipeline integration stands at 132 of 566: 65
+record (S9), 36 refused references (S10), 7 cooked names and these 8 (S20), and 16
+that assert on a failed cook without printing why (S20 diagnoses them).
+
 ### S9. Editor records
 
 Deletes: `RecordsFolder`, `PathFor`, `RelativePathFor`, `ProjectRootOf`,
@@ -639,7 +663,9 @@ sources. Docs: `content-pipeline.md` 17, ContentPipeline README.
 ### S14. Libraries in the editor
 
 Requires S18 decisions. Deletes: the typed-name library add, library rename,
-re-rooting under the mount name, the binary unavailable-state adapter. Adds:
+re-rooting under the mount name, the binary unavailable-state adapter, library
+copies of a project's asset (`OverriddenCookedSources`, `ProjectSourceWins`), which
+one root per library leaves unreachable. Adds:
 Add library, `Invalid` presentation, `.cooked` follow in Live Preview and Play,
 generation swap with `replaces`; a loose generation with unmet requirements
 mounts and its mount reports `mount.cooked_dependency_missing`. Functional tests: `ContentMountsViewModelTests`,

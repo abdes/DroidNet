@@ -15,4 +15,10 @@ public enum MountState
 
     /// <summary>The mount is bound to a folder or file that does not exist.</summary>
     Missing = 2,
+
+    /// <summary>
+    /// The mount is bound to a cooked library it cannot use. It stays in the table with its findings, contributes no
+    /// assets, and is never added to a cook's, a run's or a preview's cooked roots.
+    /// </summary>
+    Invalid = 3,
 }

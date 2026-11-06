@@ -198,9 +198,12 @@ Rules:
 
 `Project.oxy` contains:
 
-`SchemaVersion = 2` declares one `Mounts` list. The editor refuses a version 1
+`SchemaVersion = 3` declares one `Mounts` list. The editor refuses an earlier
 manifest with its unsupported-version diagnostic; such projects are migrated by
-editing their data, with no reader of the old form kept:
+editing their data, with no reader of the old form kept. Version 3 removes the
+`Pak` kind: a `Pak` entry becomes `Cooked`, and its saved order entry too.
+
+From version 1 to version 2:
 
 | Version 1 `Project.oxy`                             | Version 2 `Project.oxy` and `.mounts.json`                                                                          |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -212,12 +215,12 @@ editing their data, with no reader of the old form kept:
 
 | Field           | Required | Rule                                                                                   |
 | --------------- | -------- | -------------------------------------------------------------------------------------- |
-| `SchemaVersion` | Yes      | Must equal `2`, the supported project manifest version.                                |
+| `SchemaVersion` | Yes      | Must equal `3`, the supported project manifest version.                                |
 | `Id`            | Yes      | New non-empty GUID generated for each created project.                                 |
 | `Name`          | Yes      | User-facing project name selected at creation.                                         |
 | `Category`      | Yes      | Template/project category.                                                             |
 | `Thumbnail`     | No       | Project/template preview path when available.                                          |
-| `Mounts`        | Yes      | The project's mounts: `Source`, `Cooked` and `Pak`. Must include `Content -> Content`. |
+| `Mounts`        | Yes      | The project's mounts: `Source` and `Cooked`. A created game maps `Content -> Content`. |
 
 `Project.oxy` must not persist:
 
@@ -246,30 +249,41 @@ placeholder, which a `.mounts.json` binds on each machine.
   { "Name": "Showcase", "Kind": "Source", "Path": "../../Media/Showcase" },
   { "Name": "Studio", "Kind": "Source" },
   { "Name": "VendorCooked", "Kind": "Cooked" },
-  { "Name": "Engine2D", "Kind": "Pak", "Path": "../Paks/engine2d.pak" }
+  { "Name": "Engine2D", "Kind": "Cooked", "Path": "../Paks/Engine2D.pak" }
 ]
 ```
 
-| Kind     | Holds                                                                         |
-| -------- | ----------------------------------------------------------------------------- |
-| `Source` | A folder of authored sources: edited, cooked, relocated and watched           |
-| `Cooked` | A cooked folder (`container.index.bin`) mounted read-only as a library        |
-| `Pak`    | A `.pak` file mounted read-only as a library, beneath the project's own roots |
+| Kind     | Holds                                                               |
+| -------- | ------------------------------------------------------------------- |
+| `Source` | A folder of authored sources: edited, cooked, relocated and watched |
+| `Cooked` | A read-only library, beneath the project's own roots                |
+
+A `Cooked` mount's binding decides how it is read:
+
+| Binding target                       | Read as                                                 |
+| ------------------------------------ | ------------------------------------------------------- |
+| A folder with `container.index.bin`  | A loose cooked root                                     |
+| A `.pak` file                        | A pak                                                   |
+| A library project's `.cooked` folder | The generation `head.json` selects for the mount's root |
+
+The engine never reads `.cooked`: where the editor hands the engine a mount, it
+hands over the selected generation's folder.
 
 Rules, one validator for every place that writes mounts
 (`ProjectMounts.ValidateDeclarations` and the resolved table):
 
 - a path is relative to the project root and may leave it (`../Media`); an
   absolute path is refused with `path.absolute_committed`.
-- mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$` (`mount.name_invalid`) and
+- mount names match `^[A-Za-z_][A-Za-z0-9_-]*$` (`mount.name_invalid`) and
   are unique ignoring case (`mount.name_duplicate`).
 - reserved names are refused ignoring case: `project` and `Engine`, the mounts
   every project has, and `Cooked` and `Build`, the Content Explorer's output
   folder nodes (`ProjectAssetFiles.IsReservedMountName`).
 - the project declares a `Source` mount (`mount.source_required`); `Content`
-  maps to `Content` in created projects.
-- source mount folders never overlap (`mount.folder_overlap`), compared on their
-  canonical folders, links resolved.
+  maps to `Content` in created games; a library template's mount takes the
+  project's name.
+- mount folders never overlap, source or cooked (`mount.folder_overlap`), compared
+  on their canonical folders, links resolved.
 - no source mount is in an output folder (`mount.folder_in_output`); see
   [Output Folders](#output-folders).
 - a shared folder is mounted under the same name by every project that uses it,
@@ -314,19 +328,21 @@ added mount, its name, kind, committed path, folder or file on this machine,
 which file bound it, and its state. The merge is the engine's; a case file,
 `MountTableCases.json`, is run by both the engine's and the editor's tests.
 
-| State     | Meaning                                                            |
-| --------- | ------------------------------------------------------------------ |
-| `Bound`   | The committed path or a `.mounts.json` names a folder              |
-| `Unbound` | A placeholder no `.mounts.json` binds (`mount.unbound`)            |
-| `Missing` | The bound folder or pak file is not there (`mount.folder_missing`) |
+| State     | Meaning                                                                     |
+| --------- | --------------------------------------------------------------------------- |
+| `Bound`   | The committed path or a `.mounts.json` names a folder or file it can use    |
+| `Unbound` | A placeholder no `.mounts.json` binds (`mount.unbound`)                     |
+| `Missing` | The bound folder or pak file is not there (`mount.folder_missing`)          |
+| `Invalid` | A cooked library it cannot use (`mount.cooked_*`); it contributes no assets |
 
-- opening never fails for an unbound or missing mount: both are warnings, and
+- opening never fails for an unbound, missing or invalid mount: they are warnings, and
   the mount stays in the Content Explorer with its state and Bind or Override.
 - structural errors (names, overlap, output folders, absolute committed paths)
   fail opening and every mount change.
 - `ProjectAssetFiles` is the only mapper between mount paths and files:
-  `Find`, `FindByFilePath`, `SourceMountPathOf` and `SourceFileOf`; no component
-  combines the project root with a mount's path.
+  `Find` and `FindByFilePath`, which go through a library's facts, `LocateReference`,
+  `ToFileReference` and `SourceFileOf`; no component combines the project root with
+  a mount's path.
 - a change of any `.mounts.json` of the hierarchy during a session resolves the
   table again; a table that differs is applied as a mount change.
 
@@ -525,7 +541,9 @@ Field rules:
 - predefined built-in template `SourceFolder` must not contain `Project.oxy`.
 - `Mounts` is required, follows the mount rules above, and commits no absolute
   path.
-- `StarterScene` is required for built-in V0.1 templates.
+- `StarterScene` is required for built-in V0.1 templates, except a library's. A
+  mount with `"Role": "Library"` replaces `Content`: the template declares no other,
+  and the created project names the mount after itself.
 - every `StarterContent` entry must be under an authoring mount.
 
 Template metadata is not copied into `Project.oxy` as project identity.
@@ -544,7 +562,7 @@ After create-from-template, the project `Project.oxy` contains:
 
 ```json
 {
-  "SchemaVersion": 2,
+  "SchemaVersion": 3,
   "Id": "<new-guid>",
   "Name": "<user-project-name>",
   "Category": "<template-category>",

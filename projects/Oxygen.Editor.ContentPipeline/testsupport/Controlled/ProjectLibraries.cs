@@ -23,14 +23,14 @@ internal static class ProjectLibraries
     /// <param name="libraries">Each library's mount name and absolute pak file.</param>
     /// <returns>The project with the libraries bound.</returns>
     public static ProjectContext WithPakLibraries(this ProjectContext context, params (string Name, string File)[] libraries)
-        => With(context, MountKind.Pak, libraries);
+        => With(context, MountKind.Cooked, libraries);
 
     private static ProjectContext With(ProjectContext context, MountKind kind, (string Name, string Location)[] libraries)
     {
         var names = libraries.Select(static library => library.Name).ToHashSet(StringComparer.Ordinal);
         var declared = context.DeclaredMounts.Where(mount => !names.Contains(mount.Name))
             .Concat(libraries.Select(library => new ProjectMount(library.Name, kind))).ToArray();
-        var bindings = context.LibraryMounts.Where(mount => mount.Location is not null && mount.DeclaredPath is null && !names.Contains(mount.Name)).Select(static mount => (mount.Name, Location: mount.Location!.FullPath))
+        var bindings = context.CookedMounts.Where(mount => mount.BoundTo is not null && mount.DeclaredPath is null && !names.Contains(mount.Name)).Select(static mount => (mount.Name, Location: mount.Location!.FullPath))
             .Concat(libraries)
             .ToDictionary(static binding => binding.Name, static binding => binding.Location.Replace('\\', '/'), StringComparer.Ordinal);
         var mountsFile = context.ProjectRoot.Combine(ProjectMounts.FileName).FullPath;

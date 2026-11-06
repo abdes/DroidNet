@@ -61,9 +61,9 @@ public sealed partial class ContentMountsViewModel : ObservableObject
             });
         }
 
-        foreach (var mount in project.LibraryMounts)
+        foreach (var mount in project.CookedMounts)
         {
-            this.Mounts.Add(this.RowOf(mount, mount.Kind == MountKind.Pak ? ContentMountKind.PakLibrary : ContentMountKind.LocalLibrary, isPrimary: false));
+            this.Mounts.Add(this.RowOf(mount, mount.IsPakFile ? ContentMountKind.PakLibrary : ContentMountKind.LocalLibrary, isPrimary: false));
         }
 
         this.Mounts.Add(new(this, AssetPath.Engine.Mount, engineContent.Path.FullPath, ContentMountKind.EngineContent));

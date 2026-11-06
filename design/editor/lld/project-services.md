@@ -158,13 +158,13 @@ Persisted as `Project.oxy` at project root.
 
 V0.1 required fields:
 
-- `SchemaVersion`: `2`.
+- `SchemaVersion`: `3`.
 - `Id`: non-empty GUID.
 - `Name`: non-empty display name.
 - `Category`: project category identity.
 - `Thumbnail`: optional project-relative path.
 - `Mounts`: the project's mounts (`ProjectMount`): a name, a kind (`Source`,
-  `Cooked`, `Pak`) and a path relative to the project root, or none for a
+  `Cooked`) and a path relative to the project root, or none for a
   placeholder. Never an absolute path; `.mounts.json` files bind mounts per
   machine
   ([project layout](project-layout-and-templates.md#mount-bindings)).
@@ -203,7 +203,7 @@ Rules:
 - `Mounts` must be explicit in project manifests created by the editor, and
   declare a `Source` mount.
 - Missing `SchemaVersion` is invalid for V0.1 projects.
-- Any schema version other than `2` returns `UnsupportedVersion`; a version 1
+- Any schema version other than `3` returns `UnsupportedVersion`; an earlier
   manifest is migrated by editing its data.
 - Missing or empty `Id` is invalid.
 - Missing or empty `Name` is invalid.
@@ -242,7 +242,7 @@ Validation state rules:
 - `NotAProject`: the folder is readable but does not contain `Project.oxy`.
 - `InvalidManifest`: `Project.oxy` is present but malformed, missing required
   fields, or contains invalid field values.
-- `UnsupportedVersion`: `SchemaVersion` is present but is not `1`.
+- `UnsupportedVersion`: `SchemaVersion` is present but is not `3`.
 - `InvalidContentRoots`: the manifest is otherwise valid, but one or more
   authoring or local folder roots are missing, duplicated, malformed, outside
   the project root when they must be relative, or otherwise unusable.
@@ -259,9 +259,9 @@ Required fields:
 - project root path.
 - the resolved mount table (`Mounts`): every declared or locally added mount
   with its kind, committed path, location on this machine, the file that bound
-  it and its state (`Bound`, `Unbound`, `Missing`), and what resolving it found
+  it, its role and its state (`Bound`, `Unbound`, `Missing`, `Invalid`), and what resolving it found
   (`MountFindings`). `SourceMounts` are its bound source mounts, inside or
-  outside the project folder; `LibraryMounts` its cooked folders and paks;
+  outside the project folder; `LibraryMounts` its bound and valid cooked mounts; `CookedMounts` all of them;
   `DeclaredMounts` what `Project.oxy` commits; `AuthoredFolders` the project
   root and the source mount folders outside it.
 - cooked root path policy.
@@ -299,8 +299,8 @@ Path rules:
 - committed paths are resolved against the project root and may leave it.
 - `.mounts.json` paths are absolute; the project's own file binds and
   overrides, files above it only bind placeholders and add mounts.
-- folders are compared canonically, links resolved; a pak mount names a `.pak`
-  file.
+- folders are compared canonically, links resolved; a cooked mount's binding decides
+  how it is read.
 - mount names compare ignoring case.
 - display preserves the path casing stored in the manifest or selected by the
   user.
@@ -455,9 +455,7 @@ Loading and saving `Project.oxy` must preserve:
 - project `Name`.
 - category.
 - thumbnail.
-- authoring mounts.
-- local folder mounts.
-- pak file mounts.
+- source and cooked mounts.
 
 The V0.1 editor owns the manifest it writes. Unknown fields are not part of the
 V0.1 contract. If future schema evolution requires extensions, the project

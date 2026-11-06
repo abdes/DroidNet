@@ -27,4 +27,7 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeSourceFactsFixture.cs" Link="Support/NativeSourceFactsFixture.cs" />
         <Compile Include="../../testsupport/Native/SharedSourceStatusScenario.cs" Link="Support/SharedSourceStatusScenario.cs" />
     </ItemGroup>
+    <ItemGroup>
+        <Using Include="Oxygen.Managed.Assets.Persistence.Publication" />
+    </ItemGroup>
 </Project>

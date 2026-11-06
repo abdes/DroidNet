@@ -5,6 +5,8 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -40,12 +42,40 @@ public sealed class ProjectAssetFilesTests
     }
 
     [TestMethod]
-    public void Find_ForACookedLibrary_ResolvesItUnderItsFolder()
+    public void Find_ForACookedLibrary_GoesThroughItsIndex()
     {
         var location = Project.Find(AssetPath.Parse("/Vendor/Wood.omat"));
 
-        _ = location!.File.Should().Be(FileSystemPath.From(@"E:\Vendor\Wood.omat"));
+        _ = location!.File.Should().Be(FileSystemPath.From(@"E:\Vendor").Combine(CookedLibraryFixture.DescriptorOf("/Vendor/Wood.omat")));
         _ = location.MountKind.Should().Be(ProjectMountKind.Cooked);
+        _ = Project.Find(AssetPath.Parse("/Vendor/Gone.omat")).Should().BeNull("the library's index does not list it");
+    }
+
+    [TestMethod]
+    public void FindByFilePath_ForACookedLibrary_NamesTheDescriptorByItsAsset()
+    {
+        var descriptor = FileSystemPath.From(@"E:\Vendor").Combine(CookedLibraryFixture.DescriptorOf("/Vendor/Wood.omat"));
+
+        _ = Project.FindByFilePath(descriptor)!.Path.Should().Be(AssetPath.Parse("/Vendor/Wood.omat"));
+    }
+
+    [TestMethod]
+    public void Find_ForAPak_LocatesWhatItHoldsInThePak()
+    {
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Demo\Content");
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Paks");
+        fileSystem.File.WriteAllBytes(@"C:\Games\Paks\Props.pak", CookedLibraryFixture.Pak("Props", "/Props/Crate.omat"));
+        var project = ProjectContext.FromProjectInfo(
+            new ProjectInfo("Demo", Category.Games, @"C:\Games\Demo")
+            {
+                Mounts = [new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("Props", MountKind.Cooked, "../Paks/Props.pak")],
+            },
+            fileSystem);
+
+        _ = project.Find(AssetPath.Parse("/Props/Crate.omat"))!.File.Should().Be(FileSystemPath.From(@"C:\Games\Paks\Props.pak"));
+        _ = project.Find(AssetPath.Parse("/Props/Gone.omat")).Should().BeNull();
+        _ = project.LocateReference(AssetPath.Parse("/Content/Materials/Wood.omat"), "/Props/Crate.omat").Should().Be(FileSystemPath.From(@"C:\Games\Paks\Props.pak"));
     }
 
     [TestMethod]
@@ -168,18 +198,21 @@ public sealed class ProjectAssetFilesTests
     }
 
     [TestMethod]
-    public void SourceMountPathOf_NamesAFileByItsMountWhereverTheMountIs()
+    public void ToFileReference_IsRelativeInTheReferrersMountAndAbsoluteFromAnother()
     {
-        _ = Project.SourceMountPathOf(FileSystemPath.From(@"C:\Games\Demo\Content\Models\My Car.FBX")).Should().Be("/Content/Models/My Car.FBX");
-        _ = Project.SourceMountPathOf(FileSystemPath.From(@"D:\Library\Trees\Oak.omat.json")).Should().Be("/Shared/Trees/Oak.omat.json");
+        var referrer = AssetPath.Parse("/Content/Materials/Wood.omat");
+
+        _ = Project.ToFileReference(referrer, FileSystemPath.From(@"C:\Games\Demo\Content\Models\Car.fbx")).Should().Be("../Models/Car.fbx");
+        _ = Project.ToFileReference(referrer, FileSystemPath.From(@"D:\Library\Trees\Oak.omat.json")).Should().Be("/Shared/Trees/Oak.omat.json");
     }
 
     [TestMethod]
-    public void SourceMountPathOf_AFileOutsideEverySourceMount_IsNull()
+    public void ToFileReference_AFileOutsideEverySourceMount_IsNull()
     {
-        _ = Project.SourceMountPathOf(FileSystemPath.From(@"C:\Games\Demo\Imports\Content\Car.glb.import.json")).Should().BeNull("records are project files, not sources");
-        _ = Project.SourceMountPathOf(FileSystemPath.From(@"E:\Vendor\Wood.omat")).Should().BeNull("a cooked library is not a source mount");
-        _ = Project.SourceMountPathOf(FileSystemPath.From(@"C:\Games\Demo\Content")).Should().BeNull("a mount's own folder is not a file in it");
+        var referrer = AssetPath.Parse("/Content/Materials/Wood.omat");
+        _ = Project.ToFileReference(referrer, FileSystemPath.From(@"C:\Games\Demo\Imports\Content\Car.glb.import.json")).Should().BeNull("no source mount holds it");
+        _ = Project.ToFileReference(referrer, FileSystemPath.From(@"E:\Vendor\Wood.omat")).Should().BeNull("a cooked library is not a source mount");
+        _ = Project.ToFileReference(referrer, FileSystemPath.From(@"C:\Games\Demo\Content")).Should().BeNull("a mount's own folder is not a file in it");
     }
 
     [TestMethod]
@@ -187,7 +220,6 @@ public sealed class ProjectAssetFilesTests
     {
         _ = Project.SourceFileOf("/Shared/Trees/Oak.omat.json").Should().Be(FileSystemPath.From(@"D:\Library\Trees\Oak.omat.json"));
         _ = Project.SourceFileOf("/Content").Should().Be(FileSystemPath.From(@"C:\Games\Demo\Content"));
-        _ = Project.LocateSourceMountPath("/Shared/Trees/Oak.omat.json")!.Value.PathBelow.Should().Be("Trees/Oak.omat.json");
     }
 
     [TestMethod]
@@ -213,6 +245,7 @@ public sealed class ProjectAssetFilesTests
             _ = fileSystem.Directory.CreateDirectory(folder);
         }
 
+        fileSystem.File.WriteAllBytes(@"E:\Vendor\" + LooseCookedIndex.FileName, CookedLibraryFixture.LooseIndex("/Vendor/Wood.omat"));
         _ = TestProject.BindMounts(fileSystem, FileSystemPath.From(@"C:\Games\Demo"), ("Shared", @"D:\Library"), ("Vendor", @"E:\Vendor"));
         var info = new ProjectInfo("Demo", Category.Games, @"C:\Games\Demo")
         {

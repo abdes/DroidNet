@@ -22,7 +22,8 @@ reference it.
   loads a project file; a test of a malformed file keeps its own text.
 - `BindMounts(fileSystem, projectRoot, (name, location)...)` writes the
   project's `.mounts.json`, binding mounts to folders or pak files on this
-  machine. It is the one test writer of that file.
+  machine. A cooked mount needs a real library there: `CookedLibraryFixture`, in the
+  `Oxygen.Managed.Assets` test kit, writes one. It is the one test writer of that file.
 - `Open(info, fileSystem)` opens a saved project, as the editor opens it, for a
   test that loads its project through the project manager.
 - `TestSession(context)` is a project session for one project, which services

@@ -11,6 +11,7 @@ using Moq;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -39,7 +40,7 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
 
     [TestMethod]
     [DataRow(1, DisplayName = "Version 1 is refused")]
-    [DataRow(3, DisplayName = "A newer version is refused")]
+    [DataRow(4, DisplayName = "A newer version is refused")]
     public async Task ValidateAsync_ShouldReturnUnsupportedVersion_WhenManifestSchemaIsUnsupported(int schemaVersion)
     {
         var result = await this.ValidateAsync(TestProject.ManifestJson(schemaVersion: schemaVersion), CreateProjectFileSystem()).ConfigureAwait(false);
@@ -155,12 +156,12 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     }
 
     [TestMethod]
-    public async Task ValidateAsync_ShouldAcceptAPakMountBoundToAFile()
+    public async Task ValidateAsync_ShouldAcceptACookedMountBoundToAPak()
     {
-        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Pak, "../Paks/Props.pak") };
+        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Cooked, "../Paks/Props.pak") };
         var fs = CreateProjectFileSystem(mounts);
         _ = fs.Directory.CreateDirectory(@"C:\Paks");
-        await fs.File.WriteAllTextAsync(@"C:\Paks\Props.pak", "pak", this.CancellationToken).ConfigureAwait(false);
+        await fs.File.WriteAllBytesAsync(@"C:\Paks\Props.pak", CookedLibraryFixture.Pak("Props", "/Props/Crate.omat"), this.CancellationToken).ConfigureAwait(false);
 
         var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), fs).ConfigureAwait(false);
 
@@ -169,16 +170,53 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     }
 
     [TestMethod]
-    public async Task ValidateAsync_ShouldRefuseAPakMountBoundToAFolder()
+    public async Task ValidateAsync_ShouldOpenAProjectWhoseCookedMountCannotBeRead()
     {
-        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Pak, "../Paks/Props.pak") };
+        var mounts = new[] { ContentMount, new ProjectMount("Props", MountKind.Cooked, "../Paks/Props.pak") };
         var fs = CreateProjectFileSystem(mounts);
-        _ = fs.Directory.CreateDirectory(@"C:\Paks\Props.pak");
+        _ = fs.Directory.CreateDirectory(@"C:\Paks");
+        await fs.File.WriteAllTextAsync(@"C:\Paks\Props.pak", "not a pak", this.CancellationToken).ConfigureAwait(false);
 
         var result = await this.ValidateAsync(TestProject.ManifestJson(mounts: mounts), fs).ConfigureAwait(false);
 
-        _ = result.State.Should().Be(ProjectValidationState.InvalidContentRoots);
-        _ = result.Message.Should().StartWith(MountCodes.PathKind);
+        _ = result.State.Should().Be(ProjectValidationState.Valid);
+        _ = result.MountFindings.Should().ContainSingle().Which.Code.Should().Be(MountCodes.CookedFormatUnsupported);
+    }
+
+    [TestMethod]
+    public void AManifestOfAnUnknownMountKind_IsRefusedWithItsCode()
+    {
+        var manifest = TestProject.ManifestJson().Replace("\"Kind\": \"Source\"", "\"Kind\": \"Pak\"", StringComparison.Ordinal);
+
+        Action read = () => _ = ProjectInfo.FromJson(manifest);
+
+        _ = read.Should().Throw<System.Text.Json.JsonException>().WithMessage($"*{MountCodes.KindUnknown}*");
+    }
+
+    [TestMethod]
+    public void AManifestOfAnEarlierSchema_IsUnsupported()
+    {
+        var manifest = TestProject.ManifestJson().Replace($"\"SchemaVersion\": {ProjectInfo.CurrentSchemaVersion}", "\"SchemaVersion\": 2", StringComparison.Ordinal);
+
+        Action read = () => _ = ProjectInfo.FromJson(manifest);
+
+        _ = read.Should().Throw<UnsupportedProjectSchemaException>();
+    }
+
+    [TestMethod]
+    public async Task ProjectCreationService_ShouldNameALibraryTemplatesMountAfterTheProject()
+    {
+        var fs = new MockFileSystem();
+        CreateTemplateSkeleton(fs, @"C:\Templates\Blank");
+        _ = fs.Directory.CreateDirectory(@"C:\Projects");
+        await fs.File.WriteAllTextAsync(@"C:\Templates\Blank\Template.json", CreateLibraryTemplateDescriptorJson(), this.CancellationToken).ConfigureAwait(false);
+
+        var result = await this.CreateFromBlankTemplateAsync(fs).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue(result.Message);
+        var info = ProjectInfo.FromJson(await fs.File.ReadAllTextAsync(@"C:\Projects\Created\Project.oxy", this.CancellationToken).ConfigureAwait(false));
+        _ = info.Mounts.Should().ContainSingle().Which.Should().Be(new ProjectMount("Created", MountKind.Source, "Content"));
+        _ = info.DefaultSceneId.Should().BeNull();
     }
 
     [TestMethod]
@@ -560,13 +598,36 @@ public sealed partial class ProjectValidationAndContextTests : TestSuiteWithAsse
     {
         var fs = new MockFileSystem();
         _ = fs.Directory.CreateDirectory(ProjectRootPath);
-        foreach (var mount in (mounts ?? [ContentMount]).Where(static mount => mount is { Path: not null, Kind: not MountKind.Pak }))
+        foreach (var mount in (mounts ?? [ContentMount]).Where(static mount => mount is { Path: not null, Kind: MountKind.Source }))
         {
             _ = fs.Directory.CreateDirectory(fs.Path.GetFullPath(fs.Path.Combine(ProjectRootPath, mount.Path!)));
         }
 
         return fs;
     }
+
+    private static string CreateLibraryTemplateDescriptorJson()
+        => """
+           {
+             "SchemaVersion": 1,
+             "TemplateId": "Libraries/Library",
+             "Name": "Library",
+             "DisplayName": "Library",
+             "Description": "Library template",
+             "Category": "892D3C51-72C0-47DD-AF32-65CA63EEDDFE",
+             "Icon": "Media/Icon.png",
+             "Preview": "Media/Preview.png",
+             "SourceFolder": ".",
+             "Mounts": [
+               {
+                 "Name": "Library",
+                 "Role": "Library",
+                 "Kind": "Source",
+                 "Path": "Content"
+               }
+             ]
+           }
+           """;
 
     private static string CreateTemplateDescriptorJson()
         => """

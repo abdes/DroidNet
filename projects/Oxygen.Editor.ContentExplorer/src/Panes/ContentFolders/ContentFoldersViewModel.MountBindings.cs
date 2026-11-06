@@ -80,7 +80,7 @@ public partial class ContentFoldersViewModel
         string? location;
         try
         {
-            location = await MountLocationPicker.PickAsync(dialogService, mount.Kind == MountKind.Pak, mount.Location?.FullPath, session.Lifetime).ConfigureAwait(true);
+            location = await MountLocationPicker.PickAsync(dialogService, mount.IsPakFile, mount.Location?.FullPath, session.Lifetime).ConfigureAwait(true);
         }
         catch (IOException failure)
         {

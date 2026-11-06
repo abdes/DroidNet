@@ -68,11 +68,16 @@ public sealed record ProjectContext : IFileReferenceLocator
             .Where(folder => !folder.IsSameOrInside(this.ProjectRoot))
             .Prepend(this.ProjectRoot);
 
-    /// <summary>Gets the cooked folder and pak file mounts, bound or not: the project's read-only libraries.</summary>
+    /// <summary>Gets the cooked mounts that are bound and valid: the libraries the project reads.</summary>
     public IEnumerable<ResolvedMount> LibraryMounts
-        => this.Mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak);
+        => this.CookedMounts.Where(static mount => mount.IsBound);
+
+    /// <summary>Gets every cooked mount, whatever its state, as the Content Explorer lists them.</summary>
+    public IEnumerable<ResolvedMount> CookedMounts
+        => this.Mounts.Where(static mount => mount.Kind == MountKind.Cooked);
 
     /// <inheritdoc/>
+    /// <remarks>A library's file is found through its facts; what a pak holds has no file of its own.</remarks>
     public FileSystemPath? LocateReference(AssetPath referrer, string text)
         => AssetPath.TryResolveReference(referrer, text, VirtualPathRuleSet.Cooked, out var path, out _) ? this.Find(path)?.File : null;
 

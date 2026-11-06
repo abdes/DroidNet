@@ -9,7 +9,13 @@ catalogs can list a pak's assets by virtual path without launching a tool.
 its own handle, shared with other readers only; callers that must keep the pak
 unchanged while they use it hold their own handle and call `Read`.
 
-The reader checks the header and footer magic, the format and browse index
+`PakDocument.Library`, `Dependencies` and `Deleted` come from the embedded catalog:
+the pak's one root name, what it requires of other libraries, and the lower assets
+it deletes. `LibraryFacts.Of` turns a pak's or a loose root's metadata into the one
+record the editor's mount table checks, the managed twin of the engine's cooked
+summary.
+
+The reader checks the header and footer magic, the catalog version, the format and browse index
 versions, the UUIDv7 source identity, the directory and browse index bounds,
 duplicate keys and paths, browse entries naming assets the directory lacks, and
 texture entries outside the texture table. `PakDocument.Textures` lists each

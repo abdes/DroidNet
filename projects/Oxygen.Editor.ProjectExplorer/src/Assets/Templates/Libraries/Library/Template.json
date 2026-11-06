@@ -1,0 +1,21 @@
+{
+  "SchemaVersion": 1,
+  "TemplateId": "Libraries/Library",
+  "Name": "PB_Template_Libraries_Library_Name",
+  "DisplayName": "PB_Template_Libraries_Library_Name",
+  "Description": "PB_Template_Libraries_Library_Description",
+  "Icon": "Media/Icon.png",
+  "Preview": "Media/Preview.png",
+  "SourceFolder": ".",
+  "Category": "892D3C51-72C0-47DD-AF32-65CA63EEDDFE",
+  "Mounts": [
+    {
+      "Name": "Library",
+      "Role": "Library",
+      "Kind": "Source",
+      "Path": "Content"
+    }
+  ],
+  "StarterContent": [],
+  "PreviewImages": ["Media/Preview.png"]
+}

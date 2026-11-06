@@ -223,7 +223,7 @@ public partial class ContentFoldersViewModel
             this.LogPakMountFailure(failure, AssetPath.Engine.Mount, engineContent.Path);
         }
 
-        foreach (var mount in project.LibraryMounts.Where(static mount => mount is { Kind: MountKind.Pak, Location: not null }))
+        foreach (var mount in project.LibraryMounts.Where(static mount => mount.Container == MountContainer.Pak))
         {
             var location = mount.Location!;
             try

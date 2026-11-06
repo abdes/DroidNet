@@ -50,7 +50,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var json = /*lang=json,strict*/
             $$"""
               {
-                "SchemaVersion": 2,
+                "SchemaVersion": 3,
                 "Id": "{{projectInfo.Id}}",
                 "Name": "name",
                 "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
@@ -248,7 +248,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string json = /*lang=json,strict*/
             """
             {
-              "SchemaVersion": 2,
+              "SchemaVersion": 3,
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
             }
@@ -315,7 +315,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         const string json = /*lang=json,strict*/
             """
             {
-              "SchemaVersion": 2,
+              "SchemaVersion": 3,
               "Id": "",
               "Name": "name",
               "Category": "C44E7604-B265-40D8-9442-11A01ECE334C"
@@ -345,7 +345,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
 
         var json = ProjectInfo.ToJson(pi);
 
-        _ = json.Should().Contain("\"SchemaVersion\": 2");
+        _ = json.Should().Contain("\"SchemaVersion\": 3");
         _ = json.Should().NotContain(nameof(ProjectInfo.Location));
         _ = json.Should().NotContain(nameof(ProjectInfo.LastUsedOn));
     }

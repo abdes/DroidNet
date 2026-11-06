@@ -109,6 +109,11 @@ public sealed class ProjectCreationService(
                 return ProjectCreationResult.Failure(projectRoot, prepared.Refusal ?? "Project template could not be read.");
             }
 
+            if (templateDescriptor.IsLibrary && ProjectAssetFiles.ValidateDeclaredMountName(request.ProjectName) is { } refusal)
+            {
+                return ProjectCreationResult.Failure(projectRoot, $"A library project's name is its mount's name. {refusal}");
+            }
+
             var projectFolder = await storage.GetFolderFromPathAsync(projectRoot, cancellationToken)
                 .ConfigureAwait(false);
             rootCreated = !await projectFolder.ExistsAsync().ConfigureAwait(false);
@@ -232,7 +237,7 @@ public sealed class ProjectCreationService(
 
         foreach (var mount in templateDescriptor.Mounts)
         {
-            projectInfo.Mounts.Add(mount);
+            projectInfo.Mounts.Add(templateDescriptor.IsLibrary ? mount with { Name = request.ProjectName } : mount);
         }
 
         if (projectInfo.Mounts.Count == 0)
@@ -302,12 +307,17 @@ public sealed class ProjectCreationService(
             throw new InvalidDataException("Project template Mounts is required.");
         }
 
-        if (!descriptor.Mounts.Any(static mount =>
+        if (descriptor.IsLibrary && descriptor.Mounts.Count != 1)
+        {
+            throw new InvalidDataException("A library project template declares its library mount and no other.");
+        }
+
+        if (!descriptor.IsLibrary && !descriptor.Mounts.Any(static mount =>
                 string.Equals(mount.Name, Constants.ContentFolderName, StringComparison.Ordinal)
                 && mount.Kind == MountKind.Source
                 && string.Equals(mount.Path, Constants.ContentFolderName, StringComparison.OrdinalIgnoreCase)))
         {
-            throw new InvalidDataException("Project template Mounts must include the source mount Content -> Content.");
+            throw new InvalidDataException("Project template Mounts must include the source mount Content -> Content, or a mount with the role Library.");
         }
 
         if (ProjectMounts.ValidateDeclarations([.. descriptor.Mounts]) is { } refusal)
@@ -320,7 +330,8 @@ public sealed class ProjectCreationService(
             ValidateMount(mount);
         }
 
-        if (descriptor.StarterScene is null)
+        // A library has no scene of its own to start from.
+        if (descriptor.StarterScene is null && !descriptor.IsLibrary)
         {
             throw new InvalidDataException("Project template StarterScene is required.");
         }
@@ -547,15 +558,16 @@ public sealed class ProjectCreationService(
 
     private async Task RequireStarterFilesAsync(IFolder sourceFolder, TemplateDescriptor descriptor, CancellationToken cancellationToken)
     {
-        var starterScene = descriptor.StarterScene
-            ?? throw new InvalidDataException("Project template StarterScene is required.");
-        var starterSceneRelativePath = ResolveTemplateAssetRelativePath(
-            descriptor,
-            starterScene.AssetUri,
-            starterScene.RelativePath,
-            "StarterScene");
-        await this.RequireSourceFileExistsAsync(sourceFolder, starterSceneRelativePath, "StarterScene", cancellationToken)
-            .ConfigureAwait(false);
+        if (descriptor.StarterScene is { } starterScene)
+        {
+            var starterSceneRelativePath = ResolveTemplateAssetRelativePath(
+                descriptor,
+                starterScene.AssetUri,
+                starterScene.RelativePath,
+                "StarterScene");
+            await this.RequireSourceFileExistsAsync(sourceFolder, starterSceneRelativePath, "StarterScene", cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         foreach (var starterContent in descriptor.StarterContent)
         {
@@ -663,8 +675,11 @@ public sealed class ProjectCreationService(
         IReadOnlyList<ProjectMount> Mounts,
         TemplateStarterScene? StarterScene,
         IReadOnlyList<TemplateStarterContent> StarterContent,
-        IReadOnlyList<string> PreviewImages)
+        IReadOnlyList<string> PreviewImages,
+        bool IsLibrary)
     {
+        private const string LibraryRole = "Library";
+
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             AllowTrailingCommas = true,
@@ -677,6 +692,7 @@ public sealed class ProjectCreationService(
             var descriptor = JsonSerializer.Deserialize<TemplateDescriptorData>(json, JsonOptions)
                 ?? new TemplateDescriptorData();
 
+            var mounts = descriptor.Mounts ?? [];
             var thumbnail = descriptor.Thumbnail
                 ?? descriptor.Preview
                 ?? descriptor.PreviewImages?.FirstOrDefault()
@@ -692,11 +708,21 @@ public sealed class ProjectCreationService(
                 descriptor.Preview,
                 thumbnail,
                 descriptor.SourceFolder,
-                descriptor.Mounts ?? [],
+                [.. mounts.Select(MountOf)],
                 descriptor.StarterScene,
                 descriptor.StarterContent ?? [],
-                descriptor.PreviewImages ?? []);
+                descriptor.PreviewImages ?? [],
+                mounts.Any(IsLibraryMount));
         }
+
+        private static bool IsLibraryMount(TemplateMount mount)
+            => mount.Role is null ? false
+                : string.Equals(mount.Role, LibraryRole, StringComparison.Ordinal) ? true
+                : throw new InvalidDataException($"Project template mount role '{mount.Role}' is unknown.");
+
+        // A library mount takes the project's name when the project is created; until then it has its role's.
+        private static ProjectMount MountOf(TemplateMount mount)
+            => new(IsLibraryMount(mount) ? LibraryRole : mount.Name ?? string.Empty, mount.Kind, mount.Path, mount.IsExpanded);
     }
 
     private sealed class TemplateDescriptorData
@@ -721,12 +747,14 @@ public sealed class ProjectCreationService(
 
         public string? SourceFolder { get; set; }
 
-        public List<ProjectMount>? Mounts { get; set; }
+        public List<TemplateMount>? Mounts { get; set; }
 
         public TemplateStarterScene? StarterScene { get; set; }
 
         public List<TemplateStarterContent>? StarterContent { get; set; }
     }
+
+    private sealed record TemplateMount(string? Name, MountKind Kind = MountKind.Source, string? Path = null, bool IsExpanded = true, string? Role = null);
 
     private sealed record TemplateStarterScene(AssetPath AssetUri, string? RelativePath, bool OpenOnCreate);
 

@@ -278,6 +278,9 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         }
 
         var fileSystem = new RealFileSystem();
+        var libraryIndex = libraryRoot.Combine("container.index.bin").FullPath;
+        _ = Directory.CreateDirectory(libraryRoot.FullPath);
+        await File.WriteAllBytesAsync(libraryIndex, Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/Library/Materials/Red.omat"), this.TestContext.CancellationToken).ConfigureAwait(true);
         var project = TestProject.Create(fileSystem, root.Location, [new ProjectMount("Content", MountKind.Source, "Content"), new("Library", MountKind.Cooked, "Library")]).Context with
         {
             Name = "Navigation",
@@ -293,6 +296,8 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
                 saved = candidate;
                 if (succeeds)
                 {
+                    // A library's root is its mount's name, so the renamed mount needs a library of that name.
+                    File.WriteAllBytes(libraryIndex, Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/LibraryRenamed/Materials/Red.omat"));
                     session.ChangeContext(ProjectContext.FromProjectInfo(candidate, fileSystem));
                 }
             })

@@ -232,7 +232,7 @@ public sealed partial class ContentPipelineService
         }
 
         var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, identity.VirtualPath);
-        var source = project.SourceMountPathOf(primary)
+        var source = CookPaths.MountPathOf(project, primary)
             ?? throw new InvalidDataException("The model's source is outside the project's source mounts.");
         var record = ModelImportSettings.Create(path, source, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);

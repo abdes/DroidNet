@@ -1,7 +1,7 @@
 {
   "Id": "018f8f8f-1234-7abc-8def-0123456789ab",
   "Name": "Oxygen Examples",
-  "SchemaVersion": 2,
+  "SchemaVersion": 3,
   "Mounts": [
     {
       "Name": "Showcase",

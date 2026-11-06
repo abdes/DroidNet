@@ -9,10 +9,10 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Derives owned publication and cook operation paths from identities, never serialized filesystem paths.</summary>
 internal static class CookPublicationPaths
 {
-    private const string PublicationsFolder = "publications";
-    private const string GenerationsFolder = "generations";
+    private const string PublicationsFolder = CookPublicationFormat.PublicationsFolder;
+    private const string GenerationsFolder = CookPublicationFormat.GenerationsFolder;
 
-    internal static string Head(string projectRoot) => OwnedPath(projectRoot, ProjectOutputFolders.Cooked, "head.json");
+    internal static string Head(string projectRoot) => OwnedPath(projectRoot, ProjectOutputFolders.Cooked, CookPublicationFormat.HeadFileName);
 
     internal static string Document(string projectRoot, Guid publicationId)
         => OwnedPath(projectRoot, ProjectOutputFolders.Cooked, PublicationsFolder, Identity(publicationId) + ".json");

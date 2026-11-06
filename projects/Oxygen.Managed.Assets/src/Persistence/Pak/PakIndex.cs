@@ -20,6 +20,21 @@ public static class PakIndex
     public const int BrowseTextureEntrySize = 12;
     public const ushort Version = 12;
     public const uint BrowseIndexVersion = 2;
+    public const uint CatalogVersion = 5;
+    public const int CatalogKeySize = 16;
+
+    // Version, source key and content version precede the record counts.
+    public const int CatalogCountsOffset = sizeof(uint) + CatalogKeySize + sizeof(ushort);
+
+    // Key, type and the descriptor's and transitive resources' digests.
+    public const int CatalogEntrySize = CatalogKeySize + 1 + (2 * CatalogDigestSize);
+
+    // Source key, content version and catalog digest.
+    public const int CatalogBaseSize = CatalogKeySize + sizeof(ushort) + CatalogDigestSize;
+
+    // Kind, key and type.
+    public const int CatalogRequirementSize = 1 + CatalogKeySize + 1;
+    public const int CatalogDigestSize = 32;
 
     private const int FooterTextureTableOffset = 104;
     private const int FooterTextureTableCount = 112;
@@ -28,7 +43,6 @@ public static class PakIndex
     private const int FooterBrowseSize = 192;
     private const int FooterCatalogOffset = 200;
     private const int FooterCatalogSize = 208;
-    private const int CatalogDigestSize = 32;
     private const int FooterMagicOffset = 248;
 
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXPAK\0\0\0");
@@ -82,9 +96,13 @@ public static class PakIndex
         var directory = ReadDirectory(stream, footer, length - FooterSize);
         var textureCount = BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(FooterTextureTableCount, 4));
         var (assets, textures) = ReadBrowseIndex(stream, footer, length - FooterSize, directory, textureCount);
-        return new PakDocument(contentVersion, sourceIdentity, ReadCatalogDigest(stream, footer, length - FooterSize), assets)
+        var catalog = ReadCatalog(stream, footer, length - FooterSize);
+        return new PakDocument(contentVersion, sourceIdentity, catalog.Digest, assets)
         {
             Textures = ReadTextures(stream, footer, length - FooterSize, textures),
+            Library = catalog.Library,
+            Dependencies = catalog.Dependencies,
+            Deleted = catalog.Deleted,
         };
     }
 
@@ -241,8 +259,8 @@ public static class PakIndex
         return (assets, textures);
     }
 
-    // The catalog ends with the SHA-256 digest of its canonical contents.
-    private static string ReadCatalogDigest(Stream stream, byte[] footer, ulong footerOffset)
+    // The catalog holds what the pak provides and requires, and ends with the SHA-256 digest of its canonical contents.
+    private static (string Digest, string Library, List<LibraryDependency> Dependencies, List<AssetKey> Deleted) ReadCatalog(Stream stream, byte[] footer, ulong footerOffset)
     {
         var offset = BinaryPrimitives.ReadUInt64LittleEndian(footer.AsSpan(FooterCatalogOffset, 8));
         var size = BinaryPrimitives.ReadUInt64LittleEndian(footer.AsSpan(FooterCatalogSize, 8));
@@ -251,7 +269,75 @@ public static class PakIndex
             throw new InvalidDataException("The pak catalog is missing or out of bounds.");
         }
 
-        return Convert.ToHexString(ReadBlock(stream, offset + size - CatalogDigestSize, CatalogDigestSize));
+        var bytes = ReadBlock(stream, offset, checked((int)size));
+        var contents = bytes.AsSpan(0, bytes.Length - CatalogDigestSize);
+        var digest = Convert.ToHexString(bytes.AsSpan(bytes.Length - CatalogDigestSize));
+        try
+        {
+            var (library, dependencies, deleted) = ReadCatalogContents(contents);
+            return (digest, library, dependencies, deleted);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            throw new InvalidDataException("The pak catalog is truncated.", exception);
+        }
+    }
+
+    private static (string Library, List<LibraryDependency> Dependencies, List<AssetKey> Deleted) ReadCatalogContents(ReadOnlySpan<byte> contents)
+    {
+        var version = BinaryPrimitives.ReadUInt32LittleEndian(contents);
+        if (version != CatalogVersion)
+        {
+            throw new InvalidDataException($"The pak catalog uses version {version}; this editor reads version {CatalogVersion}. Repack the content.");
+        }
+
+        var position = CatalogCountsOffset;
+        var entryCount = ReadCount(contents, ref position);
+        var deletedCount = ReadCount(contents, ref position);
+        var baseCount = ReadCount(contents, ref position);
+        var dependencyCount = ReadCount(contents, ref position);
+        var library = ReadName(contents, ref position);
+        position = checked(position + (entryCount * CatalogEntrySize));
+        var deleted = new List<AssetKey>(deletedCount);
+        for (var index = 0; index < deletedCount; index++)
+        {
+            deleted.Add(AssetKey.FromBytes(contents.Slice(position, CatalogKeySize)));
+            position += CatalogKeySize;
+        }
+
+        position = checked(position + (baseCount * CatalogBaseSize));
+        var dependencies = new List<LibraryDependency>(dependencyCount);
+        for (var index = 0; index < dependencyCount; index++)
+        {
+            var required = ReadName(contents, ref position);
+            var requirementCount = ReadCount(contents, ref position);
+            var requirements = new List<LibraryRequirement>(requirementCount);
+            for (var requirement = 0; requirement < requirementCount; requirement++)
+            {
+                var record = contents.Slice(position, CatalogRequirementSize);
+                requirements.Add(new(record[0] == LooseCooked.LooseCookedIndex.RequirementKindTexture, AssetKey.FromBytes(record.Slice(1, CatalogKeySize)), record[1 + CatalogKeySize]));
+                position += CatalogRequirementSize;
+            }
+
+            dependencies.Add(new(required, requirements));
+        }
+
+        return (library, dependencies, deleted);
+    }
+
+    private static int ReadCount(ReadOnlySpan<byte> contents, ref int position)
+    {
+        var count = BinaryPrimitives.ReadUInt32LittleEndian(contents[position..]);
+        position += sizeof(uint);
+        return count <= int.MaxValue ? (int)count : throw new InvalidDataException("A pak catalog count is out of range.");
+    }
+
+    private static string ReadName(ReadOnlySpan<byte> contents, ref int position)
+    {
+        var length = contents[position];
+        var name = Encoding.UTF8.GetString(contents.Slice(position + 1, length));
+        position += 1 + length;
+        return name;
     }
 
     private static string ReadPath(ReadOnlySpan<byte> strings, ReadOnlySpan<byte> slice, HashSet<string> paths)

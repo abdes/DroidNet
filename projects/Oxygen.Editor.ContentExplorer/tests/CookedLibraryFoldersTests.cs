@@ -18,18 +18,6 @@ namespace Oxygen.Editor.ContentExplorer.Tests;
 [TestClass]
 public sealed partial class CookedLibraryFoldersTests
 {
-    /// <summary>A library folder shows the library's own copy of an asset that project output overrides.</summary>
-    [TestMethod]
-    public void LibraryFolderShowsItsOwnCopyOfAnOverriddenAsset()
-    {
-        using var fixture = new Fixture();
-        var rows = CookedLibraryFolders.ForFolders([fixture.Shared], fixture.Project, [AssetPath.Parse("/First")]);
-        var library = rows.Should().ContainSingle().Subject;
-        _ = library.DisplayPath.Should().Be("/First/payloads/shared.bin");
-        _ = library.CookedMetadata!.ContainerPath.Should().Be(fixture.First);
-        _ = library.IsCookedSourceOverridden.Should().BeTrue();
-    }
-
     /// <summary>A folder outside every library shows the resolved rows unchanged.</summary>
     [TestMethod]
     public void OrdinaryFolderKeepsTheResolvedRows()

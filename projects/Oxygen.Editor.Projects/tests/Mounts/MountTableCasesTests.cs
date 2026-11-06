@@ -2,10 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Persistence.Pak;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -21,6 +29,8 @@ namespace Oxygen.Editor.Projects.Tests.Mounts;
 public sealed class MountTableCasesTests
 {
     private const string Temp = @"C:\MountCases";
+    private const int ScriptDescriptorSize = 78;
+    private const int ScriptExternalSourceOffset = 58;
 
     private static readonly Lazy<JsonArray> Cases = new(static () =>
         JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "MountTableCases.json")))!["cases"]!.AsArray());
@@ -73,8 +83,88 @@ public sealed class MountTableCasesTests
             fileSystem.File.WriteAllText(Path.Combine(Temp, folder, ProjectMounts.FileName), Expand(document!.ToJsonString()));
         }
 
+        foreach (var recipe in testCase["cooked_sources"]?.AsArray().Select(static node => node!.AsObject()) ?? [])
+        {
+            AddCookedSource(fileSystem, recipe);
+        }
+
         return fileSystem;
     }
+
+    // Builds the cooked source a recipe names with the fixture writers.
+    private static void AddCookedSource(MockFileSystem fileSystem, JsonObject recipe)
+    {
+        var path = Path.Combine(Temp, recipe["path"]!.GetValue<string>());
+        var unsupported = string.Equals(recipe["format"]?.GetValue<string>(), "unsupported", StringComparison.Ordinal);
+        var roots = Strings(recipe["roots"]).ToArray();
+        var assets = recipe["assets"]?.AsArray().Select(static asset => (Path: asset!["path"]!.GetValue<string>(), Type: Enum.Parse<AssetType>(asset["type"]!.GetValue<string>()))).ToArray() ?? [];
+        if (string.Equals(recipe["kind"]!.GetValue<string>(), "pak", StringComparison.Ordinal))
+        {
+            _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var stream = new MemoryStream();
+            PakFixture.Write(stream, PakOf(roots[0], assets, recipe["requirements"]?.AsArray()));
+            var bytes = stream.ToArray();
+            if (unsupported)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), PakIndex.Version + 1);
+            }
+
+            fileSystem.File.WriteAllBytes(path, bytes);
+            return;
+        }
+
+        _ = fileSystem.Directory.CreateDirectory(path);
+        var entries = new List<AssetEntry>();
+        foreach (var root in roots)
+        {
+            entries.Add(EntryOf($"/{root}/Materials/Red.omat", AssetType.Material, fileSystem, path, new byte[4]));
+        }
+
+        if (recipe["external_script"]?.GetValue<bool>() == true)
+        {
+            var descriptor = new byte[ScriptDescriptorSize];
+            BinaryPrimitives.WriteUInt32LittleEndian(descriptor.AsSpan(ScriptExternalSourceOffset), 1);
+            entries.Add(EntryOf($"/{roots[0]}/Scripts/Spin.oscript", AssetType.Script, fileSystem, path, descriptor));
+        }
+
+        entries.AddRange(assets.Select(asset => EntryOf(asset.Path, asset.Type, fileSystem, path, new byte[4])));
+        using (var index = new MemoryStream())
+        {
+            LooseCookedIndexFixture.Write(index, new Document(1, default, Guid.CreateVersion7(), entries, []));
+            var bytes = index.ToArray();
+            if (unsupported)
+            {
+                BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8), LooseCookedIndex.Version + 1);
+            }
+
+            fileSystem.File.WriteAllBytes(Path.Combine(path, LooseCookedIndex.FileName), bytes);
+        }
+    }
+
+    private static AssetEntry EntryOf(string virtualPath, AssetType type, MockFileSystem fileSystem, string root, byte[] descriptor)
+    {
+        var relative = virtualPath[1..] + ".bin";
+        var file = Path.Combine(root, relative);
+        _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        fileSystem.File.WriteAllBytes(file, descriptor);
+        return new AssetEntry(AssetKey.FromVirtualPath(virtualPath), relative, virtualPath, (byte)type, (ulong)descriptor.Length, SHA256.HashData(Encoding.UTF8.GetBytes(virtualPath)));
+    }
+
+    private static PakDocument PakOf(string root, (string Path, AssetType Type)[] assets, JsonArray? requirements)
+        => new(
+            1,
+            Guid.CreateVersion7(),
+            new string('0', 64),
+            [.. assets.Select(static asset => new PakAssetEntry(AssetKey.FromVirtualPath(asset.Path), (byte)asset.Type, asset.Path, 0, 0))])
+        {
+            Library = root,
+            Dependencies = [.. (requirements ?? []).Select(static node => node!.AsObject())
+                .GroupBy(static requirement => requirement["mount"]!.GetValue<string>(), StringComparer.Ordinal)
+                .Select(static group => new LibraryDependency(group.Key, [.. group.Select(static requirement => new LibraryRequirement(
+                    false,
+                    AssetKey.FromVirtualPath(requirement["path"]!.GetValue<string>()),
+                    (byte)Enum.Parse<AssetType>(requirement["type"]!.GetValue<string>())))]))],
+        };
 
     private static List<ProjectMount> Declarations(JsonObject testCase)
         => [.. testCase["declarations"]!.AsArray().Select(static node => new ProjectMount(
@@ -89,10 +179,14 @@ public sealed class MountTableCasesTests
         _ = mount.Should().NotBeNull($"{because}: {name}");
         _ = mount!.Kind.ToString().Should().Be(expected["kind"]!.GetValue<string>(), because);
         _ = mount.Scope.ToString().Should().BeEquivalentTo(expected["scope"]!.GetValue<string>(), because);
-        _ = mount.State.ToString().Should().Be(expected["state"]!.GetValue<string>(), because);
+        _ = mount.State.ToString().Should().Be(expected["state"]!.GetValue<string>(), $"{because}: {string.Join(' ', mount.Findings.Select(static finding => finding.Message))}");
         _ = OriginText(mount.Origin).Should().Be(expected["origin"]!.GetValue<string>(), because);
         _ = mount.OriginFile.Should().Be(At(expected["origin_file"]), because);
         _ = mount.Location.Should().Be(At(expected["folder"]), because);
+        if (expected["role"] is { } role)
+        {
+            _ = mount.Role.ToString().Should().Be(role.GetValue<string>(), because);
+        }
     }
 
     private static string OriginText(MountOrigin origin) => origin switch

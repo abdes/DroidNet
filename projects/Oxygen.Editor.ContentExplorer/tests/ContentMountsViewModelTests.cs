@@ -182,7 +182,7 @@ public sealed class ContentMountsViewModelTests
         var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
         ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-        _ = candidate.Mounts.Single(static mount => mount.Kind == MountKind.Pak).Should().Be(new ProjectMount("Props", MountKind.Pak, "../../Paks/Props.pak"));
+        _ = candidate.Mounts.Single(static mount => mount.Name == "Props").Should().Be(new ProjectMount("Props", MountKind.Cooked, "../../Paks/Props.pak"));
         _ = candidate.Mounts.Select(static mount => mount.Name).Should().NotContain(AssetPath.Engine.Mount);
     }
 
@@ -190,9 +190,9 @@ public sealed class ContentMountsViewModelTests
     [TestMethod]
     public void RenamedPakKeepsItsPriority()
     {
-        var project = CreateProject(new ProjectMount("Props", MountKind.Pak, "../../Paks/Props.pak")) with
+        var project = CreateProject(new ProjectMount("Props", MountKind.Cooked, "../../Paks/Props.pak")) with
         {
-            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Pak, "Props")],
+            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.Cooked, "Props")],
         };
         var model = CreateModel(project);
         var pak = model.Mounts.Single(static row => row.Kind == ContentMountKind.PakLibrary);
@@ -203,7 +203,7 @@ public sealed class ContentMountsViewModelTests
         var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
         ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
-        _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.Pak, "Rocks"));
+        _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.Cooked, "Rocks"));
     }
 
     /// <summary>Each row shows where its mount is on this machine, and offers what fits: Bind, Override, Remove binding.</summary>

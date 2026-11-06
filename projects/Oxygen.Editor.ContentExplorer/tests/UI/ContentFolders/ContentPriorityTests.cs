@@ -34,8 +34,8 @@ internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceT
         {
             var first = FileSystemPath.From(Directory.CreateDirectory(Path.Combine(directory.FullName, "First")).FullName);
             var second = FileSystemPath.From(Directory.CreateDirectory(Path.Combine(directory.FullName, "Second")).FullName);
-            await File.WriteAllBytesAsync(first.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
-            await File.WriteAllBytesAsync(second.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
+            await File.WriteAllBytesAsync(first.Combine("container.index.bin").FullPath, Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/First/Materials/Red.omat"), this.TestContext.CancellationToken).ConfigureAwait(true);
+            await File.WriteAllBytesAsync(second.Combine("container.index.bin").FullPath, Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/Second/Materials/Red.omat"), this.TestContext.CancellationToken).ConfigureAwait(true);
             var project = TestProject.Create(
                 new RealFileSystem(),
                 directory.FullName,

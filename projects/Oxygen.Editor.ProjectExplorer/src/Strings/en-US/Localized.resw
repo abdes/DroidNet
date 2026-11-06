@@ -123,6 +123,12 @@
   <data name="PB_Locations_RecentProjects" xml:space="preserve">
     <value>Recent Projects</value>
   </data>
+  <data name="PB_Template_Libraries_Library_Description" xml:space="preserve">
+    <value>Content other projects mount: its assets live under one mount, named after the project.</value>
+  </data>
+  <data name="PB_Template_Libraries_Library_Name" xml:space="preserve">
+    <value>Library</value>
+  </data>
   <data name="PB_Template_Games_Blank_Description" xml:space="preserve">
     <value>A starting empty project with no code.</value>
   </data>

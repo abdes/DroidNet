@@ -23,18 +23,12 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
             switch (source.Kind)
             {
                 case CookedContentSourceKind.Cooked:
-                    var folder = project.LibraryMounts.Single(mount => mount.Kind == MountKind.Cooked && string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-
-                    // A folder without an index, or without a location, holds no cooked content to order yet.
-                    if (folder.Location is { } root && project.FileSystem.File.Exists(Path.Combine(root.FullPath, LooseCookedIndex.FileName)))
+                    // A mount that is unbound, missing or invalid has no content to order.
+                    if (project.LibraryMounts.FirstOrDefault(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)) is { } library)
                     {
-                        this.Sources.Add(new(source, folder.Name, root.FullPath));
+                        this.Sources.Add(new(source, library.Name, library.Location!.FullPath));
                     }
 
-                    break;
-                case CookedContentSourceKind.Pak:
-                    var pak = project.LibraryMounts.Single(mount => mount.Kind == MountKind.Pak && string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-                    this.Sources.Add(new(source, pak.Name, pak.Location?.FullPath ?? string.Empty));
                     break;
                 case CookedContentSourceKind.ProjectOutput:
                     this.Sources.Add(new(source, "Project output", ProjectOutputFolders.CookedPath(project.ProjectRoot.FullPath)));

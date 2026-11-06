@@ -66,7 +66,7 @@ public partial class ContentFoldersViewModel
                     // Always mounted from the SDK; the project does not declare it.
                     continue;
                 case ContentMountKind.PakLibrary:
-                    AddDeclaredMount(candidate, row, MountKind.Pak);
+                    AddDeclaredMount(candidate, row, MountKind.Cooked);
                     continue;
                 case ContentMountKind.ProjectSource:
                     AddDeclaredMount(candidate, row, MountKind.Source);
@@ -391,8 +391,8 @@ public partial class ContentFoldersViewModel
     private sealed record DeclaredLibrary(CookedContentSourceKind Kind, string Name, string? Container)
     {
         public static List<DeclaredLibrary> Of(IEnumerable<ProjectMount> mounts)
-            => [.. mounts.Where(static mount => mount.Kind is MountKind.Cooked or MountKind.Pak)
-                .Select(static mount => new DeclaredLibrary(mount.Kind == MountKind.Pak ? CookedContentSourceKind.Pak : CookedContentSourceKind.Cooked, mount.Name, mount.Path))];
+            => [.. mounts.Where(static mount => mount.Kind == MountKind.Cooked)
+                .Select(static mount => new DeclaredLibrary(CookedContentSourceKind.Cooked, mount.Name, mount.Path))];
 
         public bool Is(CookedContentSource source) => this.Kind == source.Kind && string.Equals(this.Name, source.Name, StringComparison.Ordinal);
     }

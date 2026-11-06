@@ -47,8 +47,26 @@ internal static class CookPaths
         ArgumentNullException.ThrowIfNull(file);
 
         // A source mount inside the project tree names its files before the project does.
-        return project.SourceMountPathOf(file)
+        return MountPathOf(project, file)
             ?? (file != project.ProjectRoot && file.IsSameOrInside(project.ProjectRoot) ? file.GetPathBelow(project.ProjectRoot) : null);
+    }
+
+    /// <summary>
+    /// Gets the mount path of a file in a bound source mount: the mount's name and the file's path below its folder,
+    /// such as <c>/Content/Ship/Ship.glb</c>. Unlike a virtual path, the file's name may be any name a file may have.
+    /// </summary>
+    /// <param name="project">The project and its mount table.</param>
+    /// <param name="file">The file.</param>
+    /// <returns>The mount path, or <see langword="null"/> when no bound source mount holds the file.</returns>
+    public static string? MountPathOf(ProjectContext project, FileSystemPath file)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(file);
+
+        // Source mounts never overlap, so at most one holds the file.
+        return project.SourceMounts.FirstOrDefault(mount => file != mount.Location && file.IsSameOrInside(mount.Location!)) is { } holder
+            ? "/" + holder.Name + "/" + file.GetPathBelow(holder.Location!)
+            : null;
     }
 
     /// <summary>Gets the file a cook path names.</summary>
@@ -87,8 +105,10 @@ internal static class CookPaths
             return ExactSourcePath.Exists(project.FileSystem, project.ProjectRoot.FullPath, cookPath);
         }
 
-        return project.LocateSourceMountPath(cookPath) is var (mount, below)
-            && ExactSourcePath.Exists(project.FileSystem, mount.Location!.FullPath, below);
+        var file = project.SourceFileOf(cookPath);
+        return file is not null
+            && project.SourceMounts.FirstOrDefault(mount => file.IsSameOrInside(mount.Location!)) is { } holder
+            && ExactSourcePath.Exists(project.FileSystem, holder.Location!.FullPath, file == holder.Location ? string.Empty : file.GetPathBelow(holder.Location!));
     }
 
     /// <summary>Gets the path below a private input root where a cook path's captured file is kept.</summary>

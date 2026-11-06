@@ -25,7 +25,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <summary>
     ///     The current supported project manifest schema version.
     /// </summary>
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

@@ -389,7 +389,7 @@ public partial class ContentFoldersViewModel(
             return;
         }
 
-        foreach (var mount in projectInfo.Mounts.Where(static mount => mount.Kind != MountKind.Pak).ToList())
+        foreach (var mount in projectInfo.Mounts.Where(mount => activeProject.Mounts.FirstOrDefault(resolved => string.Equals(resolved.Name, mount.Name, StringComparison.Ordinal))?.IsPakFile != true).ToList())
         {
             _ = projectInfo.Mounts.Remove(mount);
         }
@@ -413,7 +413,7 @@ public partial class ContentFoldersViewModel(
             await this.RestoreMountAsync(root, context, view.Name, view.Folder, isProjectRelative: true, view.IsExpanded).ConfigureAwait(true);
         }
 
-        foreach (var mount in context.LibraryMounts.Where(static mount => mount is { Kind: MountKind.Cooked, Location: not null }))
+        foreach (var mount in context.LibraryMounts.Where(static mount => mount.Container != MountContainer.Pak))
         {
             await this.RestoreMountAsync(root, context, mount.Name, mount.Location!.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }

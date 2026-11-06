@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO.Abstractions;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Persistence.Pak;
+using Oxygen.Managed.Assets.Persistence.Publication;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Mounts;
@@ -17,6 +22,7 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
 {
     private readonly List<Entry> entries = [];
     private readonly List<MountFinding> findings = [];
+    private readonly List<(string Name, LibraryFacts Facts)> libraries = [];
 
     /// <summary>Adds the committed declaration.</summary>
     /// <param name="declared">The committed mounts.</param>
@@ -84,7 +90,7 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
     public ProjectMountTable Finish()
     {
         var mounts = this.entries.Select(this.Bind).ToList();
-        this.CheckSourceFolders(mounts);
+        this.CheckFolders(mounts);
         return new ProjectMountTable(projectRoot, mounts, [.. this.findings]);
     }
 
@@ -162,37 +168,181 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
         var location = MountFolders.Canonical(fileSystem, IsAbsolute(text) ? text : Path.Combine(binding.Base.FullPath, text));
         var isFolder = fileSystem.Directory.Exists(location.FullPath);
         var exists = isFolder || fileSystem.File.Exists(location.FullPath);
-        var mount = unbound with { Location = location, Origin = binding.Origin, OriginFile = binding.File, State = exists ? MountState.Bound : MountState.Missing };
+        var role = entry.Kind == MountKind.Source && MountFolders.SegmentsBelow(location, projectRoot) is not null ? MountRole.Own : MountRole.Shared;
+        var mount = unbound with { Location = location, BoundTo = location, Origin = binding.Origin, OriginFile = binding.File, State = exists ? MountState.Bound : MountState.Missing, Role = role };
         if (!exists)
         {
             this.Report(MountCodes.FolderMissing, $"Mount '{entry.Name}' is bound to '{location}', which does not exist.", entry.Name, binding.File);
-        }
-        else if ((entry.Kind == MountKind.Pak) == isFolder)
-        {
-            this.Report(MountCodes.PathKind, $"{entry.Kind} mount '{entry.Name}' is bound to the {(isFolder ? "folder" : "file")} '{location}'.", entry.Name, binding.File);
+            return mount;
         }
 
-        return mount;
+        if (entry.Kind == MountKind.Source && !isFolder)
+        {
+            this.Report(MountCodes.PathKind, $"Source mount '{entry.Name}' is bound to the file '{location}'.", entry.Name, binding.File);
+        }
+
+        return entry.Kind == MountKind.Cooked ? this.BindLibrary(mount, location, isFolder) : mount;
     }
 
-    private void CheckSourceFolders(List<ResolvedMount> mounts)
+    private ResolvedMount BindLibrary(ResolvedMount mount, FileSystemPath bound, bool isFolder)
     {
-        var sources = mounts.Where(static mount => mount is { Kind: MountKind.Source, Location: not null }).ToArray();
-        for (var index = 0; index < sources.Length; index++)
+        var findings = new List<MountFinding>();
+        void Add(string code, string message) => findings.Add(new MountFinding(code, $"Cooked mount '{mount.Name}' ('{bound}') {message}; it contributes no assets.", mount.Name, mount.OriginFile));
+
+        var read = this.ReadLibrary(mount.Name, bound, isFolder, Add);
+        if (read is { Facts: { } facts })
         {
-            var mount = sources[index];
-            if (MountFolders.IsInOutputFolder(mount.Location!, projectRoot))
+            CheckLibrary(mount.Name, facts, Add);
+            findings.AddRange(this.UnprovidedOf(mount, bound, facts));
+        }
+
+        if (findings.Count != 0)
+        {
+            this.findings.AddRange(findings);
+            return mount with { State = MountState.Invalid, Findings = findings };
+        }
+
+        this.libraries.Add((mount.Name, read!.Facts!));
+        return mount with { Location = read.Location, Container = read.Container, Library = read.Facts };
+    }
+
+    private static void CheckLibrary(string name, LibraryFacts facts, Action<string, string> add)
+    {
+        if (facts.Roots.Count > 1)
+        {
+            add(MountCodes.CookedRootMultiple, $"holds the roots '{string.Join("', '", facts.Roots)}': a cooked source has one root");
+        }
+        else if (facts.Roots.Count == 1 && !string.Equals(facts.Roots[0], name, StringComparison.Ordinal))
+        {
+            add(MountCodes.CookedRootMismatch, $"holds the root '{facts.Roots[0]}': a cooked source's one root is its mount name");
+        }
+
+        foreach (var script in facts.ExternalScripts)
+        {
+            add(MountCodes.CookedExternalScript, $"holds the script '{script}' with an external source: only a Source mount supplies one");
+        }
+    }
+
+    private List<MountFinding> UnprovidedOf(ResolvedMount mount, FileSystemPath bound, LibraryFacts facts)
+    {
+        var findings = new List<MountFinding>();
+        foreach (var dependency in facts.Dependencies)
+        {
+            foreach (var requirement in dependency.Requirements.Where(requirement => !this.IsProvidedBelow(dependency.Library, requirement)))
+            {
+                var what = requirement.IsTexture ? $"texture {requirement.Key}" : $"{(AssetType)requirement.AssetType} {requirement.Key}";
+                findings.Add(new MountFinding(MountCodes.CookedDependencyMissing, $"Cooked mount '{mount.Name}' ('{bound}') requires {what} of mount '{dependency.Library}', which no mount below it provides; it contributes no assets.", mount.Name, mount.OriginFile));
+            }
+        }
+
+        return findings;
+    }
+
+    // The newest valid library bound before this one that holds the requirement must be the mount it names, with the
+    // required type, as the runtime checks the stack it mounts. The engine's content lies below every mount.
+    private bool IsProvidedBelow(string library, LibraryRequirement requirement)
+    {
+        if (string.Equals(library, AssetPath.Engine.Mount, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        foreach (var (name, facts) in this.libraries.AsEnumerable().Reverse())
+        {
+            if (requirement.IsTexture)
+            {
+                if (facts.HasTexture(requirement.Key))
+                {
+                    return string.Equals(name, library, StringComparison.Ordinal);
+                }
+
+                continue;
+            }
+
+            if (facts.Deleted.Contains(requirement.Key))
+            {
+                return false;
+            }
+
+            if (facts.TryFindAsset(requirement.Key, out var assetType))
+            {
+                return string.Equals(name, library, StringComparison.Ordinal) && assetType == requirement.AssetType;
+            }
+        }
+
+        return false;
+    }
+
+    private LibraryRead? ReadLibrary(string name, FileSystemPath bound, bool isFolder, Action<string, string> add)
+    {
+        try
+        {
+            return !isFolder ? this.ReadPak(bound)
+                : fileSystem.File.Exists(bound.Combine(CookPublicationFormat.HeadFileName).FullPath) ? this.ReadGeneration(name, bound, add)
+                : this.ReadLooseRoot(bound, MountContainer.LooseRoot);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            add(MountCodes.CookedFormatUnsupported, $"cannot be read: {exception.Message}");
+            return null;
+        }
+    }
+
+    private LibraryRead ReadPak(FileSystemPath file)
+    {
+        using var stream = fileSystem.File.OpenRead(file.FullPath);
+        return new(file, MountContainer.Pak, LibraryFacts.Of(PakIndex.Read(stream)));
+    }
+
+    private LibraryRead ReadLooseRoot(FileSystemPath folder, MountContainer container)
+    {
+        var indexPath = folder.Combine(LooseCookedIndex.FileName).FullPath;
+        if (!fileSystem.File.Exists(indexPath))
+        {
+            throw new InvalidDataException("it is neither a loose cooked root, a pak nor a project's cooked output");
+        }
+
+        using var stream = fileSystem.File.OpenRead(indexPath);
+        return new(folder, container, LibraryFacts.Of(LooseCookedIndex.Read(stream), relative => fileSystem.File.ReadAllBytes(folder.Combine(relative).FullPath)));
+    }
+
+    // A library project's output folder: head.json selects the publication, whose document selects the mount root's generation.
+    private LibraryRead? ReadGeneration(string name, FileSystemPath cooked, Action<string, string> add)
+    {
+        var head = CookPublicationFormat.ReadHead(fileSystem.File.ReadAllBytes(cooked.Combine(CookPublicationFormat.HeadFileName).FullPath));
+        var document = fileSystem.File.ReadAllBytes(cooked.Combine(CookPublicationFormat.DocumentPath(head.PublicationId)).FullPath);
+        if (CookPublicationFormat.SelectGeneration(head, document, name) is not { } sourceKey)
+        {
+            add(MountCodes.CookedRootMismatch, $"selects no generation for the root '{name}': a cooked source's one root is its mount name");
+            return null;
+        }
+
+        return this.ReadLooseRoot(cooked.Combine(CookPublicationFormat.GenerationPath(sourceKey)), MountContainer.Generation);
+    }
+
+    private void CheckFolders(List<ResolvedMount> mounts)
+    {
+        var folders = mounts.Where(this.HasFolder).ToArray();
+        for (var index = 0; index < folders.Length; index++)
+        {
+            var mount = folders[index];
+            if (mount.Kind == MountKind.Source && MountFolders.IsInOutputFolder(mount.Location!, projectRoot))
             {
                 this.Report(MountCodes.FolderInOutput, $"Mount '{mount.Name}' is in an output folder: '{mount.Location}'.", mount.Name, mount.OriginFile);
             }
 
-            foreach (var other in sources[(index + 1)..].Where(other => MountFolders.SegmentsBelow(mount.Location!, other.Location!) is not null
-                || MountFolders.SegmentsBelow(other.Location!, mount.Location!) is not null))
+            foreach (var other in folders[(index + 1)..].Where(other => MountFolders.SegmentsBelow(mount.BoundTo!, other.BoundTo!) is not null
+                || MountFolders.SegmentsBelow(other.BoundTo!, mount.BoundTo!) is not null))
             {
-                this.Report(MountCodes.FolderOverlap, $"Mount '{other.Name}' at '{other.Location}' overlaps mount '{mount.Name}' at '{mount.Location}'.", other.Name, other.OriginFile);
+                this.Report(MountCodes.FolderOverlap, $"Mount '{other.Name}' at '{other.BoundTo}' overlaps mount '{mount.Name}' at '{mount.BoundTo}'.", other.Name, other.OriginFile);
             }
         }
     }
+
+    private bool HasFolder(ResolvedMount mount)
+        => mount.BoundTo is { } bound && (mount.Kind == MountKind.Source || fileSystem.Directory.Exists(bound.FullPath));
+
+    private sealed record LibraryRead(FileSystemPath Location, MountContainer Container, LibraryFacts Facts);
 
     private sealed record Binding(string Text, FileSystemPath Base, MountOrigin Origin, FileSystemPath? File);
 

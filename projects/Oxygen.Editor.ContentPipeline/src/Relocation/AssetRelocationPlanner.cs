@@ -357,7 +357,7 @@ internal static class AssetRelocationPlanner
             var record = ModelImportSettings.Parse(import.RecordPath.FullPath, content);
             var finalPath = FileSystemPath.From(ModelImportSettings.PathFor(
                 ModelImportSettings.ProjectRootOf(import.RecordPath.FullPath, record.VirtualPath)!, virtualPath.VirtualPath));
-            var source = project.SourceMountPathOf(target)
+            var source = CookPaths.MountPathOf(project, target)
                 ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's source mounts.");
             var rewritten = (record with { VirtualPath = virtualPath.VirtualPath }).WithSource(source).ToBytes();
             map.AddMove(new(import.RecordPath, finalPath, IsDirectory: false));
