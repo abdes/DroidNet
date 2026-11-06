@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Assets.Authoring.Textures;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
@@ -38,8 +39,10 @@ internal sealed class AssetIdentityReducer
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(cookScope);
 
+        var companions = FindCompanions(records, project);
         return [.. records
             .Where(static record => IsBrowsableRecord(record.Identity))
+            .Where(record => record.Cooked is not null || project.Find(record.Identity)?.File is not { } file || !companions.Contains(file))
             .GroupBy(static record => record.Cooked is null ? AssetFileTypes.ToIdentity(record.Identity) : record.Identity)
             .Select(group => this.CreateItem(group.Key, [.. group], project))
             .OfType<AssetEntry>()
@@ -78,6 +81,47 @@ internal sealed class AssetIdentityReducer
         return AssetFileTypes.Find(name) is { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked or AssetFileCategory.Script or AssetFileCategory.Input }
             ? AssetFileTypes.RemoveSuffix(name)
             : name;
+    }
+
+    // The files that belong to another asset and are no rows of their own: a model's companions, and the images beside a
+    // texture that names them. A model's source at its identity is its row. A source a record only references stays a row
+    // with Import, since more settings can be made of it.
+    private static HashSet<FileSystemPath> FindCompanions(IReadOnlyList<AssetRecord> records, ProjectContext project)
+    {
+        var companions = new HashSet<FileSystemPath>();
+        foreach (var model in new Models.ModelImportRecords(project).All)
+        {
+            companions.UnionWith(model.CompanionFiles(project).Where(file => project.Find(model.Identity)?.File != file));
+        }
+
+        foreach (var texture in records.Where(static record => record.Cooked is null && record.Identity.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)))
+        {
+            companions.UnionWith(ImagesBeside(project, texture.Identity));
+        }
+
+        return companions;
+    }
+
+    private static IEnumerable<FileSystemPath> ImagesBeside(ProjectContext project, AssetPath descriptor)
+    {
+        if (project.Find(descriptor)?.File is not { } file || !project.FileSystem.File.Exists(file.FullPath))
+        {
+            return [];
+        }
+
+        try
+        {
+            var identity = AssetFileTypes.ToIdentity(descriptor);
+            return [.. TextureSourceReader.Read(project.FileSystem.File.ReadAllBytes(file.FullPath), identity)
+                .ResolveImages(identity, project, image => project.FileSystem.File.Exists(image.FullPath))
+                .Select(static image => image.File)
+                .OfType<FileSystemPath>()
+                .Where(image => image.Parent == file.Parent)];
+        }
+        catch (Exception exception) when (exception is AssetFormatException or IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
     }
 
     // A pak holds its descriptors inside the file: the asset is read-only and has nothing to cook.

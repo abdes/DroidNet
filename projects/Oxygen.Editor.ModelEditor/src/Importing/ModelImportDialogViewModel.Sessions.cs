@@ -63,10 +63,10 @@ public sealed partial class ModelImportDialogViewModel
         return this.project.FileSystem.File.WriteAllBytesAsync(manifestPath, session.ToBytes(manifestPath), cancellationToken);
     }
 
-    // A session's model goes back to the folder its identity names: the folder of a project source, or the folder that
+    // A session's model goes back to the folder its identity names: its own for a source in a mount, or the folder that
     // holds the model's own folder.
     private string FolderOf(ModelImportSessionJob job)
-        => (this.ProjectSourceIdentity(job.Source) is not null ? job.VirtualPath.Parent : job.VirtualPath.Parent?.Parent)?.VirtualPath
+        => (ImportDestination.IsMounted(this.project, job.Source) ? job.VirtualPath.Parent : job.VirtualPath.Parent?.Parent)?.VirtualPath
             ?? this.destination;
 
     private bool CanReplace() => this.HasNamesToReplace;

@@ -27,6 +27,11 @@ public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
         ValidateBundleName(bundleName);
         var mount = project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
             ?? throw new ArgumentException("Choose an authoring folder, not built-in or cooked content.", nameof(folder));
+        if (mount.Role != MountRole.Own)
+        {
+            throw new ArgumentException($"'{mount.Name}' is a shared mount. Choose a folder in one of this project's own mounts; settings in a shared mount are made in its own project.", nameof(folder));
+        }
+
         var segments = folder.RelativePath.Length == 0 ? [] : folder.RelativePath.Split('/');
         return Path.Combine(ResolveInsideMount(mount, segments), bundleName);
     }

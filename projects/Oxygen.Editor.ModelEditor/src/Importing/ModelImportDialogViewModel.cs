@@ -45,7 +45,7 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
         this.project = project ?? throw new ArgumentNullException(nameof(project));
         this.dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         this.analyzer = analyzer ?? throw new ArgumentNullException(nameof(analyzer));
-        this.destination = destination.VirtualPath;
+        this.destination = ImportDestination.DefaultFolder(project, destination).VirtualPath;
         this.shell = shell;
         this.Run = new(runDefaults);
         this.Run.PropertyChanged += this.OnRunChanged;
@@ -304,26 +304,13 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     private static ImmutableArray<BeforeImportItem> ReportedBy(ModelImportFile file)
         => BeforeImportItem.From(file.Analysis?.Diagnostics.Where(static issue => issue.Severity >= DiagnosticSeverity.Warning) ?? []);
 
-    // A model already under an authoring mount is imported in place: its identity is its own path.
-    private AssetPath? ProjectSourceIdentity(string sourcePath)
-    {
-        var source = FileSystemPath.From(Path.GetFullPath(sourcePath));
-        foreach (var mount in this.project.SourceMounts)
-        {
-            var root = mount.Location!;
-            if (source != root && source.IsSameOrInside(root))
-            {
-                return AssetPath.Create(mount.Name, source.GetPathBelow(root));
-            }
-        }
-
-        return null;
-    }
-
-    // The identity a file's model takes: its own path in the project, else its file in a folder named for it.
     private AssetPath PlannedIdentity(ModelImportFile file)
-        => this.ProjectSourceIdentity(file.SourcePath)
-            ?? ImportDestination.Parse(file.DestinationFolder).Combine(file.Name.Trim() + "/" + file.FileName);
+        => ImportDestination.IdentityOf(this.project, file.SourcePath, file.Name.Trim(), ImportDestination.Parse(file.DestinationFolder));
+
+    // A model already reading this source in its mount, which importing the source imports again.
+    private bool IsImportedFrom(string sourcePath, AssetPath identity, ModelImportRecords records, out ModelImportRecord? record)
+        => records.TryFind(identity, out record) && ImportDestination.IsMounted(this.project, sourcePath)
+            && FileSystemPath.From(record.SourcePath) == FileSystemPath.From(Path.GetFullPath(sourcePath));
 
     // Marks missing sources and names that are taken, by the project or by another file of this import.
     private void CheckFiles()
@@ -355,22 +342,24 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
     private string CheckName(ModelImportFile file, HashSet<string> planned, ModelImportRecords records)
     {
         file.IsNameTaken = false;
+        file.IsReimport = false;
         try
         {
             var name = file.Name.Trim();
             var folder = ImportDestination.Parse(file.DestinationFolder);
-            if (this.ProjectSourceIdentity(file.SourcePath) is { } inPlace)
-            {
-                // A model already imported in place is imported again: its record takes these settings.
-                file.IsReimport = records.TryFind(inPlace, out _);
-                return planned.Add(inPlace.VirtualPath) ? string.Empty : $"{file.FileName} is in this import twice.";
-            }
-
-            file.IsReimport = false;
-
-            if (!planned.Add(this.PlannedIdentity(file).VirtualPath))
+            var identity = this.PlannedIdentity(file);
+            file.IsReimport = this.IsImportedFrom(file.SourcePath, identity, records, out _);
+            if (!planned.Add(identity.VirtualPath))
             {
                 return $"Another file of this import is named {name} in {folder}.";
+            }
+
+            if (ImportDestination.IsMounted(this.project, file.SourcePath))
+            {
+                file.Replacement = null;
+                return file.IsReimport || !this.IsTaken(identity, file.SourcePath, records)
+                    ? string.Empty
+                    : $"A model or file named {identity.Name} is already in {folder}. Choose another name.";
             }
 
             if (!this.project.FileSystem.Directory.Exists(ImportSourceRetention.ResolveDestination(this.project, folder, name)))
@@ -389,6 +378,11 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
             return error.Message;
         }
     }
+
+    // The record of another model, or a file other than the source, already at the identity.
+    private bool IsTaken(AssetPath identity, string sourcePath, ModelImportRecords records)
+        => records.TryFind(identity, out _)
+            || (this.project.Find(identity)?.File is { } file && file != FileSystemPath.From(Path.GetFullPath(sourcePath)) && this.project.FileSystem.File.Exists(file.FullPath));
 
     // The dialog marks a run with custom settings; it learns of a change through this model.
     private void OnRunChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)

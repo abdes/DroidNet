@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
+using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Models;
 using Oxygen.Managed.Assets;
 
@@ -39,12 +40,14 @@ public sealed partial class ModelImportDialogViewModel
 
             if (listed.Add(path))
             {
-                // A model already imported in place starts from the settings of its last import, which it imports again.
+                // A source in an own mount is imported beside itself, which makes it the model's companion. A model already
+                // reading it starts from the settings of its last import, which it imports again.
                 var name = Path.GetFileNameWithoutExtension(path);
-                var settings = this.ProjectSourceIdentity(path) is { } identity && records.TryFind(identity, out var record)
-                    ? record.Settings.Settings.Clone()
+                var folder = ImportDestination.OwnFolderOf(this.project, path) ?? ImportDestination.Parse(this.destination);
+                var settings = this.IsImportedFrom(path, folder.Combine(name + Path.GetExtension(path)), records, out var record)
+                    ? record!.Settings.Settings.Clone()
                     : NewSettings(name);
-                added.Add(this.Append(new ModelImportFile(path, name, this.destination, settings)));
+                added.Add(this.Append(new ModelImportFile(path, name, folder.VirtualPath, settings)));
             }
         }
 

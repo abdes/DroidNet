@@ -358,6 +358,13 @@ identity and must update every authored referrer in one transaction.
   moves the record to the new identity with the companions, and a source elsewhere
   stays and is respelled. `source_identity`, and every node and surface it names,
   survives the move. Moving a companion moves its model.
+- **Raw sources.** A model or image with no asset at its identity is a row marked
+  Not imported, with Import on it, which starts the import's review. This holds
+  when a record elsewhere references the file, since more settings can be made of
+  it. A model's record and companions, and the images beside a texture that names
+  them, are not rows of their own. An import starts beside a source in an own mount,
+  making it a companion, and otherwise in the selected own folder; it never offers a
+  shared mount.
 - **Scenes.** A scene is renamed, moved and duplicated like any asset. Deleting
   the project's start scene, or a folder that holds it, is rejected until
   another scene is the start scene.

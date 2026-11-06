@@ -44,7 +44,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S10   | Done, committed                                                |
 | S11   | Done, committed                                                |
 | S12   | Done, committed                                                |
-| S13   | Not started                                                    |
+| S13   | Done, committed                                                |
 | S14   | Not started (waits on S18)                                     |
 | S15   | Not started (waits on S18)                                     |
 | S16   | Not started (waits on S18)                                     |
@@ -737,6 +737,17 @@ source in a mount, raw source rows with Import, texture import by reference.
 Functional tests: `ImportWorkflow` planning over a fake project, `TextureImportTests`
 by reference and by copy, `AssetFeed` rows for records, companions and raw
 sources. Docs: `content-pipeline.md` 17, ContentPipeline README.
+
+Beyond this text:
+
+- A raw source stays a row when a record elsewhere references it: scenarios V1 and
+  V4 need it, so `design.md`'s table now says so.
+- An image is a raw source too: an image beside a texture that names it is no row,
+  and any other is a row with Import. The row and the toolbar menu gain Import.
+- A source in an own mount starts its review beside itself, so the default makes it
+  a companion; moving the destination makes it a reference.
+- A model of the requested name reading another source refuses until it is renamed;
+  only a model copied in has a folder to replace.
 
 ### S14. Libraries in the editor
 

@@ -84,10 +84,33 @@ public sealed class ImportWorkflowTests
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
         var cook = NativeCook.Create(workspace);
         var service = cook.Service;
-        var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/Models/model.fbx"));
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "Content"), "*.fbx", SearchOption.AllDirectories).Should().ContainSingle();
+    }
+
+    /// <summary>A source in another mount is referenced: the model cooks at the chosen identity and nothing is copied.</summary>
+    /// <returns>The asynchronous referenced source test.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task ImportWorkflowReferencesASourceInAnotherMount()
+    {
+        using var workspace = new CookWorkspace(
+            [new("Content", Oxygen.Editor.Projects.Mounts.MountKind.Source, "Content"), new("Art", Oxygen.Editor.Projects.Mounts.MountKind.Source, "Art")],
+            EngineContentPak.Installed());
+        var path = Path.Combine(workspace.Root, "Art/Media/truck.fbx");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
+        var cook = NativeCook.Create(workspace);
+
+        var result = await cook.Service.ImportSourceAsync(new(workspace.ProjectContext, path, "Truck", AssetPath.Parse("/Content/Cars")), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
+        _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/Cars/Truck.fbx"));
+        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, "Content"), "*.fbx", SearchOption.AllDirectories).Should().BeEmpty();
+        using var record = System.Text.Json.JsonDocument.Parse(await File.ReadAllBytesAsync(Path.Combine(workspace.Root, "Content/Cars/Truck.fbx.import.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        _ = record.RootElement.GetProperty("source").GetString().Should().Be("/Art/Media/truck.fbx");
     }
 
     /// <summary>A failed cook retains its source and changes Retry to the retained identity, even after the original disappears.</summary>

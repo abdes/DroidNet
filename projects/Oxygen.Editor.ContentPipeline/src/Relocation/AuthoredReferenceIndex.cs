@@ -181,8 +181,6 @@ internal sealed class AuthoredReferenceIndex
         public FileSystemPath Folder => this.PrimaryPath.Parent!;
 
         /// <summary>Gets the files the model owns: its primary and every file its last import read.</summary>
-        public IReadOnlyList<FileSystemPath> Files
-            => [this.PrimaryPath, .. (this.Settings.SourceFingerprint?.Files ?? [])
-                .Select(file => FileSystemPath.From(Path.GetFullPath(Path.Combine(this.Folder.FullPath, file.Path))))];
+        public IReadOnlyList<FileSystemPath> Files => this.Settings.FilesRead(this.PrimaryPath);
     }
 }

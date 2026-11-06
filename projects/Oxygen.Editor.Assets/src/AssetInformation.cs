@@ -90,7 +90,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
     private static string GetDescription(AssetEntry asset)
     {
-        var description = asset.IsPackaged || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.Model ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
+        var description = asset.IsPackaged || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.Model || asset.IsRawSource ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
         {
             AssetState.Missing => "The referenced asset could not be found.",
             AssetState.Broken => "The asset could not be read or validated.",

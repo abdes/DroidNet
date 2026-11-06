@@ -59,6 +59,11 @@ releasing its input and tool leases. Failed termination retains ownership until
 the worker drains. Progress and structured warnings/errors flow into the shared
 Cooking panel throughout import, validation and publication.
 
+A new model's record goes in one of the project's own mounts.
+[ImportDestination](src/Import/ImportDestination.cs) owns the rule: a source in a
+mount is referenced where it is, and a source in no mount is copied in with its
+bundle.
+
 Every import reads two lists per source from the native report. Its products
 (assets and texture descriptors, by virtual path) say which source produced each
 cooked asset: a model's or an input file's products are attributed from this

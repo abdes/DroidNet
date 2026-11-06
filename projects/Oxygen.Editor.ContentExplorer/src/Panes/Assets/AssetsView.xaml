@@ -107,6 +107,14 @@
                                 </MenuFlyoutItem>
                                 <MenuFlyoutSeparator />
                                 <MenuFlyoutItem
+                                    Command="{x:Bind ViewModel.ImportSelectedSourceCommand}"
+                                    Text="Import"
+                                    ToolTipService.ToolTip="Create an asset from this file, with its own settings.">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE8B5;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem
                                     Command="{x:Bind ViewModel.ReimportSelectedSourceCommand}"
                                     Text="Reimport"
                                     ToolTipService.ToolTip="{x:Bind ViewModel.ReimportToolTip, Mode=OneWay}">
@@ -545,6 +553,14 @@
                             ToolTipService.ToolTip="{x:Bind ViewModel.CookSelectedToolTip, Mode=OneWay}">
                             <MenuFlyoutItem.Icon>
                                 <FontIcon Glyph="&#xE8A5;" />
+                            </MenuFlyoutItem.Icon>
+                        </MenuFlyoutItem>
+                        <MenuFlyoutItem
+                            Command="{x:Bind ViewModel.ImportSelectedSourceCommand}"
+                            Text="Import"
+                            ToolTipService.ToolTip="Create an asset from this file, with its own settings.">
+                            <MenuFlyoutItem.Icon>
+                                <FontIcon Glyph="&#xE8B5;" />
                             </MenuFlyoutItem.Icon>
                         </MenuFlyoutItem>
                         <MenuFlyoutItem

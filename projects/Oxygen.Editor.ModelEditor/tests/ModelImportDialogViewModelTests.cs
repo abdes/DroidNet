@@ -267,6 +267,84 @@ public sealed class ModelImportDialogViewModelTests
     }
 
     [TestMethod]
+    public void ASourceInASharedMountIsReferencedFromTheChosenFolder()
+    {
+        var (project, source) = CreateProjectWithSharedSource("Truck.fbx");
+        using var dialog = Create(project);
+
+        var file = dialog.AddFiles([source]).Single();
+        var plan = dialog.ToPlan();
+
+        _ = file.DestinationFolder.Should().Be(Destination.VirtualPath, "a shared mount is no destination");
+        _ = file.IsReimport.Should().BeFalse();
+        _ = plan.Models.Single().Name.Should().Be("Truck");
+    }
+
+    [TestMethod]
+    public void ASourceAlreadyReadByTheModelAtItsIdentityIsImportedAgain()
+    {
+        var (project, source) = CreateProjectWithSharedSource("Truck.fbx");
+        var record = ModelImportSettings.Create(Destination.Combine("Truck.fbx"), "/RawMedia/Truck.fbx", ModelImportSettings.DefaultSettings("Truck"));
+        project.FileSystem.File.WriteAllBytes(Path.Combine(project.ProjectRoot.FullPath, "Content", "Vehicles", "Truck.fbx" + ModelImportSettings.RecordSuffix), record.ToBytes());
+        using var dialog = Create(project);
+
+        var file = dialog.AddFiles([source]).Single();
+
+        _ = file.IsReimport.Should().BeTrue();
+        _ = dialog.CanImport.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void AModelOfThatNameReadingAnotherSourceBlocksTheImportUntilRenamed()
+    {
+        var (project, source) = CreateProjectWithSharedSource("Truck.fbx");
+        var record = ModelImportSettings.Create(Destination.Combine("Truck.fbx"), "/RawMedia/Other.fbx", ModelImportSettings.DefaultSettings("Truck"));
+        project.FileSystem.File.WriteAllText(@"D:\Media\Raw\Other.fbx", "model");
+        project.FileSystem.File.WriteAllBytes(Path.Combine(project.ProjectRoot.FullPath, "Content", "Vehicles", "Truck.fbx" + ModelImportSettings.RecordSuffix), record.ToBytes());
+        using var dialog = Create(project);
+
+        var file = dialog.AddFiles([source]).Single();
+        dialog.UpdateSelection([file]);
+
+        _ = dialog.Problems.Should().Contain("already in /Content/Vehicles");
+        _ = dialog.HasNamesToReplace.Should().BeFalse("only a model copied in has a folder to replace");
+
+        dialog.SelectedName = "TruckLod";
+
+        _ = dialog.CanImport.Should().BeTrue("another name is another model of the same source");
+    }
+
+    [TestMethod]
+    public void ASourceInAnOwnMountStartsBesideItself()
+    {
+        var (project, _) = CreateProject();
+        var source = Path.Combine(project.ProjectRoot.FullPath, "Content", "Props", "Lamp.glb");
+        _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        project.FileSystem.File.WriteAllText(source, "model");
+        using var dialog = Create(project);
+
+        var file = dialog.AddFiles([source]).Single();
+
+        _ = file.DestinationFolder.Should().Be("/Content/Props");
+        _ = dialog.CanImport.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void ADestinationInASharedMountBlocksTheImport()
+    {
+        var (project, source) = CreateProjectWithSharedSource("Truck.fbx");
+        using var dialog = Create(project);
+        var file = dialog.AddFiles([source]).Single();
+        dialog.UpdateSelection([file]);
+
+        dialog.SelectedFolder = "/RawMedia";
+
+        _ = dialog.CanImport.Should().BeFalse();
+        _ = dialog.Problems.Should().Contain("'RawMedia' is a shared mount");
+        _ = dialog.ContentFolderOf(@"D:\Media\Raw").Should().BeNull("the picker offers own mounts only");
+    }
+
+    [TestMethod]
     public void ContentFolderOf_IsTheFoldersPathUnderItsMount()
     {
         var (project, _) = CreateProject();

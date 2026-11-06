@@ -590,17 +590,17 @@ canonical absolute paths, so nothing past the serializer changes.
 
 ### Assets and Content Explorer
 
-| Area                                        | Change                                                                                                                                                         |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AssetFeed`, `AssetEntry`                   | A model row is the record's identity; the record and companions are never rows; raw sources in `Source` mounts with no record naming them are rows with Import |
-| `AssetBrowserQuery`                         | "Not imported" means a raw source row                                                                                                                          |
-| `AssetCatalog`                              | Library catalogs come from library facts for every valid `Cooked` mount, pak or loose                                                                          |
-| `ContentMountKind`                          | `LocalLibrary` and `PakLibrary` merge into `Library`; `Invalid` presentation                                                                                   |
-| `CookedLibraryFolders`, pak tree            | Library assets are shown at their own virtual paths; nothing re-roots them under a typed name                                                                  |
-| `ContentMountsViewModel`, `ContentMountRow` | Add library replaces the typed-name add of libraries; libraries cannot be renamed                                                                              |
-| `UnavailableMountTreeItemAdapter`           | A third state, `Invalid`, with the finding's message                                                                                                           |
-| `AssetsViewModel`                           | Import from a raw source row; destination limited to own mounts; copy, duplicate and delete of models (E3 to E5)                                               |
-| `TextureImport`, `TextureImportTarget`      | A source in a mount is referenced, not copied; the descriptor has no `virtual_path`                                                                            |
+| Area                                        | Change                                                                                                                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `AssetFeed`, `AssetEntry`                   | A model row is the record's identity; the record and companions are never rows; a raw source in a `Source` mount is a row with Import, even when a record elsewhere references it (V1, V4) |
+| `AssetBrowserQuery`                         | "Not imported" means a raw source row                                                                                                                                                      |
+| `AssetCatalog`                              | Library catalogs come from library facts for every valid `Cooked` mount, pak or loose                                                                                                      |
+| `ContentMountKind`                          | `LocalLibrary` and `PakLibrary` merge into `Library`; `Invalid` presentation                                                                                                               |
+| `CookedLibraryFolders`, pak tree            | Library assets are shown at their own virtual paths; nothing re-roots them under a typed name                                                                                              |
+| `ContentMountsViewModel`, `ContentMountRow` | Add library replaces the typed-name add of libraries; libraries cannot be renamed                                                                                                          |
+| `UnavailableMountTreeItemAdapter`           | A third state, `Invalid`, with the finding's message                                                                                                                                       |
+| `AssetsViewModel`                           | Import from a raw source row; destination limited to own mounts; copy, duplicate and delete of models (E3 to E5)                                                                           |
+| `TextureImport`, `TextureImportTarget`      | A source in a mount is referenced, not copied; the descriptor has no `virtual_path`                                                                                                        |
 
 ### Problems
 

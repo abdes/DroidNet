@@ -61,7 +61,7 @@ public sealed partial class ContentPipelineService
         else if (added.Length > 1)
         {
             results.Add(await this.cookCoordinator.RunCookAsync(
-                new(CookTargetKind.Changes, ScopeUri: null) { Assets = [.. added.Select(request => PlannedIdentity(project, request))], OriginContext = project },
+                new(CookTargetKind.Changes, ScopeUri: null) { Assets = [.. added.Select(IdentityOf)], OriginContext = project },
                 (operation, token) => this.ImportNewSourcesCoreAsync(operation, added, run, token),
                 cancellationToken).ConfigureAwait(false));
         }
@@ -127,21 +127,17 @@ public sealed partial class ContentPipelineService
             cancellationToken);
     }
 
-    // The identity a new model takes: its own path when it is already under an authoring mount, else its file in a
-    // folder named for it in the chosen destination.
-    private static AssetPath PlannedIdentity(ProjectContext project, SceneImportRequest request)
-    {
-        var source = Path.GetFullPath(request.SourcePath);
-        return CookInputResolver.FindAuthoringSourceUri(project, FileSystemPath.From(source))
-            ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
-    }
+    private static AssetPath IdentityOf(SceneImportRequest request)
+        => ImportDestination.IdentityOf(request.Project, request.SourcePath, request.Name, request.DestinationFolder);
 
-    // The record of a model imported in place, which a request for its source imports again; null for any other.
+    // The record of the model a request names when it already reads the request's source in its mount, which the request
+    // imports again; null for any other.
     private static ModelImportRecord? InPlaceRecord(ProjectContext project, SceneImportRequest request)
-    {
-        var source = FileSystemPath.From(Path.GetFullPath(request.SourcePath));
-        return CookInputResolver.FindAuthoringSourceUri(project, source) is { } identity ? ModelRecordLookup.TryFind(project, identity) : null;
-    }
+        => ImportDestination.IsMounted(project, request.SourcePath)
+            && ModelRecordLookup.TryFind(project, IdentityOf(request)) is { } record
+            && FileSystemPath.From(record.SourcePath) == FileSystemPath.From(Path.GetFullPath(request.SourcePath))
+                ? record
+                : null;
 
     private async Task<ContentCookResult> ImportSourceCoreAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
     {
@@ -162,8 +158,7 @@ public sealed partial class ContentPipelineService
 
             var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
             var primary = CookPaths.FileOf(operation.Project, retained.BundleRoot + "/" + retained.PrimaryRelativePath);
-            retainedUri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
-                ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
+            retainedUri = IdentityOf(request);
             var recovery = request with { RetainedSource = retained };
             retainRecovery(recovery);
             CookRunContext.Report(new(Message: "Source retained. Preparing import settings.")
@@ -194,14 +189,12 @@ public sealed partial class ContentPipelineService
 
     private async Task<RetainedImportSource> RetainRequestedSourceAsync(ContentCookOperation operation, SceneImportRequest request, CancellationToken cancellationToken)
     {
-        // A model already under an authoring mount is used where it is; one from outside is copied, with its bundle,
-        // into a folder of the chosen destination. Either way its identity is its file's virtual path.
+        // A source in a mount is referenced where it is; one from outside is copied, with its bundle, into a folder of the
+        // chosen destination.
         var source = Path.GetFullPath(request.SourcePath);
-        var inProject = CookInputResolver.FindAuthoringSourceUri(operation.Project, FileSystemPath.From(source));
-        var identity = inProject ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
-        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, identity);
+        var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, IdentityOf(request));
         var discovery = new SceneImportSourceDiscovery(this.cookCoordinator, this.engineContentPipelineApi);
-        if (inProject is not null)
+        if (ImportDestination.IsMounted(operation.Project, source))
         {
             var discovered = await discovery.DiscoverAsync(operation, source, recipe, cancellationToken).ConfigureAwait(false);
             var primary = discovered.Files.Single(file => file.SourcePath == FileSystemPath.From(source));
@@ -233,6 +226,13 @@ public sealed partial class ContentPipelineService
 
         var file = project.Find(identity.WithName(identity.Name + ModelImportSettings.RecordSuffix))
             ?? throw new InvalidDataException($"The model {identity} is outside the project's source mounts.");
+
+        // A file already at the identity is another asset's, unless it is this model's own source.
+        if (project.Find(identity)?.File is { } taken && taken != primary && project.FileSystem.File.Exists(taken.FullPath))
+        {
+            throw new InvalidOperationException($"'{identity}' is already another file. Choose another name.");
+        }
+
         var source = project.ToFileReference(identity, primary)
             ?? throw new InvalidDataException("The model's source is outside the project's source mounts.");
         var record = ModelImportSettings.Create(identity, source, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
@@ -292,8 +292,7 @@ public sealed partial class ContentPipelineService
 
             var retained = await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
             var primary = CookPaths.FileOf(operation.Project, retained.BundleRoot + "/" + retained.PrimaryRelativePath);
-            var uri = CookInputResolver.FindAuthoringSourceUri(operation.Project, primary)
-                ?? throw new InvalidDataException("The retained source is outside the project's authoring mounts.");
+            var uri = IdentityOf(request);
             await this.CreateImportRecordAsync(operation, primary, uri, request, cancellationToken).ConfigureAwait(false);
             return (uri, null);
         }
@@ -311,8 +310,7 @@ public sealed partial class ContentPipelineService
     private Task<ContentCookResult> ReimportInPlaceAsync(SceneImportRequest request, ModelImportRecord record, ImportRunSettings run, CancellationToken cancellationToken)
     {
         var project = request.Project;
-        var uri = CookInputResolver.FindAuthoringSourceUri(project, FileSystemPath.From(Path.GetFullPath(request.SourcePath)))
-            ?? throw new InvalidDataException("The model's source is outside the project's authoring mounts.");
+        var uri = record.Identity;
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, uri) { IsReimport = true, OriginContext = project },
             async (operation, token) =>

@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
@@ -16,7 +17,8 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.Textures.Tests;
 
 /// <summary>
-/// Importing an image copies it into an authoring folder and writes its descriptor beside it; a refused request says
+/// Importing an image writes its descriptor in an own mount, naming an image in a mount where it is and copying one from
+/// anywhere else in beside the descriptor; a refused request says
 /// why with a <see cref="TextureImportCodes"/> code and leaves no file behind.
 /// </summary>
 [TestClass]
@@ -24,6 +26,7 @@ public sealed class TextureImportTests
 {
     // The user picks images anywhere on disk, outside the project.
     private const string Outside = @"C:\Outside";
+    private const string SharedMedia = @"D:\Media\Raw";
 
     private readonly MockFileSystem fileSystem = new();
     private readonly TestProject project;
@@ -52,6 +55,90 @@ public sealed class TextureImportTests
         _ = descriptor.RootElement.GetProperty("intent").GetString().Should().Be("albedo");
         _ = descriptor.RootElement.GetProperty("decode").GetProperty("color_space").GetString().Should().Be("srgb");
         _ = descriptor.RootElement.GetProperty("output").GetProperty("format").GetString().Should().Be("rgba8_srgb");
+    }
+
+    /// <summary>An image in an own mount is named where it is: nothing is copied, and the descriptor spells it relative.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AnImageInTheMountIsReferencedRelative()
+    {
+        var image = this.project.WriteFile("/Content/Media/Brick.png", [1, 2, 3]);
+
+        var texture = await this.import.CreateAsync(this.Request(image.FullPath, "/Content/Textures", "Wall"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = texture.Should().Be(AssetPath.Parse("/Content/Textures/Wall.otex"));
+        using var descriptor = this.ReadJson("/Content/Textures/Wall.otex.json");
+        _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("../Media/Brick.png");
+        _ = this.fileSystem.File.Exists(this.project.PathOf("/Content/Textures/Wall.png").FullPath).Should().BeFalse();
+    }
+
+    /// <summary>D2: an image already beside the descriptor is its companion.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AnImageBesideTheDescriptorIsNamedByItsFileName()
+    {
+        var image = this.project.WriteFile("/Content/Textures/Brick.png", [1, 2, 3]);
+
+        _ = await this.import.CreateAsync(this.Request(image.FullPath, "/Content/Textures", "Brick"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        using var descriptor = this.ReadJson("/Content/Textures/Brick.otex.json");
+        _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("Brick.png");
+    }
+
+    /// <summary>An image in a shared mount is named by its virtual path and stays there; a name in use there is no collision.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AnImageInASharedMountIsReferencedAbsolute()
+    {
+        var shared = this.CreateProjectWithSharedMount();
+        var image = Path.Combine(SharedMedia, "Brick.png");
+        this.fileSystem.File.WriteAllBytes(image, [1, 2, 3]);
+        var request = new TextureImportRequest(shared.Context, image, AssetPath.Parse("/Content/Textures"), "Brick", "albedo", "srgb", "rgba8_srgb");
+
+        _ = this.import.IsTaken(this.import.ResolveTarget(request)).Should().BeFalse();
+        _ = await this.import.CreateAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        using var descriptor = JsonDocument.Parse(this.fileSystem.File.ReadAllBytes(shared.PathOf("/Content/Textures/Brick.otex.json").FullPath));
+        _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("/RawMedia/Brick.png");
+        _ = this.fileSystem.File.Exists(shared.PathOf("/Content/Textures/Brick.png").FullPath).Should().BeFalse();
+    }
+
+    /// <summary>A destination in a shared mount is refused with its code and writes nothing.</summary>
+    [TestMethod]
+    public void ADestinationInASharedMountIsRefused()
+    {
+        var shared = this.CreateProjectWithSharedMount();
+        var image = this.WriteOutside("sky.png", [1]);
+        var request = new TextureImportRequest(shared.Context, image, AssetPath.Parse("/RawMedia/Textures"), "Sky", "albedo", "srgb", "rgba8_srgb");
+
+        var resolve = () => this.import.ResolveTarget(request);
+
+        _ = resolve.Should().Throw<TextureImportException>().Which.Code.Should().Be(TextureImportCodes.DestinationShared);
+    }
+
+    /// <summary>A six-face cube in a mount names its +X face, whichever face was selected; nothing is copied.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ASixFaceCubeInTheMountReferencesItsPositiveXFace()
+    {
+        foreach (var suffix in TextureImport.FaceSuffixes)
+        {
+            _ = this.project.WriteFile($"/Content/Media/sky{suffix}.hdr", Radiance(8, 8, suffix));
+        }
+
+        var request = this.Request(this.project.PathOf("/Content/Media/sky_ny.hdr").FullPath, "/Content/Sky", "Sky") with
+        {
+            Intent = "hdr_env",
+            ColorSpace = "linear",
+            Format = "rgba16f",
+            Cube = new TextureCubeImport(CubeLayout.SixFaces),
+        };
+
+        _ = await this.import.CreateAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        using var descriptor = this.ReadJson("/Content/Sky/Sky.otex.json");
+        _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("../Media/sky_px.hdr");
+        _ = this.fileSystem.Directory.GetFiles(this.project.PathOf("/Content/Sky").FullPath).Should().ContainSingle();
     }
 
     [TestMethod]
@@ -364,6 +451,16 @@ public sealed class TextureImportTests
         {
             return refusal.Code;
         }
+    }
+
+    // A second project, its Content its own and a folder outside it mounted as RawMedia.
+    private TestProject CreateProjectWithSharedMount()
+    {
+        const string root = @"C:\Shared\Game";
+        _ = this.fileSystem.Directory.CreateDirectory(root);
+        _ = this.fileSystem.Directory.CreateDirectory(SharedMedia);
+        _ = TestProject.BindMounts(this.fileSystem, FileSystemPath.From(root), ("RawMedia", SharedMedia));
+        return TestProject.Create(this.fileSystem, root, [new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("RawMedia")]);
     }
 
     private TextureImportRequest Request(string image, string destination, string name)

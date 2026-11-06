@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ModelEditor.Importing;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -39,6 +40,23 @@ internal static class ImportDialogs
         }
 
         return (project, sources);
+    }
+
+    /// <summary>Creates a project that mounts a folder outside it as the shared mount RawMedia, holding one source.</summary>
+    /// <param name="file">The source file's name.</param>
+    /// <returns>The project and the source's full path.</returns>
+    public static (ProjectContext Project, string Source) CreateProjectWithSharedSource(string file)
+    {
+        const string root = @"C:\Projects\Garage";
+        const string media = @"D:\Media\Raw";
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(root);
+        _ = fileSystem.Directory.CreateDirectory(Path.Combine(root, "Content", "Vehicles"));
+        _ = fileSystem.Directory.CreateDirectory(media);
+        _ = TestProject.BindMounts(fileSystem, FileSystemPath.From(root), ("RawMedia", media));
+        var source = Path.Combine(media, file);
+        fileSystem.File.WriteAllText(source, "model");
+        return (TestProject.Create(fileSystem, root, [new ProjectMount("Content", MountKind.Source, "Content"), new ProjectMount("RawMedia")]).Context, source);
     }
 
     /// <summary>Creates a dialog whose analyzer reports <paramref name="facts"/> for every file.</summary>

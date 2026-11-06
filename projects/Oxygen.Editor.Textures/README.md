@@ -8,8 +8,9 @@ them. It holds no view, view model or dialog.
   texels, and whether its images exist. The Material Editor and the
   environment's cubemap picker read it.
 - `TextureImport` imports an image as a project texture: it resolves the target
-  in an authoring folder, copies the image (or the six faces of a cube) and
-  writes the descriptor beside it. It owns the cube layouts, their detection
+  in one of the project's own mounts and writes the descriptor there. An image in
+  a mount is referenced where it is, and one from anywhere else is copied in (with
+  the six faces of a cube) beside the descriptor. It owns the cube layouts, their detection
   from an image's size, and the intents, color spaces and formats an import
   offers; the face names are the format's (`TextureSource.CubeFaceSuffixSets`),
   which the cooker uses to find a six-face cube's faces. A refused import throws

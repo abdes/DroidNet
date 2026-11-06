@@ -90,6 +90,16 @@ public sealed record ModelImportSettings
             ["tangents_policy"] = "generate",
         });
 
+    /// <summary>Gets the files the model reads: its primary and every file its last import read.</summary>
+    /// <param name="primary">The primary source file; the import's other files are relative to its folder.</param>
+    /// <returns>The files.</returns>
+    public IReadOnlyList<FileSystemPath> FilesRead(FileSystemPath primary)
+    {
+        ArgumentNullException.ThrowIfNull(primary);
+        return [primary, .. (this.SourceFingerprint?.Files ?? [])
+            .Select(file => FileSystemPath.From(Path.GetFullPath(Path.Combine(primary.Parent!.FullPath, file.Path))))];
+    }
+
     /// <summary>Creates the record of a model before its first import.</summary>
     /// <param name="identity">The model's identity, which decides where the record lives.</param>
     /// <param name="source">The model's primary source file, a file reference from the record.</param>

@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Textures;
 
 namespace Oxygen.Editor.ContentExplorer.Importing;
@@ -47,7 +48,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     /// <summary>Initializes a new instance of the <see cref="TextureImportDialogViewModel"/> class for a reviewed image import.</summary>
     /// <param name="project">The active project.</param>
     /// <param name="sourcePath">The selected image.</param>
-    /// <param name="destinationFolder">The initial authoring destination.</param>
+    /// <param name="destinationFolder">The initial destination, in an own mount.</param>
     /// <param name="textureImport">The texture import, which reads the image and checks the request.</param>
     /// <param name="dialogs">The folder picker service.</param>
     public TextureImportDialogViewModel(ProjectContext project, string sourcePath, string destinationFolder, TextureImport textureImport, IDialogService dialogs)
@@ -290,7 +291,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
                 return;
             }
 
-            foreach (var mount in this.project.SourceMounts)
+            foreach (var mount in this.project.SourceMounts.Where(static mount => mount.Role == MountRole.Own))
             {
                 var root = mount.Location!.FullPath;
                 var relative = Path.GetRelativePath(root, selected).Replace('\\', '/');
@@ -302,7 +303,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
                 }
             }
 
-            this.Error = "Choose a folder inside one of this project's authoring mounts.";
+            this.Error = "Choose a folder inside one of this project's own mounts.";
             this.CanAccept = false;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

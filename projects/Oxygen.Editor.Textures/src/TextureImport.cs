@@ -11,7 +11,8 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Textures;
 
 /// <summary>
-/// Imports an image as a project texture: copies the image into an authoring folder and writes its descriptor beside it.
+/// Imports an image as a project texture: writes its descriptor in an own mount, naming an image in a mount where it is,
+/// and copying an image from anywhere else in beside the descriptor.
 /// </summary>
 /// <param name="fileSystem">The file system that holds the images and the project.</param>
 public sealed class TextureImport(IFileSystem fileSystem)
@@ -99,7 +100,7 @@ public sealed class TextureImport(IFileSystem fileSystem)
         }
 
         // The descriptor is made first: settings it refuses leave no file behind.
-        var descriptor = new TextureSource(Path.GetFileName(target.ImagePath))
+        var descriptor = new TextureSource(target.Source)
         {
             Name = request.Name,
             Intent = request.Intent,
@@ -108,13 +109,14 @@ public sealed class TextureImport(IFileSystem fileSystem)
             Cube = CubeSettings(request.Cube),
         };
         var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(TextureSourceWriter.ToJson(descriptor, target.VirtualPath), JsonOptions);
-        _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(target.ImagePath)!);
+        _ = this.fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(target.DescriptorPath)!);
         var sources = request.Cube?.Layout == CubeLayout.SixFaces ? this.FindCubeFaces(request.SourcePath)! : [request.SourcePath];
+        var copies = target.ImagePaths.Count;
         var imagesCreated = 0;
         var descriptorCreated = false;
         try
         {
-            for (var index = 0; index < sources.Count; ++index)
+            for (var index = 0; index < copies; ++index)
             {
                 var source = this.fileSystem.FileStream.New(sources[index], FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
                 await using var sourceLifetime = source.ConfigureAwait(false);

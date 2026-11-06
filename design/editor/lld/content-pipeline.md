@@ -1055,10 +1055,21 @@ in-attempt coherence evidence; durable freshness uses file content and probe
 presence/type/size/link state, so producer-owned metadata writes do not make an
 otherwise unchanged project stale.
 
-Retained model bundles live under `Content/SourceMedia/DCC` through the declared
-Content mount. Operation ownership and native query files survive a failed
-worker termination until native drain and cleanup complete. Query output remains
-in its operation directory and cannot overwrite an authored source.
+An import writes a new model's record in one of the project's own mounts; a
+destination in a shared mount is refused, because settings in a shared mount are
+made in its own project. A source in a mount stays where it is: the model is
+`<folder>/<name><extension>` in the chosen folder and its record references the
+source, so one file can be imported by many projects, or twice in one project
+under two names. Imported beside itself under its own name, the source is the
+model's companion. A source in no mount is copied in with its bundle, and the model
+is `<folder>/<name>/<file>`. `ImportDestination` owns this rule for the review and
+the import. A request for a source the named model already reads imports it again.
+A model of that name reading another source, or another file at the identity,
+refuses the import until it is renamed.
+
+Operation ownership and native query files survive a failed worker termination
+until native drain and cleanup complete. Query output remains in its operation
+directory and cannot overwrite an authored source.
 
 A model's import state is its model import record,
 `<model identity>.import.json` in the model's mount (the model

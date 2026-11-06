@@ -4,19 +4,20 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
+using Oxygen.Editor.Projects.Mounts;
 
 namespace Oxygen.Editor.ModelEditor.Importing;
 
-/// <summary>The content folder of the selected files, chosen from the project's authoring mounts.</summary>
+/// <summary>The content folder of the selected files, chosen from the project's own mounts.</summary>
 public sealed partial class ModelImportDialogViewModel
 {
-    /// <summary>Gets the content folder of a folder on disk: its path under the authoring mount that holds it.</summary>
+    /// <summary>Gets the content folder of a folder on disk: its path under the own mount that holds it.</summary>
     /// <param name="folder">A folder on disk.</param>
-    /// <returns>The content folder, such as <c>/Content/Vehicles</c>, or null outside every authoring mount.</returns>
+    /// <returns>The content folder, such as <c>/Content/Vehicles</c>, or null outside every own mount.</returns>
     public string? ContentFolderOf(string folder)
     {
         ArgumentException.ThrowIfNullOrEmpty(folder);
-        foreach (var mount in this.project.SourceMounts)
+        foreach (var mount in this.project.SourceMounts.Where(static mount => mount.Role == MountRole.Own))
         {
             var root = mount.Location!.FullPath;
             var relative = Path.GetRelativePath(root, folder).Replace('\\', '/');
@@ -50,7 +51,7 @@ public sealed partial class ModelImportDialogViewModel
             }
             else
             {
-                this.ErrorText = "Choose a folder in one of this project's authoring mounts.";
+                this.ErrorText = "Choose a folder in one of this project's own mounts.";
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)

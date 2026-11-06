@@ -33,7 +33,7 @@ public sealed partial class ModelImportFile : ObservableObject
     public partial string SourcePath { get; set; }
 
     /// <summary>Gets or sets the model's name: its folder in <see cref="DestinationFolder"/> for a source from outside
-    /// the project.</summary>
+    /// every mount, and otherwise its file's name there.</summary>
     [ObservableProperty]
     public partial string Name { get; set; }
 

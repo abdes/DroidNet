@@ -304,7 +304,7 @@ public partial class AssetsViewModel(
             return;
         }
 
-        var destination = this.GetSelectedTextureFolder(project);
+        var destination = ImportDestination.OwnFolderOf(project, sourcePath)?.VirtualPath ?? this.GetSelectedTextureFolder(project);
         var model = new TextureImportDialogViewModel(project, sourcePath, destination, textureImport, dialogService);
         var view = new TextureImportDialogView(model);
         var button = await dialogService.ShowAsync(
@@ -347,7 +347,7 @@ public partial class AssetsViewModel(
 
     private string GetSelectedTextureFolder(ProjectContext project)
     {
-        var selected = this.GetSelectedFolder();
+        var selected = ImportDestination.DefaultFolder(project, this.GetSelectedFolder());
         var parts = selected.VirtualPath.Trim('/').Split('/');
         var mountName = parts.Length > 0
             ? project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, parts[0], StringComparison.Ordinal))?.Name
@@ -440,6 +440,10 @@ public partial class AssetsViewModel(
             {
                 await this.ImportModelsAsync(project, [sourcePath.FullPath]).ConfigureAwait(true);
             }
+        }
+        else if (args.InvokedItem is { Kind: AssetKind.Image, IsRawSource: true, SourcePath: { } image })
+        {
+            await this.ImportImageSourceAsync(session.Context, image.FullPath).ConfigureAwait(true);
         }
         else if (args.InvokedItem is { Kind: AssetKind.Material, DescriptorPath: not null })
         {
@@ -579,6 +583,7 @@ public partial class AssetsViewModel(
     private void NotifyCookSelection()
     {
         this.ReimportSelectedSourceCommand.NotifyCanExecuteChanged();
+        this.ImportSelectedSourceCommand.NotifyCanExecuteChanged();
         this.ShowImportSourceCommand.NotifyCanExecuteChanged();
         this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
         this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
@@ -917,6 +922,20 @@ public partial class AssetsViewModel(
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
         {
             await dialogService.ShowMessageAsync("Import", error.Message, session.Lifetime).ConfigureAwait(true);
+        }
+    }
+
+    private bool CanImportSelectedSource() => !this.disposed && this.isInitialized
+        && this.SelectedAssets.Count <= 1 && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { IsRawSource: true, SourcePath: not null } };
+
+    [RelayCommand(CanExecute = nameof(CanImportSelectedSource))]
+    private async Task ImportSelectedSourceAsync()
+    {
+        if (this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { IsRawSource: true, SourcePath: { } source } asset })
+        {
+            await (asset.Kind == AssetKind.Image
+                ? this.ImportImageSourceAsync(session.Context, source.FullPath)
+                : this.ImportModelsAsync(session.Context, [source.FullPath])).ConfigureAwait(true);
         }
     }
 

@@ -36,6 +36,9 @@ public static class TextureImportCodes
     /// <summary>The destination is a source-media or generated folder.</summary>
     public const string DestinationDerived = DiagnosticCodes.TexturePrefix + "Import.DestinationDerived";
 
+    /// <summary>The destination is in a shared mount: an import writes into the project's own mounts.</summary>
+    public const string DestinationShared = DiagnosticCodes.TexturePrefix + "Import.DestinationShared";
+
     /// <summary>A strip or cross image is not exactly its grid of square faces.</summary>
     public const string LayoutMismatch = DiagnosticCodes.TexturePrefix + "Import.LayoutMismatch";
 

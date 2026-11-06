@@ -33,6 +33,10 @@ public sealed record AssetEntry(
     /// <summary>Gets the retained model file for information and source navigation, not descriptor editing.</summary>
     public FileSystemPath? ImportSourcePath { get; init; }
 
+    /// <summary>Gets a value indicating whether the row is a file to import: a model or an image with no asset at this
+    /// identity. A record elsewhere may reference it; more settings can still be made of it.</summary>
+    public bool IsRawSource => this.Kind is AssetKind.Model or AssetKind.Image && this.ImportSource is null && !this.IsPackaged;
+
     /// <summary>Gets a value indicating whether explicit reimport can target the retained model.</summary>
     public bool CanReimport => this.ImportSource is not null;
 
@@ -89,7 +93,7 @@ public sealed record AssetEntry(
 
     /// <summary>Gets the primary asset-state badge.</summary>
     public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden"
-        : this.IsPackaged ? this.PackagedBadge : this.Kind == AssetKind.Model && this.ImportSource is null ? "Not imported"
+        : this.IsPackaged ? this.PackagedBadge : this.IsRawSource ? "Not imported"
         : AssetStatusText.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
@@ -98,7 +102,7 @@ public sealed record AssetEntry(
         : this.IsPackaged
         ? $"Packaged in {this.CookedMetadata?.ContainerPath.Name}: read-only, and cooks reference it without copying it."
             + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
-        : this.Kind == AssetKind.Model && this.ImportSource is null ? "Import this model to create usable geometry, materials and scenes."
+        : this.IsRawSource ? (this.Kind == AssetKind.Model ? "Import this model to create usable geometry, materials and scenes." : "Import this image to create a texture.")
         : AssetStatusText.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
     /// <summary>

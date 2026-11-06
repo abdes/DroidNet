@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models;
@@ -14,4 +16,19 @@ public sealed record ModelImportRecord(string RecordPath, ModelImportSettings Se
 {
     /// <summary>Gets the model's identity, which is where the record lives.</summary>
     public AssetPath Identity => this.Settings.Identity;
+
+    /// <summary>Gets the source files that belong to the model: when its source is beside its record with its name, or in a
+    /// folder of that name, that source and what it read in its folder. A source anywhere else is only referenced.</summary>
+    /// <param name="project">The project.</param>
+    /// <returns>The files; empty for a referenced source.</returns>
+    public IReadOnlyList<FileSystemPath> CompanionFiles(ProjectContext project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var primary = FileSystemPath.From(this.SourcePath);
+        return project.FindByFilePath(FileSystemPath.From(this.RecordPath))?.Path is { } record
+            && project.FindByFilePath(primary)?.Path is { } source
+            && AssetFileTypes.CompanionsOf(record, source).Contains(source)
+                ? [.. this.Settings.FilesRead(primary).Where(file => file.IsSameOrInside(primary.Parent!))]
+                : [];
+    }
 }

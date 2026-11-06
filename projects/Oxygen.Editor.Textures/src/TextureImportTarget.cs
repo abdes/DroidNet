@@ -13,12 +13,17 @@ namespace Oxygen.Editor.Textures;
 /// <summary>Where an import puts a texture: its identity, its images and its descriptor, inside an authoring mount.</summary>
 /// <param name="MountName">The authoring mount that receives the texture.</param>
 /// <param name="VirtualPath">The texture's identity.</param>
-/// <param name="ImagePath">The image the descriptor names: the copied image, or the +X face of a six-face cube.</param>
+/// <param name="ImagePath">The image the descriptor names, copied or referenced: the image, or the +X face of a six-face
+/// cube.</param>
 /// <param name="DescriptorPath">The descriptor file.</param>
 public sealed record TextureImportTarget(string MountName, AssetPath VirtualPath, string ImagePath, string DescriptorPath)
 {
-    /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first.</summary>
+    /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first. None for an
+    /// image in a mount, which is referenced where it is.</summary>
     public IReadOnlyList<string> ImagePaths { get; init; } = [ImagePath];
+
+    /// <summary>Gets the file reference the descriptor names its image by.</summary>
+    public string Source { get; init; } = Path.GetFileName(ImagePath);
 
     /// <summary>Resolves and checks a reviewed texture import request.</summary>
     /// <param name="import">The import, which reads the selected images.</param>
@@ -39,12 +44,19 @@ public sealed record TextureImportTarget(string MountName, AssetPath VirtualPath
             ValidateLayoutFits(import, request.SourcePath, cube.Layout);
         }
 
+        var identity = request.DestinationFolder.Combine(request.Name + AssetFileTypes.Texture);
+        var descriptorPath = Path.Combine(physicalFolder, request.Name + AssetFileTypes.TextureDescriptor);
+        var image = Path.GetFullPath(sixFaces ? import.FindCubeFaces(request.SourcePath)![0] : request.SourcePath);
+        if (request.Project.ToFileReference(identity, FileSystemPath.From(image)) is { } reference)
+        {
+            return new(mount.Name, identity, image, descriptorPath) { ImagePaths = [], Source = reference };
+        }
+
         var extension = Path.GetExtension(request.SourcePath).ToLowerInvariant();
         var imagePaths = (sixFaces ? TextureImport.FaceSuffixes : [string.Empty])
             .Select(suffix => Path.Combine(physicalFolder, request.Name + suffix + extension))
             .ToArray();
-        var descriptorPath = Path.Combine(physicalFolder, request.Name + AssetFileTypes.TextureDescriptor);
-        return new(mount.Name, request.DestinationFolder.Combine(request.Name + AssetFileTypes.Texture), imagePaths[0], descriptorPath) { ImagePaths = imagePaths };
+        return new(mount.Name, identity, imagePaths[0], descriptorPath) { ImagePaths = imagePaths };
     }
 
     // The image, the name and the cook settings, before the destination is looked at.
@@ -83,12 +95,17 @@ public sealed record TextureImportTarget(string MountName, AssetPath VirtualPath
         }
     }
 
-    // The destination: an authoring mount, its folders below it, and the physical folder they name inside the mount.
+    // The destination: an own mount, its folders below it, and the physical folder they name inside the mount.
     private static (ResolvedMount Mount, string PhysicalFolder) ResolveFolder(TextureImportRequest request)
     {
         var folder = request.DestinationFolder;
         var mount = request.Project.SourceMounts.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal))
             ?? throw new TextureImportException(TextureImportCodes.DestinationNotAuthoring, "Choose a folder inside a project authoring mount.");
+        if (mount.Role != MountRole.Own)
+        {
+            throw new TextureImportException(TextureImportCodes.DestinationShared, $"'{mount.Name}' is a shared mount. Choose a folder in one of this project's own mounts; settings in a shared mount are made in its own project.");
+        }
+
         var folderParts = folder.IsMount ? [] : folder.RelativePath.Split('/');
         if (folderParts.Any(Oxygen.Managed.Core.VirtualPath.IsDerivedContent))
         {
