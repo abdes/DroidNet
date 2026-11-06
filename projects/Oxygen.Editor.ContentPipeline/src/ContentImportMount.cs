@@ -14,4 +14,10 @@ namespace Oxygen.Editor.ContentPipeline;
 /// which the cook's mounts file binds.</param>
 public sealed record ContentImportMount(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("path"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Path);
+    [property: JsonPropertyName("path"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Path)
+{
+    /// <summary>Gets the mount's kind; a source mount when absent.</summary>
+    [JsonPropertyName("kind")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Kind { get; init; }
+}

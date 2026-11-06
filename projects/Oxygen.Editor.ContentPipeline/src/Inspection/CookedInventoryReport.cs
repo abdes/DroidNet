@@ -55,8 +55,13 @@ public sealed class CookedInventoryReport
     /// <summary>Gets observed file failures; process success alone does not establish integrity.</summary>
     public ImmutableArray<CookedInventoryIssue> Issues { get; }
 
-    /// <summary>Gets a value indicating whether every indexed member and the complete membership matched.</summary>
+    /// <summary>Gets a value indicating whether every indexed member and the complete membership matched, as a root to
+    /// publish must.</summary>
     public bool IsValid => this.Issues.IsEmpty;
+
+    /// <summary>Gets a value indicating whether the root reads as its last commit: nothing but a writer's leftovers
+    /// differs.</summary>
+    public bool IsMountable => this.Issues.All(static issue => issue.IsLeftover);
 
     /// <summary>Reads the native schema and checks cross-record identities.</summary>
     /// <param name="json">The Inspector report.</param>
@@ -97,7 +102,7 @@ public sealed class CookedInventoryReport
     /// <returns>Asset/file metadata and integrity diagnostics.</returns>
     public CookInspectionResult ToInspection(string root)
     {
-        CookedAssetEntry[] assets = this.IsValid ? [.. this.Assets.Select(static asset => ToEntry(asset))] : [];
+        CookedAssetEntry[] assets = this.IsMountable ? [.. this.Assets.Select(static asset => ToEntry(asset))] : [];
         var files = this.Files.Select(static file => new CookedFileEntry(file.Key, checked((ulong)file.Value.Size))).ToArray();
         return new(root, this.IsValid, this.SourceKey, assets, files, this.Diagnostics(root));
     }
@@ -106,6 +111,12 @@ public sealed class CookedInventoryReport
     /// <param name="root">The physical root for diagnostics.</param>
     /// <returns>The integrity result.</returns>
     public CookValidationResult ToValidation(string root) => new(root, this.IsValid, this.Diagnostics(root));
+
+    /// <summary>Creates the validation view of a root that is only read: a writer's leftovers are no failure.</summary>
+    /// <param name="root">The physical root for diagnostics.</param>
+    /// <returns>The integrity result.</returns>
+    public CookValidationResult ToMountValidation(string root)
+        => new(root, this.IsMountable, [.. this.Diagnostics(root).Where(diagnostic => this.Issues.Any(issue => !issue.IsLeftover && string.Equals(diagnostic.AffectedPath, Path.Combine(root, issue.RelativePath), StringComparison.Ordinal)))]);
 
     private static CookedAssetEntry ToEntry(CookedInventoryAsset asset)
     {

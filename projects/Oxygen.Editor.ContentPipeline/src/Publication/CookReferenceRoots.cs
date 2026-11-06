@@ -45,7 +45,7 @@ internal sealed partial class CookReferenceRoots : IDisposable
 
                 var expected = previous.Roots.Single(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
                 var actual = await lease.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
-                if (!expected.Matches(actual) || !actual.IsValid)
+                if (!expected.Matches(actual) || !actual.IsMountable)
                 {
                     throw new IOException($"Cooked dependency mount '{mount}' changed before native lookup. Cook that content again.");
                 }

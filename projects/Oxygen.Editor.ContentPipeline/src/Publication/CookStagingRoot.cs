@@ -43,6 +43,30 @@ internal sealed class CookStagingRoot(string mount, Guid sourceKey, string path)
         this.Before = await CookRootImage.CaptureAsync(previousRoot, this.Path, cancellationToken, excludeGenerationMarker: true).ConfigureAwait(false);
     }
 
+    // Deletes the files no commit lists and cuts the bytes past a data file's committed length, as the engine's writer does
+    // when it opens a root.
+    internal void DiscardLeftovers(CookedInventoryReport seeded)
+    {
+        foreach (var issue in seeded.Issues.Where(static issue => issue.IsLeftover))
+        {
+            var file = System.IO.Path.Combine(this.Path, issue.RelativePath);
+            if (!File.Exists(file))
+            {
+                continue;
+            }
+
+            if (seeded.Files.TryGetValue(issue.RelativePath, out var committed))
+            {
+                using var data = new FileStream(file, FileMode.Open, FileAccess.Write, FileShare.None);
+                data.SetLength(committed.Size);
+            }
+            else
+            {
+                File.Delete(file);
+            }
+        }
+    }
+
     internal async Task PrepareWriteAsync()
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);

@@ -202,7 +202,7 @@ public sealed class NativeImportReportReaderTests
             Guid.NewGuid(),
             Path.Combine(root, "inputs"),
             root,
-            new(1, output, [new("model", "model", "model.gltf", [], Output: null, Name: null) { Record = "Imports/Content/Models/model.gltf.import.json" }]))
+            new(1, output, [new("model", "model", "model.gltf", [], Output: null, Name: null) { VirtualPath = "/Content/Models/model.gltf" }]))
         {
             MountsFile = ContentImportMountsFile.Empty,
         };

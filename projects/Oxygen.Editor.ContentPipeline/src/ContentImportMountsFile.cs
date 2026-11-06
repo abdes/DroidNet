@@ -12,10 +12,11 @@ namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
 /// The mounts file a cook passes to the ImportTool with <c>--mounts</c>: the project's resolved table, each bound source
-/// mount by name and absolute folder, with <c>"root": true</c>. The tool then resolves exactly the table the editor
-/// shows, and reads no <c>.mounts.json</c> file a second time.
+/// mount and valid cooked mount by name and absolute location (a cooked mount's resolved generation folder or pak), with
+/// <c>"root": true</c>. The tool then resolves exactly the table the editor shows, and reads no <c>.mounts.json</c> file a
+/// second time.
 /// </summary>
-/// <param name="Mounts">Each bound source mount's absolute folder, by mount name.</param>
+/// <param name="Mounts">Each bound mount's absolute location, by mount name.</param>
 public sealed record ContentImportMountsFile(
     [property: JsonPropertyName("mounts")] ImmutableSortedDictionary<string, string> Mounts)
 {
@@ -34,11 +35,11 @@ public sealed record ContentImportMountsFile(
 
     /// <summary>Creates the mounts file of a project's resolved table.</summary>
     /// <param name="project">The project.</param>
-    /// <returns>The file binding every bound source mount.</returns>
+    /// <returns>The file binding every bound source mount and valid cooked mount.</returns>
     public static ContentImportMountsFile Of(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return new(project.SourceMounts.ToImmutableSortedDictionary(
+        return new(project.SourceMounts.Concat(project.LibraryMounts).ToImmutableSortedDictionary(
             static mount => mount.Name,
             static mount => mount.Location!.FullPath.Replace('\\', '/'),
             StringComparer.Ordinal));

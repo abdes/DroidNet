@@ -22,9 +22,8 @@ public interface IContentImportManifestBuilder
     /// <summary>Builds one destination-free native recipe for discovery and execution.</summary>
     /// <param name="input">The logical source and output identity.</param>
     /// <param name="dependsOn">Other jobs required in the same batch.</param>
-    /// <param name="modelRecordPath">For a foreign model source, its model import record, relative to the project.</param>
     /// <returns>The native job with its complete recipe and layout.</returns>
-    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null);
+    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn);
 
     /// <summary>
     /// Builds the manifest for the resolved inputs in a single cook scope.

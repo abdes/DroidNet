@@ -20,6 +20,16 @@ public static class AssetImportDiagnosticCodes
     public const string ImportFailed = DiagnosticCodes.AssetImportPrefix + "ImportFailed";
 
     /// <summary>
+    /// The import stopped before it finished, on a request from outside the editor.
+    /// </summary>
+    public const string RunStopped = DiagnosticCodes.AssetImportPrefix + "RunStopped";
+
+    /// <summary>
+    /// The import tool failed with an internal defect, which the content did not cause.
+    /// </summary>
+    public const string ToolDefect = DiagnosticCodes.AssetImportPrefix + "ToolDefect";
+
+    /// <summary>
     /// A missing file the source names outside the folder its inputs are kept
     /// under is left out of them; the import proceeds without it.
     /// </summary>

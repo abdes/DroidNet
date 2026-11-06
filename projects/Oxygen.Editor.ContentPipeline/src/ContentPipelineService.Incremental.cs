@@ -160,7 +160,7 @@ public sealed partial class ContentPipelineService
         var mounts = operation.Project.SourceMounts
             .Select(static mount => mount.Name).Concat(previous.Roots.Select(static root => root.Mount)).Distinct(StringComparer.Ordinal).ToArray();
         var inventories = await CookIncrementalPlanner.ReadInventoriesAsync(baseline, mounts, this.engineContentPipelineApi, cancellationToken, artifacts).ConfigureAwait(false);
-        var repair = CookRootRepair.Create(operation.Project, baseline, previous, mounts, inventories);
+        var repair = CookRootRepair.Create(operation.Project, baseline.FindProjectRoot, previous, mounts, inventories);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, targetKind);
         var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken, uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), [.. previous.ProducedAssets]).ConfigureAwait(false);
         try

@@ -17,8 +17,13 @@ public sealed class CookedScriptReport
 {
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
     private readonly ImmutableDictionary<Guid, ImmutableArray<ScriptParameter>> scripts;
+    private readonly ImmutableDictionary<Guid, string> failures;
 
-    private CookedScriptReport(ImmutableDictionary<Guid, ImmutableArray<ScriptParameter>> scripts) => this.scripts = scripts;
+    private CookedScriptReport(ImmutableDictionary<Guid, ImmutableArray<ScriptParameter>> scripts, ImmutableDictionary<Guid, string> failures)
+    {
+        this.scripts = scripts;
+        this.failures = failures;
+    }
 
     /// <summary>Validates the shared native schema and rejects duplicate scripts or parameters.</summary>
     /// <param name="json">The native report.</param>
@@ -31,14 +36,17 @@ public sealed class CookedScriptReport
             throw new InvalidDataException("The native script report does not match its schema.");
         }
 
-        if (!document.RootElement.GetProperty("complete").GetBoolean())
-        {
-            throw new InvalidDataException("The native script report has a script it could not read.");
-        }
-
         var declarations = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<ScriptParameter>>();
+        var failures = ImmutableDictionary.CreateBuilder<Guid, string>();
         foreach (var row in document.RootElement.GetProperty("scripts").EnumerateArray())
         {
+            // A script the tool could not read has a row of its own; it fails that script, not the others.
+            if (!row.GetProperty("complete").GetBoolean())
+            {
+                failures[row.GetProperty("asset_key").GetGuid()] = row.GetProperty("diagnostic").GetString()!;
+                continue;
+            }
+
             var parameters = row.GetProperty("parameters").EnumerateArray().Select(ParseParameter).ToImmutableArray();
             if (parameters.Select(static parameter => parameter.Name).Distinct(StringComparer.Ordinal).Take(parameters.Length + 1).Count() != parameters.Length)
             {
@@ -51,16 +59,18 @@ public sealed class CookedScriptReport
             }
         }
 
-        return new(declarations.ToImmutable());
+        return new(declarations.ToImmutable(), failures.ToImmutable());
     }
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="scriptUri">The requested script identity.</param>
     /// <returns>The sole script, or null when the root has no matching script.</returns>
+    /// <exception cref="InvalidDataException">The tool could not read this script; the message names it and why.</exception>
     public CookedScript? SingleOrDefault(AssetPath scriptUri)
-        => this.scripts.Count switch
+        => (this.scripts.Count + this.failures.Count) switch
         {
             0 => null,
+            1 when this.failures.Count == 1 => throw new InvalidDataException($"The script '{scriptUri}' cannot be read: {this.failures.Values.Single()}"),
             1 => new(this.scripts.Keys.Single(), new Script { Identity = scriptUri, Origin = ScriptOrigin.Library, Parameters = this.scripts.Values.Single() }),
             _ => throw new InvalidDataException("The native script query returned more than one asset."),
         };

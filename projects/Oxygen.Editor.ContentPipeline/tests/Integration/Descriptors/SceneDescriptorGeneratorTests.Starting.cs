@@ -119,9 +119,9 @@ internal sealed partial class SceneDescriptorGeneratorTests
             .Select(static context => (context.GetProperty("context_ref").GetString(), context.GetProperty("priority").GetInt32()))
             .ToArray();
         _ = contexts.Should().Equal(
-            ("/Content/Input/Controls.input/Menu.oimap", StartingContextRules.DefaultPriority),
-            ("/Content/Input/Controls.input/Gameplay.oimap", 3),
-            ("/Content/Input/Overlay.input/Overlay.oimap", 7));
+            ("../Input/Controls.input/Menu.oimap", StartingContextRules.DefaultPriority),
+            ("../Input/Controls.input/Gameplay.oimap", 3),
+            ("../Input/Overlay.input/Overlay.oimap", 7));
     }
 
     /// <summary>A starting input context that its input source does not declare fails the cook with Go To Property.</summary>

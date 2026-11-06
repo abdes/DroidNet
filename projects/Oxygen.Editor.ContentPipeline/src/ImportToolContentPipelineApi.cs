@@ -245,7 +245,10 @@ public sealed partial class ImportToolContentPipelineApi(
             ? Import.NativeImportReportReader.Read(await File.ReadAllTextAsync(files.Report, cancellationToken).ConfigureAwait(false), execution, result.ExitCode)
             : result.ExitCode == 0
             ? throw new InvalidDataException("Native source import did not produce its required output report.")
-            : new NativeImportResult(Succeeded: false, Diagnostics: [CreateImportFailureDiagnostic(execution.OperationId, result)]);
+            : new NativeImportResult(Succeeded: false, Diagnostics: [Import.NativeImportReportReader.DiagnosticOf(execution.OperationId, Import.NativeImportReportReader.OutcomeOf(result.ExitCode)) ?? CreateImportFailureDiagnostic(execution.OperationId, result)])
+            {
+                Outcome = Import.NativeImportReportReader.OutcomeOf(result.ExitCode),
+            };
     }
 
     // The files of one ImportTool run, in the operation's folder: what it reads, and the report it writes. A run without

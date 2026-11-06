@@ -75,7 +75,7 @@ public sealed partial class SceneDescriptorGenerator
             }
 
             contexts.Add(new NativeStartingInputContext(
-                ContentPipelinePaths.ToNativeDescriptorPath(entry.Context, AssetFileTypes.InputMappingContext),
+                ContentPipelinePaths.ToNativeReference(entry.Context, AssetFileTypes.InputMappingContext, site.SceneInput.AssetUri),
                 StartingContextRules.EffectivePriority(entry, source)));
         }
 

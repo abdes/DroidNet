@@ -82,10 +82,13 @@ internal sealed class CookStagingArea : IAsyncDisposable
 
             // A retired file is listed by an earlier commit, and goes when no reader holds that commit.
             var retired = ReadRetired(root.Path);
-            if (root.Before.Files.Keys.Any(path => !LooseCookedIndex.IsReservedPath(path) && !inventory.Files.ContainsKey(path) && !retired.Contains(path)))
+            if (root.Before.Files.Keys.Any(path => !LooseCookedIndex.IsReservedPath(path) && !inventory.Files.ContainsKey(path) && !retired.Contains(path) && !damaged.Contains(path)))
             {
                 throw new IOException($"Cooked membership changed before staging '{root.Mount}'. Retry the cook.");
             }
+
+            // The candidate seeded from the root leaves a stopped writer's leftovers behind, as the next writer does.
+            root.DiscardLeftovers(inventory);
         }
     }
 

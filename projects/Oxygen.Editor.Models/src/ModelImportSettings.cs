@@ -165,6 +165,29 @@ public sealed record ModelImportSettings
         };
     }
 
+    /// <summary>Finds the source of a record's bytes when the reference grammar refuses it.</summary>
+    /// <param name="bytes">The bytes of a record that could not be read.</param>
+    /// <param name="identity">The model's identity.</param>
+    /// <returns>The source as written and the refusal's code, or <see langword="null"/> when the record was refused for
+    /// another reason.</returns>
+    public static (string Source, string Code)? FindRefusedSource(ReadOnlyMemory<byte> bytes, AssetPath identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        try
+        {
+            using var document = JsonDocument.Parse(bytes);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("source", out var source) && source.ValueKind == JsonValueKind.String
+                && !AssetPath.TryResolveReference(identity, source.GetString()!, VirtualPathRuleSet.Cooked, out _, out var error)
+                    ? (source.GetString()!, error.Value.ToCode())
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Gets the record's source file, through the project's mount table.</summary>
     /// <param name="project">The project and its mount table.</param>
     /// <returns>The source file, or <see langword="null"/> when its mount is not bound on this machine.</returns>

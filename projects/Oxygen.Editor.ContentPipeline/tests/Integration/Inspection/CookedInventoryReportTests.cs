@@ -65,6 +65,41 @@ public sealed class CookedInventoryReportTests
         }
     }
 
+    /// <summary>
+    /// What a stopped writer left reads as the last commit: a mount accepts it and repair sees no damage, but a root to
+    /// publish holds none of it.
+    /// </summary>
+    [TestMethod]
+    [DataRow("uncommitted")]
+    [DataRow("uncommitted_tail")]
+    public void AWritersLeftoversDoNotStopARootBeingRead(string reason)
+    {
+        var report = CookedInventoryReport.Parse(Inventory("Resources/member.bin", FileKind.BuffersData).Replace("\"issues\":[]", $$"""
+            "issues":[{"relative_path":"Resources/member.bin","reason":"{{reason}}"}]
+            """, StringComparison.Ordinal));
+
+        _ = report.IsValid.Should().BeFalse("a root to publish holds no leftovers");
+        _ = report.IsMountable.Should().BeTrue();
+        _ = report.ToValidation("root").Succeeded.Should().BeFalse();
+        var mounted = report.ToMountValidation("root");
+        _ = mounted.Succeeded.Should().BeTrue();
+        _ = mounted.Diagnostics.Should().BeEmpty();
+    }
+
+    /// <summary>Damage still stops a mount, and its leftovers are left out of what it reports.</summary>
+    [TestMethod]
+    public void DamageBesideLeftoversStopsARootBeingRead()
+    {
+        var report = CookedInventoryReport.Parse(Inventory("Resources/member.bin", FileKind.BuffersData).Replace("\"issues\":[]", """
+            "issues":[{"relative_path":"Resources/member.bin","reason":"digest_mismatch"},{"relative_path":"Resources/stray.bin","reason":"uncommitted"}]
+            """, StringComparison.Ordinal));
+
+        _ = report.IsMountable.Should().BeFalse();
+        var mounted = report.ToMountValidation("root");
+        _ = mounted.Succeeded.Should().BeFalse();
+        _ = mounted.Diagnostics.Should().ContainSingle().Which.Message.Should().Contain("digest_mismatch");
+    }
+
     private static string Inventory(string path, FileKind kind)
     {
         var sourceKey = Guid.Empty.ToString();

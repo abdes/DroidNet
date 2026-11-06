@@ -11,9 +11,6 @@ using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Authoring.Materials;
-using Oxygen.Managed.Assets.Authoring.Textures;
-using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -197,20 +194,21 @@ internal sealed partial class CookSourceAnalyzer(
         var managed = ImmutableArray.CreateBuilder<CookSnapshotInput>();
 
         // A model cooks from its import record, which the snapshot captures with the model's files.
-        string? recordPath = null;
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
             var record = ModelRecordLookup.Find(operation.Project, input.AssetUri);
-            recordPath = CookPaths.Of(operation.Project, FileSystemPath.From(record.RecordPath));
             var bytes = await CookSavedSourceReader.ReadAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
             _ = ModelImportSettings.Parse(bytes, record.Identity);
-            managed.Add(new(AssetUri: null, FileSystemPath.From(record.RecordPath), recordPath, Convert.ToHexString(SHA256.HashData(bytes))));
+            managed.Add(new(AssetUri: null, FileSystemPath.From(record.RecordPath), CookPaths.Of(operation.Project, FileSystemPath.From(record.RecordPath)), Convert.ToHexString(SHA256.HashData(bytes))));
         }
 
         var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
-            ? await this.ValidateMaterialTextureSourcesAsync(input, cancellationToken).ConfigureAwait(false)
+            ? await new MaterialTextureCheck(operation.OperationId, operation.Project).RunAsync(
+                input,
+                await CookSavedSourceReader.ReadAsync(input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false),
+                cancellationToken).ConfigureAwait(false)
             : [];
-        return new(input, recipes.BuildJob(input, [], recordPath), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
+        return new(input, recipes.BuildJob(input, []), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
     }
 
     // A scene is projected to the descriptor the engine cooks.
@@ -245,103 +243,6 @@ internal sealed partial class CookSourceAnalyzer(
         });
         return new(input, recipes.BuildJob(projected, []), managed, projection);
     }
-
-    // A material that cannot be read reports its own problem; one that can has each texture checked.
-    private async Task<ImmutableArray<DiagnosticRecord>> ValidateMaterialTextureSourcesAsync(ContentCookInput input, CancellationToken cancellationToken)
-    {
-        var materialBytes = await CookSavedSourceReader.ReadAsync(input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
-        MaterialSource material;
-        try
-        {
-            material = MaterialSourceReader.Read(materialBytes, input.AssetUri);
-        }
-        catch (AssetFormatException exception)
-        {
-            return [this.CreateSourceDiagnostic(input, exception.Problem)];
-        }
-
-        var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
-        foreach (var (channel, texture) in material.TextureReferences)
-        {
-            if (await this.ValidateTextureBindingAsync(input, channel, texture, cancellationToken).ConfigureAwait(false) is { } problem)
-            {
-                diagnostics.Add(problem);
-            }
-        }
-
-        return diagnostics.ToImmutable();
-    }
-
-    // A binding names a texture by its virtual path; an authored texture's descriptor must exist and its images too.
-    private async Task<DiagnosticRecord?> ValidateTextureBindingAsync(ContentCookInput input, string channel, AssetPath texture, CancellationToken cancellationToken)
-    {
-        if (!texture.Name.EndsWith(AssetFileTypes.Texture, StringComparison.Ordinal))
-        {
-            return this.CreateTextureReferenceDiagnostic(input, channel, texture.VirtualPath, "path is not a named texture", details: null);
-        }
-
-        if (!CookInputResolver.IsAuthoringUri(operation.Project, texture))
-        {
-            return null;
-        }
-
-        var textureDescriptorPath = this.ResolveTextureDescriptorPath(texture);
-        return textureDescriptorPath is null || !operation.Project.FileSystem.File.Exists(textureDescriptorPath)
-            ? this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath ?? texture.VirtualPath, "texture descriptor is missing", details: null)
-            : await this.ValidateTextureImagesAsync(input, channel, textureDescriptorPath, texture, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task<DiagnosticRecord?> ValidateTextureImagesAsync(ContentCookInput input, string channel, string textureDescriptorPath, AssetPath identity, CancellationToken cancellationToken)
-    {
-        TextureSource texture;
-        try
-        {
-            texture = TextureSourceReader.Read(await operation.Project.FileSystem.File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false), identity);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or AssetFormatException)
-        {
-            return this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath, "texture descriptor is invalid", exception.Message);
-        }
-
-        var files = operation.Project.FileSystem;
-        return texture.ResolveImages(identity, operation.Project, image => files.File.Exists(image.FullPath))
-            .FirstOrDefault(image => image.File is not { } file || !files.File.Exists(file.FullPath)) is { } missing
-            ? this.CreateTextureReferenceDiagnostic(input, channel, missing.File?.FullPath ?? missing.Reference, "source image is missing", details: null)
-            : null;
-    }
-
-    // A texture referenced by identity cooks from its authored descriptor in an authoring mount.
-    private string? ResolveTextureDescriptorPath(AssetPath texture)
-        => operation.Project.SourceMounts.Any(mount => string.Equals(mount.Name, texture.Mount, StringComparison.Ordinal))
-            && operation.Project.Find(texture.WithAuthoringSuffix()) is { IsMountRoot: false } descriptor
-                ? descriptor.File.FullPath
-                : null;
-
-    private DiagnosticRecord CreateSourceDiagnostic(ContentCookInput input, AssetProblem problem)
-        => new()
-        {
-            OperationId = operation.OperationId,
-            Domain = FailureDomain.AssetImport,
-            Severity = DiagnosticSeverity.Error,
-            Code = problem.Code,
-            Message = $"Material '{input.AssetUri.VirtualPath}' cannot be read: {problem.Message}",
-            TechnicalMessage = problem.Explanation,
-            AffectedPath = input.SourceAbsolutePath.FullPath,
-            AffectedVirtualPath = input.AssetUri.VirtualPath,
-        };
-
-    private DiagnosticRecord CreateTextureReferenceDiagnostic(ContentCookInput input, string channel, string affectedPath, string issue, string? details)
-        => new()
-        {
-            OperationId = operation.OperationId,
-            Domain = FailureDomain.AssetImport,
-            Severity = DiagnosticSeverity.Error,
-            Code = "material.texture_reference_invalid",
-            Message = $"Material '{input.AssetUri.VirtualPath}' texture channel '{channel}' {issue}.",
-            TechnicalMessage = details,
-            AffectedPath = affectedPath,
-            AffectedVirtualPath = input.AssetUri.VirtualPath,
-        };
 
     private ContentCookInput Rebase(ContentCookInput input)
         => input with { SourceCookPath = CookPaths.Of(operation.Project, input.SourceAbsolutePath) };

@@ -16,8 +16,13 @@ public sealed class CookedGeometryReport
 {
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
     private readonly ImmutableDictionary<Guid, Inventory> geometries;
+    private readonly ImmutableDictionary<Guid, string> failures;
 
-    private CookedGeometryReport(ImmutableDictionary<Guid, Inventory> geometries) => this.geometries = geometries;
+    private CookedGeometryReport(ImmutableDictionary<Guid, Inventory> geometries, ImmutableDictionary<Guid, string> failures)
+    {
+        this.geometries = geometries;
+        this.failures = failures;
+    }
 
     /// <summary>Validates the shared native schema and rejects ambiguous identities or bindings.</summary>
     /// <param name="json">The native report.</param>
@@ -30,15 +35,19 @@ public sealed class CookedGeometryReport
             throw new InvalidDataException("The native geometry report does not match its schema.");
         }
 
-        if (!document.RootElement.GetProperty("complete").GetBoolean())
-        {
-            throw new InvalidDataException("The native geometry report has a geometry it could not read.");
-        }
-
         var inventories = ImmutableDictionary.CreateBuilder<Guid, Inventory>();
+        var failures = ImmutableDictionary.CreateBuilder<Guid, string>();
         foreach (var row in document.RootElement.GetProperty("geometries").EnumerateArray())
         {
             var key = row.GetProperty("geometry_asset_key").GetGuid();
+
+            // A geometry the tool could not read has a row of its own; it fails that geometry, not the others.
+            if (!row.GetProperty("complete").GetBoolean())
+            {
+                failures[key] = row.GetProperty("diagnostic").GetString()!;
+                continue;
+            }
+
             var ids = new HashSet<Guid>();
             var locations = new HashSet<(uint Lod, uint Submesh)>();
             var surfaces = ImmutableArray.CreateBuilder<GeometrySurface>();
@@ -74,24 +83,27 @@ public sealed class CookedGeometryReport
             }
         }
 
-        return new(inventories.ToImmutable());
+        return new(inventories.ToImmutable(), failures.ToImmutable());
     }
 
     /// <summary>Finds the exact native key while preserving the requested authored URI.</summary>
     /// <param name="geometryUri">The authored identity.</param>
     /// <param name="nativeGeometryKey">The native key to resolve.</param>
     /// <returns>The matching inventory, or null.</returns>
+    /// <exception cref="InvalidDataException">The tool could not read this geometry; the message names it and why.</exception>
     public GeometrySurfaceMetadata? Find(AssetPath geometryUri, Guid nativeGeometryKey)
-        => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Surfaces, inventory.LodPolicy) : null;
+        => this.failures.TryGetValue(nativeGeometryKey, out var failure)
+            ? throw new InvalidDataException($"The geometry '{geometryUri}' cannot be read: {failure}")
+            : this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Surfaces, inventory.LodPolicy) : null;
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="geometryUri">The authored identity.</param>
     /// <returns>The sole inventory, or null when the root has no matching geometry.</returns>
     public GeometrySurfaceMetadata? SingleOrDefault(AssetPath geometryUri)
-        => this.geometries.Count switch
+        => (this.geometries.Count + this.failures.Count) switch
         {
             0 => null,
-            1 => this.Find(geometryUri, this.geometries.Keys.Single()),
+            1 => this.Find(geometryUri, this.geometries.Keys.Concat(this.failures.Keys).Single()),
             _ => throw new InvalidDataException("The native geometry query returned more than one asset."),
         };
 

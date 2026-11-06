@@ -106,12 +106,12 @@ internal sealed partial class ScriptCookingTests : IDisposable
         var binding = result.ScriptBindings.Should().ContainSingle().Subject;
         _ = binding.NodeIndex.Should().Be(1u);
         _ = binding.SlotId.Should().Be(slot.Id.ToString("D"));
-        _ = binding.ScriptVirtualPath.Should().Be("/Content/Player/move.oscript");
+        _ = binding.ScriptVirtualPath.Should().Be("../Player/move.oscript", "a generated descriptor spells a reference from the scene");
         _ = binding.ExecutionOrder.Should().Be(2);
         _ = binding.Params.Select(static param => (param.Key, param.Type)).Should().Equal(
             ("follow", "node"), ("jump", "asset"), ("offset", "vec2"), ("speed", "float"));
         _ = binding.Params.Single(static param => string.Equals(param.Key, "follow", StringComparison.Ordinal)).Value.Should().Be(new ScriptSidecarNodeRef(0u));
-        _ = binding.Params.Single(static param => string.Equals(param.Key, "jump", StringComparison.Ordinal)).Value.Should().Be("/Content/Input/Jump.oiact");
+        _ = binding.Params.Single(static param => string.Equals(param.Key, "jump", StringComparison.Ordinal)).Value.Should().Be("../Input/Jump.oiact");
         _ = result.ScriptReferences.Should().BeEquivalentTo([MoveScript, AssetPath.Parse("/Content/Input/Jump.oiact")]);
         var warning = result.Diagnostics.Should().ContainSingle().Subject;
         _ = warning.Severity.Should().Be(DiagnosticSeverity.Warning);
@@ -267,7 +267,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
             Severity = DiagnosticSeverity.Error,
             Code = "script.sidecar.param_undeclared",
             Message = "Script '/Content/Player/move.oscript' declares no parameter 'speed'",
-            TechnicalMessage = "bindings[0].params[1].key",
+            TechnicalMessage = "/bindings/0/params/1/key",
             AffectedPath = descriptor.DescriptorPath,
         };
 
@@ -303,7 +303,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
             Severity = DiagnosticSeverity.Error,
             Code = "script.sidecar.param_undeclared",
             Message = "The slot's script declares no parameter 'speed'",
-            TechnicalMessage = "instance_bindings[0].params[0].key",
+            TechnicalMessage = "/instance_bindings/0/params/0/key",
             AffectedPath = descriptor.DescriptorPath,
         };
 
@@ -341,7 +341,7 @@ internal sealed partial class ScriptCookingTests : IDisposable
             Severity = DiagnosticSeverity.Warning,
             Code = KeptChangeDiagnostics.ScriptInstanceOverrideUnresolved,
             Message = "The change names no node of the instanced scene",
-            TechnicalMessage = "instance_bindings[0]",
+            TechnicalMessage = "/instance_bindings/0",
             AffectedPath = descriptor.DescriptorPath,
         };
 

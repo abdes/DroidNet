@@ -21,6 +21,38 @@ internal static class NativeImportReportReader
         return JsonSchema.FromText(reader.ReadToEnd());
     });
 
+    /// <summary>Reads how a run ended from the tool's exit code; an exit code the tool does not document is a failure.</summary>
+    /// <param name="exitCode">The tool's exit code.</param>
+    /// <returns>The outcome.</returns>
+    public static NativeRunOutcome OutcomeOf(int exitCode)
+        => Enum.IsDefined((NativeRunOutcome)exitCode) ? (NativeRunOutcome)exitCode : NativeRunOutcome.Failed;
+
+    /// <summary>Gets the diagnostic of a run that ended without its content being at fault.</summary>
+    /// <param name="operationId">The operation.</param>
+    /// <param name="outcome">How the run ended.</param>
+    /// <returns>The diagnostic, or <see langword="null"/> for an outcome the jobs explain.</returns>
+    public static DiagnosticRecord? DiagnosticOf(Guid operationId, NativeRunOutcome outcome)
+        => outcome switch
+        {
+            NativeRunOutcome.Stopped => new()
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.AssetImport,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetImportDiagnosticCodes.RunStopped,
+                Message = "The import stopped before it finished, on a request from outside the editor. The cooked content stays as it was.",
+            },
+            NativeRunOutcome.ToolDefect => new()
+            {
+                OperationId = operationId,
+                Domain = FailureDomain.ContentPipeline,
+                Severity = DiagnosticSeverity.Fatal,
+                Code = AssetImportDiagnosticCodes.ToolDefect,
+                Message = "The ImportTool failed with an internal defect, which the content did not cause. The cooked content stays as it was.",
+            },
+            _ => null,
+        };
+
     /// <summary>Validates the requested jobs and detaches their outputs, products and diagnostics.</summary>
     /// <param name="json">The native report document.</param>
     /// <param name="execution">The immutable native request.</param>
@@ -83,9 +115,11 @@ internal static class NativeImportReportReader
         }
 
         AddBatchDiagnostics(root, execution, diagnostics);
-        AddIncompleteDiagnostic(execution, succeeded, diagnostics);
+        var outcome = OutcomeOf(exitCode);
+        AddIncompleteDiagnostic(execution, outcome, succeeded, diagnostics);
         return new(succeeded, diagnostics)
         {
+            Outcome = outcome,
             OutputsBySource = outputsBySource.ToImmutable(),
             ProductsBySource = productsBySource.ToImmutable(),
             ModelImports = succeeded ? modelImports.ToImmutable() : [],
@@ -112,7 +146,7 @@ internal static class NativeImportReportReader
     // A successful job that imports a model establishes what its record keeps, one entry per requested source.
     private static void ReadModelImport(JsonElement job, ContentImportJob requested, ImmutableDictionary<string, JsonElement>.Builder modelImports)
     {
-        if (requested.Record is null
+        if (!requested.IsModel
             || !string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
         {
             return;
@@ -170,9 +204,16 @@ internal static class NativeImportReportReader
             AffectedEntity = NativeSourceObject.Read(issue),
         };
 
-    // A run that failed without reporting any error still reports that it did not complete.
-    private static void AddIncompleteDiagnostic(ContentImportExecution execution, bool succeeded, List<DiagnosticRecord> diagnostics)
+    // A run the tool stopped, or a defect of the tool, says so whatever its jobs reported; a run that failed without
+    // reporting any error still reports that it did not complete.
+    private static void AddIncompleteDiagnostic(ContentImportExecution execution, NativeRunOutcome outcome, bool succeeded, List<DiagnosticRecord> diagnostics)
     {
+        if (DiagnosticOf(execution.OperationId, outcome) is { } ended)
+        {
+            diagnostics.Add(ended);
+            return;
+        }
+
         if (succeeded || diagnostics.Exists(static issue => issue.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal))
         {
             return;

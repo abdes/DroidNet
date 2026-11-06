@@ -176,7 +176,10 @@ public sealed class ModelImportRecordsTests
         var records = new ModelImportRecords(project);
 
         _ = records.All.Should().BeEmpty();
-        _ = records.Problems.Should().ContainSingle().Which.UnboundSource.Should().BeNull("the record is not readable: its source leaves its mount");
+        var problem = records.Problems.Should().ContainSingle().Subject;
+        _ = problem.UnboundSource.Should().BeNull("the record is not readable: its source leaves its mount");
+        _ = problem.RefusedSource.Should().Be("../../Content/Car.glb");
+        _ = problem.RefusalCode.Should().Be("vpath.reference_outside_mount");
     }
 
     private ProjectContext CreateProject()

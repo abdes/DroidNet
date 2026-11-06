@@ -24,9 +24,10 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A reference is checked when it names a source mount of the project: it resolves when the mount is bound and holds the
-/// asset's source, or the source of the container that produces it. References to the engine's content and to cooked
-/// libraries resolve through their catalogs, not here.
+/// A reference into a source mount resolves when the mount is bound and holds the asset's source, or the source of the
+/// container that produces it; one into a cooked mount, when the library is valid and holds the asset. Shared content
+/// cannot reference a project's own mount, since no other project has it. A reference the grammar refuses names nothing,
+/// and is listed with its refusal. References to the engine's content resolve through its catalog, not here.
 /// </para>
 /// <para>
 /// The session activates the check: it runs when the project opens and after each change of the project's mounts, one
@@ -42,7 +43,13 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     private const string SourceProperty = "$.source";
 
     /// <summary>The version of the file tools read.</summary>
-    internal const int ReferencesFileVersion = 2;
+    internal const int ReferencesFileVersion = 3;
+
+    /// <summary>The code of a reference into a library that does not hold the asset.</summary>
+    internal const string ReferenceUnresolved = "reference.unresolved";
+
+    /// <summary>The code of a reference from a shared mount into a project's own mount.</summary>
+    internal const string ReferenceIntoProjectMount = "reference.into_project_mount";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -120,31 +127,43 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
         foreach (var descriptor in index.Descriptors)
         {
             found.AddRange(descriptor.Fields
-                .Select(field => (Field: field, Code: UnresolvedCode(project, field.Identity)))
+                .Select(field => (Field: field, Code: UnresolvedCode(project, descriptor.Identity, field.Identity)))
                 .Where(static check => check.Code is not null)
-                .Select(check => new UnresolvedReference(descriptor.Location, check.Field.Property, check.Field.Identity.VirtualPath, check.Code!)));
+                .Select(check => new UnresolvedReference(descriptor.Location, check.Field.Property, check.Field.Written, check.Field.Identity.VirtualPath, check.Code!)));
+            found.AddRange(descriptor.Refused.Select(refused => new UnresolvedReference(descriptor.Location, refused.Property, refused.Written, Resolved: null, refused.Code)));
         }
 
-        // A model's record names its source; a model moved or deleted while the project was closed leaves it unresolved.
         var records = new ModelImportRecords(project);
-        found.AddRange(records.All
-            .Where(record => !project.FileSystem.File.Exists(record.SourcePath))
-            .Select(static record => new UnresolvedReference(FileSystemPath.From(record.RecordPath), SourceProperty, record.Settings.Source, AssetIdentityDiagnosticCodes.ResolveMissing)));
+        found.AddRange(records.All.Select(record => (Record: record, Code: RecordSourceCode(project, record)))
+            .Where(static check => check.Code is not null)
+            .Select(static check => new UnresolvedReference(FileSystemPath.From(check.Record.RecordPath), SourceProperty, check.Record.Settings.Source, ResolvedSource(check.Record), check.Code!)));
         found.AddRange(records.Problems
             .Where(static problem => problem.UnboundSource is not null)
             .Select(problem => new UnresolvedReference(
                 FileSystemPath.From(problem.RecordPath),
                 SourceProperty,
                 problem.UnboundSource!,
+                problem.UnboundSource!,
                 UnavailableMountCode(project, MountNameOf(problem.UnboundSource!)) ?? AssetIdentityDiagnosticCodes.ResolveMissing)));
+        found.AddRange(records.Problems
+            .Where(static problem => problem.RefusedSource is not null)
+            .Select(static problem => new UnresolvedReference(FileSystemPath.From(problem.RecordPath), SourceProperty, problem.RefusedSource!, Resolved: null, problem.RefusalCode!)));
         return [.. found.OrderBy(static reference => reference.File.FullPath, StringComparer.Ordinal)
             .ThenBy(static reference => reference.Property, StringComparer.Ordinal)];
     }
 
-    /// <summary>Gets why a referenced identity does not resolve in the project's source mounts.</summary>
+    /// <summary>Gets why a reference does not resolve in the project.</summary>
+    /// <param name="project">The project.</param>
+    /// <param name="referrer">The identity of the file that holds the reference.</param>
+    /// <param name="identity">The referenced identity.</param>
+    /// <returns>The code, or <see langword="null"/> when it resolves.</returns>
+    internal static string? UnresolvedCode(ProjectContext project, AssetPath referrer, AssetPath identity)
+        => IsIntoProjectMount(project, referrer, identity) ? ReferenceIntoProjectMount : UnresolvedCode(project, identity);
+
+    /// <summary>Gets why a referenced identity does not resolve in the project's mounts.</summary>
     /// <param name="project">The project.</param>
     /// <param name="identity">The referenced identity.</param>
-    /// <returns>The code, or <see langword="null"/> when it resolves or names no source mount.</returns>
+    /// <returns>The code, or <see langword="null"/> when it resolves.</returns>
     internal static string? UnresolvedCode(ProjectContext project, AssetPath identity)
     {
         var mount = project.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, identity.Mount, StringComparison.Ordinal));
@@ -156,12 +175,38 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
                     ? null : AssetIdentityDiagnosticCodes.ResolveMissing;
         }
 
-        return mount.Kind != MountKind.Source ? null
+        return mount.Kind == MountKind.Cooked ? UnresolvedLibraryCode(mount, identity)
             : UnavailableMountCode(project, mount.Name) is { } unavailable ? unavailable
             : CookInputResolver.HasProjectSource(project, identity)
                 || (AssetFileTypes.ContainerOf(identity) is { } container && CookInputResolver.HasProjectSource(project, container))
                 ? null : AssetIdentityDiagnosticCodes.ResolveMissing;
     }
+
+    // A library that is not usable resolves nothing; a usable one resolves what it holds.
+    private static string? UnresolvedLibraryCode(ResolvedMount mount, AssetPath identity)
+        => mount.State switch
+        {
+            MountState.Unbound => MountCodes.Unbound,
+            MountState.Missing => MountCodes.FolderMissing,
+            MountState.Bound when mount.Library?.Holds(identity.VirtualPath) == true => null,
+            MountState.Bound => ReferenceUnresolved,
+            _ => mount.Findings.Count != 0 ? mount.Findings[0].Code : ReferenceUnresolved,
+        };
+
+    // Shared content is read by other projects, which do not have this project's own mounts.
+    private static bool IsIntoProjectMount(ProjectContext project, AssetPath referrer, AssetPath identity)
+        => !string.Equals(referrer.Mount, identity.Mount, StringComparison.Ordinal)
+            && project.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, referrer.Mount, StringComparison.Ordinal)) is { Kind: MountKind.Source, Role: MountRole.Shared }
+            && project.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, identity.Mount, StringComparison.Ordinal)) is { Kind: MountKind.Source, Role: MountRole.Own };
+
+    // A model's record names its source; a model moved or deleted while the project was closed leaves it unresolved.
+    private static string? RecordSourceCode(ProjectContext project, ModelImportRecord record)
+        => AssetPath.TryParse(ResolvedSource(record), out var source) && IsIntoProjectMount(project, record.Identity, source) ? ReferenceIntoProjectMount
+            : project.FileSystem.File.Exists(record.SourcePath) ? null
+            : AssetIdentityDiagnosticCodes.ResolveMissing;
+
+    private static string ResolvedSource(ModelImportRecord record)
+        => AssetPath.TryResolveReference(record.Identity, record.Settings.Source, VirtualPathRuleSet.Cooked, out var source, out _) ? source.VirtualPath : record.Settings.Source;
 
     // Why a declared source mount cannot be read on this machine, or null when it can or is not a source mount.
     private static string? UnavailableMountCode(ProjectContext project, string name)
@@ -184,7 +229,8 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
         var document = new ReferencesFile(ReferencesFileVersion, [.. found.Select(reference => new ReferencesFile.Entry(
             CookPaths.TryOf(project, reference.File) ?? reference.File.FullPath,
             reference.Property,
-            reference.MountPath,
+            reference.Written,
+            reference.Resolved,
             reference.Code))]);
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temporary = path + ".tmp";
@@ -223,7 +269,8 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
             },
             CancellationToken.None);
 
-    // The file tools read: each unresolved reference by the cook path of its file, its field, the mount path and the code.
+    // The file tools read: each unresolved reference by the cook path of its file, its field, what it writes, what that
+    // resolves to, and the code.
     private sealed record ReferencesFile(
         [property: JsonPropertyName("schema_version")] int Version,
         [property: JsonPropertyName("references")] IReadOnlyList<ReferencesFile.Entry> References)
@@ -231,12 +278,14 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
         /// <summary>One unresolved reference.</summary>
         /// <param name="File">The referencing file's cook path.</param>
         /// <param name="Property">The field's JSON path.</param>
-        /// <param name="Missing">The unresolved mount path.</param>
+        /// <param name="Written">The reference as the file writes it.</param>
+        /// <param name="Resolved">The virtual path it resolves to, absent when the grammar refuses it.</param>
         /// <param name="Code">Why it does not resolve.</param>
         public sealed record Entry(
             [property: JsonPropertyName("file")] string File,
             [property: JsonPropertyName("property")] string Property,
-            [property: JsonPropertyName("missing")] string Missing,
+            [property: JsonPropertyName("written")] string Written,
+            [property: JsonPropertyName("resolved"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Resolved,
             [property: JsonPropertyName("code")] string Code);
     }
 }

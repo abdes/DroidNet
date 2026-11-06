@@ -57,8 +57,29 @@ internal static class AuthoredReferenceFormat
         var root = JsonNode.Parse(StripBom(content.Span));
         var anchor = AnchorOf(path, identity);
         return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
-            .Select(node => TryParseReference(path, anchor, node.GetValue<string>(), out var target, out _) ? new AuthoredReference(node.GetPath(), target) : null)
+            .Select(node => TryParseReference(path, anchor, node.GetValue<string>(), out var target, out _) ? new AuthoredReference(node.GetPath(), target, node.GetValue<string>()) : null)
             .OfType<AuthoredReference>()];
+    }
+
+    /// <summary>Reads the references of an engine format that the reference grammar refuses, each with its field.</summary>
+    /// <param name="path">The descriptor.</param>
+    /// <param name="identity">The descriptor's identity.</param>
+    /// <param name="content">The descriptor bytes.</param>
+    /// <returns>Each refused reference; none for a format that holds no references from its identity.</returns>
+    /// <exception cref="JsonException">The descriptor is not JSON.</exception>
+    public static IReadOnlyList<RefusedReference> ReadRefusedReferences(FileSystemPath path, AssetPath identity, ReadOnlyMemory<byte> content)
+    {
+        if (IsTexture(path) || IsEditorFormat(path))
+        {
+            return [];
+        }
+
+        var root = JsonNode.Parse(StripBom(content.Span));
+        return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
+            .Where(node => !AssetFileTypes.Is(path.Name, AssetFileCategory.Input) || new InputActionReference(node.GetValue<string>()).IsReference)
+            .Select(node => AssetPath.TryResolveReference(identity, node.GetValue<string>(), VirtualPathRuleSet.Authored, out _, out var error)
+                ? null : new RefusedReference(node.GetPath(), node.GetValue<string>(), error.Value.ToCode()))
+            .OfType<RefusedReference>()];
     }
 
     /// <summary>Renames an action or a mapping context inside its input source, keeping the rest of the file.</summary>

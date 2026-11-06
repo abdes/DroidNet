@@ -501,7 +501,8 @@ public sealed partial class ContentPipelineService(
         var allDiagnostics = diagnostics.Concat(MapSourceDiagnostics(scope, importResult.Diagnostics)).ToList();
         if (!importResult.Succeeded)
         {
-            return CreateFailedImport(operationId, targetKind, allDiagnostics);
+            var failed = CreateFailedImport(operationId, targetKind, allDiagnostics);
+            return importResult.Outcome == NativeRunOutcome.Stopped ? failed with { Status = OperationStatus.Cancelled } : failed;
         }
 
         var validated = await this.ValidateImportedOutputAsync(operationId, targetKind, scope, manifest, allDiagnostics, importResult, cancellationToken).ConfigureAwait(false);

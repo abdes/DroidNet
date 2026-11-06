@@ -186,8 +186,9 @@ public enum ContentCookInputRole
 cook path (`CookPaths`): the mount path of a file in a bound source mount,
 inside or outside the project folder (`/Content/Materials/Red.omat.json`,
 `/Studio/Bricks/Brick.omat.json`), or the path below the project root of a
-project file outside every source mount, such as a model import record or a
-generated scene descriptor in `.pipeline`. Snapshots, provenance and source
+project file outside every source mount, such as a generated scene descriptor in
+`.pipeline`. A model's source is the file its record names, anywhere, and its
+record cooks with it under its own mount path. Snapshots, provenance and source
 facts store cook paths, so they stay valid when a mount is bound to another
 folder. A source that cooks one asset cooks it at that identity: its import job
 names it as `virtual_path`, and the cooker writes the descriptor there. Cook
@@ -261,8 +262,9 @@ assets) lives in the SDK's engine content pak, `share/oxygen/engine.pak`, under
 
 - authored scene files keep the asset path, file type included, such as
   `/Engine/Generated/BasicShapes/Cube.ogeo`.
-- the native scene descriptor names that path; the engine pak is the first
-  native context root, so the cook resolves the reference without copying the
+- the native scene descriptor spells every reference from the scene's identity,
+  relative within its mount and by virtual path from another; the engine pak is
+  the first native context root, so the cook resolves the reference without copying the
   asset into the project, and the publication never binds the engine pak because
   every runtime mounts it beneath the project's content.
 - no editor-side descriptor is generated for engine content.
@@ -280,7 +282,10 @@ context roots like scene, geometry and sidecar jobs. The asset catalog lists the
 cooked textures of loose libraries and paks with the facts their texture record
 states (2D or cube, format), which the texture pickers use, and the library
 closure records a library texture as a cooked dependency of the material or
-scene that uses it.
+scene that uses it. Before the cook, the analysis checks a material's texture
+binding against the mount it names: a valid library must hold the texture, an
+authored texture's descriptor and images must exist, and a diagnostic states what
+the file writes, what that resolves to and what was looked up.
 
 ### 7.5 Import Manifest
 
@@ -309,7 +314,11 @@ public sealed record ContentImportMount(
     [property: JsonPropertyName("name")]
     string Name,
     [property: JsonPropertyName("path")]
-    string? Path); // null for a placeholder
+    string? Path) // null for a placeholder
+{
+    [JsonPropertyName("kind")]
+    public string? Kind { get; init; } // Cooked; a source mount when absent
+}
 
 public sealed record ContentImportJob(
     [property: JsonPropertyName("id")]
@@ -328,9 +337,10 @@ public sealed record ContentImportJob(
     [JsonPropertyName("virtual_path")]
     public string? VirtualPath { get; init; }
 
-    // A model job names its record instead of a source.
-    [JsonPropertyName("record")]
-    public string? Record { get; init; }
+    // A model job writes no source: the tool reads the record at virtual_path,
+    // which holds the source and settings. Source stays for attributing its report.
+    [JsonIgnore]
+    public bool IsModel => this.Type == "model";
 }
 ```
 
@@ -348,11 +358,13 @@ Mount layout rules:
 - A cooked root holds one mount, the one its identities name
   (`/<MountName>/...`).
 - The manifest's `mounts` declare the project's committed source mounts, with
-  their committed paths or as placeholders; job sources and descriptor
-  references are mount paths.
+  their committed paths or as placeholders, and its valid cooked mounts, as
+  placeholders of kind `Cooked`; job sources are mount paths, and descriptor
+  references follow the reference grammar.
 - The ImportTool runs with `--root <ProjectRoot>` and `--mounts`, a file the
   editor writes beside each run's manifest in the operation folder below
-  `.build` (`ContentImportMountsFile`): every bound source mount by name and
+  `.build` (`ContentImportMountsFile`): every bound source mount, and every valid
+  cooked mount at what is read (its generation folder or pak), by name and
   absolute folder, with `"root": true`. The tool resolves the table the editor
   shows, and reads no `.mounts.json` a second time. An analysis of a file
   outside the project passes an empty mounts file, so no `.mounts.json` above
@@ -519,21 +531,21 @@ yet is never overwritten. It reports each created file as `FilesChanged` before
 
 `IReferenceCheck` (`ReferenceCheck`, a session service) lists every reference of
 the project's authored files, and the source of every model import record, that
-does not resolve in its source mounts. It runs when the project opens, after
+does not resolve in its mounts. It runs when the project opens, after
 each change of its mounts, and on demand.
 
-| Guarantee                       | How                                                                                                                                                                                                                                                  |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The project opens               | A reference to a moved or deleted asset stays as written, an unresolved mount path; nothing is dropped or rewritten. Its cooked output keeps loading until the next cook.                                                                            |
-| Every broken reference is found | Each one is listed with the referencing file, the field's JSON path, the mount path and the code: `OXE.ASSETID.Resolve.Missing` when nothing is there, `mount.unbound` or `mount.folder_missing` when its mount cannot be read on this machine.      |
-| People see the list             | The check is an `IAssetProblemSource`: the list is in the Problems pane.                                                                                                                                                                             |
-| Tools read the list             | Each check writes `.build/references.json` (`schema_version`, then `references`: `file` by cook path, `property`, `missing`, `code`), replacing the previous list in one move.                                                                       |
-| References can be repaired      | References are mount paths in text files, so an old-to-new map from the library's history (`git log -M --name-status`) or its release notes is enough to rewrite them; the open project reloads the rewritten files, and the next check clears them. |
+| Guarantee                       | How                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The project opens               | A reference to a moved or deleted asset stays as written, an unresolved mount path; nothing is dropped or rewritten. Its cooked output keeps loading until the next cook.                                                                                                                                                                                                                                                       |
+| Every broken reference is found | Each one is listed with the referencing file, the field's JSON path, what it writes, what that resolves to and the code: `OXE.ASSETID.Resolve.Missing` when no source is there, `reference.unresolved` when a library does not hold it, `reference.into_project_mount` from shared content into an own mount, the mount's code when it cannot be read, and the grammar's code, with nothing resolved, when the text is refused. |
+| People see the list             | The check is an `IAssetProblemSource`: the list is in the Problems pane.                                                                                                                                                                                                                                                                                                                                                        |
+| Tools read the list             | Each check writes `.build/references.json` (`schema_version`, then `references`: `file` by cook path, `property`, `written`, `resolved`, `code`), replacing the previous list in one move.                                                                                                                                                                                                                                      |
+| References can be repaired      | References are text in files, so an old-to-new map from the library's history (`git log -M --name-status`) or its release notes is enough to rewrite them; the open project reloads the rewritten files, and the next check clears them.                                                                                                                                                                                        |
 
-A reference resolves when its mount is a bound source mount that holds the
-asset's source, or the source of the container that produces it. References to
-the engine's content and to cooked libraries resolve through their catalogs, not
-here.
+A reference into a source mount resolves when the mount is bound and holds the
+asset's source, or the source of the container that produces it; one into a
+cooked mount, when the library is valid and holds the asset. References to the
+engine's content resolve through its catalog, not here.
 
 ## 9. UI Surfaces
 
@@ -1022,13 +1034,13 @@ worker termination until native drain and cleanup complete. Query output remains
 in its operation directory and cannot overwrite an authored source.
 
 A model's import state is its model import record,
-`<ProjectRoot>/Imports/<virtual path>.import.json` (the model
-`/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`).
-The record names its source by mount path, resolved through the mount table, so
-one shared model reads the same in every project that mounts its folder. The
-record follows
+`<model identity>.import.json` in the model's mount (the model
+`/Content/Models/Ship.glb` has `/Content/Models/Ship.glb.import.json`).
+The record names its source by a file reference, resolved through the mount
+table, so one shared model reads the same in every project that mounts its
+folder. The record follows
 the engine's `oxygen.model-import.schema.json` shared with the ImportTool
-([scene instances](scene-instances.md) NGN14): source, virtual path, settings,
+([scene instances](scene-instances.md) NGN14): source, settings,
 source identity, surface provenance, node continuity, published nodes and
 source fingerprint. The product reads no other format; older sidecars become
 records by hand, keeping their source identity. Normals
@@ -1241,7 +1253,8 @@ retain their URIs. External source edits trigger stale state and an explicit
 reimport/cook; they cannot silently replace a dirty authored material.
 
 Portable project truth is Project.oxy, authored Content, retained
-`Content/SourceMedia`, model import records (`Imports/`), and Config. The
+`Content/SourceMedia`, with the model import records beside their models, and
+Config. The
 output folders, `.cooked` and `.build` (which holds `.pipeline`), are
 reproducible and excluded from version control, and so is `.mounts.json`: a
 mount it binds is a dependency each machine binds itself. The portable

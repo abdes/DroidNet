@@ -33,6 +33,22 @@ public static class ContentPipelinePaths
             : throw new ArgumentException($"'{asset}' is not a '{expectedExtension}' asset.", nameof(asset));
     }
 
+    /// <summary>Spells an asset as a generated descriptor names it: relative within the descriptor's mount, its virtual path
+    /// from another, as the engine requires of every reference.</summary>
+    /// <param name="asset">The asset's identity.</param>
+    /// <param name="expectedExtension">The extension an asset of the expected type has.</param>
+    /// <param name="anchor">The identity of the job that cooks the descriptor.</param>
+    /// <returns>The reference text.</returns>
+    /// <exception cref="ArgumentException">
+    /// The identity is not a virtual path the engine accepts, or not of the expected type.
+    /// </exception>
+    public static string ToNativeReference(AssetPath asset, string expectedExtension, AssetPath anchor)
+    {
+        ArgumentNullException.ThrowIfNull(anchor);
+        _ = ToNativeDescriptorPath(asset, expectedExtension);
+        return asset.ToReference(anchor);
+    }
+
     /// <summary>Gets the virtual path a scene cooks to, which the runtime loads it by.</summary>
     /// <param name="scene">The scene's identity, such as <c>/Content/Scenes/Level 1.oscene</c>.</param>
     /// <returns>The cooked scene's virtual path.</returns>

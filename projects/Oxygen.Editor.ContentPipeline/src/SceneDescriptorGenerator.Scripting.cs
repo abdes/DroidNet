@@ -56,7 +56,7 @@ public sealed partial class SceneDescriptorGenerator
 
                 references.Add(script);
                 var parameters = CookParameters(slot.Overrides.Where(entry => !problems.Any(problem => string.Equals(problem.Field.Parameter, entry.Key, StringComparison.Ordinal))));
-                bindings.Add(new ScriptSidecarBinding((uint)nodeIndices[node.Id], slot.Id.ToString("D"), script.VirtualPath, slot.ExecutionOrder, parameters));
+                bindings.Add(new ScriptSidecarBinding((uint)nodeIndices[node.Id], slot.Id.ToString("D"), script.ToReference(sceneInput.AssetUri), slot.ExecutionOrder, parameters));
                 sites.Add(site with { ParameterNames = [.. parameters.Select(static parameter => parameter.Key)] });
             }
 
@@ -91,7 +91,7 @@ public sealed partial class SceneDescriptorGenerator
                     ScriptValueKind.FloatValue => value.FloatValue,
                     ScriptValueKind.StringValue => value.StringValue,
                     ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value => value.GetVectorComponents(),
-                    ScriptValueKind.AssetValue => value.Asset!.VirtualPath,
+                    ScriptValueKind.AssetValue => value.Asset!.ToReference(sceneInput.AssetUri),
                     ScriptValueKind.NodeValue => value.Node is { } reference && nodeIndices.TryGetValue(reference.Node, out var index)
                         ? new ScriptSidecarNodeRef((uint)index, NodePathOf(reference.Path))
                         : null,

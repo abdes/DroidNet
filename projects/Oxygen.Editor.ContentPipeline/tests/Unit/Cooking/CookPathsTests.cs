@@ -55,7 +55,7 @@ internal sealed class CookPathsTests
 
     [TestMethod]
     public void AProjectFileOutsideEverySourceMount_IsNamedBelowTheProjectRoot()
-        => _ = CookPaths.Of(this.project, FileSystemPath.From(Path.Combine(Root, "Imports", "Content", "Car.glb.import.json"))).Should().Be("Imports/Content/Car.glb.import.json");
+        => _ = CookPaths.Of(this.project, FileSystemPath.From(Path.Combine(Root, ".build", "Scenes", "Main.oscene.json"))).Should().Be(".build/Scenes/Main.oscene.json");
 
     [TestMethod]
     public void AFileOutsideEveryMountAndTheProject_HasNoCookPath()
@@ -70,7 +70,7 @@ internal sealed class CookPathsTests
     public void ACookPathResolvesThroughTheMountTable()
     {
         _ = CookPaths.FileOf(this.project, "/Studio/Materials/Brick.omat.json").Should().Be(FileSystemPath.From(Path.Combine(Studio, "Materials", "Brick.omat.json")));
-        _ = CookPaths.FileOf(this.project, "Imports/Content/Car.glb.import.json").Should().Be(FileSystemPath.From(Path.Combine(Root, "Imports", "Content", "Car.glb.import.json")));
+        _ = CookPaths.FileOf(this.project, ".build/Scenes/Main.oscene.json").Should().Be(FileSystemPath.From(Path.Combine(Root, ".build", "Scenes", "Main.oscene.json")));
         _ = CookPaths.TryFileOf(this.project, "/Vendor/Materials/Brick.omat.json").Should().BeNull("an unbound mount names no file");
     }
 
@@ -84,7 +84,7 @@ internal sealed class CookPathsTests
 
     [TestMethod]
     [DataRow("/Content/Materials/Red.omat.json", true)]
-    [DataRow("Imports/Content/Car.glb.import.json", true)]
+    [DataRow(".build/Scenes/Main.oscene.json", true)]
     [DataRow(".pipeline/Scenes/Content/Main.oscene.json", true)]
     [DataRow(".mounts/Content/Red.omat.json", false)]
     [DataRow("/Content/../Red.omat.json", false)]
@@ -97,7 +97,7 @@ internal sealed class CookPathsTests
     public void AMountPathIsCapturedBelowTheMountsFolderOfTheInputRoot()
     {
         _ = CookPaths.StoragePathOf("/Studio/Materials/Brick.omat.json").Should().Be(".mounts/Studio/Materials/Brick.omat.json");
-        _ = CookPaths.StoragePathOf("Imports/Content/Car.glb.import.json").Should().Be("Imports/Content/Car.glb.import.json");
+        _ = CookPaths.StoragePathOf(".build/Scenes/Main.oscene.json").Should().Be(".build/Scenes/Main.oscene.json");
     }
 
     [TestMethod]
@@ -132,7 +132,7 @@ internal sealed class CookPathsTests
         });
         _ = file.Root.Should().BeTrue();
         _ = file.Resolve(Root, "/Studio/Materials/Brick.omat.json").Should().Be(Path.Combine(Studio, "Materials", "Brick.omat.json"));
-        _ = file.Resolve(Root, "Imports/Content/Car.glb.import.json").Should().Be(Path.Combine(Root, "Imports", "Content", "Car.glb.import.json"));
+        _ = file.Resolve(Root, ".build/Scenes/Main.oscene.json").Should().Be(Path.Combine(Root, ".build", "Scenes", "Main.oscene.json"));
         _ = file.Resolve(Root, "/Vendor/Brick.omat.json").Should().Be("/Vendor/Brick.omat.json", "a mount it does not bind is the tool's to report");
     }
 

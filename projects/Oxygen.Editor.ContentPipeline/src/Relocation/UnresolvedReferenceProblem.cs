@@ -16,7 +16,9 @@ public sealed record UnresolvedReferenceProblem : AssetProblem
         : base(
             DiagnosticSeverity.Warning,
             (reference ?? throw new ArgumentNullException(nameof(reference))).Code,
-            $"'{reference.File.Name}' references '{reference.MountPath}' at {reference.Property}, which does not resolve in this project.")
+            reference.Resolved is { } resolved && !string.Equals(resolved, reference.Written, StringComparison.Ordinal)
+                ? $"'{reference.File.Name}' references '{reference.Written}' at {reference.Property}, which is '{resolved}' and does not resolve in this project."
+                : $"'{reference.File.Name}' references '{reference.Written}' at {reference.Property}, which does not resolve in this project.")
     {
         this.Reference = reference;
         this.File = reference.File.FullPath;

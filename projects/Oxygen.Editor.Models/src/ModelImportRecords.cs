@@ -59,7 +59,7 @@ public sealed class ModelImportRecords
             }
             catch (Exception failure) when (IsUnreadable(failure))
             {
-                problems.Add(new(path, failure.Message));
+                problems.Add(ProblemOf(project, path, failure));
             }
         }
 
@@ -137,6 +137,20 @@ public sealed class ModelImportRecords
 
     private static AssetPath? IdentityOf(ProjectContext project, string path)
         => project.FindByFilePath(FileSystemPath.From(path)) is { Identity: var identity } && AssetFileTypes.Is(identity.Name, AssetFileCategory.Model) ? identity : null;
+
+    // A record whose source the grammar refuses is one a reference check can list, with its code.
+    private static ModelImportRecordProblem ProblemOf(ProjectContext project, string path, Exception failure)
+    {
+        var problem = new ModelImportRecordProblem(path, failure.Message);
+        if (failure is not InvalidDataException || IdentityOf(project, path) is not { } identity)
+        {
+            return problem;
+        }
+
+        return ModelImportSettings.FindRefusedSource(project.FileSystem.File.ReadAllBytes(path), identity) is { } refused
+            ? problem with { RefusedSource = refused.Source, RefusalCode = refused.Code }
+            : problem;
+    }
 
     private static bool IsUnreadable(Exception failure)
         => failure is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException;

@@ -45,7 +45,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var node = JsonNode.Parse(descriptor.RootElement.GetProperty("nodes")[0].GetRawText())!;
         _ = node["id"]!.GetValue<string>().Should().Be(root.Id.ToString());
         var instance = node["instance"]!;
-        _ = instance["scene_ref"]!.GetValue<string>().Should().Be("/Content/Vehicles/Car.glb/Car.oscene");
+        _ = instance["scene_ref"]!.GetValue<string>().Should().Be("../Vehicles/Car.glb/Car.oscene");
         var change = instance["overrides"]!.AsArray().Should().ContainSingle().Subject!;
         _ = change["path"]!.AsArray().Select(static id => id!.GetValue<string>()).Should().Equal(door.ToString());
         var transform = change["components"]!["transform"]!["values"]!;
@@ -70,7 +70,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 
         var instance = descriptor.RootElement.GetProperty("nodes")[0].GetProperty("instance");
-        _ = instance.GetProperty("scene_ref").GetString().Should().Be("/Content/Prefabs/Watchtower.oscene");
+        _ = instance.GetProperty("scene_ref").GetString().Should().Be("../Prefabs/Watchtower.oscene");
         _ = instance.TryGetProperty("overrides", out _).Should().BeFalse();
     }
 
@@ -134,7 +134,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
             Severity = DiagnosticSeverity.Warning,
             Code = KeptChangeDiagnostics.InstanceOverrideUnresolved,
             Message = "The change names no node of the instanced scene",
-            TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"nodes[{index}].instance.overrides[0].components.transform"),
+            TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"/nodes/{index}/instance/overrides/0/components/transform"),
             AffectedPath = result.DescriptorPath,
         };
 

@@ -460,7 +460,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = document.RootElement.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
-            .Should().Be("/Content/Geometry/Foo.ogeo");
+            .Should().Be("../Geometry/Foo.ogeo");
     }
 
     /// <summary>Preserves an empty scene and its environment without synthetic nodes.</summary>
@@ -607,7 +607,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
                     {
                         case float value: _ = encoded.GetSingle().Should().Be(value, property.Name); break;
                         case bool value: _ = encoded.GetBoolean().Should().Be(value, property.Name); break;
-                        case AssetPath value: _ = encoded.GetString().Should().Be(value.VirtualPath, property.Name); break;
+                        case AssetPath value: _ = encoded.GetString().Should().Be(value.ToReference(AssetPath.Parse("/Content/Scenes/Main.oscene")), property.Name); break;
                         case ImmutableArray<ExposureCompensationKeyData> keys:
                             _ = encoded.GetArrayLength().Should().Be(keys.Length);
                             for (var index = 0; index < keys.Length; index++)
@@ -763,16 +763,16 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var references = document.RootElement.GetProperty("references");
         _ = references.GetProperty("materials").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Materials/Surface.omat");
+            .Should().Equal("../Materials/Surface.omat");
         _ = references.GetProperty("scripts").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Scripts/A.oscript", "/Content/Scripts/Z.oscript");
+            .Should().Equal("../Scripts/A.oscript", "../Scripts/Z.oscript");
         _ = references.GetProperty("input_actions").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Input/Jump.oiact");
+            .Should().Equal("../Input/Jump.oiact");
         _ = references.TryGetProperty("input_mapping_contexts", out _).Should().BeFalse();
         _ = references.GetProperty("physics_sidecars").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Physics/Main.opscene");
+            .Should().Equal("../Physics/Main.opscene");
         _ = references.GetProperty("extra_assets").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/Content/Extras/A.bin", "/Content/Extras/Z.bin");
+            .Should().Equal("../Extras/A.bin", "../Extras/Z.bin");
     }
 
     [TestMethod]
@@ -915,9 +915,9 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = parts[0].GetProperty("kind").GetString().Should().Be(SceneSchema.Geometry.Surface.Kind);
         _ = parts[0].GetProperty("id").GetGuid().Should().Be(surfaceId);
         _ = parts[0].GetProperty("values").GetProperty("/material").GetString()
-            .Should().Be("/Content/Materials/Red.omat");
+            .Should().Be("../Materials/Red.omat");
         _ = root.GetProperty("references").GetProperty("materials")[0].GetString()
-            .Should().Be("/Content/Materials/Red.omat");
+            .Should().Be("../Materials/Red.omat");
         _ = root.GetProperty("cameras").GetProperty("perspective").GetArrayLength().Should().Be(1);
         _ = root.GetProperty("lights").GetProperty("directional").GetArrayLength().Should().Be(1);
         var light = root.GetProperty("lights").GetProperty("directional")[0];
@@ -936,7 +936,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var sphere = environment.GetProperty("sky_sphere");
         _ = sphere.GetProperty("enabled").GetBoolean().Should().BeTrue();
         _ = sphere.GetProperty("source").GetInt32().Should().Be(0);
-        _ = sphere.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Backdrop.otex");
+        _ = sphere.GetProperty("cubemap_ref").GetString().Should().Be("../Textures/Backdrop.otex");
         _ = sphere.GetProperty("illuminance_lux").GetSingle().Should().Be(15000f);
         _ = sphere.GetProperty("intensity").GetSingle().Should().Be(512f);
         _ = sphere.GetProperty("rotation_radians").GetSingle().Should().Be(0.5f);

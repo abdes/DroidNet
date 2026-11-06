@@ -248,7 +248,7 @@ public sealed class LooseCookedIndexTests
 
     [TestMethod]
     [DataRow(FileKind.TextureDescriptor, null)]
-    [DataRow(FileKind.Auxiliary, "/Content/Textures/Sky.otex")]
+    [DataRow(FileKind.BuffersData, "/Content/Textures/Sky.otex")]
     [DataRow(FileKind.TextureDescriptor, "/Content/Materials/Wood.mat")]
     public void Read_WithInvalidFileVirtualPath_ShouldThrow(FileKind kind, string? virtualPath)
     {
@@ -281,6 +281,27 @@ public sealed class LooseCookedIndexTests
         var file = LooseCookedIndex.Read(ms).Files.Should().ContainSingle().Subject;
         _ = file.VirtualPath.Should().BeNull();
         _ = file.SourcePath.Should().Be("/Content/Ship/Hull.buffers.json", "a re-cook of its producer retires the file");
+    }
+
+    [TestMethod]
+    public void Read_NamedAuxiliaryFile_ShouldKeepItsVirtualPath()
+    {
+        var sidecar = new FileRecord(
+            Kind: FileKind.Auxiliary,
+            RelativePath: "Models/Ship.glb/Hull.lod0.index.9f549650eea1e253.obuf",
+            Size: 64,
+            Sha256: System.Security.Cryptography.SHA256.HashData("sidecar"u8),
+            VirtualPath: "/Content/Models/Ship.glb/Hull.lod0.index.obuf",
+            SourcePath: "/Content/Models/Ship.glb");
+        var doc = CreateSampleDocument() with { Files = [sidecar] };
+
+        using var ms = new MemoryStream();
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        ms.Position = 0;
+
+        var file = LooseCookedIndex.Read(ms).Files.Should().ContainSingle().Subject;
+        _ = file.VirtualPath.Should().Be("/Content/Models/Ship.glb/Hull.lod0.index.obuf", "a buffer sidecar is referenced by it");
+        _ = file.SourcePath.Should().Be("/Content/Models/Ship.glb");
     }
 
     [TestMethod]

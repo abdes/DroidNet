@@ -28,23 +28,22 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? VirtualPath { get; init; }
 
-    /// <summary>Gets the model import record a <c>model</c> job runs, relative to the folder sources resolve from.</summary>
-    /// <remarks>The record holds the model's source, virtual path, settings and identity; the job carries none of them.</remarks>
-    [JsonPropertyName("record")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Record { get; init; }
+    /// <summary>Gets a value indicating whether this job runs a model import record, which the tool reads at the job's
+    /// <see cref="VirtualPath"/> and which holds the model's source and settings; the job carries neither.</summary>
+    [JsonIgnore]
+    public bool IsModel => string.Equals(this.Type, "model", StringComparison.Ordinal);
 
     /// <summary>Gets the type the engine reports for this job: a <c>model</c> job runs, and reports, as the <c>gltf</c> or
     /// <c>fbx</c> job its source's format makes it.</summary>
     [JsonIgnore]
-    public string ReportedType => this.Record is null
+    public string ReportedType => !this.IsModel
         ? this.Type
         : string.Equals(Path.GetExtension(this.Source), ".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf";
 
     /// <summary>Gets the source the manifest names: none for a <c>model</c> job, whose record names it.</summary>
     [JsonPropertyName("source")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ManifestSource => this.Record is null ? this.Source : null;
+    public string? ManifestSource => this.IsModel ? null : this.Source;
 
     /// <summary>Gets the ordered resolver-only roots for scene and geometry descriptors.</summary>
     /// <remarks>Not part of the manifest file: the ImportTool receives them as <c>--cooked-context-root</c> arguments.</remarks>

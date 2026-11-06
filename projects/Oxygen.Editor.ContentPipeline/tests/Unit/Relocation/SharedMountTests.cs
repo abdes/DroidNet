@@ -63,7 +63,8 @@ public sealed class SharedMountTests
         var reference = unresolved.Should().ContainSingle().Subject;
         _ = reference.File.Should().Be(workspace.FileOf("Content/Materials/Wall.omat.json"));
         _ = reference.Property.Should().Be("$.textures.base_color.virtual_path");
-        _ = reference.MountPath.Should().Be("/Studio/Textures/Brick.otex");
+        _ = reference.Written.Should().Be(AuthoredFiles.SpellReference(AssetPath.Parse("/Content/Materials/Wall.omat"), AssetPath.Parse("/Studio/Textures/Brick.otex")));
+        _ = reference.Resolved.Should().Be("/Studio/Textures/Brick.otex");
         _ = reference.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         _ = check.Problems.Should().ContainSingle().Which.Code.Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
         var written = ReadReferences(workspace);
@@ -71,7 +72,8 @@ public sealed class SharedMountTests
         var entry = written["references"]!.AsArray().Should().ContainSingle().Subject!;
         _ = entry["file"]!.GetValue<string>().Should().Be("/Content/Materials/Wall.omat.json");
         _ = entry["property"]!.GetValue<string>().Should().Be("$.textures.base_color.virtual_path");
-        _ = entry["missing"]!.GetValue<string>().Should().Be("/Studio/Textures/Brick.otex");
+        _ = entry["written"]!.GetValue<string>().Should().Be("/Studio/Textures/Brick.otex");
+        _ = entry["resolved"]!.GetValue<string>().Should().Be("/Studio/Textures/Brick.otex");
         _ = entry["code"]!.GetValue<string>().Should().Be(AssetIdentityDiagnosticCodes.ResolveMissing);
 
         _ = workspace.Write("Content/Materials/Wall.omat.json", WallMaterial("/Studio/Textures/Walls.otex").Text);
@@ -97,6 +99,55 @@ public sealed class SharedMountTests
     }
 
     // Content holds a material that references a texture of Studio, a folder outside the project.
+    /// <summary>A reference the grammar refuses names nothing: it is listed as written, with the refusal's code.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AReferenceTheGrammarRefuses_IsListedAsWrittenWithItsCode()
+    {
+        using var workspace = CreateWorkspace();
+        var text = WallMaterial("/Content/Textures/Brick.otex").Text.Replace("../Textures/Brick.otex", "/Content/Textures/Brick.otex", StringComparison.Ordinal);
+        _ = workspace.Write("Content/Materials/Wall.omat.json", text);
+
+        var reference = (await ReferenceCheck.FindAsync(workspace.Project, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().ContainSingle().Subject;
+
+        _ = reference.Written.Should().Be("/Content/Textures/Brick.otex");
+        _ = reference.Resolved.Should().BeNull();
+        _ = reference.Code.Should().Be("vpath.reference_self_absolute");
+    }
+
+    /// <summary>Shared content is read by other projects, which do not have this project's own mounts.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AReferenceFromASharedMountIntoAnOwnMount_IsListed()
+    {
+        using var workspace = CreateWorkspace();
+        _ = workspace.Write("Content/Textures/Wood.otex.json", AuthoredFiles.Texture("/Content/Textures/Wood.otex", "Wood.png").Text);
+        _ = workspace.Write("Content/Textures/Wood.png", "png");
+        workspace.WriteOutside(Path.Combine(Studio, "Materials", "Plank.omat.json"), AuthoredFiles.Material("/Studio/Materials/Plank.omat").Texture("base_color", "/Content/Textures/Wood.otex").Text);
+
+        var reference = (await ReferenceCheck.FindAsync(workspace.Project, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().ContainSingle().Subject;
+
+        _ = reference.File.FullPath.Should().Be(Path.Combine(Studio, "Materials", "Plank.omat.json"));
+        _ = reference.Resolved.Should().Be("/Content/Textures/Wood.otex");
+        _ = reference.Code.Should().Be(ReferenceCheck.ReferenceIntoProjectMount);
+    }
+
+    /// <summary>A record's source that the grammar refuses is listed with the record, not lost with it.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ARecordSourceTheGrammarRefuses_IsListed()
+    {
+        using var workspace = CreateWorkspace();
+        var record = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
+        var path = workspace.PathOf(workspace.RecordOf(record));
+        workspace.FileSystem.File.WriteAllText(path, workspace.FileSystem.File.ReadAllText(path).Replace("\"source\": \"robot.gltf\"", "\"source\": \"../../../../Robot.gltf\"", StringComparison.Ordinal));
+
+        var reference = (await ReferenceCheck.FindAsync(workspace.Project, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().ContainSingle().Subject;
+
+        _ = reference.Written.Should().Be("../../../../Robot.gltf");
+        _ = reference.Code.Should().Be("vpath.reference_outside_mount");
+    }
+
     private static RelocationWorkspace CreateWorkspace()
     {
         var workspace = new RelocationWorkspace();

@@ -368,7 +368,7 @@ public sealed class CookOrchestrationTests
     {
         public ContentImportJob BuildModelJob(string source, IReadOnlyList<string> dependsOn, string name, AssetPath identity) => new ContentImportManifestBuilder().BuildModelJob(source, dependsOn, name, identity);
 
-        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null) => new ContentImportManifestBuilder().BuildJob(input, dependsOn, modelRecordPath);
+        public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn) => new ContentImportManifestBuilder().BuildJob(input, dependsOn);
 
         public ContentImportManifest BuildManifest(ContentCookScope scope)
             => CreateInvalid();

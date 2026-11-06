@@ -14,13 +14,16 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
     // The version of the asset key request the Inspector reads.
     private const int AssetKeyRequestVersion = 2;
 
+    // The Inspector's exit code when it read the root but not an asset of it: a report's rows say which.
+    private const int InspectorAssetFailed = 2;
+
     /// <inheritdoc />
     public Task<CookedGeometryReport> InspectGeometryAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
-        => this.RunInspectorAsync(operationRoot, ["geometries", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedGeometryReport.Parse, artifacts, cancellationToken);
+        => this.RunInspectorAsync(operationRoot, ["geometries", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedGeometryReport.Parse, artifacts, cancellationToken, rowsOnFailure: true);
 
     /// <inheritdoc />
     public Task<CookedScriptReport> InspectScriptsAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
-        => this.RunInspectorAsync(operationRoot, ["scripts", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedScriptReport.Parse, artifacts, cancellationToken);
+        => this.RunInspectorAsync(operationRoot, ["scripts", Path.GetFullPath(cookedRoot), "--virtual-path", virtualPath], request: null, CookedScriptReport.Parse, artifacts, cancellationToken, rowsOnFailure: true);
 
     /// <inheritdoc />
     public Task<CookedDependencyReport> InspectDependenciesAsync(string operationRoot, string cookedRoot, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
@@ -46,7 +49,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
             cancellationToken);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Failed termination transfers the Inspector handle to the returned worker-drain continuation; ordinary completion awaits disposal in finally.")]
-    private async Task<T> RunInspectorAsync<T>(string operationRoot, IReadOnlyList<string> arguments, string? request, Func<string, T> parse, NativeArtifactLease? artifacts, CancellationToken cancellationToken)
+    private async Task<T> RunInspectorAsync<T>(string operationRoot, IReadOnlyList<string> arguments, string? request, Func<string, T> parse, NativeArtifactLease? artifacts, CancellationToken cancellationToken, bool rowsOnFailure = false)
     {
         var compatibility = artifacts is not null ? new NativeCompatibilityResult(artifacts, [])
             : await this.nativeCompatibility.VerifyAsync(Guid.NewGuid(), cancellationToken).ConfigureAwait(false);
@@ -74,7 +77,7 @@ public sealed partial class ImportToolContentPipelineApi : ICookedDependencyInsp
 
             command.AddRange(["--output", output]);
             var result = await this.processRunner.RunAsync(new(tool, command, Path.GetFullPath(operationRoot)), cancellationToken).ConfigureAwait(false);
-            return result.ExitCode == 0
+            return result.ExitCode == 0 || (rowsOnFailure && result.ExitCode == InspectorAssetFailed && File.Exists(output))
                 ? parse(await File.ReadAllTextAsync(output, cancellationToken).ConfigureAwait(false))
                 : throw new InvalidDataException($"Native content inspection failed: {result.StandardError} {result.StandardOutput}");
         }

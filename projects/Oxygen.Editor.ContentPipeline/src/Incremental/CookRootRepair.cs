@@ -29,14 +29,14 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
     /// <summary>Selects the roots to reconstruct, the outputs to remove and the sources to cook again.</summary>
     /// <param name="project">The project and its mount table.</param>
-    /// <param name="publication">The publication lease that resolves project roots.</param>
+    /// <param name="publishedRootOf">Finds the selected generation of a mount, if it has one.</param>
     /// <param name="previous">The provenance of the previous cook.</param>
     /// <param name="mounts">The mounts being cooked.</param>
     /// <param name="inventories">The cooked inventory of each mount.</param>
     /// <returns>The repair work.</returns>
     public static CookRootRepair Create(
         ProjectContext project,
-        CookPublicationReadLease publication,
+        Func<string, FileSystemPath?> publishedRootOf,
         CookProvenance previous,
         IReadOnlyCollection<string> mounts,
         ImmutableDictionary<string, CookedInventoryReport> inventories)
@@ -52,7 +52,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
         sources.UnionWith(FindUsers(previous, retired));
         foreach (var mount in mounts)
         {
-            var path = publication.FindProjectRoot(mount)?.FullPath;
+            var path = publishedRootOf(mount)?.FullPath;
             var prior = previous.Roots.FirstOrDefault(root => string.Equals(root.Mount, mount, StringComparison.Ordinal));
             var owners = previous.Products.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal))).ToArray();
             var kept = owners.Where(product => !retired.Contains(product)).ToArray();
@@ -67,7 +67,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                 throw new InvalidDataException("An inventory has no selected generation.");
             }
 
-            if (!inventory.IsValid && RepairDamagedRoot(mount, path, prior, owners, retired, inventory, empty, sources, diagnostics))
+            if (!inventory.IsMountable && RepairDamagedRoot(mount, path, prior, owners, retired, inventory, empty, sources, diagnostics))
             {
                 continue;
             }
@@ -207,10 +207,12 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
 
         // A descriptor whose bytes changed, or that is in an asset format the engine no longer reads, needs only its
         // owner cooked again.
-        var sharedDamage = inventory.Issues.Any(issue => !descriptors.Contains(issue.RelativePath)
+        // A writer's leftovers are no damage: the next writer deletes them.
+        var damage = inventory.Issues.Where(static issue => !issue.IsLeftover).ToArray();
+        var sharedDamage = damage.Any(issue => !descriptors.Contains(issue.RelativePath)
             || issue.Reason is not ("digest_mismatch" or "format_version"));
         var affected = sharedDamage ? descriptors
-            : descriptors.Where(descriptor => inventory.Issues.Any(issue => string.Equals(issue.RelativePath, descriptor, StringComparison.Ordinal)));
+            : descriptors.Where(descriptor => damage.Any(issue => string.Equals(issue.RelativePath, descriptor, StringComparison.Ordinal)));
         foreach (var descriptor in affected)
         {
             var owner = owners.Where(product => product.Outputs.Any(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal)

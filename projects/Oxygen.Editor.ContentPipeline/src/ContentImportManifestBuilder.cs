@@ -105,15 +105,14 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn, string? modelRecordPath = null)
+    public ContentImportJob BuildJob(ContentCookInput input, IReadOnlyList<string> dependsOn)
     {
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(dependsOn);
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
-            ArgumentException.ThrowIfNullOrEmpty(modelRecordPath);
-
-            // The record holds the model's source, identity and settings; the job only schedules it.
+            // The tool reads the record at the model's identity, which holds its source and settings; the job only
+            // schedules it. The source stays here, unwritten, for what the job's report is attributed to.
             return new(
                 BuildJobId(input),
                 "model",
@@ -122,7 +121,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 Output: null,
                 Name: null)
             {
-                Record = NormalizeSource(modelRecordPath),
+                VirtualPath = input.AssetUri.VirtualPath,
             };
         }
 
@@ -183,15 +182,17 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         };
 
     /// <summary>
-    /// Gets the source mounts a manifest declares: the project's committed source mounts, with their committed paths or
-    /// as placeholders. The cook's mounts file binds them, and adds the mounts only a <c>.mounts.json</c> file declares.
+    /// Gets the mounts a manifest declares: the project's committed source mounts, with their committed paths or as
+    /// placeholders, and its valid cooked mounts, as placeholders. The cook's mounts file binds them, and adds the mounts
+    /// only a <c>.mounts.json</c> file declares.
     /// </summary>
     /// <param name="project">The project.</param>
     /// <returns>The mounts a manifest declares.</returns>
     internal static List<ContentImportMount> CreateMounts(ProjectContext project)
         => [.. project.DeclaredMounts
             .Where(static mount => mount.Kind == MountKind.Source)
-            .Select(static mount => new ContentImportMount(mount.Name, mount.Path?.Replace('\\', '/').Trim('/')))];
+            .Select(static mount => new ContentImportMount(mount.Name, mount.Path?.Replace('\\', '/').Trim('/')))
+            .Concat(project.LibraryMounts.Select(static mount => new ContentImportMount(mount.Name, Path: null) { Kind = nameof(MountKind.Cooked) }))];
 
     /// <summary>Builds the job that attaches a scene's script slots to its cooked scene.</summary>
     /// <param name="sceneJob">The scene's job, which the sidecar patches.</param>

@@ -16,6 +16,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="Diagnostics">Adapted native diagnostics.</param>
 public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<DiagnosticRecord> Diagnostics)
 {
+    /// <summary>Gets how the run ended.</summary>
+    public NativeRunOutcome Outcome { get; init; } = Succeeded ? NativeRunOutcome.Succeeded : NativeRunOutcome.Failed;
+
     /// <summary>Gets the files each native job wrote, shared tables included, keyed by captured source-relative path.</summary>
     public ImmutableDictionary<string, ImmutableArray<string>> OutputsBySource { get; init; }
         = [];

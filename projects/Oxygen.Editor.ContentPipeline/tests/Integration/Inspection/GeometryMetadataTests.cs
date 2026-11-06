@@ -109,9 +109,31 @@ public sealed class GeometryMetadataTests
         api.VerifyNoOtherCalls();
     }
 
-    /// <summary>A report that holds a geometry it could not read is refused, though its schema is met.</summary>
+    /// <summary>A geometry the tool could not read fails that geometry: the other rows stay, and the message names it.</summary>
     [TestMethod]
-    public void RejectsAReportWithAFailedRow()
+    public void AFailedRowFailsOnlyItsGeometry()
+    {
+        var source = JsonNode.Parse(SurfaceReport())!;
+        source["complete"] = false;
+        var failed = source["geometries"]![0]!.DeepClone().AsObject();
+        failed["geometry_asset_key"] = "10203040-5060-7080-90a0-b0c0d0e0f002";
+        failed["complete"] = false;
+        failed["diagnostic"] = "The geometry is retired.";
+        _ = failed.Remove("layout_revision");
+        _ = failed.Remove("lod_policy");
+        failed["surfaces"] = new JsonArray();
+        source["geometries"]!.AsArray().Add(failed);
+
+        var report = CookedGeometryReport.Parse(source.ToJsonString());
+
+        _ = report.Find(AssetPath.Parse("/Content/Geometry/Test.ogeo"), Guid.Parse("10203040-5060-7080-90a0-b0c0d0e0f001")).Should().NotBeNull();
+        Action read = () => report.Find(AssetPath.Parse("/Content/Geometry/Bad.ogeo"), Guid.Parse("10203040-5060-7080-90a0-b0c0d0e0f002"));
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*/Content/Geometry/Bad.ogeo*retired*");
+    }
+
+    /// <summary>A query of one geometry that could not be read names it, not the tool's output.</summary>
+    [TestMethod]
+    public void AQueryOfAFailedGeometryNamesIt()
     {
         var source = JsonNode.Parse(SurfaceReport())!;
         source["complete"] = false;
@@ -122,9 +144,32 @@ public sealed class GeometryMetadataTests
         _ = row.Remove("lod_policy");
         row["surfaces"] = new JsonArray();
 
-        Action read = () => CookedGeometryReport.Parse(source.ToJsonString());
+        Action read = () => CookedGeometryReport.Parse(source.ToJsonString()).SingleOrDefault(AssetPath.Parse("/Content/Geometry/Test.ogeo"));
 
-        _ = read.Should().Throw<InvalidDataException>().WithMessage("*could not read*");
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*/Content/Geometry/Test.ogeo*retired*");
+    }
+
+    /// <summary>A script the tool could not read fails that script, and the message names it.</summary>
+    [TestMethod]
+    public void AFailedScriptRowNamesItsScript()
+    {
+        var json = $$$"""
+            {
+              "schema_version": {{{EngineSchemaVersions.Scripts}}},
+              "complete": false,
+              "scripts": [{
+                "virtual_path": "/Content/Scripts/Spin.oscript",
+                "asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",
+                "complete": false,
+                "diagnostic": "The script is corrupt.",
+                "parameters": []
+              }]
+            }
+            """;
+
+        Action read = () => CookedScriptReport.Parse(json).SingleOrDefault(AssetPath.Parse("/Content/Scripts/Spin.oscript"));
+
+        _ = read.Should().Throw<InvalidDataException>().WithMessage("*/Content/Scripts/Spin.oscript*corrupt*");
     }
 
     private static string SurfaceReport() => $$$"""

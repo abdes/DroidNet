@@ -79,35 +79,16 @@ internal sealed partial class ContentImportManifestBuilderTests
             "/Content/Vehicles/Ship/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
             ContentCookInputRole.Primary);
-        const string recordPath = "Imports/Content/Vehicles/Ship/model.gltf.import.json";
 
-        var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"], recordPath);
+        var job = new ContentImportManifestBuilder().BuildJob(input, ["prior"]);
 
         _ = job.Type.Should().Be("model");
-        _ = job.Record.Should().Be(recordPath);
+        _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.gltf", "the tool reads the record at the model's identity");
         _ = job.ManifestSource.Should().BeNull("the record names the model's source");
         _ = job.Source.Should().Be("/Content/Vehicles/Ship/model.gltf", "the job stays attributed to the model's file, by its mount path");
         _ = job.DependsOn.Should().Equal("prior");
-        _ = job.VirtualPath.Should().BeNull("the record holds the model's identity");
         var json = JsonSerializer.Serialize(job);
-        _ = json.Should().Contain("\"record\"").And.NotContain("\"source\"").And.NotContain("unit_policy");
-    }
-
-    /// <summary>A model job is scheduled by its record; the model's input has no job without one.</summary>
-    [TestMethod]
-    public void BuildJobRefusesAModelWithoutARecord()
-    {
-        var input = new ContentCookInput(
-            AssetPath.Parse("/Content/Vehicles/Ship/model.gltf"),
-            ContentCookAssetKind.ForeignSource,
-            "Content",
-            "/Content/Vehicles/Ship/model.gltf",
-            FileSystemPath.From(Path.GetFullPath("model.gltf")),
-            ContentCookInputRole.Primary);
-
-        var build = () => new ContentImportManifestBuilder().BuildJob(input, []);
-
-        _ = build.Should().Throw<ArgumentException>();
+        _ = json.Should().Contain("\"virtual_path\"").And.NotContain("\"record\"").And.NotContain("\"source\"").And.NotContain("unit_policy");
     }
 
     /// <summary>The first import of a model discovers its files before its record exists: a format job at its identity.</summary>
@@ -121,7 +102,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = job.Name.Should().Be("Ship");
         _ = job.Source.Should().Be("Content/Vehicles/Ship/model.fbx");
         _ = job.VirtualPath.Should().Be("/Content/Vehicles/Ship/model.fbx");
-        _ = job.Record.Should().BeNull();
+        _ = job.IsModel.Should().BeFalse();
     }
 
     /// <summary>Scene exposure masks cook before the scene, at their own identity.</summary>

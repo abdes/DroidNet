@@ -32,7 +32,7 @@ public sealed record ModelImportSession
 
     // The keys of a job that are not model import settings.
     private static readonly ImmutableHashSet<string> JobKeys = ImmutableHashSet.Create(
-        StringComparer.Ordinal, "id", "type", "source", "sources", "virtual_path", "output", "depends_on", "layout", "source_key", "cooked_context_roots", "record");
+        StringComparer.Ordinal, "id", "type", "source", "sources", "virtual_path", "output", "depends_on", "layout", "source_key", "cooked_context_roots");
 
     /// <summary>Gets the session's models, in order.</summary>
     public ImmutableArray<ModelImportSessionJob> Jobs { get; init; } = [];

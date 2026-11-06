@@ -41,7 +41,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S7    | Done, committed                                                |
 | S8    | Done, committed                                                |
 | S9    | Done, committed                                                |
-| S10   | Not started                                                    |
+| S10   | Done, committed                                                |
 | S11   | Not started                                                    |
 | S12   | Not started                                                    |
 | S13   | Not started                                                    |
@@ -659,8 +659,28 @@ diagnostics with a fake project, `SceneDescriptorGenerator` spelling as a pure
 function over a scene model, `CookIncrementalPlanner` reuse of an unchanged
 output whose content-named descriptor path the index records. Docs: `content-pipeline.md` 7.2, 7.4, 7.5, 8.6.
 
+Beyond this text, because the cook could not run without them:
+
+- The managed index reader accepts an auxiliary file with a virtual path, as the
+  engine's format does. It refused every buffer sidecar, so no model cook could
+  publish.
+- The script sidecar and kept-change diagnostics read their location as the JSON
+  pointer the cooker reports. They still read the older `bindings[0]` form, so
+  those diagnostics had lost their slot, their node and Go To Property.
+- `MaterialTextureCheck` is the texture check, moved out of `CookSourceAnalyzer`
+  so it runs over a fake project; `CookRootRepair.Create` takes a lookup of the
+  published root instead of a lease, for the same reason.
+- Generator expectations in the integration descriptor and script tests moved to
+  the relative spelling, as the scene-model tests of that spelling.
+
 Integration tests left for S20: the cooking, import, inspection and publication
-integration tests in the test impact table.
+integration tests in the test impact table. ContentPipeline integration stands at
+60 of 577, down from 130. By first message: 15 are library fixtures that declare a
+library under another name than its root; 10 write a reference the grammar refuses
+or assert an older diagnostic; 9 are `ProducedSourceMetadataTests`; 6 expect a
+cooked file at its old name; 2 are descriptor expectations past the first one
+fixed; 18 report only that the cook did not publish, and their fixtures need the
+same review.
 
 ### S11. Scene documents
 
@@ -673,7 +693,7 @@ cross-mount and refused references. Docs: `Oxygen.Editor.World/README.md` and
 
 ### S12. Relocation
 
-Deletes: identity-field rewriting, `PruneEmptyRecordFolders`, the model copy
+Deletes: identity-field rewriting, the model copy
 and member-move blockers, the folder-wide model delete. Adds: companions,
 respelling by new identity, the R3 closure and refusal, roles in writable
 mounts, shared-mount review text, copy with new `source_identity`, delete that

@@ -88,7 +88,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
-        var authoredReferences = CreateNativeReferences(scene.References, out var referenceIssue);
+        var authoredReferences = CreateNativeReferences(scene.References, sceneInput.AssetUri, out var referenceIssue);
         if (referenceIssue is not null)
         {
             diagnostics.Add(CreateDiagnostic(
@@ -169,7 +169,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             Renderables: renderables.Count == 0 ? null : renderables,
             Cameras: CreateCameras(cameras, orthographicCameras),
             Lights: lights,
-            Environment: CreateEnvironment(scene.Environment),
+            Environment: CreateEnvironment(scene.Environment, sceneInput.AssetUri),
             LocalFogVolumes: localFogVolumes.Count == 0 ? null : localFogVolumes,
             References: references);
 
@@ -364,7 +364,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             string geometryRef;
             try
             {
-                geometryRef = ContentPipelinePaths.ToNativeDescriptorPath(geometry.Geometry, AssetFileTypes.Geometry);
+                geometryRef = ContentPipelinePaths.ToNativeReference(geometry.Geometry, AssetFileTypes.Geometry, sceneInput.AssetUri);
             }
             catch (ArgumentException ex)
             {
@@ -395,7 +395,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             try
             {
                 sceneRef = AssetFileTypes.SceneProductOf(instance.Source) is { } scene
-                    ? ContentPipelinePaths.ToCookedScenePath(scene)
+                    ? ContentPipelinePaths.ToNativeReference(scene, AssetFileTypes.Scene, sceneInput.AssetUri)
                     : throw new ArgumentException($"'{instance.Source}' is neither a model nor a scene.", nameof(instance));
             }
             catch (ArgumentException exception)
@@ -487,7 +487,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 case AssetPath material when entry.Property == SceneSchema.Geometry.Surface.Material.Id:
                     try
                     {
-                        var materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
+                        var materialRef = ContentPipelinePaths.ToNativeReference(material, AssetFileTypes.Material, sceneInput.AssetUri);
                         _ = materialRefs.Add(materialRef);
                         return JsonValue.Create(materialRef);
                     }
@@ -520,21 +520,22 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
     private static NativeReferences? CreateNativeReferences(
         Oxygen.Editor.World.Serialization.SceneReferencesData references,
+        AssetPath anchor,
         out string? error)
     {
         ArgumentNullException.ThrowIfNull(references);
 
         try
         {
-            var scripts = ResolveTypedReferences(references.Scripts, AssetFileTypes.Script);
-            var inputActions = ResolveTypedReferences(references.InputActions, AssetFileTypes.InputAction);
-            var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene);
+            var scripts = ResolveTypedReferences(references.Scripts, AssetFileTypes.Script, anchor);
+            var inputActions = ResolveTypedReferences(references.InputActions, AssetFileTypes.InputAction, anchor);
+            var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene, anchor);
             if (references.ExtraAssets.Any(static asset => asset.IsMount))
             {
                 throw new InvalidDataException("Extra scene asset references must name assets below a mount.");
             }
 
-            var extraAssets = new SortedSet<string>(references.ExtraAssets.Select(static asset => asset.VirtualPath), StringComparer.Ordinal).ToArray();
+            var extraAssets = new SortedSet<string>(references.ExtraAssets.Select(asset => asset.ToReference(anchor)), StringComparer.Ordinal).ToArray();
             error = null;
 
             return scripts.Length == 0 && inputActions.Length == 0
@@ -561,12 +562,13 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
     private static string[] ResolveTypedReferences(
         IEnumerable<AssetPath> assetUris,
-        string expectedExtension)
+        string expectedExtension,
+        AssetPath anchor)
     {
         var paths = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var assetUri in assetUris)
         {
-            var nativePath = ContentPipelinePaths.ToNativeDescriptorPath(assetUri, expectedExtension);
+            var nativePath = ContentPipelinePaths.ToNativeReference(assetUri, expectedExtension, anchor);
             _ = paths.Add(nativePath);
         }
 
@@ -637,13 +639,13 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         return null;
     }
 
-    private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment)
+    private static NativeEnvironment CreateEnvironment(SceneEnvironmentData environment, AssetPath anchor)
         => new(
             CreateSkyAtmosphere(environment.AtmosphereEnabled, environment.SkyAtmosphere ?? new()),
-            CreateSkyLight(environment.SkyLight ?? new()),
-            CreateSkySphere(environment.SkySphere ?? new()),
+            CreateSkyLight(environment.SkyLight ?? new(), anchor),
+            CreateSkySphere(environment.SkySphere ?? new(), anchor),
             CreateFog(environment.Fog ?? new()),
-            CreatePostProcess(environment.PostProcess ?? new()),
+            CreatePostProcess(environment.PostProcess ?? new(), anchor),
             new NativeBackgroundEnvironment(environment.Background.Enabled, ToArray(environment.Background.ColorRgb)));
 
     // The textures the cooked environment references: each must be cooked into
@@ -669,11 +671,11 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         }
     }
 
-    private static NativeSkyLightEnvironment CreateSkyLight(SkyLightEnvironmentData authored)
+    private static NativeSkyLightEnvironment CreateSkyLight(SkyLightEnvironmentData authored, AssetPath anchor)
         => new(
             Enabled: authored.Enabled,
             Source: (int)authored.Source,
-            CubemapRef: GetTexturePath(authored.ActiveCubemap),
+            CubemapRef: GetTextureReference(authored.ActiveCubemap, anchor),
             IlluminanceLux: authored.CubemapIlluminanceLux,
             Intensity: authored.Intensity,
             TintRgb: ToArray(authored.TintRgb),
@@ -686,11 +688,11 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             VolumetricScatteringIntensity: authored.VolumetricScatteringIntensity,
             AffectReflections: authored.AffectReflections);
 
-    private static NativeSkySphereEnvironment CreateSkySphere(SkySphereEnvironmentData authored)
+    private static NativeSkySphereEnvironment CreateSkySphere(SkySphereEnvironmentData authored, AssetPath anchor)
         => new(
             Enabled: authored.Enabled,
             Source: (int)authored.Source,
-            CubemapRef: GetTexturePath(authored.ActiveCubemap),
+            CubemapRef: GetTextureReference(authored.ActiveCubemap, anchor),
             SolidColorRgb: ToArray(authored.SolidColorRgb),
             IlluminanceLux: authored.IlluminanceLux,
             Intensity: authored.Intensity,
@@ -740,7 +742,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             FullyDirectionalInscatteringColorDistance: 0.0f,
             NonDirectionalInscatteringColorDistance: 0.0f);
 
-    private static NativePostProcessEnvironment CreatePostProcess(PostProcessEnvironmentData authored)
+    private static NativePostProcessEnvironment CreatePostProcess(PostProcessEnvironmentData authored, AssetPath anchor)
         => new(
             Enabled: true,
             ToneMapper: (int)authored.ToneMapper,
@@ -762,7 +764,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             AutoExposureSpotMeterRadius: authored.AutoExposureSpotMeterRadius,
             AutoExposureBlackInfluence: authored.AutoExposureBlackInfluence,
             AutoExposureTransitionDistanceEv: authored.AutoExposureTransitionDistanceEv,
-            AutoExposureMeteringMask: GetTexturePath(authored.AutoExposureMeteringMask),
+            AutoExposureMeteringMask: GetTextureReference(authored.AutoExposureMeteringMask, anchor),
             AutoExposureCompensationCurve: [.. authored.AutoExposureCompensationCurve.Select(static key => new NativeExposureCompensationKey(key.MeteredEv, key.CompensationEv))],
             BloomIntensity: authored.BloomIntensity,
             BloomThreshold: authored.BloomThreshold,
@@ -771,8 +773,8 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             VignetteIntensity: authored.VignetteIntensity,
             DisplayGamma: authored.DisplayGamma);
 
-    private static string? GetTexturePath(AssetPath? texture)
-        => texture is null ? null : ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
+    private static string? GetTextureReference(AssetPath? texture, AssetPath anchor)
+        => texture is null ? null : ContentPipelinePaths.ToNativeReference(texture, AssetFileTypes.Texture, anchor);
 
     // Mirrors the native Earth baseline in Oxygen/Core/Types/Atmosphere.h.
     private static NativeSkyAtmosphereEnvironment CreateSkyAtmosphere(bool enabled, SkyAtmosphereEnvironmentData authored)

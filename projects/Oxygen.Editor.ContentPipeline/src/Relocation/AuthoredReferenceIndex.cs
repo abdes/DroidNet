@@ -68,7 +68,11 @@ internal sealed class AuthoredReferenceIndex
 
             try
             {
-                descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, AssetFileTypes.ToIdentity(virtualPath), content)));
+                var identity = AssetFileTypes.ToIdentity(virtualPath);
+                descriptors.Add(new(path, virtualPath, identity, AuthoredReferenceFormat.ReadReferences(path, identity, content))
+                {
+                    Refused = AuthoredReferenceFormat.ReadRefusedReferences(path, identity, content),
+                });
             }
             catch (Exception error) when (error is JsonException or AssetFormatException or InvalidDataException or InvalidOperationException)
             {
@@ -127,6 +131,9 @@ internal sealed class AuthoredReferenceIndex
     /// <param name="Fields">Each reference, with the field that holds it.</param>
     internal sealed record Descriptor(FileSystemPath Location, AssetPath VirtualPath, AssetPath Identity, IReadOnlyList<AuthoredReference> Fields)
     {
+        /// <summary>Gets the references the reference grammar refuses, which name nothing.</summary>
+        public IReadOnlyList<RefusedReference> Refused { get; init; } = [];
+
         /// <summary>Gets the distinct identities the descriptor references.</summary>
         public IEnumerable<AssetPath> References => this.Fields.Select(static reference => reference.Identity).Distinct();
     }

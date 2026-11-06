@@ -23,6 +23,8 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <summary>Captures immutable cooked-library facts and retains the corresponding file readers.</summary>
 internal sealed partial class CookedLibraryReadSet : IDisposable
 {
+    internal const string LibraryInspectionFailed = "asset_cook.library_inspection_failed";
+
     private readonly List<Root> roots = [];
     private readonly List<UnreadableLibrary> unreadable = [];
     private IReadOnlyList<CookedContentSource> order = [];
@@ -145,7 +147,18 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 continue;
             }
 
-            var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
+            CookedAssetDependencies? metadata;
+            try
+            {
+                metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception failure) when (failure is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                // A library that is gone or does not read fails what needs it, where the cook can say so.
+                expansion.Diagnostics.Add(Issue(consumer, LibraryInspectionFailed, $"Cannot read cooked library '{root.Name}' at '{root.Path}': {failure.Message}"));
+                continue;
+            }
+
             if (metadata is null)
             {
                 expansion.Diagnostics.Add(PendingInspectionIssue(consumer));
@@ -236,8 +249,28 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         // The engine content pak is an SDK artifact: the cooking artifact lease verifies its bytes.
         foreach (var root in this.roots.Where(static root => root.Reader is not null))
         {
-            var inventory = await root.Reader!.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
-            var result = inventory.ToValidation(root.Path);
+            CookedInventoryReport inventory;
+            try
+            {
+                inventory = await root.Reader!.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception failure) when (failure is InvalidDataException or IOException or UnauthorizedAccessException)
+            {
+                throw new CookInputDiscoveryException(
+                [
+                    new DiagnosticRecord
+                    {
+                        OperationId = Guid.Empty,
+                        Domain = FailureDomain.AssetCook,
+                        Severity = DiagnosticSeverity.Error,
+                        Code = LibraryInspectionFailed,
+                        Message = $"Cannot read cooked library '{root.Name}' at '{root.Path}': {failure.Message}",
+                        AffectedPath = root.Path,
+                    },
+                ]);
+            }
+
+            var result = inventory.ToMountValidation(root.Path);
             if (!result.Succeeded)
             {
                 throw new CookInputDiscoveryException(result.Diagnostics);

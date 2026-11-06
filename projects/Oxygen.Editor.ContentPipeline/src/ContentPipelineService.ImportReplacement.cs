@@ -243,7 +243,7 @@ public sealed partial class ContentPipelineService
         NativeArtifactLease artifacts,
         CancellationToken cancellationToken)
     {
-        var job = this.manifestBuilder.BuildJob(source, [], recordRelative);
+        var job = this.manifestBuilder.BuildJob(source, []);
         var execution = new ContentSourceAnalysisExecution(
             operation.OperationId,
             operation.Project.ProjectRoot.FullPath,
@@ -276,7 +276,7 @@ public sealed partial class ContentPipelineService
     /// <param name="Source">The retained source.</param>
     /// <param name="Replacement">The reviewed replacement target, with the model's record.</param>
     /// <param name="Incoming">The incoming source file.</param>
-    /// <param name="RecordRelative">The model import record's project-relative path.</param>
+    /// <param name="RecordRelative">The model import record's cook path.</param>
     /// <param name="ResolveScopes">Resolves the cook scopes at discovery time.</param>
     /// <param name="Previous">The previous cook provenance.</param>
     /// <param name="Libraries">The cooked libraries read by the cook.</param>

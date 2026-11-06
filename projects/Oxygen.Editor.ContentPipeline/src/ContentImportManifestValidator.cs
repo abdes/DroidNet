@@ -101,9 +101,9 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         {
             diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest job '{job.Id}' source is required."));
         }
-        else if (string.Equals(job.Type, "model", StringComparison.Ordinal) && string.IsNullOrWhiteSpace(job.Record))
+        else if (job.IsModel && string.IsNullOrWhiteSpace(job.VirtualPath))
         {
-            diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest model job '{job.Id}' needs its model import record."));
+            diagnostics.Add(CreateDiagnostic(operationId, $"Import manifest model job '{job.Id}' needs its model's identity."));
         }
 
         if (job.DependsOn.Any(string.IsNullOrWhiteSpace))

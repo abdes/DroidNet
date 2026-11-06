@@ -60,6 +60,6 @@ public sealed partial class ContentPipelineService
             technicalMessage: location);
     }
 
-    [GeneratedRegex(@"^(?<instance>instance_)?bindings\[(?<binding>\d+)\](?:\.params\[(?<param>\d+)\])?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^/(?<instance>instance_)?bindings/(?<binding>\d+)(?:/params/(?<param>\d+))?", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex BindingLocation();
 }

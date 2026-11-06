@@ -5,6 +5,7 @@
 using System.Text.Json;
 using Json.Schema;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -35,7 +36,7 @@ public sealed partial class SceneDescriptorGenerator
         JsonElement instance;
         try
         {
-            instance = JsonSerializer.SerializeToElement(CreatePostProcess(authored), SceneDescriptorJson.Options);
+            instance = JsonSerializer.SerializeToElement(CreatePostProcess(authored, AssetPath.Engine.Combine("Validated.oscene")), SceneDescriptorJson.Options);
         }
         catch (ArgumentException)
         {

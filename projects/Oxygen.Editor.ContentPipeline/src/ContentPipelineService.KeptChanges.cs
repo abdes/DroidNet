@@ -73,9 +73,9 @@ public sealed partial class ContentPipelineService
 
     private static int Index(Match match, string group) => int.Parse(match.Groups[group].Value, CultureInfo.InvariantCulture);
 
-    [GeneratedRegex(@"^(?:nodes\[(?<node>\d+)\](?:\.instance\.overrides\[(?<change>\d+)\])?|renderables\[(?<renderable>\d+)\])", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^(?:/nodes/(?<node>\d+)(?:/instance/overrides/(?<change>\d+))?|/renderables/(?<renderable>\d+))", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex DescriptorLocation();
 
-    [GeneratedRegex(@"^instance_bindings\[(?<binding>\d+)\]", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
+    [GeneratedRegex(@"^/instance_bindings/(?<binding>\d+)", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex InstanceBindingLocation();
 }

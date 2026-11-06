@@ -222,6 +222,25 @@ public sealed partial class CookStagingTests
 
         _ = inventory.Issues.Should().ContainSingle().Which.Reason.Should().Be("uncommitted_tail");
         _ = verify.Should().NotThrow();
+        _ = new FileInfo(Path.Combine(staging.Roots[0].Path, "resources", "buffers.data")).Length.Should().Be(inventory.Files["resources/buffers.data"].Size, "the candidate leaves the tail behind, as the next writer does");
+    }
+
+    /// <summary>A file no commit lists is no change either, and the candidate leaves it behind.</summary>
+    /// <returns>The asynchronous regression.</returns>
+    [TestMethod]
+    public async Task AcceptedInventoryLeavesAnUncommittedFileBehind()
+    {
+        using var project = new StagingProject();
+        _ = await this.PublishRootAsync(project).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(project.PublishedRoot, "resources", "stray.0123456789abcdef"), "leftover", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inventory = NativeInventoryFixture.Read(project.PublishedRoot);
+        var staging = await project.StageAsync(["Content"], this.TestContext.CancellationToken).ConfigureAwait(false);
+        await using var lifetime = staging.ConfigureAwait(false);
+
+        staging.VerifyAcceptedInventories(new Dictionary<string, CookedInventoryReport>(StringComparer.Ordinal) { ["Content"] = inventory }, new HashSet<string>(StringComparer.Ordinal));
+
+        _ = inventory.Issues.Should().ContainSingle().Which.Reason.Should().Be("uncommitted");
+        _ = File.Exists(Path.Combine(staging.Roots[0].Path, "resources", "stray.0123456789abcdef")).Should().BeFalse();
     }
 
     /// <summary>Traversal and Windows path aliases are rejected before staging is created.</summary>
