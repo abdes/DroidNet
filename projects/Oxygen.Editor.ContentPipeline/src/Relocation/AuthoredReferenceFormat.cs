@@ -115,6 +115,24 @@ internal static class AuthoredReferenceFormat
         return Serialize(renamed, content.Span);
     }
 
+    /// <summary>Rewrites one reference field, keeping the rest of the file.</summary>
+    /// <param name="path">The descriptor.</param>
+    /// <param name="content">The descriptor bytes.</param>
+    /// <param name="retarget">The field and its new text.</param>
+    /// <returns>The rewritten bytes.</returns>
+    /// <exception cref="AssetRelocationException">The field no longer holds the text the rewrite was asked for.</exception>
+    public static byte[] RetargetReference(FileSystemPath path, ReadOnlyMemory<byte> content, ReferenceRetarget retarget)
+    {
+        ArgumentNullException.ThrowIfNull(retarget);
+        var root = JsonNode.Parse(StripBom(content.Span));
+        var field = ReferenceFields(path).SelectMany(field => field.Select(root))
+            .FirstOrDefault(node => string.Equals(node.GetPath(), retarget.Property, StringComparison.Ordinal)
+                && string.Equals(node.GetValue<string>(), retarget.Written, StringComparison.Ordinal))
+            ?? throw new AssetRelocationException($"'{path.Name}' changed since its references were checked. Check them again.");
+        field.ReplaceWith(JsonValue.Create(retarget.Replacement));
+        return Serialize(root!, content.Span);
+    }
+
     /// <summary>Rewrites a descriptor for a relocation.</summary>
     /// <param name="project">The project that holds the descriptor.</param>
     /// <param name="path">The descriptor's current location.</param>

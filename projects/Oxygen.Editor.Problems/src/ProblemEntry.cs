@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
@@ -52,7 +54,10 @@ public sealed record ProblemEntry(AssetProblem Problem)
     public string Rendered => this.Problem is ScriptProblem script
         ? script.Rendered
         : $"{this.SeverityKeyword}[{this.Code}]: {this.Message}\n"
-            + (this.Problem.File is { } file ? $" --> {file}" + (this.Location.Length > 0 ? ":" + this.Location : string.Empty) + "\n" : string.Empty);
+            + (this.Problem.File is { } file ? $" --> {file}" + (this.Location.Length > 0 ? ":" + this.Location : string.Empty) + "\n" : string.Empty)
+            + (this.Problem is UnresolvedReferenceProblem { Reference: var reference }
+                ? $" field:    {reference.Property}\n written:  {reference.Written}\n expects:  {AssetKinds.FromFileName(reference.Written)}\n"
+                : string.Empty);
 
     /// <summary>Gets what the problem means and how to resolve it, or empty.</summary>
     public string Explanation => this.Problem.Explanation ?? string.Empty;

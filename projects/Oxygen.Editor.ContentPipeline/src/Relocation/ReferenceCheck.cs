@@ -57,19 +57,23 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     private readonly ILogger logger;
     private readonly SubscriberEvent<EventHandler> problemsChanged = new();
     private readonly SemaphoreSlim running = new(1, 1);
+    private readonly IAssetRelocationService? relocation;
     private ImmutableArray<UnresolvedReference> unresolved = [];
     private ImmutableArray<AssetProblem> problems = [];
 
     /// <summary>Initializes a new instance of the <see cref="ReferenceCheck"/> class.</summary>
     /// <param name="session">The project session, whose project is checked.</param>
     /// <param name="logger">The logger.</param>
-    public ReferenceCheck(IProjectSession session, ILogger<ReferenceCheck> logger)
+    /// <param name="relocation">The relocation service, whose committed changes can fix or break references; optional.</param>
+    public ReferenceCheck(IProjectSession session, ILogger<ReferenceCheck> logger, IAssetRelocationService? relocation = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(logger);
         this.session = session;
         this.logger = logger;
+        this.relocation = relocation;
         session.ContextChanged += this.OnContextChanged;
+        relocation?.FilesChanged += this.OnFilesChanged;
         this.RunInBackground();
     }
 
@@ -112,6 +116,7 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     public void Dispose()
     {
         this.session.ContextChanged -= this.OnContextChanged;
+        this.relocation?.FilesChanged -= this.OnFilesChanged;
         this.running.Dispose();
     }
 
@@ -244,6 +249,8 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
     }
 
     private void OnContextChanged(object? sender, EventArgs args) => this.RunInBackground();
+
+    private void OnFilesChanged(object? sender, AssetFilesChangedEventArgs args) => this.RunInBackground();
 
     // A check the session starts ends with the session; one that cannot read or write the project's files reports why.
     private void RunInBackground()

@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.Pickers;
 using Windows.System;
 
 namespace Oxygen.Editor.Problems;
@@ -97,6 +98,24 @@ public sealed partial class ProblemsView : UserControl
         if (this.observed is not null && this.ProblemList.SelectedItem is ProblemEntry entry)
         {
             this.observed.Selected = entry;
+        }
+    }
+
+    // The picker is filled before the flyout opens, since it refuses a change of its lists while they attach.
+    private void OnRetargetClicked(object sender, RoutedEventArgs args)
+    {
+        this.observed?.BeginRetarget();
+        this.RetargetFlyout.ShowAt(this.RetargetButton);
+    }
+
+    private void OnRetargetFlyoutClosed(object? sender, object args) => this.observed?.EndRetarget();
+
+    private async void OnRetargetChoiceInvoked(object? sender, AssetChoice choice)
+    {
+        this.RetargetFlyout.Hide();
+        if (this.observed is not null && choice.Asset is { } asset)
+        {
+            await this.observed.RetargetAsync(asset).ConfigureAwait(true);
         }
     }
 

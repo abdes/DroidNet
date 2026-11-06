@@ -15,6 +15,9 @@ public sealed record AssetRelocationRequest
     /// <summary>Gets the actions and mapping contexts to rename inside their input sources.</summary>
     public IReadOnlyList<InputProductRename> ProductRenames { get; init; } = [];
 
+    /// <summary>Gets the reference fields to rewrite so they name another asset.</summary>
+    public IReadOnlyList<ReferenceRetarget> Retargets { get; init; } = [];
+
     /// <summary>Gets a value indicating whether a model moved into a shared mount gets its own copy of a source it references
     /// in another mount, instead of keeping the reference.</summary>
     public bool CopiesSourcesIn { get; init; }
@@ -29,5 +32,6 @@ public sealed record AssetRelocationRequest
     {
         Moves = [.. this.Moves.Reverse().Select(static move => new AssetRelocationMove(move.Target, move.Source))],
         ProductRenames = [.. this.ProductRenames.Reverse().Select(static rename => rename.Reverse())],
+        Retargets = [.. this.Retargets.Reverse().Select(static retarget => retarget.Reverse())],
     };
 }

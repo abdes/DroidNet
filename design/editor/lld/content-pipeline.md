@@ -561,8 +561,15 @@ yet is never overwritten. It reports each created file as `FilesChanged` before
 
 `IReferenceCheck` (`ReferenceCheck`, a session service) lists every reference of
 the project's authored files, and the source of every model import record, that
-does not resolve in its mounts. It runs when the project opens, after
-each change of its mounts, and on demand.
+does not resolve in its mounts. It runs when the project opens, after each
+change of its mounts, after each committed relocation, and on demand.
+
+Retarget in the Problems pane repairs a listed reference of an authored file in
+a writable mount: `IAssetRelocationService.RetargetAsync` rewrites the field to
+name the picked asset, spelled from its file, with the other references of the
+same text when the checked option stays on. It is a relocation with no moves, so
+it journals, follows open documents and undoes as one step. A model record's
+`source` names a file, not an asset of a type, so it has no Retarget.
 
 | Guarantee                       | How                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

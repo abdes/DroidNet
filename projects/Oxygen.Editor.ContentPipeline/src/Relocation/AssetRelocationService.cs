@@ -95,6 +95,35 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
+    public bool CanRetarget(UnresolvedReference reference)
+    {
+        ArgumentNullException.ThrowIfNull(reference);
+        return AuthoredReferenceFormat.IsReferencingSource(reference.File.FullPath) && RelocationPaths.ToVirtual(session.Context, reference.File) is not null;
+    }
+
+    /// <inheritdoc/>
+    public Task<AssetRelocationPlan> RetargetAsync(IReadOnlyList<UnresolvedReference> references, AssetPath target, string label, HistoryKeeper history, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(references);
+        ArgumentNullException.ThrowIfNull(target);
+        var project = session.Context;
+        var retargets = references.Select(reference =>
+        {
+            var anchor = project.FindByFilePath(reference.File)?.Identity
+                ?? throw new AssetRelocationException($"'{reference.File.Name}' is not in a mount of this project.");
+            return ReferenceCheck.UnresolvedCode(project, anchor, target) == ReferenceCheck.ReferenceIntoProjectMount
+                ? throw new AssetRelocationException($"'{reference.File.Name}' is shared content, which cannot reference '{target}': other projects do not have the mount '{target.Mount}'.")
+                : new ReferenceRetarget(reference.File, reference.Property, reference.Written, target.ToReference(anchor));
+        }).ToArray();
+        foreach (var retarget in retargets)
+        {
+            this.LogRetargetRequested(retarget.File.FullPath, retarget.Property, retarget.Written, retarget.Replacement);
+        }
+
+        return this.RelocateAsync(new AssetRelocationRequest { Retargets = retargets }, label, history, cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public Task<AssetRelocationReview> PreviewAsync(AssetRelocationRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);

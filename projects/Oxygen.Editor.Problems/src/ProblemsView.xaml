@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Oxygen.Editor.Problems"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
     x:Name="Root"
     Background="{ThemeResource LayerFillColorDefaultBrush}">
     <UserControl.Resources>
@@ -163,6 +164,7 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto">
                     <TextBlock
@@ -188,7 +190,42 @@
                         Content="Select node"
                         ToolTipService.ToolTip="Select the node this problem names: in the scene that played, or in the scene the cook reported it for"
                         Visibility="{x:Bind ViewModel.CanSelectNode, Mode=OneWay}" />
+                    <Button
+                        x:Name="RetargetButton"
+                        Click="OnRetargetClicked"
+                        Content="Retarget…"
+                        Style="{ThemeResource AccentButtonStyle}"
+                        ToolTipService.ToolTip="Pick the asset this reference should name"
+                        Visibility="{x:Bind ViewModel.CanRetarget, Mode=OneWay}">
+                        <FlyoutBase.AttachedFlyout>
+                            <Flyout x:Name="RetargetFlyout" Closed="OnRetargetFlyoutClosed">
+                                <StackPanel Width="476" Spacing="8">
+                                    <pickers:AssetPicker
+                                        ChoiceInvoked="OnRetargetChoiceInvoked"
+                                        MaxListHeight="280"
+                                        Model="{x:Bind ViewModel.RetargetChoices, Mode=OneWay}" />
+                                    <CheckBox IsChecked="{x:Bind ViewModel.RetargetsOthers, Mode=TwoWay}" Visibility="{x:Bind ViewModel.HasOtherReferences, Mode=OneWay}">
+                                        <StackPanel>
+                                            <TextBlock Text="{x:Bind ViewModel.OtherReferencesText, Mode=OneWay}" />
+                                            <TextBlock
+                                                FontSize="12"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind ViewModel.OtherReferencesDetail, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </StackPanel>
+                            </Flyout>
+                        </FlyoutBase.AttachedFlyout>
+                    </Button>
                 </StackPanel>
+                <TextBlock
+                    Grid.Row="3"
+                    Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                    IsTextSelectionEnabled="True"
+                    Text="{x:Bind ViewModel.RetargetFailure, Mode=OneWay}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind ViewModel.HasRetargetFailure, Mode=OneWay}" />
             </Grid>
         </Grid>
     </Grid>

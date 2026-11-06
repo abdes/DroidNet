@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using Moq;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -25,7 +28,14 @@ internal static class TestProblems
     /// <param name="codeEditor">The code editor a problem's location opens in.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
     /// <param name="cookIssues">What shows the node a cook's problem names; one that accepts nothing by default.</param>
+    /// <param name="retarget">What Retarget uses; ports that answer nothing by default.</param>
     /// <returns>The view model.</returns>
-    internal static ProblemsViewModel CreateModel(TestSession session, IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes, ICookIssueReveal? cookIssues = null)
-        => new(new AssetProblemSources(sources), codeEditor, session, nodes, cookIssues ?? Mock.Of<ICookIssueReveal>());
+    internal static ProblemsViewModel CreateModel(TestSession session, IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes, ICookIssueReveal? cookIssues = null, RetargetServices? retarget = null)
+        => new(
+            new AssetProblemSources(sources),
+            codeEditor,
+            session,
+            nodes,
+            cookIssues ?? Mock.Of<ICookIssueReveal>(),
+            retarget ?? new(Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetFeed>(), Mock.Of<IHistoryService>(), Mock.Of<IDocumentArea>()));
 }

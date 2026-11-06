@@ -43,6 +43,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IRuntimeProblemSource? runtime;
     private readonly IRuntimeProblemNodes nodes;
     private readonly ICookIssueReveal cookIssues;
+    private readonly RetargetServices retarget;
 
     /// <summary>Initializes a new instance of the <see cref="ProblemsViewModel"/> class.</summary>
     /// <param name="sources">The session's problem sources: the family facts, and the running scene's problems.</param>
@@ -50,12 +51,15 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <param name="session">The project session the panel lives in, for project-relative file names.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
     /// <param name="cookIssues">What shows the node or property a cook's problem names.</param>
-    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes, ICookIssueReveal cookIssues)
+    /// <param name="retarget">What Retarget offers the assets from and rewrites a reference through.</param>
+    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes, ICookIssueReveal cookIssues, RetargetServices retarget)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(retarget);
         this.nodes = nodes;
         this.cookIssues = cookIssues;
+        this.retarget = retarget;
         this.sources = sources.Sources;
         this.codeEditor = codeEditor;
         this.session = session;
@@ -74,7 +78,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 
     /// <summary>Gets or sets the selected problem.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(CanSelectNode))]
+    [NotifyPropertyChangedFor(nameof(HasSelection), nameof(CanSelectNode), nameof(CanRetarget))]
     [NotifyCanExecuteChangedFor(nameof(OpenSelectedCommand), nameof(SelectNodeCommand))]
     public partial ProblemEntry? Selected { get; set; }
 
@@ -150,6 +154,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
+        this.EndRetarget();
         foreach (var source in this.sources)
         {
             source.ProblemsChanged -= this.OnProblemsChanged;

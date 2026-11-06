@@ -35,6 +35,7 @@ public sealed class ProblemsModule : IFeatureModule
     {
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<IRuntimeProblemNodes, RuntimeProblemNodes>(Reuse.Singleton);
+        scope.Register<RetargetServices>(Reuse.Singleton);
         scope.Register<ProblemsViewModel>(Reuse.Singleton);
         scope.Register<ProblemsView>(Reuse.Transient);
         scope.Register<ProblemsPresenter>(Reuse.Singleton);

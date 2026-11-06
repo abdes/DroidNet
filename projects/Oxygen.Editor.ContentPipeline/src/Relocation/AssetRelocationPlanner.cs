@@ -65,8 +65,13 @@ internal static class AssetRelocationPlanner
             AddProductRename(project, index, map, renames, rename);
         }
 
+        if (request.Retargets.FirstOrDefault(retarget => !index.Descriptors.Any(descriptor => descriptor.Location == retarget.File)) is { } gone)
+        {
+            throw new AssetRelocationException($"'{gone.File.Name}' changed since its references were checked. Check them again.");
+        }
+
         RefuseReferencesIntoOwnMounts(project, index, map);
-        var edits = await PlanEditsAsync(project, index, map, renames, files, cancellationToken).ConfigureAwait(false);
+        var edits = await PlanEditsAsync(project, index, map, renames, request.Retargets.ToLookup(static retarget => retarget.File), files, cancellationToken).ConfigureAwait(false);
         var referrers = edits.Where(edit => !map.IsMoved(edit.OriginalPath) && !renames.ContainsKey(edit.OriginalPath))
             .Select(edit => RelocationPaths.ToVirtual(project, edit.OriginalPath)!)
             .Order().ToArray();
@@ -555,6 +560,7 @@ internal static class AssetRelocationPlanner
         AuthoredReferenceIndex index,
         RelocationMap map,
         Dictionary<FileSystemPath, List<InputProductRename>> renames,
+        ILookup<FileSystemPath, ReferenceRetarget> retargets,
         IAtomicFileStore files,
         CancellationToken cancellationToken)
     {
@@ -567,6 +573,11 @@ internal static class AssetRelocationPlanner
             foreach (var rename in renames.GetValueOrDefault(descriptor.Location) ?? [])
             {
                 renamed = AuthoredReferenceFormat.RenameInputProduct(renamed, rename);
+            }
+
+            foreach (var retarget in retargets[descriptor.Location])
+            {
+                renamed = AuthoredReferenceFormat.RetargetReference(descriptor.Location, renamed, retarget);
             }
 
             if ((AuthoredReferenceFormat.RewriteDescriptor(project, descriptor.Location, renamed, map)

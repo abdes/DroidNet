@@ -33,6 +33,14 @@ public sealed partial class AssetRelocationService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
+        Message = "Retarget requested: '{File}' at {Property}: '{Written}' -> '{Replacement}'.")]
+    private static partial void LogRetargetRequested(ILogger logger, string file, string property, string written, string replacement);
+
+    private void LogRetargetRequested(string file, string property, string written, string replacement) => LogRetargetRequested(this.logger, file, property, written, replacement);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
         Message = "'{Label}' recorded in the history; undoing it runs the reverse relocation.")]
     private static partial void LogRecorded(ILogger logger, string label);
 

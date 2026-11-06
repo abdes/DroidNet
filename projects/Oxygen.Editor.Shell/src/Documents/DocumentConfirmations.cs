@@ -43,6 +43,7 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
             SaveBeforeOperation.Cook => ("Cook", "cook", "The cook reads the saved files."),
             SaveBeforeOperation.Rename => ("Rename", "rename", "Renaming rewrites the files that use it."),
             SaveBeforeOperation.Move => ("Move", "move", "Moving rewrites the files that use it."),
+            SaveBeforeOperation.Retarget => ("Retarget", "retarget", "Retargeting rewrites the files that hold the references."),
             _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, message: null),
         };
         var count = documents.Count == 1 ? "1 document" : string.Create(CultureInfo.CurrentCulture, $"{documents.Count} documents");

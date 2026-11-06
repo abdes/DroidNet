@@ -46,7 +46,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S12   | Done, committed                                                |
 | S13   | Done, committed                                                |
 | S14   | Done, committed                                                |
-| S15   | Not started                                                    |
+| S15   | Done, committed                                                |
 | S16   | Not started                                                    |
 | S17   | Not started                                                    |
 | S18   | Done, committed                                                |

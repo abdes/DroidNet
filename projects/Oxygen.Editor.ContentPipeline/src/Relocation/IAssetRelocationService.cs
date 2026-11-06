@@ -52,6 +52,24 @@ public interface IAssetRelocationService
     /// <exception cref="AssetRelocationException">The request was rejected or failed; no file is left changed.</exception>
     public Task<AssetRelocationPlan> RelocateAsync(AssetRelocationRequest request, string label, HistoryKeeper history, CancellationToken cancellationToken);
 
+    /// <summary>Tests whether Retarget can rewrite a reference: a field of an authored format, in a file of a writable mount.</summary>
+    /// <param name="reference">The unresolved reference.</param>
+    /// <returns>Whether the reference can be rewritten.</returns>
+    public bool CanRetarget(UnresolvedReference reference);
+
+    /// <summary>
+    /// Rewrites unresolved references to name an asset, each spelled from its own file, as one relocation: one restorable
+    /// transaction that open documents follow, and one change in <paramref name="history"/>.
+    /// </summary>
+    /// <param name="references">The references to rewrite.</param>
+    /// <param name="target">The asset they name after.</param>
+    /// <param name="label">What the history shows for the change.</param>
+    /// <param name="history">The history the caller records the change in.</param>
+    /// <param name="cancellationToken">Cancels before the first change.</param>
+    /// <returns>The applied plan.</returns>
+    /// <exception cref="AssetRelocationException">The change was rejected or failed; no file is left changed.</exception>
+    public Task<AssetRelocationPlan> RetargetAsync(IReadOnlyList<UnresolvedReference> references, AssetPath target, string label, HistoryKeeper history, CancellationToken cancellationToken);
+
     /// <summary>
     /// The moves that paste cut items into a folder: each item that is not already in it moves there under its name.
     /// </summary>

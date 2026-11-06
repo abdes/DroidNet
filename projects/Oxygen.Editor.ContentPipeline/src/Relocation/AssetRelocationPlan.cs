@@ -50,7 +50,7 @@ public sealed class AssetRelocationPlan
 
     /// <summary>Gets the request that undoes this relocation, what its closure moved included.</summary>
     public AssetRelocationRequest Reverse
-        => new AssetRelocationRequest { Moves = [.. this.Request.Moves, .. this.ClosureMoves], ProductRenames = this.Request.ProductRenames }.Reverse() with
+        => new AssetRelocationRequest { Moves = [.. this.Request.Moves, .. this.ClosureMoves], ProductRenames = this.Request.ProductRenames, Retargets = this.Request.Retargets }.Reverse() with
         {
             CopiesSourcesIn = this.Request.RemovedSourceCopies.Count != 0,
             RemovedSourceCopies = this.SourceCopies,

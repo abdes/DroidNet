@@ -18,4 +18,7 @@ public enum SaveBeforeOperation
 
     /// <summary>A move of assets, which rewrites the files that use them.</summary>
     Move,
+
+    /// <summary>A retarget of references, which rewrites the files that hold them.</summary>
+    Retarget,
 }
