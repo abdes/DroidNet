@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Import package review, refused (dark theme)</title>
+  <desc>The Import package dialog on a package two of whose destinations already exist. The import is refused and the reasons are listed; the rest of the review stays readable.</desc>
+  <defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.26"/></filter></defs>
+  <rect width="1440" height="1000" fill="#202020"/>
+  <rect x="0" y="0" width="1440" height="44" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="0" y="560" width="930" height="440" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="934" y="44" width="506" height="956" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="0" y="0" width="1440" height="1000" fill="#000000" fill-opacity="0.3"/>
+  <rect x="100" y="40" width="1090" height="560" rx="8" fill="#202020" stroke="#757575" stroke-opacity="0.4" filter="url(#shadow)"/>
+  <path d="M108,40 H1182 A8,8 0 0 1 1190,48 V530 H100 V48 A8,8 0 0 1 108,40Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="100" y1="530" x2="1190" y2="530" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="124" y="80" font-size="20" font-weight="600" fill="#ffffff">Import package</text>
+  <text x="124" y="104" font-size="13" fill-opacity="0.773" fill="#ffffff">Garage.zip · into /Props/Racer · 37 assets, 2 sources</text>
+  <rect x="124" y="112" width="1042" height="40" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="136" y="138" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
+  <text x="160" y="137" font-size="13" font-weight="600" fill="#ffffff">Cannot import.</text>
+  <text x="266" y="137" font-size="13" fill="#ffffff">2 destinations already exist. A package never overwrites, so nothing was written.</text>
+  <text x="124" y="180" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
+  <text x="148" y="180" font-weight="600" fill="#ffffff">Already exist</text>
+  <text x="252" y="180" font-size="12" fill-opacity="0.773" fill="#ffffff">2 · rename or remove them in this project, then import again</text>
+  <line x1="124" y1="189" x2="1166" y2="189" stroke="#ffffff" stroke-opacity="0.082"/>
+  <text x="148" y="210" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Materials/Rust.omat</text>
+  <text x="1166" y="210" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Material</text>
+  <text x="148" y="234" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Textures/Brick.otex</text>
+  <text x="1166" y="234" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Texture</text>
+  <text x="124" y="270" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#fce100">&#xE7BA;</text>
+  <text x="148" y="270" font-weight="600" fill="#ffffff">Not mounted here</text>
+  <text x="276" y="270" font-size="12" fill-opacity="0.773" fill="#ffffff">1 mount · its references stay unresolved until the project mounts it</text>
+  <line x1="124" y1="279" x2="1166" y2="279" stroke="#ffffff" stroke-opacity="0.082"/>
+  <text x="148" y="300" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Vehicles</text>
+  <text x="1166" y="300" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">12 assets</text>
+  <text x="124" y="336" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8A5;</text>
+  <text x="148" y="336" font-weight="600" fill="#ffffff">New here</text>
+  <text x="212" y="336" font-size="12" fill-opacity="0.773" fill="#ffffff">35</text>
+  <line x1="124" y1="345" x2="1166" y2="345" stroke="#ffffff" stroke-opacity="0.082"/>
+  <text x="148" y="366" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Levels/Garage/Garage.oscene</text>
+  <text x="1166" y="366" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Scene</text>
+  <text x="148" y="390" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Cars/Truck.fbx</text>
+  <text x="1166" y="390" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Model</text>
+  <text x="148" y="414" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Cars/Truck.fbx.import.json</text>
+  <text x="1166" y="414" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Its record</text>
+  <text x="148" y="438" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Input/Car.input</text>
+  <text x="1166" y="438" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Input</text>
+  <text x="148" y="462" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">/Props/Racer/Scripts/door.lua</text>
+  <text x="1166" y="462" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Script</text>
+  <text x="148" y="486" font-size="12" fill-opacity="0.773" fill="#ffffff">and 30 more, by scrolling</text>
+  <rect x="946" y="548" width="126" height="32" rx="4" fill="#ffffff" fill-opacity="0.157"/>
+  <text x="1009.0" y="569" text-anchor="middle" fill-opacity="0.53" fill="#ffffff">Import<title>Disabled while a destination exists</title></text>
+  <rect x="1082" y="548" width="84" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1124.0" y="569" text-anchor="middle" fill="#ffffff">Close</text>
+  <rect x="1200" y="40" width="232" height="700" rx="6" fill="#161616" stroke="#4a4a4a"/>
+  <text x="1210" y="62" font-size="11" font-weight="600" fill="#ffffff">What the mockup shows</text>
+  <text x="1210" y="84" font-size="11" fill="#e0e0e0">1. One control with the export review;</text>
+  <text x="1220" y="99" font-size="11" fill="#e0e0e0">groups with a problem come first, so a</text>
+  <text x="1220" y="114" font-size="11" fill="#e0e0e0">refusal is read without scrolling.</text>
+  <text x="1210" y="136" font-size="11" fill="#e0e0e0">2. The list is a plan, not a result: a</text>
+  <text x="1220" y="151" font-size="11" fill="#e0e0e0">refused import wrote nothing and says</text>
+  <text x="1220" y="166" font-size="11" fill="#e0e0e0">so.</text>
+  <text x="1210" y="188" font-size="11" fill="#e0e0e0">3. Refused, with the same bar and</text>
+  <text x="1220" y="203" font-size="11" fill="#e0e0e0">groups: a destination that exists; a</text>
+  <text x="1220" y="218" font-size="11" fill="#e0e0e0">destination mount that is not this</text>
+  <text x="1220" y="233" font-size="11" fill="#e0e0e0">project&#x27;s own writable mount (the reason</text>
+  <text x="1220" y="248" font-size="11" fill="#e0e0e0">names the mount and which project owns</text>
+  <text x="1220" y="263" font-size="11" fill="#e0e0e0">it); a file whose digest differs from</text>
+  <text x="1220" y="278" font-size="11" fill="#e0e0e0">package.json (the package is damaged).</text>
+  <text x="1210" y="300" font-size="11" fill="#e0e0e0">4. Not mounted here warns only: R11</text>
+  <text x="1220" y="315" font-size="11" fill="#e0e0e0">reports such a dependency as an</text>
+  <text x="1220" y="330" font-size="11" fill="#e0e0e0">unresolved reference, and the team can</text>
+  <text x="1220" y="345" font-size="11" fill="#e0e0e0">mount it later. A dependency on a game</text>
+  <text x="1220" y="360" font-size="11" fill="#e0e0e0">mount cannot occur (R3).</text>
+  <text x="1210" y="382" font-size="11" fill="#e0e0e0">5. When allowed, the bar is absent, the</text>
+  <text x="1220" y="397" font-size="11" fill="#e0e0e0">primary button reads Import 37, and the</text>
+  <text x="1220" y="412" font-size="11" fill="#e0e0e0">import is one Undo step. On a project</text>
+  <text x="1220" y="427" font-size="11" fill="#e0e0e0">with open dirty files it asks to save</text>
+  <text x="1220" y="442" font-size="11" fill="#e0e0e0">first, as any relocation does.</text>
+  <text x="1210" y="464" font-size="11" fill="#e0e0e0">6. No per-file choice to skip or</text>
+  <text x="1220" y="479" font-size="11" fill="#e0e0e0">overwrite: the package is all or</text>
+  <text x="1220" y="494" font-size="11" fill="#e0e0e0">nothing, so its digests still describe</text>
+  <text x="1220" y="509" font-size="11" fill="#e0e0e0">what landed and Replace with library</text>
+  <text x="1220" y="524" font-size="11" fill="#e0e0e0">stays exact.</text>
+  <text x="1210" y="546" font-size="11" fill="#e0e0e0">7. Rows are not links: the destinations</text>
+  <text x="1220" y="561" font-size="11" fill="#e0e0e0">do not exist yet. Already exist rows</text>
+  <text x="1220" y="576" font-size="11" fill="#e0e0e0">select the existing asset on double-</text>
+  <text x="1220" y="591" font-size="11" fill="#e0e0e0">click.</text>
+</svg>

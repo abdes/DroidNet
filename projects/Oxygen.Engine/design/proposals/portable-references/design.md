@@ -573,7 +573,8 @@ into its own mount relative. `oxygen.asset-package.schema.json` lives in
 
 **Pak build.** `PakBuildService` runs PakTool through
 `EngineContentPipelineToolLocator`, after the R10 check of the mount table
-(`pak.dependency_not_pak`). It packs the project's published cooked root with
+(`pak.dependency_not_pak`) and a cook of what changed, so a pak never ships a
+stale cook. It packs the project's published cooked root with
 `--dependency-pak` for each library pak, lowest first, and `engine.pak`.
 
 ### Oxygen.Editor.World and Oxygen.Editor.Scenes
@@ -605,8 +606,11 @@ canonical absolute paths, so nothing past the serializer changes.
 ### Problems
 
 `ProblemsViewModel` adds Retarget on `UnresolvedReferenceProblem`: the asset
-picker filtered to the field's asset type, then one `RelocationEdit` that
-rewrites the written text with `ToReference`, committed as an Undo step.
+picker filtered to the field's asset type, searching for the broken name's
+stem, then one `RelocationEdit` that rewrites the written text with
+`ToReference`, committed as an Undo step. A checkbox, on by default, lists the
+other unresolved references with the same written text and includes them in
+that edit.
 
 ### Play and Live Preview
 
@@ -626,14 +630,29 @@ The new commands reuse the editor's existing dialogs and controls; the plan's
 UX slice produces SVG mockups in the editor's style before any of them is
 built.
 
-| Command              | Where                                                      | Flow                                                                                                                                                                                                                        |
-| -------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add library          | Content Explorer, mounts dialog                            | Pick a `.pak`, a cooked folder or a library project's `.cooked`; the dialog shows the library name read from it, its dependencies and where it will be placed; Add writes the committed path or the placeholder and binding |
-| Export package       | Content Explorer, on assets or folders of a writable mount | Review lists every asset with its destination under the chosen library folder, the sources copied in and the dependencies; Export writes the `.zip`                                                                         |
-| Import package       | Content Explorer of a library project                      | Pick the `.zip`; review lists every destination; refused with the reasons when any destination exists                                                                                                                       |
-| Replace with library | Content Explorer of the game                               | Pick the `.zip`; review shows the three lists of R11; Replace commits one Undo step                                                                                                                                         |
-| Retarget             | Problems, on an unresolved reference                       | Asset picker filtered to the field's type                                                                                                                                                                                   |
-| Build pak            | Project menu                                               | Refused with the list of loose library mounts, or runs PakTool and shows its report                                                                                                                                         |
+| Command              | Where                                                      | Flow                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add library          | Content Explorer, mounts dialog                            | Pick a `.pak`, a cooked folder or a library project's `.cooked`; the dialog shows the library name read from it, its dependencies and where it will be placed; a missing dependency warns, and the mount is added `Invalid`; Add writes the committed path, the default only for a file inside the project, or the placeholder and binding |
+| Export package       | Content Explorer, on assets or folders of a writable mount | Review lists every asset with its destination under the chosen library folder, the sources copied in and the dependencies; Export writes the `.zip`                                                                                                                                                                                        |
+| Import package       | Content Explorer of a library project                      | Pick the `.zip`; review lists every destination; refused with the reasons when any destination exists                                                                                                                                                                                                                                      |
+| Replace with library | Content Explorer of the game                               | Pick the `.zip`; review shows the three lists of R11; Replace commits one Undo step                                                                                                                                                                                                                                                        |
+| Retarget             | Problems, on an unresolved reference                       | Asset picker filtered to the field's type; a checked option includes the other references with the same text, in one Undo step                                                                                                                                                                                                             |
+| Build pak            | Content Explorer, the Cook toolbar button                  | Refused with the list of loose library mounts, or asks for the output and version, cooks what changed, runs PakTool and shows its report in the Cooking panel                                                                                                                                                                              |
+
+### Mockups
+
+Drawn in the editor's dark theme, from the views they extend. Each mockup's
+notes state its decisions and their reasons; open it to read them.
+
+| Command              | Mockup                                                                                        | Extends                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Add library          | [add-library](../../../../../design/editor/lld/mockups/add-library.svg)                       | `ContentMountsView`, `MountPlacementView`                   |
+| Package commands     | [asset-package-commands](../../../../../design/editor/lld/mockups/asset-package-commands.svg) | `AssetsView` Import flyout, asset and folder context menus  |
+| Export package       | [asset-package-export](../../../../../design/editor/lld/mockups/asset-package-export.svg)     | Grouped list with the Problems panel's headers, in a dialog |
+| Import package       | [asset-package-import](../../../../../design/editor/lld/mockups/asset-package-import.svg)     | The same list                                               |
+| Replace with library | [asset-package-replace](../../../../../design/editor/lld/mockups/asset-package-replace.svg)   | The same list                                               |
+| Retarget             | [problems-retarget](../../../../../design/editor/lld/mockups/problems-retarget.svg)           | `ProblemsView` details, `AssetPicker`                       |
+| Build pak            | [build-pak](../../../../../design/editor/lld/mockups/build-pak.svg)                           | `AssetsView` Cook flyout, Cooking panel runs                |
 
 ## Testing
 
@@ -748,4 +767,14 @@ window.
 - **Project schema version 3.** The `Pak` kind and records outside mounts are
   refused as version 2, like version 1 today, with no reader for either.
 - **Mockups before the new commands are built.** Add library, packages,
-  Retarget and Build pak are new UI; the owner decides them on SVG mockups.
+  Retarget and Build pak are new UI; the owner decided them on the
+  [mockups](#mockups).
+- **Adding a library with a missing dependency warns.** The mount is added
+  `Invalid` and recovers when the library is added, so libraries can be added in
+  any order.
+- **A shared library is saved on this machine by default.** Its location is a
+  machine fact; `Project.oxy` is the default only for a file inside the project.
+- **Retarget offers every reference with the same text, checked.** One rename
+  breaks them together, so one pick repairs them, with one Undo.
+- **Build pak cooks first.** A pak of a stale cook would ship old content
+  silently.

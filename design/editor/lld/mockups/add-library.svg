@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Add library, in the mounts dialog (dark theme)</title>
+  <desc>The Content mounts dialog with Library chosen under Add a mount. The picked pak&#x27;s facts are read from it: the name, its form, what it needs and where it lands. A warning says a required library is not mounted. An Invalid mount row shows its finding. Libraries have no rename action.</desc>
+  <defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.26"/></filter></defs>
+  <rect width="1440" height="1000" fill="#202020"/>
+  <rect x="0" y="0" width="1440" height="44" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="0" y="560" width="930" height="440" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="934" y="44" width="506" height="956" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="0" y="0" width="1440" height="1000" fill="#000000" fill-opacity="0.3"/>
+  <rect x="150" y="40" width="1040" height="830" rx="8" fill="#202020" stroke="#757575" stroke-opacity="0.4" filter="url(#shadow)"/>
+  <path d="M158,40 H1182 A8,8 0 0 1 1190,48 V800 H150 V48 A8,8 0 0 1 158,40Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="150" y1="800" x2="1190" y2="800" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="174" y="80" font-size="20" font-weight="600" fill="#ffffff">Content mounts</text>
+  <text x="174" y="96" font-size="13" fill-opacity="0.773" fill="#ffffff">Project.oxy commits each mount with a relative path or as a placeholder; .mounts.json binds it on this machine.</text>
+  <text x="174" y="114" font-size="13" fill-opacity="0.773" fill="#ffffff">Unmounting removes the registration, never the files.</text>
+  <rect x="174" y="140" width="992" height="52" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="185" y="173" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff" fill-opacity="0.773">&#xE8B7;</text>
+  <text x="216" y="162" font-weight="600" fill="#ffffff">Content</text>
+  <text x="216" y="180" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">./Content</text>
+  <text x="684" y="171" font-size="12" fill-opacity="0.773" fill="#ffffff">Source</text>
+  <text x="742" y="162" font-size="12" fill="#ffffff">In the project</text>
+  <text x="742" y="180" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">H:/studio/games/Racer/Content</text>
+  <text x="1126" y="172" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff" fill-opacity="0.773">&#xE72E;<title>Cannot be changed or unmounted</title></text>
+  <rect x="174" y="196" width="992" height="52" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="185" y="229" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff" fill-opacity="0.773">&#xE7B8;</text>
+  <text x="216" y="218" font-weight="600" fill="#ffffff">Vehicles</text>
+  <text x="216" y="236" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">placeholder</text>
+  <text x="684" y="227" font-size="12" fill-opacity="0.773" fill="#ffffff">Cooked</text>
+  <text x="742" y="218" font-size="12" fill="#ffffff">Bound on this machine</text>
+  <text x="742" y="236" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">H:/studio/libraries/Vehicles/.cooked</text>
+  <text x="1062" y="228" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8DA;<title>Change the binding</title></text>
+  <text x="1094" y="228" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8CD;<title>Remove the binding on this machine</title></text>
+  <text x="1126" y="228" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE711;<title>Unmount</title></text>
+  <rect x="174" y="252" width="992" height="52" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="185" y="285" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff" fill-opacity="0.773">&#xE7B8;</text>
+  <text x="216" y="274" font-weight="600" fill="#ffffff">Interiors</text>
+  <text x="216" y="292" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">Paks/Interiors.pak</text>
+  <text x="684" y="283" font-size="12" fill-opacity="0.773" fill="#ffffff">Cooked</text>
+  <text x="742" y="274" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ff99a4">&#xEA39;</text>
+  <text x="760" y="274" font-size="12" fill="#ffffff">Invalid: holds /Content, not /Interiors</text>
+  <text x="742" y="292" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">mount.cooked_root_mismatch</text>
+  <text x="1062" y="284" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE711;<title>Unmount</title></text>
+  <rect x="174" y="308" width="992" height="52" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="185" y="341" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff" fill-opacity="0.773">&#xE7B8;</text>
+  <text x="216" y="330" font-weight="600" fill="#ffffff">Engine</text>
+  <text x="216" y="348" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">engine.pak</text>
+  <text x="684" y="339" font-size="12" fill-opacity="0.773" fill="#ffffff">Cooked</text>
+  <text x="742" y="330" font-size="12" fill="#ffffff">Installed with the editor</text>
+  <text x="742" y="348" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">engine.pak</text>
+  <text x="1126" y="340" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff" fill-opacity="0.773">&#xE72E;<title>Cannot be changed or unmounted</title></text>
+  <text x="174" y="384" font-weight="600" fill="#ffffff">Add a mount</text>
+  <text x="174" y="410" font-size="13" fill="#ffffff">Location</text>
+  <rect x="174" y="418" width="170" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="185" y="439" fill="#ffffff">Library</text>
+  <text x="320" y="438" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <text x="356" y="410" font-size="13" fill="#ffffff">Pak file or cooked folder</text>
+  <rect x="356" y="418" width="672" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <line x1="357" y1="449.5" x2="1027" y2="449.5" stroke="#ffffff" stroke-opacity="0.545"/>
+  <text x="367" y="439" font-size="13" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">//share/oxygen/Props.pak</text>
+  <rect x="1038" y="418" width="128" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1102.0" y="439" text-anchor="middle" fill="#ffffff">Browse…<title>Pak file… or Cooked folder…</title></text>
+  <text x="1142" y="438" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#ffffff" fill-opacity="0.77">&#xE70D;</text>
+  <rect x="174" y="462" width="992" height="150" rx="8" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="188" y="486" font-size="13" fill-opacity="0.773" fill="#ffffff">Name</text>
+  <text x="284" y="486" font-size="13" font-weight="600" fill="#ffffff">Props</text>
+  <text x="330.0" y="486" font-size="12" fill-opacity="0.773" fill="#ffffff">read from the file&#x27;s one root, never typed</text>
+  <text x="188" y="513" font-size="13" fill-opacity="0.773" fill="#ffffff">Form</text>
+  <text x="284" y="513" font-size="13" fill="#ffffff">Pak</text>
+  <text x="315.6" y="513" font-size="12" fill-opacity="0.773" fill="#ffffff">format 12 · 1,284 assets</text>
+  <text x="188" y="540" font-size="13" fill-opacity="0.773" fill="#ffffff">Needs</text>
+  <text x="284" y="540" font-size="13" fill="#ffffff">Vehicles</text>
+  <text x="351.6" y="540" font-size="12" fill-opacity="0.773" fill="#ffffff">12 assets · not mounted</text>
+  <text x="188" y="567" font-size="13" fill-opacity="0.773" fill="#ffffff"></text>
+  <text x="284" y="567" font-size="13" fill="#ffffff">Engine</text>
+  <text x="337.2" y="567" font-size="12" fill-opacity="0.773" fill="#ffffff">39 assets · provided</text>
+  <text x="188" y="594" font-size="13" fill-opacity="0.773" fill="#ffffff">Priority</text>
+  <text x="284" y="594" font-size="13" fill="#ffffff">Above Vehicles and Engine, below Content</text>
+  <text x="582.0" y="594" font-size="12" fill-opacity="0.773" fill="#ffffff">above what it needs</text>
+  <text x="266" y="540" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#fce100">&#xE7BA;</text>
+  <text x="266" y="567" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <rect x="174" y="620" width="992" height="40" rx="4" fill="#433519" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="186" y="646" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#fce100">&#xE7BA;</text>
+  <text x="210" y="645" font-size="13" font-weight="600" fill="#ffffff">Vehicles is not mounted.</text>
+  <text x="386" y="645" font-size="13" fill="#ffffff">Props can be added, and stays Invalid until Vehicles is added below it.</text>
+  <text x="174" y="674" fill="#ffffff">Save the file</text>
+  <circle cx="184" cy="694" r="9" fill="none" stroke="#ffffff" stroke-opacity="0.545"/>
+  <text x="204" y="699" fill-opacity="0.36" fill="#ffffff">In Project.oxy (not available: the file is on another drive)</text>
+  <text x="204" y="717" font-size="12" fill-opacity="0.36" fill="#ffffff">Shared through the repository: everyone gets the file at the same place beside the project.</text>
+  <circle cx="184" cy="736" r="9" fill="#60cdff"/><circle cx="184" cy="736" r="4" fill="#000000"/>
+  <text x="204" y="741" fill="#ffffff">On this machine only, in .mounts.json</text>
+  <text x="204" y="759" font-size="12" fill-opacity="0.773" fill="#ffffff">Project.oxy commits a placeholder; each person binds it to their own file.</text>
+  <rect x="946" y="818" width="126" height="32" rx="4" fill="#60cdff"/>
+  <text x="1009.0" y="839" text-anchor="middle" fill="#000000">Add library</text>
+  <rect x="1082" y="818" width="84" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1124.0" y="839" text-anchor="middle" fill="#ffffff">Close</text>
+  <rect x="1200" y="40" width="232" height="920" rx="6" fill="#161616" stroke="#4a4a4a"/>
+  <text x="1210" y="62" font-size="11" font-weight="600" fill="#ffffff">What the mockup shows</text>
+  <text x="1210" y="84" font-size="11" fill="#e0e0e0">1. Existing dialog and rows</text>
+  <text x="1220" y="99" font-size="11" fill="#e0e0e0">(ContentMountsView). Location offers</text>
+  <text x="1220" y="114" font-size="11" fill="#e0e0e0">Source folder, Library and the output</text>
+  <text x="1220" y="129" font-size="11" fill="#e0e0e0">folders; Pak file goes.</text>
+  <text x="1210" y="151" font-size="11" fill="#e0e0e0">2. Library has no name box: the name is</text>
+  <text x="1220" y="166" font-size="11" fill="#e0e0e0">read from the file&#x27;s one root (R6).</text>
+  <text x="1220" y="181" font-size="11" fill="#e0e0e0">Browse opens Pak file… or Cooked</text>
+  <text x="1220" y="196" font-size="11" fill="#e0e0e0">folder….</text>
+  <text x="1210" y="218" font-size="11" fill="#e0e0e0">3. A cooked folder shows Form as Loose</text>
+  <text x="1220" y="233" font-size="11" fill="#e0e0e0">cooked root, or Library project&#x27;s</text>
+  <text x="1220" y="248" font-size="11" fill="#e0e0e0">.cooked with its generation; a .cooked</text>
+  <text x="1220" y="263" font-size="11" fill="#e0e0e0">binding follows new cooks.</text>
+  <text x="1210" y="285" font-size="11" fill="#e0e0e0">4. Needs: R10&#x27;s requirements read from</text>
+  <text x="1220" y="300" font-size="11" fill="#e0e0e0">the pak, each checked against the layers</text>
+  <text x="1220" y="315" font-size="11" fill="#e0e0e0">below. A .cooked or loose root reads its</text>
+  <text x="1220" y="330" font-size="11" fill="#e0e0e0">own.</text>
+  <text x="1210" y="352" font-size="11" fill="#e0e0e0">5. A missing library warns and adds, so</text>
+  <text x="1220" y="367" font-size="11" fill="#e0e0e0">libraries can be added in any order; the</text>
+  <text x="1220" y="382" font-size="11" fill="#e0e0e0">code mount.cooked_dependency_missing</text>
+  <text x="1220" y="397" font-size="11" fill="#e0e0e0">shows until the library is added.</text>
+  <text x="1210" y="419" font-size="11" fill="#e0e0e0">6. No file can be read, or it holds</text>
+  <text x="1220" y="434" font-size="11" fill="#e0e0e0">several roots, an external script or an</text>
+  <text x="1220" y="449" font-size="11" fill="#e0e0e0">unreadable format: red InfoBar with the</text>
+  <text x="1220" y="464" font-size="11" fill="#e0e0e0">code, Add off. A name in use:</text>
+  <text x="1220" y="479" font-size="11" fill="#e0e0e0">mount.name_duplicate.</text>
+  <text x="1210" y="501" font-size="11" fill="#e0e0e0">7. Priority is computed, above what it</text>
+  <text x="1220" y="516" font-size="11" fill="#e0e0e0">needs; Content priority moves it later</text>
+  <text x="1220" y="531" font-size="11" fill="#e0e0e0">and refuses a move below a need.</text>
+  <text x="1210" y="553" font-size="11" fill="#e0e0e0">8. Save the file is MountPlacementView.</text>
+  <text x="1220" y="568" font-size="11" fill="#e0e0e0">It defaults to Project.oxy only for a</text>
+  <text x="1220" y="583" font-size="11" fill="#e0e0e0">file inside the project, unlike a source</text>
+  <text x="1220" y="598" font-size="11" fill="#e0e0e0">folder, as a shared library usually sits</text>
+  <text x="1220" y="613" font-size="11" fill="#e0e0e0">elsewhere on each machine.</text>
+  <text x="1210" y="635" font-size="11" fill="#e0e0e0">9. Invalid row: third state beside</text>
+  <text x="1220" y="650" font-size="11" fill="#e0e0e0">Unbound and Missing; error glyph,</text>
+  <text x="1220" y="665" font-size="11" fill="#e0e0e0">finding in words, code below. Only</text>
+  <text x="1220" y="680" font-size="11" fill="#e0e0e0">Unmount and, when a placeholder, the</text>
+  <text x="1220" y="695" font-size="11" fill="#e0e0e0">binding actions.</text>
+  <text x="1210" y="717" font-size="11" fill="#e0e0e0">10. Library rows have no rename: the</text>
+  <text x="1220" y="732" font-size="11" fill="#e0e0e0">name is the content&#x27;s.</text>
+</svg>

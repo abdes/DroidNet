@@ -7,7 +7,7 @@ Status: proposal. It changes the reference contract of
 [content pipeline](../../../../../design/editor/lld/content-pipeline.md) and
 [Content Explorer](../../../../../design/editor/lld/content-explorer-asset-identity.md).
 
-Last updated: 2026-10-31
+Last updated: 2026-11-06
 
 The [design](design.md) gives the component design and the
 [plan](plan.md) the slices and the debt ledger.
@@ -264,8 +264,9 @@ other games that mount the library are not read and nothing is stored for them.
 The rename, move and delete reviews of an asset in a shared mount say so,
 naming the mount. Another game finds what broke on its next open: its
 reference check reports each reference that no longer resolves, and the
-problem's **Retarget** action repoints that one reference through the asset
-picker, as an ordinary edit with Undo.
+problem's **Retarget** action repoints that reference through the asset
+picker, and by default the other references that name the same path, listed
+first, as one ordinary edit with Undo.
 
 ### R10. Pak dependencies are what a pak uses
 
@@ -481,7 +482,7 @@ from or where it is stored.
 
 The contract does not reach projects that are not open: a rename or delete
 in a shared library breaks other games' references, which R9 makes visible
-at their next open and repairable one by one, without storing anything.
+at their next open and repairable by Retarget, without storing anything.
 
 ## Today
 
@@ -601,7 +602,7 @@ paks included; no reader of the old catalog is kept.
 | Add library names and orders a pak mount; a downloaded pak with a missing dependency or an unreadable format is `Invalid`                                                                                                                                                                                          | ContentExplorer UI tests; `MountTableBuilder` tests with pak fixtures                          |
 | R10: a library update or patch that keeps the used assets mounts; one that removes or retypes a used asset is refused, at mount and at a lower-layer refresh                                                                                                                                                       | `PakCatalog` tests; `Oxygen.Content` pak mount tests with base, patch and dependency fixtures  |
 | A `Cooked` mount reads a loose root, a `.cooked` folder or a pak by its binding; a `.cooked` binding follows `head.json`, swaps generations and keeps the old one when a pak above would break; packing with a library bound to a loose root fails with `pak.dependency_not_pak` in the editor before PakTool runs | Editor mount tests with publication fixtures; `Oxygen.Content` generation tests; PakTool tests |
-| Retarget repoints one unresolved reference, with Undo                                                                                                                                                                                                                                                              | `ReferenceCheck` and Problems tests                                                            |
+| Retarget repoints an unresolved reference and, when kept checked, the others with its text, with one Undo                                                                                                                                                                                                          | `ReferenceCheck` and Problems tests                                                            |
 | Own and shared roles; `reference.into_project_mount`                                                                                                                                                                                                                                                               | `MountTableBuilder` and `ReferenceCheck` tests                                                 |
 | Every row of R8, including the shared-mount closure and Undo                                                                                                                                                                                                                                                       | `AssetRelocationTests`, `SharedMountTests`                                                     |
 | Export closure, copied sources, digests and dependencies; import refuses any existing file; Replace with library for each row of its table, with Undo                                                                                                                                                              | ContentPipeline asset package tests; ContentExplorer UI tests                                  |
@@ -656,7 +657,7 @@ paks included; no reader of the old catalog is kept.
   assets are changed in the library project after the replace.
 - **No legacy code.** Old content is migrated as data.
 - **Other projects are reported, not redirected.** A library rename breaks
-  other games' references visibly, and Retarget repairs each one. A redirect
+  other games' references visibly, and Retarget repairs them. A redirect
   table in the library was rejected: it only grows and every reader would
   carry it forever. Refusing renames from games was rejected: it reduces the
   surprise, not the breakage.

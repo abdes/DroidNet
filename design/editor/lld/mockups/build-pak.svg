@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1000" viewBox="0 0 1440 1000" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Build pak: command, dialog, refusal and report (dark theme)</title>
+  <desc>Four states of Build pak: the Cook flyout with the new item, the dialog with the output and content version, the refusal listing libraries bound to loose roots, and the run in the Cooking panel.</desc>
+  <defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.26"/></filter></defs>
+  <rect width="1440" height="1000" fill="#202020"/>
+  <text x="16" y="26" font-size="12" fill-opacity="0.773" fill="#ffffff">1. Command: Content Explorer, toolbar Cook</text>
+  <rect x="16" y="36" width="300" height="291" rx="8" fill="#2b2b2b" stroke="#3a3a3a" filter="url(#shadow)"/>
+  <text x="30" y="61" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8A5;</text>
+  <text x="58" y="61" fill="#ffffff">Cook selected</text>
+  <text x="30" y="93" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8B7;</text>
+  <text x="58" y="93" fill="#ffffff">Cook current folder</text>
+  <text x="30" y="125" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8F1;</text>
+  <text x="58" y="125" fill="#ffffff">Cook project</text>
+  <line x1="20" y1="140.5" x2="312" y2="140.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <rect x="20" y="146" width="292" height="30" rx="4" fill="#4cc2ff" fill-opacity="0.16"/>
+  <rect x="20" y="153" width="3" height="16" rx="1.5" fill="#4cc2ff"/>
+  <text x="30" y="166" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7B8;</text>
+  <text x="58" y="166" fill="#ffffff">Build pak…</text>
+  <line x1="20" y1="181.5" x2="312" y2="181.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <text x="30" y="207" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE721;</text>
+  <text x="58" y="207" fill="#ffffff">Inspect published output</text>
+  <text x="30" y="239" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE73E;</text>
+  <text x="58" y="239" fill="#ffffff">Validate published output</text>
+  <line x1="20" y1="254.5" x2="312" y2="254.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <text x="58" y="280" fill="#ffffff">Cook on change</text>
+  <text x="30" y="312" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE9D5;</text>
+  <text x="58" y="312" fill="#ffffff">Show cooking jobs</text>
+  <text x="340" y="26" font-size="12" fill-opacity="0.773" fill="#ffffff">2. Every library is a pak: the dialog</text>
+  <rect x="340" y="36" width="850" height="400" rx="8" fill="#202020" stroke="#757575" stroke-opacity="0.4" filter="url(#shadow)"/>
+  <path d="M348,36 H1182 A8,8 0 0 1 1190,44 V366 H340 V44 A8,8 0 0 1 348,36Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="340" y1="366" x2="1190" y2="366" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="364" y="76" font-size="20" font-weight="600" fill="#ffffff">Build pak</text>
+  <text x="364" y="100" font-size="13" fill-opacity="0.773" fill="#ffffff">Racer · cooks what changed, then packs its cooked root with PakTool</text>
+  <text x="364" y="134" font-size="13" fill="#ffffff">Output file</text>
+  <rect x="364" y="142" width="660" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <line x1="365" y1="173.5" x2="1023" y2="173.5" stroke="#ffffff" stroke-opacity="0.545"/>
+  <text x="375" y="163" font-size="13" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">H:/studio/games/Racer/.build/paks/Racer.pak</text>
+  <rect x="1034" y="142" width="132" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1100.0" y="163" text-anchor="middle" fill="#ffffff">Browse…</text>
+  <text x="364" y="198" font-size="13" fill="#ffffff">Content version</text>
+  <rect x="364" y="206" width="140" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <line x1="365" y1="237.5" x2="503" y2="237.5" stroke="#ffffff" stroke-opacity="0.545"/>
+  <text x="375" y="227" fill="#ffffff">7</text>
+  <text x="516" y="227" font-size="13" fill-opacity="0.773" fill="#ffffff">One more than the last build; kept in the project.</text>
+  <text x="364" y="264" font-size="13" fill="#ffffff">Library paks it depends on, lowest first</text>
+  <text x="364" y="288" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <text x="384" y="288" font-size="13" font-weight="600" fill="#ffffff">Engine</text>
+  <text x="474" y="288" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">engine.pak</text>
+  <text x="364" y="310" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <text x="384" y="310" font-size="13" font-weight="600" fill="#ffffff">Vehicles</text>
+  <text x="474" y="310" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">//share/oxygen/Vehicles.pak</text>
+  <text x="364" y="332" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <text x="384" y="332" font-size="13" font-weight="600" fill="#ffffff">Props</text>
+  <text x="474" y="332" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">//share/oxygen/Props.pak</text>
+  <rect x="946" y="385" width="126" height="32" rx="4" fill="#60cdff"/>
+  <text x="1009.0" y="406" text-anchor="middle" fill="#000000">Build</text>
+  <rect x="1082" y="385" width="84" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="1124.0" y="406" text-anchor="middle" fill="#ffffff">Cancel</text>
+  <text x="16" y="470" font-size="12" fill-opacity="0.773" fill="#ffffff">3. A library is loose: refused before anything runs</text>
+  <rect x="16" y="480" width="640" height="330" rx="8" fill="#202020" stroke="#757575" stroke-opacity="0.4" filter="url(#shadow)"/>
+  <path d="M24,480 H648 A8,8 0 0 1 656,488 V740 H16 V488 A8,8 0 0 1 24,480Z" fill="#ffffff" fill-opacity="0.051"/>
+  <line x1="16" y1="740" x2="656" y2="740" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="40" y="520" font-size="20" font-weight="600" fill="#ffffff">Build pak</text>
+  <text x="40" y="544" font-size="13" fill-opacity="0.773" fill="#ffffff">Racer</text>
+  <rect x="40" y="560" width="592" height="40" rx="4" fill="#442726" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="52" y="586" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ff99a4">&#xEA39;</text>
+  <text x="76" y="585" font-size="13" font-weight="600" fill="#ffffff">pak.dependency_not_pak</text>
+  <text x="246" y="585" font-size="13" fill="#ffffff">A shipped pak depends only on library paks.</text>
+  <rect x="40" y="610" width="592" height="44" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="52" y="628" font-size="13" font-weight="600" fill="#ffffff">Vehicles</text>
+  <text x="52" y="645" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">H:/studio/libraries/Vehicles/.cooked</text>
+  <text x="620" y="636" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Library project's .cooked</text>
+  <rect x="40" y="660" width="592" height="44" rx="6" fill="#ffffff" fill-opacity="0.051" stroke="#000000" stroke-opacity="0.1"/>
+  <text x="52" y="678" font-size="13" font-weight="600" fill="#ffffff">Interiors</text>
+  <text x="52" y="695" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill-opacity="0.773" fill="#ffffff">D:/share/Interiors</text>
+  <text x="620" y="686" text-anchor="end" font-size="12" fill="#ffffff" fill-opacity="0.773">Loose cooked root</text>
+  <text x="40" y="730" font-size="13" fill-opacity="0.773" fill="#ffffff">Pack each library in its own project, then bind it here to the pak.</text>
+  <rect x="394" y="759" width="144" height="32" rx="4" fill="#60cdff"/>
+  <text x="466.0" y="780" text-anchor="middle" fill="#000000">Open mounts…</text>
+  <rect x="548" y="759" width="84" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="590.0" y="780" text-anchor="middle" fill="#ffffff">Close</text>
+  <text x="680" y="470" font-size="12" fill-opacity="0.773" fill="#ffffff">4. The run: Cooking panel</text>
+  <rect x="680" y="480" width="510" height="504" fill="#ffffff" fill-opacity="0.03"/>
+  <rect x="684" y="488" width="148" height="92" rx="4" fill="#ffffff" fill-opacity="0.059"/>
+  <rect x="684" y="496" width="3" height="76" rx="1.5" fill="#4cc2ff"/>
+  <text x="696" y="510" font-size="13" font-weight="600" fill="#ffffff">Pak</text>
+  <text x="696" y="528" font-size="12" fill-opacity="0.773" fill="#ffffff">Racer.pak</text>
+  <text x="696" y="552" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <text x="714" y="552" font-size="12" fill-opacity="0.773" fill="#ffffff">Succeeded</text>
+  <text x="696" y="612" font-size="13" fill="#ffffff">Project</text>
+  <text x="696" y="630" font-size="12" fill-opacity="0.773" fill="#ffffff">Cook · 12 assets</text>
+  <line x1="836" y1="480" x2="836" y2="984" stroke="#ffffff" stroke-opacity="0.082"/>
+  <text x="850" y="510" font-weight="600" fill="#ffffff">Racer.pak</text>
+  <text x="930" y="510" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#6ccb5f">&#xE73E;</text>
+  <text x="948" y="510" font-size="12" fill-opacity="0.773" fill="#ffffff">Succeeded</text>
+  <rect x="850" y="524" width="140" height="32" rx="4" fill="#ffffff" fill-opacity="0.059" stroke="#ffffff" stroke-opacity="0.07"/>
+  <text x="920.0" y="545" text-anchor="middle" fill="#ffffff">Show in folder</text>
+  <text x="850" y="580" font-size="13" font-weight="600" fill="#ffffff">Output</text>
+  <line x1="850" y1="590" x2="1178" y2="590" stroke="#ffffff" stroke-opacity="0.545"/>
+  <text x="850" y="614" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">PakTool build</text>
+  <text x="850" y="634" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">  out      .build/paks/Racer.pak</text>
+  <text x="850" y="654" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">  version  7</text>
+  <text x="850" y="674" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">  assets   1,842</text>
+  <text x="850" y="694" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">  size     2.4 GB</text>
+  <text x="850" y="714" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">  uses     Vehicles: 12 assets</text>
+  <text x="850" y="734" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">           Props: 58 assets</text>
+  <text x="850" y="754" font-size="12" font-family="Consolas, monospace" xml:space="preserve" fill="#ffffff">           Engine: 39 assets</text>
+  <text x="850" y="790" font-size="13" font-weight="600" fill="#ffffff">Issues</text>
+  <line x1="850" y1="800" x2="1178" y2="800" stroke="#ffffff" stroke-opacity="0.082"/>
+  <text x="850" y="820" font-size="12" fill-opacity="0.773" fill="#ffffff">A PakTool finding is a row with its code,</text>
+  <text x="850" y="836" font-size="12" fill-opacity="0.773" fill="#ffffff">as a cook issue is.</text>
+  <rect x="1200" y="16" width="232" height="968" rx="6" fill="#161616" stroke="#4a4a4a"/>
+  <text x="1210" y="38" font-size="11" font-weight="600" fill="#ffffff">What the mockup shows</text>
+  <text x="1210" y="60" font-size="11" fill="#e0e0e0">1. Design said the Project menu. No such</text>
+  <text x="1220" y="75" font-size="11" fill="#e0e0e0">menu exists in the code: cooking</text>
+  <text x="1220" y="90" font-size="11" fill="#e0e0e0">commands are on Content Explorer&#x27;s Cook</text>
+  <text x="1220" y="105" font-size="11" fill="#e0e0e0">button. Build pak goes there, beside</text>
+  <text x="1220" y="120" font-size="11" fill="#e0e0e0">Cook project.</text>
+  <text x="1210" y="142" font-size="11" fill="#e0e0e0">2. The check runs first, on the mount</text>
+  <text x="1220" y="157" font-size="11" fill="#e0e0e0">table, so a refusal never starts a cook.</text>
+  <text x="1220" y="172" font-size="11" fill="#e0e0e0">It lists every library bound to a loose</text>
+  <text x="1220" y="187" font-size="11" fill="#e0e0e0">root or a .cooked folder (R10).</text>
+  <text x="1210" y="209" font-size="11" fill="#e0e0e0">3. Open mounts… closes this and opens</text>
+  <text x="1220" y="224" font-size="11" fill="#e0e0e0">the mounts dialog, where the binding</text>
+  <text x="1220" y="239" font-size="11" fill="#e0e0e0">changes with no Project.oxy edit (L5).</text>
+  <text x="1210" y="261" font-size="11" fill="#e0e0e0">4. An Invalid or Unbound library also</text>
+  <text x="1220" y="276" font-size="11" fill="#e0e0e0">refuses here, with its own finding.</text>
+  <text x="1210" y="298" font-size="11" fill="#e0e0e0">5. The build cooks first, since a pak of</text>
+  <text x="1220" y="313" font-size="11" fill="#e0e0e0">a stale cook ships old content silently.</text>
+  <text x="1220" y="328" font-size="11" fill="#e0e0e0">The cook is the existing run, then the</text>
+  <text x="1220" y="343" font-size="11" fill="#e0e0e0">pak.</text>
+  <text x="1210" y="365" font-size="11" fill="#e0e0e0">6. PakTool needs an output, a content</text>
+  <text x="1220" y="380" font-size="11" fill="#e0e0e0">version and a source key. Output and</text>
+  <text x="1220" y="395" font-size="11" fill="#e0e0e0">version are the dialog&#x27;s two choices,</text>
+  <text x="1220" y="410" font-size="11" fill="#e0e0e0">remembered per machine and in the</text>
+  <text x="1220" y="425" font-size="11" fill="#e0e0e0">project respectively. Source key: the</text>
+  <text x="1220" y="440" font-size="11" fill="#e0e0e0">project keeps one, created by its first</text>
+  <text x="1220" y="455" font-size="11" fill="#e0e0e0">build, since a pak&#x27;s identity outlives</text>
+  <text x="1220" y="470" font-size="11" fill="#e0e0e0">its versions; no UI.</text>
+  <text x="1210" y="492" font-size="11" fill="#e0e0e0">7. Default output:</text>
+  <text x="1220" y="507" font-size="11" fill="#e0e0e0">.build/paks/&lt;project&gt;.pak, outside every</text>
+  <text x="1220" y="522" font-size="11" fill="#e0e0e0">mount and git-ignored with .build. The</text>
+  <text x="1220" y="537" font-size="11" fill="#e0e0e0">catalog sidecar lands beside it.</text>
+  <text x="1210" y="559" font-size="11" fill="#e0e0e0">8. The Pak row and the Cook row are</text>
+  <text x="1220" y="574" font-size="11" fill="#e0e0e0">ordinary Cooking panel runs: output,</text>
+  <text x="1220" y="589" font-size="11" fill="#e0e0e0">issues, status, cancel. The usage</text>
+  <text x="1220" y="604" font-size="11" fill="#e0e0e0">summary is PakTool&#x27;s report.</text>
+  <text x="1210" y="626" font-size="11" fill="#e0e0e0">9. Patches are not in this command: the</text>
+  <text x="1220" y="641" font-size="11" fill="#e0e0e0">design adds none, and PakTool&#x27;s patch</text>
+  <text x="1220" y="656" font-size="11" fill="#e0e0e0">mode stays a command-line tool.</text>
+</svg>

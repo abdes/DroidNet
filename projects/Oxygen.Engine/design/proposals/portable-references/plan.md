@@ -45,11 +45,11 @@ ledger: every old form found in the code, with the slice that removes it.
 | S11   | Done, committed                                                |
 | S12   | Done, committed                                                |
 | S13   | Done, committed                                                |
-| S14   | Not started (waits on S18)                                     |
-| S15   | Not started (waits on S18)                                     |
-| S16   | Not started (waits on S18)                                     |
-| S17   | Not started (waits on S18)                                     |
-| S18   | Not started                                                    |
+| S14   | Not started                                                    |
+| S15   | Not started                                                    |
+| S16   | Not started                                                    |
+| S17   | Not started                                                    |
+| S18   | Done, committed                                                |
 | S19   | Not started                                                    |
 | S20   | Not started                                                    |
 | S21   | Not started                                                    |
@@ -751,7 +751,7 @@ Beyond this text:
 
 ### S14. Libraries in the editor
 
-Requires S18 decisions. Deletes: the typed-name library add, library rename,
+Follows the S18 mockups. Deletes: the typed-name library add, library rename,
 re-rooting under the mount name, the binary unavailable-state adapter, library
 copies of a project's asset (`OverriddenCookedSources`, `ProjectSourceWins`), which
 one root per library leaves unreachable. Adds:
@@ -763,13 +763,15 @@ mounts and its mount reports `mount.cooked_dependency_missing`. Functional tests
 
 ### S15. Retarget
 
-Adds the Problems command. Unit tests: `ProblemsViewModelTests` with a fake
+Adds the Problems command, with its option for the other references of the same
+text. Unit tests: `ProblemsViewModelTests` with a fake
 picker and relocation port; the edit and its Undo as a functional test over
 `MockFileSystem`.
 
 ### S16. Pak build
 
-Adds `PakBuildService`, the mount pre-check and the menu command. Functional
+Adds `PakBuildService`, the mount pre-check, the cook before packing, its dialog
+and the Cook button's command. Functional
 tests: the pre-check over resolved tables; the PakTool command line built from
 a project, with a fake process port. Docs: `content-pipeline.md` publication
 and packing.
@@ -784,8 +786,8 @@ a second run after a later release. Docs: `content-explorer-asset-identity.md`.
 ### S18. UX mockups
 
 SVG mockups in the editor's style for Add library, Export package, Import
-package, Replace with library, Retarget and Build pak, with the UX questions
-each raises, for the owner's decision. Added to `design.md`.
+package, Replace with library, Retarget and Build pak, with the owner's
+decisions. Linked from `design.md`, with the decisions under its Decisions.
 
 ### S19. Migration and studio example
 
@@ -950,5 +952,3 @@ lanes pass. A slice that leaves integration lanes broken names them in its
 commit body, as the [test impact](#test-impact) table lists them; no other lane
 may fail. The branch is merged only after S20, when every lane of every touched
 module passes.
-
-S14 to S17 wait for the owner's decisions on the S18 mockups.

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Asset package commands in Content Explorer (dark theme)</title>
+  <desc>The Import toolbar flyout gains Asset package and Replace with library. An asset&#x27;s and a folder&#x27;s context menus gain Export package.</desc>
+  <defs><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.26"/></filter></defs>
+  <rect width="1100" height="560" fill="#202020"/>
+  <rect x="16" y="16" width="1068" height="40" rx="4" fill="#2b2b2b"/>
+  <text x="28" y="42" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE710;</text>
+  <text x="50" y="41" font-size="13" fill="#ffffff">New</text>
+  <text x="124" y="42" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8B5;</text>
+  <text x="146" y="41" font-size="13" fill="#ffffff">Import</text>
+  <text x="220" y="42" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE895;</text>
+  <text x="242" y="41" font-size="13" fill="#ffffff">Cook</text>
+  <text x="16" y="84" font-size="12" fill-opacity="0.773" fill="#ffffff">Toolbar: Import</text>
+  <rect x="16" y="94" width="300" height="250" rx="8" fill="#2b2b2b" stroke="#3a3a3a" filter="url(#shadow)"/>
+  <text x="30" y="119" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xF158;</text>
+  <text x="58" y="119" fill="#ffffff">Source model…</text>
+  <text x="30" y="151" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE91B;</text>
+  <text x="58" y="151" fill="#ffffff">Texture or image…</text>
+  <line x1="20" y1="166.5" x2="312" y2="166.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <rect x="20" y="172" width="292" height="30" rx="4" fill="#4cc2ff" fill-opacity="0.16"/>
+  <rect x="20" y="179" width="3" height="16" rx="1.5" fill="#4cc2ff"/>
+  <text x="30" y="192" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7B8;</text>
+  <text x="58" y="192" fill="#ffffff">Asset package…</text>
+  <rect x="20" y="204" width="292" height="30" rx="4" fill="#4cc2ff" fill-opacity="0.16"/>
+  <rect x="20" y="211" width="3" height="16" rx="1.5" fill="#4cc2ff"/>
+  <text x="30" y="224" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8AB;</text>
+  <text x="58" y="224" fill="#ffffff">Replace with library…</text>
+  <line x1="20" y1="239.5" x2="312" y2="239.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <text x="30" y="265" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff" fill-opacity="0.361">&#xE8B5;</text>
+  <text x="58" y="265" fill-opacity="0.361" fill="#ffffff">Import</text>
+  <text x="30" y="297" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff" fill-opacity="0.361">&#xE8B5;</text>
+  <text x="58" y="297" fill-opacity="0.361" fill="#ffffff">Reimport</text>
+  <text x="58" y="329" fill-opacity="0.361" fill="#ffffff">Show import source</text>
+  <text x="344" y="84" font-size="12" fill-opacity="0.773" fill="#ffffff">Asset row or folder: context menu</text>
+  <rect x="344" y="94" width="300" height="291" rx="8" fill="#2b2b2b" stroke="#3a3a3a" filter="url(#shadow)"/>
+  <text x="358" y="119" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8C8;</text>
+  <text x="386" y="119" fill="#ffffff">Copy</text>
+  <text x="358" y="151" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE77F;</text>
+  <text x="386" y="151" fill="#ffffff">Paste</text>
+  <text x="358" y="183" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE74D;</text>
+  <text x="386" y="183" fill="#ffffff">Delete</text>
+  <text x="358" y="215" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE71B;</text>
+  <text x="386" y="215" fill="#ffffff">Find references</text>
+  <line x1="348" y1="230.5" x2="640" y2="230.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <rect x="348" y="236" width="292" height="30" rx="4" fill="#4cc2ff" fill-opacity="0.16"/>
+  <rect x="348" y="243" width="3" height="16" rx="1.5" fill="#4cc2ff"/>
+  <text x="358" y="256" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xEDE1;</text>
+  <text x="386" y="256" fill="#ffffff">Export package…</text>
+  <line x1="348" y1="271.5" x2="640" y2="271.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <text x="358" y="297" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8C8;</text>
+  <text x="386" y="297" fill="#ffffff">Copy path</text>
+  <text x="358" y="329" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xEC50;</text>
+  <text x="386" y="329" fill="#ffffff">Show in File Explorer</text>
+  <line x1="348" y1="344.5" x2="640" y2="344.5" stroke="#3a3a3a" stroke-opacity="1"/>
+  <text x="358" y="370" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8A5;</text>
+  <text x="386" y="370" fill="#ffffff">Cook selected</text>
+  <rect x="672" y="74" width="412" height="470" rx="6" fill="#161616" stroke="#4a4a4a"/>
+  <text x="682" y="96" font-size="11" font-weight="600" fill="#ffffff">What the mockup shows</text>
+  <text x="682" y="118" font-size="11" fill="#e0e0e0">1. Highlighted items are new; the rest are today&#x27;s AssetsView menus and the</text>
+  <text x="692" y="133" font-size="11" fill="#e0e0e0">tree&#x27;s folder menu, abridged.</text>
+  <text x="682" y="155" font-size="11" fill="#e0e0e0">2. Export package is on assets and folders of a writable source mount. On a</text>
+  <text x="692" y="170" font-size="11" fill="#e0e0e0">read-only mount it stays in the menu, disabled, with the tooltip saying a</text>
+  <text x="692" y="185" font-size="11" fill="#e0e0e0">read-only asset has no sources (P9).</text>
+  <text x="682" y="207" font-size="11" fill="#e0e0e0">3. Asset package imports the .zip into this project. It is always on: the</text>
+  <text x="692" y="222" font-size="11" fill="#e0e0e0">review refuses with the reason when the destination is not this project&#x27;s</text>
+  <text x="692" y="237" font-size="11" fill="#e0e0e0">own mount, so a game author who tries it learns why.</text>
+  <text x="682" y="259" font-size="11" fill="#e0e0e0">4. Replace with library runs in the game on the same .zip, after the</text>
+  <text x="692" y="274" font-size="11" fill="#e0e0e0">library is mounted again with the promoted assets.</text>
+  <text x="682" y="296" font-size="11" fill="#e0e0e0">5. Both Import items open a file picker for a .zip, then their review</text>
+  <text x="692" y="311" font-size="11" fill="#e0e0e0">dialog. Nothing is written before the review&#x27;s primary button.</text>
+  <text x="682" y="333" font-size="11" fill="#e0e0e0">6. Both package reviews and the export use one control: a grouped list with</text>
+  <text x="692" y="348" font-size="11" fill="#e0e0e0">the Problems panel&#x27;s group headers, in a wide dialog, because a closure</text>
+  <text x="692" y="363" font-size="11" fill="#e0e0e0">runs to hundreds of rows where the relocation review&#x27;s text list stops at a</text>
+  <text x="692" y="378" font-size="11" fill="#e0e0e0">few.</text>
+</svg>
