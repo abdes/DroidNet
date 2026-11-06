@@ -976,6 +976,38 @@
         }
       ],
       "codes": ["mount.cooked_dependency_missing"]
+    },
+    {
+      "name": "a pak whose requirement is the engine's content",
+      "cooked_sources": [
+        {
+          "path": "Libs/Props.pak",
+          "kind": "pak",
+          "roots": ["Props"],
+          "requirements": [
+            {
+              "mount": "Engine",
+              "path": "/Engine/Materials/Default.omat",
+              "type": "Material"
+            }
+          ]
+        }
+      ],
+      "declarations": [
+        { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props.pak" }
+      ],
+      "mounts": [
+        {
+          "name": "Props",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Props.pak",
+          "role": "Shared"
+        }
+      ],
+      "codes": []
     }
   ]
 }

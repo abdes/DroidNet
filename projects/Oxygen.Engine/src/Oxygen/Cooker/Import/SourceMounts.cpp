@@ -870,6 +870,10 @@ namespace {
     [[nodiscard]] auto IsProvidedBelow(const std::string_view required_mount,
       const data::PakRequirement& requirement) const -> bool
     {
+      // The engine's content lies below every mount; no table lists it.
+      if (FoldName(required_mount) == FoldName(kEngineMountName)) {
+        return true;
+      }
       const auto texture = requirement.kind == data::KeyReferenceKind::kTexture;
       for (const auto& [name, summary] : std::views::reverse(cooked_sources_)) {
         if (texture) {
