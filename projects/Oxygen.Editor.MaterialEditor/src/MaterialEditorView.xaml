@@ -9,14 +9,19 @@
     xmlns:local="using:Oxygen.Editor.MaterialEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI"
     x:Name="MaterialEditorRoot"
     mc:Ignorable="d">
 
     <UserControl.Resources>
         <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.Controls/Styles/QuietDisclosure.xaml" />
+            </ResourceDictionary.MergedDictionaries>
             <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
             <x:Double x:Key="MaterialEditorScalarMinWidth">104</x:Double>
+            <x:String x:Key="ResetToDefaultToolTip">Reset to the engine's default</x:String>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Default">
                     <SolidColorBrush x:Key="VectorBoxPointerOverBackground" Color="Transparent" />
@@ -160,48 +165,59 @@
                             </Button>
                         </Grid>
                     </editorcontrols:PropertyCard>
-
-                    <editorcontrols:PropertyCard PropertyName="Texture Parameters">
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <controls:NumberBox
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="Normal Scale"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.NormalScale, Mode=TwoWay}"
-                                Tag="NormalScale" />
-                            <controls:NumberBox
-                                Grid.Column="1"
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="Occlusion Strength"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.OcclusionStrength, Mode=TwoWay}"
-                                Tag="OcclusionStrength" />
-                        </Grid>
-                    </editorcontrols:PropertyCard>
                 </editorcontrols:PropertiesExpander.Items>
             </editorcontrols:PropertiesExpander>
 
             <editorcontrols:PropertiesExpander
-                Description="Named texture assets assigned to native material channels."
+                Description="Named texture assets assigned to native material channels, and how each is sampled."
                 Header="Textures"
                 HeaderIcon="{ui:FontIcon Glyph='&#xE91B;'}"
                 IsExpanded="True">
                 <editorcontrols:PropertiesExpander.Items>
+                    <editorcontrols:NumberField
+                        EditSessionCompleted="NumberEditCompleted"
+                        EditSessionStarted="NumberEditStarted"
+                        Label="Normal Scale"
+                        NumberValue="{x:Bind ViewModel.NormalScale, Mode=TwoWay}"
+                        Tag="NormalScale"
+                        Unit="×" />
+                    <StackPanel Spacing="2">
+                        <editorcontrols:PropertyCard PropertyName="Occlusion">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <controls:NumberBox
+                                    AutomationProperties.Name="Occlusion"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    LabelPosition="None"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.OcclusionStrength, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="OcclusionStrength"
+                                    Unit="{x:Bind ViewModel.OcclusionUnit, Mode=OneWay}" />
+                                <seg:Segmented
+                                    Grid.Column="1"
+                                    AutomationProperties.Name="Occlusion mode"
+                                    SelectedIndex="{x:Bind ViewModel.OcclusionModeIndex, Mode=TwoWay}">
+                                    <seg:SegmentedItem Content="Factor" />
+                                    <seg:SegmentedItem Content="Strength" />
+                                </seg:Segmented>
+                            </Grid>
+                        </editorcontrols:PropertyCard>
+                        <TextBlock
+                            FontSize="12"
+                            Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                            Text="Strength blends from unoccluded to the texture, so it does nothing until Ambient occlusion has one."
+                            TextWrapping="Wrap"
+                            Visibility="{x:Bind ViewModel.OcclusionCautionVisibility, Mode=OneWay}" />
+                    </StackPanel>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.TextureChannels, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="local:MaterialTextureChannel">
-                                <StackPanel Spacing="4">
+                                <StackPanel Margin="0,0,0,8" Spacing="4">
                                     <Grid ColumnSpacing="8">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="180" />
@@ -230,6 +246,164 @@
                                         Text="{x:Bind WarningText, Mode=OneWay}"
                                         TextWrapping="Wrap"
                                         Visibility="{x:Bind WarningVisibility, Mode=OneWay}" />
+                                    <Expander
+                                        Margin="188,0,0,0"
+                                        AutomationProperties.Name="{x:Bind SamplingField}"
+                                        Style="{StaticResource QuietDisclosure}"
+                                        Tag="{x:Bind SamplingField}"
+                                        Visibility="{x:Bind SamplingVisibility, Mode=OneWay}">
+                                        <Expander.Header>
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="Sampling" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{x:Bind SamplingSummary, Mode=OneWay}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTipService.ToolTip="{x:Bind SamplingSummary, Mode=OneWay}" />
+                                            </Grid>
+                                        </Expander.Header>
+                                        <StackPanel Padding="0,4,0,4" Spacing="4">
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind UvSetMark, Mode=OneWay}"
+                                                PropertyName="UV Set"
+                                                ResetCommand="{x:Bind ResetUvSetCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <seg:Segmented AutomationProperties.Name="UV Set" SelectedIndex="{x:Bind UvSetIndex, Mode=TwoWay}">
+                                                    <seg:SegmentedItem Content="Set 0" />
+                                                    <seg:SegmentedItem Content="Set 1" />
+                                                </seg:Segmented>
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                IsCompound="True"
+                                                OverrideState="{x:Bind ScaleMark, Mode=OneWay}"
+                                                PropertyName="Scale"
+                                                Qualifier="UV ×"
+                                                ResetCommand="{x:Bind ResetScaleCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <controls:VectorBox
+                                                    AutomationProperties.Name="Scale"
+                                                    ComponentLabelPosition="Left"
+                                                    ComponentMask="~.###"
+                                                    Dimension="2"
+                                                    EditSessionCompleted="VectorEditCompleted"
+                                                    EditSessionStarted="VectorEditStarted"
+                                                    Style="{StaticResource PropertyVectorBoxStyle}"
+                                                    Tag="{x:Bind SamplingField}"
+                                                    XValue="{x:Bind ScaleU, Mode=TwoWay}"
+                                                    YValue="{x:Bind ScaleV, Mode=TwoWay}" />
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                IsCompound="True"
+                                                OverrideState="{x:Bind OffsetMark, Mode=OneWay}"
+                                                PropertyName="Offset"
+                                                Qualifier="UV"
+                                                ResetCommand="{x:Bind ResetOffsetCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <controls:VectorBox
+                                                    AutomationProperties.Name="Offset"
+                                                    ComponentLabelPosition="Left"
+                                                    ComponentMask="~.###"
+                                                    Dimension="2"
+                                                    EditSessionCompleted="VectorEditCompleted"
+                                                    EditSessionStarted="VectorEditStarted"
+                                                    Style="{StaticResource PropertyVectorBoxStyle}"
+                                                    Tag="{x:Bind SamplingField}"
+                                                    XValue="{x:Bind OffsetU, Mode=TwoWay}"
+                                                    YValue="{x:Bind OffsetV, Mode=TwoWay}" />
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:NumberField
+                                                EditSessionCompleted="NumberEditCompleted"
+                                                EditSessionStarted="NumberEditStarted"
+                                                Label="Rotation"
+                                                NumberValue="{x:Bind RotationDegrees, Mode=TwoWay}"
+                                                OverrideState="{x:Bind RotationMark, Mode=OneWay}"
+                                                ResetCommand="{x:Bind ResetRotationCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}"
+                                                Tag="{x:Bind SamplingField}"
+                                                Unit="°" />
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind AddressUMark, Mode=OneWay}"
+                                                PropertyName="Wrap U"
+                                                ResetCommand="{x:Bind ResetAddressUCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <seg:Segmented AutomationProperties.Name="Wrap U" SelectedIndex="{x:Bind AddressUIndex, Mode=TwoWay}">
+                                                    <seg:SegmentedItem Content="Repeat" />
+                                                    <seg:SegmentedItem Content="Mirror" />
+                                                    <seg:SegmentedItem Content="Clamp" />
+                                                </seg:Segmented>
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind AddressVMark, Mode=OneWay}"
+                                                PropertyName="Wrap V"
+                                                ResetCommand="{x:Bind ResetAddressVCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <seg:Segmented AutomationProperties.Name="Wrap V" SelectedIndex="{x:Bind AddressVIndex, Mode=TwoWay}">
+                                                    <seg:SegmentedItem Content="Repeat" />
+                                                    <seg:SegmentedItem Content="Mirror" />
+                                                    <seg:SegmentedItem Content="Clamp" />
+                                                </seg:Segmented>
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind MagFilterMark, Mode=OneWay}"
+                                                PropertyName="Close up"
+                                                ResetCommand="{x:Bind ResetMagFilterCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <seg:Segmented AutomationProperties.Name="Close up filter" SelectedIndex="{x:Bind MagFilterIndex, Mode=TwoWay}">
+                                                        <seg:SegmentedItem Content="Nearest" />
+                                                        <seg:SegmentedItem Content="Linear" />
+                                                    </seg:Segmented>
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="A texel covers more than a pixel" />
+                                                </StackPanel>
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind MinFilterMark, Mode=OneWay}"
+                                                PropertyName="Far away"
+                                                ResetCommand="{x:Bind ResetMinFilterCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <seg:Segmented AutomationProperties.Name="Far away filter" SelectedIndex="{x:Bind MinFilterIndex, Mode=TwoWay}">
+                                                        <seg:SegmentedItem Content="Nearest" />
+                                                        <seg:SegmentedItem Content="Linear" />
+                                                    </seg:Segmented>
+                                                    <TextBlock
+                                                        VerticalAlignment="Center"
+                                                        FontSize="12"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="A texel covers less than a pixel" />
+                                                </StackPanel>
+                                            </editorcontrols:PropertyCard>
+                                            <editorcontrols:PropertyCard
+                                                OverrideState="{x:Bind MipFilterMark, Mode=OneWay}"
+                                                PropertyName="Mip levels"
+                                                ResetCommand="{x:Bind ResetMipFilterCommand}"
+                                                ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                                                <seg:Segmented AutomationProperties.Name="Mip levels" SelectedIndex="{x:Bind MipFilterIndex, Mode=TwoWay}">
+                                                    <seg:SegmentedItem Content="None" />
+                                                    <seg:SegmentedItem Content="Nearest" />
+                                                    <seg:SegmentedItem Content="Linear" />
+                                                </seg:Segmented>
+                                            </editorcontrols:PropertyCard>
+                                            <StackPanel
+                                                Margin="0,4,0,0"
+                                                Orientation="Horizontal"
+                                                Spacing="8">
+                                                <Button Command="{x:Bind ResetSamplingCommand}" Content="Reset sampling" />
+                                                <Button Command="{x:Bind ApplyToAllCommand}" Content="Apply to all textures" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Expander>
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -284,6 +458,167 @@
                                 Tag="RoughnessFactor" />
                         </Grid>
                     </editorcontrols:PropertyCard>
+                </editorcontrols:PropertiesExpander.Items>
+            </editorcontrols:PropertiesExpander>
+
+            <editorcontrols:PropertiesExpander
+                Description="A world-space grid drawn on any surface, over its base color and unaffected by light."
+                Header="Procedural Grid"
+                HeaderIcon="{ui:FontIcon Glyph='&#xE80A;'}"
+                IsExpanded="True">
+                <editorcontrols:PropertiesExpander.Items>
+                    <editorcontrols:PropertyCard PropertyName="Show grid">
+                        <ToggleSwitch AutomationProperties.Name="Show grid" IsOn="{x:Bind ViewModel.Grid.IsShown, Mode=TwoWay}" />
+                    </editorcontrols:PropertyCard>
+                    <StackPanel Spacing="4" Visibility="{x:Bind ViewModel.Grid.ValuesVisibility, Mode=OneWay}">
+                        <TextBlock
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Lines" />
+                        <editorcontrols:PropertyCard
+                            IsCompound="True"
+                            OverrideState="{x:Bind ViewModel.Grid.SpacingMark, Mode=OneWay}"
+                            PropertyName="Spacing"
+                            Qualifier="m"
+                            ResetCommand="{x:Bind ViewModel.Grid.ResetSpacingCommand}"
+                            ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                            <controls:VectorBox
+                                AutomationProperties.Name="Spacing, metres"
+                                ComponentLabelPosition="Left"
+                                ComponentMask="~.###"
+                                Dimension="2"
+                                EditSessionCompleted="VectorEditCompleted"
+                                EditSessionStarted="VectorEditStarted"
+                                Style="{StaticResource PropertyVectorBoxStyle}"
+                                Tag="grid spacing"
+                                XValue="{x:Bind ViewModel.Grid.SpacingX, Mode=TwoWay}"
+                                YValue="{x:Bind ViewModel.Grid.SpacingY, Mode=TwoWay}" />
+                        </editorcontrols:PropertyCard>
+                        <editorcontrols:NumberField
+                            EditSessionCompleted="NumberEditCompleted"
+                            EditSessionStarted="NumberEditStarted"
+                            Label="Major every"
+                            Mask="#."
+                            NumberValue="{x:Bind ViewModel.Grid.MajorEvery, Mode=TwoWay}"
+                            OverrideState="{x:Bind ViewModel.Grid.MajorEveryMark, Mode=OneWay}"
+                            ResetCommand="{x:Bind ViewModel.Grid.ResetMajorEveryCommand}"
+                            ResetToolTip="{StaticResource ResetToDefaultToolTip}"
+                            Tag="grid major interval"
+                            Unit="cells" />
+                        <editorcontrols:PropertyCard
+                            OverrideState="{x:Bind ViewModel.Grid.ThicknessMark, Mode=OneWay}"
+                            PropertyName="Thickness"
+                            ResetCommand="{x:Bind ViewModel.Grid.ResetThicknessCommand}"
+                            ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <controls:NumberBox
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    Label="Minor"
+                                    LabelPosition="Left"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.Grid.LineThickness, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="grid minor thickness"
+                                    Unit="m" />
+                                <controls:NumberBox
+                                    Grid.Column="1"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    Label="Major"
+                                    LabelPosition="Left"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.Grid.MajorThickness, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="grid major thickness"
+                                    Unit="m" />
+                                <controls:NumberBox
+                                    Grid.Column="2"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    Label="Axis"
+                                    LabelPosition="Left"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.Grid.AxisThickness, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="grid axis thickness"
+                                    Unit="m" />
+                            </Grid>
+                        </editorcontrols:PropertyCard>
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Fade" />
+                        <editorcontrols:PropertyCard
+                            OverrideState="{x:Bind ViewModel.Grid.FadeMark, Mode=OneWay}"
+                            PropertyName="Distance"
+                            ResetCommand="{x:Bind ViewModel.Grid.ResetFadeCommand}"
+                            ResetToolTip="{StaticResource ResetToDefaultToolTip}">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <controls:NumberBox
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    Label="Start"
+                                    LabelPosition="Left"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.Grid.FadeStart, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="grid fade start"
+                                    Unit="m" />
+                                <controls:NumberBox
+                                    Grid.Column="1"
+                                    EditSessionCompleted="NumberEditCompleted"
+                                    EditSessionStarted="NumberEditStarted"
+                                    Label="End"
+                                    LabelPosition="Left"
+                                    Mask="~.###"
+                                    NumberValue="{x:Bind ViewModel.Grid.FadeEnd, Mode=TwoWay}"
+                                    Style="{StaticResource PropertyNumberBoxStyle}"
+                                    Tag="grid fade end"
+                                    Unit="m" />
+                            </Grid>
+                        </editorcontrols:PropertyCard>
+                        <TextBlock
+                            Margin="0,8,0,0"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Colors" />
+                        <ItemsControl ItemsSource="{x:Bind ViewModel.Grid.Colors}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="local:MaterialGridColor">
+                                    <editorcontrols:ColorField
+                                        Margin="0,0,0,4"
+                                        Alpha="{x:Bind Alpha, Mode=TwoWay}"
+                                        Blue="{x:Bind Blue, Mode=TwoWay}"
+                                        ColorPicked="OnGridColorPicked"
+                                        EditSessionCompleted="ColorEditCompleted"
+                                        EditSessionStarted="ColorEditStarted"
+                                        Green="{x:Bind Green, Mode=TwoWay}"
+                                        HasAlpha="True"
+                                        Label="{x:Bind Label}"
+                                        OverrideState="{x:Bind Mark, Mode=OneWay}"
+                                        PickerAutomationName="{x:Bind PickerName}"
+                                        Red="{x:Bind Red, Mode=TwoWay}"
+                                        ResetCommand="{x:Bind ResetCommand}"
+                                        ResetToolTip="{StaticResource ResetToDefaultToolTip}"
+                                        Tag="{x:Bind Field}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </editorcontrols:PropertiesExpander.Items>
             </editorcontrols:PropertiesExpander>
 

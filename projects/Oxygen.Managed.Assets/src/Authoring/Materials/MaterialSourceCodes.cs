@@ -17,4 +17,7 @@ public static class MaterialSourceCodes
 
     /// <summary>The JSON does not match the engine's material descriptor schema.</summary>
     public const string SchemaMismatch = DiagnosticCodes.MaterialPrefix + "Source.SchemaMismatch";
+
+    /// <summary>The procedural grid's fade ends before it starts, which the cooker refuses.</summary>
+    public const string GridFadeReversed = DiagnosticCodes.MaterialPrefix + "Source.GridFadeReversed";
 }

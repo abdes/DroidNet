@@ -111,15 +111,36 @@ public sealed partial class MaterialEditorView : IDocumentEditorView
             return;
         }
 
+        var field = (sender as FrameworkElement)?.Tag as string ?? "BaseColor";
         if (args.Channel is { } channel)
         {
-            model.BeginEditSession("BaseColor" + ColorBox.ChannelName(channel), args.InteractionKind);
+            model.BeginEditSession(field + ColorBox.ChannelName(channel), args.InteractionKind);
             return;
         }
 
         // A pick belongs to the document it began on; a later document never receives its colors or its end.
         this.pickOwner = model;
-        model.BeginEditSession("Base color", args.InteractionKind);
+        model.BeginEditSession(string.Equals(field, "BaseColor", StringComparison.Ordinal) ? "Base color" : field, args.InteractionKind);
+    }
+
+    private void VectorEditStarted(object? sender, VectorBoxEditSessionEventArgs args)
+    {
+        if (sender is FrameworkElement { Tag: string field })
+        {
+            this.ViewModel?.BeginEditSession(field, args.InteractionKind);
+        }
+    }
+
+    private void VectorEditCompleted(object? sender, VectorBoxEditSessionEventArgs args)
+        => this.ViewModel?.CompleteEditSession(new NumberBoxEditSessionEventArgs(args.InteractionKind, args.CompletionKind, args.InputText));
+
+    private void OnGridColorPicked(object? sender, ColorBoxColorPickedEventArgs args)
+    {
+        args.Handled = true;
+        if (sender is FrameworkElement { DataContext: MaterialGridColor color } && this.pickOwner is { } owner && ReferenceEquals(owner, this.ViewModel))
+        {
+            color.Set(args.Color);
+        }
     }
 
     private void ColorEditCompleted(object? sender, ColorBoxEditSessionEventArgs args)

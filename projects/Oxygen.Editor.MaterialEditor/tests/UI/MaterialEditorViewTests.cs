@@ -89,6 +89,42 @@ internal sealed class MaterialEditorViewTests : DroidNet.Tests.VisualUserInterfa
         _ = view.KeyboardAccelerators.Should().OnlyContain(accelerator => ReferenceEquals(accelerator.ScopeOwner, view));
     });
 
+    /// <summary>An assigned slot's sampling row expands to its controls, and the grid's values show only while it is on.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task SamplingRowsAndTheGridSectionRealize() => EnqueueAsync(async () =>
+    {
+        using var material = CreateMaterialEditor();
+        var model = material.Editor;
+        model.TextureChannels[0].SelectedTexture = AssetPath.Parse("/Content/Textures/Bark.otex");
+        var view = new MaterialEditorView { ViewModel = model, Width = 920, Height = 2000 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        var samplingRows = view.FindDescendants().OfType<Expander>().Where(static row => row.Tag is string && row.Visibility == Visibility.Visible).ToArray();
+        _ = samplingRows.Should().ContainSingle("only the assigned slot has sampling");
+
+        samplingRows[0].IsExpanded = true;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        var segments = samplingRows[0].FindDescendants().OfType<CommunityToolkit.WinUI.Controls.Segmented>().ToArray();
+        _ = segments.Should().HaveCount(6, "the UV set, two wraps and three filters are segmented");
+        _ = segments[0].SelectedIndex.Should().Be(0);
+        _ = segments[5].SelectedIndex.Should().Be(2, "mips default to linear");
+
+        _ = (await RealizeNumberAsync(view, "grid minor thickness").ConfigureAwait(true) is not { ActualWidth: > 0 }).Should().BeTrue("a material without a grid shows no values");
+        model.Grid.IsShown = true;
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        var thickness = await RealizeNumberAsync(view, "grid minor thickness").ConfigureAwait(true);
+
+        _ = thickness.Should().NotBeNull();
+        _ = thickness!.ActualWidth.Should().BeGreaterThan(0);
+        var scroller = view.FindDescendant<ScrollViewer>()!;
+        _ = scroller.ChangeView(horizontalOffset: null, verticalOffset: scroller.ScrollableHeight, zoomFactor: null, disableAnimation: true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = view.FindDescendants().OfType<Oxygen.Editor.Controls.ColorField>().Where(static field => field.Tag is string tag && tag.StartsWith("grid", StringComparison.Ordinal)).Should().HaveCount(5);
+    });
+
     /// <summary>The material document keeps its cook status beside the title and every header action inside the document.</summary>
     /// <param name="width">The document width in logical pixels.</param>
     /// <param name="rasterizationScale">The effective XAML scale.</param>

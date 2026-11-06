@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 Every texture a material uses keeps the UV set, UV transform, wrap and filter
 its author gave it. This plan implements
@@ -22,16 +22,16 @@ lines.
 - [Rules for every slice](#rules-for-every-slice)
 - [What goes away](#what-goes-away)
 - [Test impact](#test-impact)
-- [Open question](#open-question)
+- [Material Editor layout](#material-editor-layout)
 
 ## Status
 
-| Slice | Content                                  | Status      |
-| ----- | ---------------------------------------- | ----------- |
-| S1    | A second UV set through geometry         | Done        |
-| S2    | Renderer samples each slot on its own    | Done        |
-| S3    | Cooked format, descriptors and importers | Done        |
-| S4    | Material Editor                          | Not started |
+| Slice | Content                                  | Status |
+| ----- | ---------------------------------------- | ------ |
+| S1    | A second UV set through geometry         | Done   |
+| S2    | Renderer samples each slot on its own    | Done   |
+| S3    | Cooked format, descriptors and importers | Done   |
+| S4    | Material Editor                          | Done   |
 
 ## What the user gets
 
@@ -301,10 +301,12 @@ old one, so all cooked content is stale until this runs:
 Closes #107. It needs portable-references S7, which owns the editor's material
 formats.
 
-S4 changes no cooked format and no importer, so it needs no Showcase recook. Its
-proof is one material authored in the editor with a non-default sampler, cooked
-through the editor's import and played. If S4 does touch the engine, the S3 proof
-order applies again.
+S4 touches the engine once: the grid's default thicknesses become the ground
+grid's 0.02, 0.04 and 0.06. A render showed that 1, 2 and 2 at a spacing of 1
+flood the surface with the minor color. Every material record holds these values,
+so the glTF, FBX and material descriptor importers move a revision, and the S3
+proof order applies. S4's own proof is one material authored in the editor with a
+non-default sampler, cooked through the editor's import and played.
 
 - Each texture slot shows and edits UV set, transform, wrap U, wrap V and the
   three filters, with undo, dirty state, save and reload.
@@ -313,10 +315,12 @@ order applies again.
   format, model and writer.
 - `MaterialEdits`, `MaterialValidation`, `MaterialDescriptors` and
   `MaterialSourceWriter`, using the existing Inspector controls.
+- An assigned slot's sampling can be applied to every other assigned slot, as one
+  undo.
 - Tests: round trip of every field, no field written when it holds its default,
   and the view lane. The owner runs the editor tests.
 
-See the [open question](#open-question) before code.
+See the [Material Editor layout](#material-editor-layout).
 
 ## Rules for every slice
 
@@ -360,9 +364,12 @@ Counted by search, not yet edited.
 | S3    | `PakFormatLayout_render_test`, `MaterialLoader_test`, `MaterialPipeline_functional_test` (40 uses), `MaterialSource_test`, `MaterialDescriptorSchema_test`, `DroppedSourceFeatures_test`, `ImporterRevision_functional_test`, every test filling the asset's UVs |
 | S4    | `MaterialSourceTests` (14 uses), `Oxygen.Editor.Materials` and `MaterialEditor` suites                                                                                                                                                                           |
 
-## Open question
+## Material Editor layout
 
-**How the Material Editor shows eight more fields per texture slot.** This is
-the owner's call before S4, from an SVG mockup in the real editor style. My
-starting point is a collapsed row under each assigned slot, showing only values
-that differ from the default.
+The owner chose this layout from the mockups
+[texture slots](../../../../../design/editor/lld/mockups/material-editor-texture-slots.svg)
+and
+[procedural grid](../../../../../design/editor/lld/mockups/material-editor-procedural-grid.svg),
+which give the reason for each decision. Each assigned slot has a collapsed
+Sampling row that names only what differs from the default, and each value shows
+what it is with the editor's own units and qualifiers.

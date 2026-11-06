@@ -3,11 +3,13 @@
 The Material Editor's view and view models. The material model, its document
 kind, edits and validation are in `Oxygen.Editor.Materials`.
 
-The editor edits a material's scalar properties and native texture channel
-bindings through `Oxygen.Editor.Materials`.
-Texture assignments participate in document save, dirty state and undo/redo;
-channel UV bindings and unexposed descriptor fields are preserved. Material
-graphs, custom shaders, and rendered preview remain outside this project scope.
+The editor edits a material's scalar properties, native texture channel bindings
+with their UV set, UV transform and sampler, its occlusion mode and its
+procedural grid through `Oxygen.Editor.Materials`.
+Each edit participates in document save, dirty state and undo/redo; a value at
+the engine's default is not written, and unexposed descriptor fields are
+preserved. Material graphs, custom shaders, and rendered preview remain outside
+this project scope.
 
 ## Tests
 

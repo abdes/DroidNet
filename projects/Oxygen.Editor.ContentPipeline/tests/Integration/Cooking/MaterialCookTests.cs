@@ -118,6 +118,51 @@ internal sealed partial class MaterialCookTests
         _ = workspace.CookedRoot.Should().Contain(Path.Combine(".cooked", "generations"));
     }
 
+    /// <summary>A slot's sampling and the grid the editor writes reach the cooked record.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task CookMaterialAsync_ShouldCookTheSlotSamplingAndGridItWrites()
+    {
+        // The record's layout, which the engine's PakFormatLayout_render_test pins.
+        const int SamplingOffset = 173;
+        const int MinorThicknessOffset = 497;
+        const int AddressUOffset = SamplingOffset + (5 * sizeof(float)) + 1;
+
+        using var workspace = new MaterialWorkspace();
+        var textureDirectory = Path.Combine(workspace.Root, "Content", "Textures");
+        Directory.CreateDirectory(textureDirectory);
+        byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255];
+        await File.WriteAllBytesAsync(Path.Combine(textureDirectory, "Surface.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
+        const string Descriptor = """
+            { "source": "Surface.tga", "intent": "albedo",
+              "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
+            """;
+        await File.WriteAllTextAsync(Path.Combine(textureDirectory, "Surface.otex.json"), Descriptor, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var surface = AssetPath.Parse("/Content/Textures/Surface.otex");
+        var material = CreateMaterial("Sampled", metallicFactor: 0.0f, roughnessFactor: 0.6f)
+            .WithTextureBinding("base_color", new MaterialTextureBinding(surface)
+            {
+                UvTransform = new MaterialUvTransform(new System.Numerics.Vector2(4, 2), System.Numerics.Vector2.Zero, 0.0f),
+                Sampler = new MaterialTextureSampler { AddressU = MaterialTextureAddress.Clamp },
+            }) with { ProceduralGrid = new MaterialProceduralGrid() };
+        var path = Path.Combine(workspace.Root, "Content", "Materials", "Sampled.omat.json");
+        await WriteMaterialAsync(path, material).ConfigureAwait(false);
+
+        var result = await CreateService(workspace).CookMaterialAsync(
+            new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Sampled.omat"), FileSystemPath.From(workspace.Root), FileSystemPath.From(path)),
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.State.Should().Be(MaterialCookState.Cooked, result.ToString());
+
+        // A cooked descriptor's file name carries its content hash.
+        var cookedPath = Directory.GetFiles(Path.Combine(workspace.CookedRoot, "Materials"), "Sampled.*.omat").Single();
+        var cooked = await File.ReadAllBytesAsync(cookedPath, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = BitConverter.ToSingle(cooked, SamplingOffset).Should().Be(4.0f);
+        _ = BitConverter.ToSingle(cooked, SamplingOffset + sizeof(float)).Should().Be(2.0f);
+        _ = cooked[AddressUOffset].Should().Be(2, "Clamp is the engine's third address mode");
+        _ = BitConverter.ToSingle(cooked, MinorThicknessOffset).Should().Be(0.02f, "an empty grid takes the engine's default");
+    }
+
     /// <summary>Changing a referenced texture image recooks the texture and retains the material in the cook result.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

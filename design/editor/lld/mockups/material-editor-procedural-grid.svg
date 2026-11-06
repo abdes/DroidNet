@@ -1,0 +1,201 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="760" viewBox="0 0 1300 760" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Material Editor procedural grid section (dark theme)</title>
+  <desc>The Procedural Grid section of the Material Editor, off with a single Show grid toggle, and on with spacing, major line interval, thickness, fade distance and five colors. Annotations on the right give the reason for each decision.</desc>
+  <rect width="1300" height="760" fill="#1c1c1c"/>
+  <text x="20" y="30" font-size="13" fill="#8a8a8a">Material Editor: procedural grid</text>
+  <text x="20" y="62" font-size="12" fill="#8a8a8a">Off: a material without a grid</text>
+  <rect x="20" y="72" width="880" height="108" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <rect x="21" y="73" width="878" height="54" rx="8" fill="#2b2b2b"/>
+  <line x1="20" y1="128" x2="900" y2="128" stroke="#1d1d1d"/>
+  <text x="34" y="106" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE80A;</text>
+  <text x="66" y="96" font-weight="600" fill="#ffffff">Procedural Grid</text>
+  <text x="66" y="114" font-size="12" fill="#c5c5c5">A world-space grid drawn on any surface, over its base color and unaffected by light.</text>
+  <text x="876" y="105" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+  <text x="52" y="158" fill="#ffffff">Show grid</text>
+  <rect x="224" y="143" width="40" height="20" rx="10" fill="none" stroke="#c5c5c5"/>
+  <circle cx="235" cy="153" r="5" fill="#c5c5c5"/>
+  <text x="20" y="208" font-size="12" fill="#8a8a8a">On: spacing and a fade changed</text>
+  <rect x="20" y="218" width="880" height="525" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <rect x="21" y="219" width="878" height="54" rx="8" fill="#2b2b2b"/>
+  <line x1="20" y1="274" x2="900" y2="274" stroke="#1d1d1d"/>
+  <text x="34" y="252" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE80A;</text>
+  <text x="66" y="242" font-weight="600" fill="#ffffff">Procedural Grid</text>
+  <text x="66" y="260" font-size="12" fill="#c5c5c5">A world-space grid drawn on any surface, over its base color and unaffected by light.</text>
+  <text x="876" y="251" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+  <text x="52" y="304" fill="#ffffff">Show grid</text>
+  <rect x="224" y="289" width="40" height="20" rx="10" fill="#4cc2ff"/>
+  <circle cx="253" cy="299" r="5" fill="#000000"/>
+  <text x="52" y="340" font-size="12" font-weight="600" fill="#8a8a8a">Lines</text>
+  <line x1="95" y1="336" x2="860" y2="336" stroke="#333333"/>
+  <rect x="44" y="352" width="3" height="24" rx="1" fill="#4cc2ff"/>
+  <text x="852" y="368" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <text x="52" y="368" fill="#ffffff">Spacing</text>
+  <text x="224" y="369" font-size="13" fill="#c5c5c5">X</text>
+  <rect x="240" y="350" width="100" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="332" y="369" text-anchor="end" fill="#ffffff">0.5</text>
+  <text x="356" y="369" font-size="13" fill="#c5c5c5">Y</text>
+  <rect x="372" y="350" width="100" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="464" y="369" text-anchor="end" fill="#ffffff">0.5</text>
+  <text x="482" y="369" font-size="12" fill="#c5c5c5">m</text>
+  <text x="52" y="404" fill="#ffffff">Major every</text>
+  <rect x="240" y="386" width="100" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="332" y="405" text-anchor="end" fill="#ffffff">10</text>
+  <text x="346" y="405" font-size="12" fill="#c5c5c5">cells</text>
+  <text x="52" y="440" fill="#ffffff">Thickness</text>
+  <text x="224" y="441" font-size="13" fill="#c5c5c5">Minor</text>
+  <rect x="266" y="422" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="334" y="441" text-anchor="end" fill="#ffffff">0.02</text>
+  <text x="348" y="441" font-size="12" fill="#c5c5c5">m</text>
+  <text x="374" y="441" font-size="13" fill="#c5c5c5">Major</text>
+  <rect x="416" y="422" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="484" y="441" text-anchor="end" fill="#ffffff">0.04</text>
+  <text x="498" y="441" font-size="12" fill="#c5c5c5">m</text>
+  <text x="524" y="441" font-size="13" fill="#c5c5c5">Axis</text>
+  <rect x="566" y="422" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="634" y="441" text-anchor="end" fill="#ffffff">0.06</text>
+  <text x="648" y="441" font-size="12" fill="#c5c5c5">m</text>
+  <text x="52" y="476" font-size="12" font-weight="600" fill="#8a8a8a">Fade</text>
+  <line x1="88" y1="472" x2="860" y2="472" stroke="#333333"/>
+  <rect x="44" y="488" width="3" height="24" rx="1" fill="#4cc2ff"/>
+  <text x="852" y="504" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <text x="52" y="504" fill="#ffffff">Distance</text>
+  <text x="224" y="505" font-size="13" fill="#c5c5c5">Start</text>
+  <rect x="266" y="486" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="334" y="505" text-anchor="end" fill="#ffffff">20</text>
+  <text x="348" y="505" font-size="12" fill="#c5c5c5">m</text>
+  <text x="378" y="505" font-size="13" fill="#c5c5c5">End</text>
+  <rect x="420" y="486" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="488" y="505" text-anchor="end" fill="#ffffff">60</text>
+  <text x="502" y="505" font-size="12" fill="#c5c5c5">m</text>
+  <text x="52" y="540" font-size="12" font-weight="600" fill="#8a8a8a">Colors</text>
+  <line x1="102" y1="536" x2="860" y2="536" stroke="#333333"/>
+  <text x="52" y="568" fill="#ffffff">Minor</text>
+  <rect x="224" y="550" width="28" height="28" rx="4" fill="#595959" stroke="#3a3a3a"/>
+  <text x="260" y="569" font-size="13" fill="#c5c5c5">R</text>
+  <rect x="276" y="550" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="344" y="569" text-anchor="end" fill="#ffffff">0.35</text>
+  <text x="364" y="569" font-size="13" fill="#c5c5c5">G</text>
+  <rect x="380" y="550" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="448" y="569" text-anchor="end" fill="#ffffff">0.35</text>
+  <text x="468" y="569" font-size="13" fill="#c5c5c5">B</text>
+  <rect x="484" y="550" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="552" y="569" text-anchor="end" fill="#ffffff">0.35</text>
+  <text x="572" y="569" font-size="13" fill="#c5c5c5">A</text>
+  <rect x="588" y="550" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="656" y="569" text-anchor="end" fill="#ffffff">1</text>
+  <text x="678" y="569" font-size="12" fill="#c5c5c5">Linear RGBA</text>
+  <text x="52" y="604" fill="#ffffff">Major</text>
+  <rect x="224" y="586" width="28" height="28" rx="4" fill="#8c8c8c" stroke="#3a3a3a"/>
+  <text x="260" y="605" font-size="13" fill="#c5c5c5">R</text>
+  <rect x="276" y="586" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="344" y="605" text-anchor="end" fill="#ffffff">0.55</text>
+  <text x="364" y="605" font-size="13" fill="#c5c5c5">G</text>
+  <rect x="380" y="586" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="448" y="605" text-anchor="end" fill="#ffffff">0.55</text>
+  <text x="468" y="605" font-size="13" fill="#c5c5c5">B</text>
+  <rect x="484" y="586" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="552" y="605" text-anchor="end" fill="#ffffff">0.55</text>
+  <text x="572" y="605" font-size="13" fill="#c5c5c5">A</text>
+  <rect x="588" y="586" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="656" y="605" text-anchor="end" fill="#ffffff">1</text>
+  <text x="678" y="605" font-size="12" fill="#c5c5c5">Linear RGBA</text>
+  <text x="52" y="640" fill="#ffffff">X axis</text>
+  <rect x="224" y="622" width="28" height="28" rx="4" fill="#e63333" stroke="#3a3a3a"/>
+  <text x="260" y="641" font-size="13" fill="#c5c5c5">R</text>
+  <rect x="276" y="622" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="344" y="641" text-anchor="end" fill="#ffffff">0.9</text>
+  <text x="364" y="641" font-size="13" fill="#c5c5c5">G</text>
+  <rect x="380" y="622" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="448" y="641" text-anchor="end" fill="#ffffff">0.2</text>
+  <text x="468" y="641" font-size="13" fill="#c5c5c5">B</text>
+  <rect x="484" y="622" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="552" y="641" text-anchor="end" fill="#ffffff">0.2</text>
+  <text x="572" y="641" font-size="13" fill="#c5c5c5">A</text>
+  <rect x="588" y="622" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="656" y="641" text-anchor="end" fill="#ffffff">1</text>
+  <text x="678" y="641" font-size="12" fill="#c5c5c5">Linear RGBA</text>
+  <text x="52" y="676" fill="#ffffff">Y axis</text>
+  <rect x="224" y="658" width="28" height="28" rx="4" fill="#3399e6" stroke="#3a3a3a"/>
+  <text x="260" y="677" font-size="13" fill="#c5c5c5">R</text>
+  <rect x="276" y="658" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="344" y="677" text-anchor="end" fill="#ffffff">0.2</text>
+  <text x="364" y="677" font-size="13" fill="#c5c5c5">G</text>
+  <rect x="380" y="658" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="448" y="677" text-anchor="end" fill="#ffffff">0.6</text>
+  <text x="468" y="677" font-size="13" fill="#c5c5c5">B</text>
+  <rect x="484" y="658" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="552" y="677" text-anchor="end" fill="#ffffff">0.9</text>
+  <text x="572" y="677" font-size="13" fill="#c5c5c5">A</text>
+  <rect x="588" y="658" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="656" y="677" text-anchor="end" fill="#ffffff">1</text>
+  <text x="678" y="677" font-size="12" fill="#c5c5c5">Linear RGBA</text>
+  <text x="52" y="712" fill="#ffffff">Origin</text>
+  <rect x="224" y="694" width="28" height="28" rx="4" fill="#ffffff" stroke="#3a3a3a"/>
+  <text x="260" y="713" font-size="13" fill="#c5c5c5">R</text>
+  <rect x="276" y="694" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="344" y="713" text-anchor="end" fill="#ffffff">1</text>
+  <text x="364" y="713" font-size="13" fill="#c5c5c5">G</text>
+  <rect x="380" y="694" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="448" y="713" text-anchor="end" fill="#ffffff">1</text>
+  <text x="468" y="713" font-size="13" fill="#c5c5c5">B</text>
+  <rect x="484" y="694" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="552" y="713" text-anchor="end" fill="#ffffff">1</text>
+  <text x="572" y="713" font-size="13" fill="#c5c5c5">A</text>
+  <rect x="588" y="694" width="76" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="656" y="713" text-anchor="end" fill="#ffffff">1</text>
+  <text x="678" y="713" font-size="12" fill="#c5c5c5">Linear RGBA</text>
+  <text x="930" y="30" font-size="16" font-weight="600" fill="#ffffff">Decisions</text>
+  <line x1="890" y1="154" x2="926" y2="71" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="71" r="9" fill="#4cc2ff"/>
+  <text x="939" y="75" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">1</text>
+  <text x="956" y="76" font-size="13" font-weight="600" fill="#ffffff">Its own section, after PBR</text>
+  <text x="956" y="94" font-size="12" fill="#c5c5c5">A grid replaces how the surface looks, so</text>
+  <text x="956" y="110" font-size="12" fill="#c5c5c5">it is no Advanced detail.</text>
+  <line x1="890" y1="154" x2="926" y2="131" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="131" r="9" fill="#4cc2ff"/>
+  <text x="939" y="135" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">2</text>
+  <text x="956" y="136" font-size="13" font-weight="600" fill="#ffffff">Off shows one row</text>
+  <text x="956" y="154" font-size="12" fill="#c5c5c5">Twelve dead rows would be noise. The</text>
+  <text x="956" y="170" font-size="12" fill="#c5c5c5">section stays where it is either way.</text>
+  <line x1="890" y1="268" x2="926" y2="191" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="191" r="9" fill="#4cc2ff"/>
+  <text x="939" y="195" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">3</text>
+  <text x="956" y="196" font-size="13" font-weight="600" fill="#ffffff">The toggle is the file's presence</text>
+  <text x="956" y="214" font-size="12" fill="#c5c5c5">On writes an empty procedural_grid, so</text>
+  <text x="956" y="230" font-size="12" fill="#c5c5c5">every value is the engine's default.</text>
+  <text x="956" y="246" font-size="12" fill="#c5c5c5">Off removes it with its values; undo</text>
+  <text x="956" y="262" font-size="12" fill="#c5c5c5">brings them back.</text>
+  <line x1="890" y1="364" x2="926" y2="291" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="291" r="9" fill="#4cc2ff"/>
+  <text x="939" y="295" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">4</text>
+  <text x="956" y="296" font-size="13" font-weight="600" fill="#ffffff">Bar and reset as on the texture slots</text>
+  <text x="956" y="314" font-size="12" fill="#c5c5c5">A value not at the default is marked, and</text>
+  <text x="956" y="330" font-size="12" fill="#c5c5c5">reset stops writing it.</text>
+  <line x1="890" y1="404" x2="926" y2="357" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="357" r="9" fill="#4cc2ff"/>
+  <text x="939" y="361" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">5</text>
+  <text x="956" y="362" font-size="13" font-weight="600" fill="#ffffff">Spacing in metres</text>
+  <text x="956" y="380" font-size="12" fill="#c5c5c5">The card's m qualifier, as on Transform</text>
+  <text x="956" y="396" font-size="12" fill="#c5c5c5">position. Grid units are world units.</text>
+  <line x1="890" y1="436" x2="926" y2="423" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="423" r="9" fill="#4cc2ff"/>
+  <text x="939" y="427" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">6</text>
+  <text x="956" y="428" font-size="13" font-weight="600" fill="#ffffff">Thickness as three boxes in one row</text>
+  <text x="956" y="446" font-size="12" fill="#c5c5c5">One idea, one row. Metres, not pixels: the</text>
+  <text x="956" y="462" font-size="12" fill="#c5c5c5">shader divides them by the spacing. Shown</text>
+  <text x="956" y="478" font-size="12" fill="#c5c5c5">with the ground grid's values, your call.</text>
+  <line x1="890" y1="500" x2="926" y2="507" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="507" r="9" fill="#4cc2ff"/>
+  <text x="939" y="511" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">7</text>
+  <text x="956" y="512" font-size="13" font-weight="600" fill="#ffffff">Start and End in one row</text>
+  <text x="956" y="530" font-size="12" fill="#c5c5c5">They only mean something together. No</text>
+  <text x="956" y="546" font-size="12" fill="#c5c5c5">caption: 0 and 0 is the default and means</text>
+  <text x="956" y="562" font-size="12" fill="#c5c5c5">no fade, as in the shader.</text>
+  <line x1="890" y1="564" x2="926" y2="591" stroke="#555555" stroke-dasharray="3 3"/>
+  <circle cx="939" cy="591" r="9" fill="#4cc2ff"/>
+  <text x="939" y="595" font-size="11" font-weight="600" text-anchor="middle" fill="#000000">8</text>
+  <text x="956" y="596" font-size="13" font-weight="600" fill="#ffffff">ColorField, Kind Linear, with alpha</text>
+  <text x="956" y="614" font-size="12" fill="#c5c5c5">It labels itself Linear RGBA and keeps 0 to 1,</text>
+  <text x="956" y="630" font-size="12" fill="#c5c5c5">the schema's range. Not Luminance, which</text>
+  <text x="956" y="646" font-size="12" fill="#c5c5c5">may exceed 1; not Multiplier, which has no picker.</text>
+</svg>

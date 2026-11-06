@@ -25,19 +25,36 @@ public enum MaterialAmbientOcclusionMode
 /// </summary>
 public sealed record MaterialProceduralGrid
 {
+    /// <summary>Gets the values the engine takes for what a descriptor does not state, all of them stated.</summary>
+    public static MaterialProceduralGrid EngineDefaults { get; } = new()
+    {
+        Spacing = Vector2.One,
+        MajorEvery = 10,
+        LineThickness = 0.02f,
+        MajorThickness = 0.04f,
+        AxisThickness = 0.06f,
+        FadeStart = 0.0f,
+        FadeEnd = 0.0f,
+        MinorColor = new Vector4(0.35f, 0.35f, 0.35f, 1.0f),
+        MajorColor = new Vector4(0.55f, 0.55f, 0.55f, 1.0f),
+        AxisColorX = new Vector4(0.9f, 0.2f, 0.2f, 1.0f),
+        AxisColorY = new Vector4(0.2f, 0.6f, 0.9f, 1.0f),
+        OriginColor = Vector4.One,
+    };
+
     /// <summary>Gets the world units between minor lines, along each axis of a plane.</summary>
     public Vector2? Spacing { get; init; }
 
     /// <summary>Gets the minor cells per major line.</summary>
     public uint? MajorEvery { get; init; }
 
-    /// <summary>Gets the thickness of minor lines.</summary>
+    /// <summary>Gets the width of minor lines, in world units.</summary>
     public float? LineThickness { get; init; }
 
-    /// <summary>Gets the thickness of major lines.</summary>
+    /// <summary>Gets the width of major lines, in world units.</summary>
     public float? MajorThickness { get; init; }
 
-    /// <summary>Gets the thickness of the axis lines.</summary>
+    /// <summary>Gets the width of the axis lines, in world units.</summary>
     public float? AxisThickness { get; init; }
 
     /// <summary>Gets the view distance at which the grid starts to fade.</summary>

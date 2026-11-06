@@ -19,7 +19,7 @@ public sealed class MaterialTextureChannelTests
         var available = CreateTexture(AssetPath.Parse("/Content/Textures/Available.otex"));
         var missing = AssetPath.Parse("/Content/Textures/Missing.otex");
 
-        channel.Refresh([available], missing);
+        channel.Refresh([available], new Oxygen.Managed.Assets.Authoring.Materials.MaterialTextureBinding(missing));
 
         _ = channel.WarningVisibility.Should().Be(Microsoft.UI.Xaml.Visibility.Visible);
         _ = channel.SelectedText.Should().EndWith(missing.VirtualPath);

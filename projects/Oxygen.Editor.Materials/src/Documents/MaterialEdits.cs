@@ -125,14 +125,63 @@ public sealed partial class MaterialEdits(
             return this.Reject(document, code, $"The material has no {channel} texture channel.");
         }
 
-        var updated = content.Material.Source.WithTextureReference(channel, texture);
-        if (this.ValidateEdited(document, updated) is { } invalid)
+        return this.ReplaceSource(document, content, content.Material.Source.WithTextureReference(channel, texture), $"Edit {channel} texture");
+    }
+
+    /// <summary>
+    ///     Puts how a channel reads its texture back to the engine's defaults, keeping the texture.
+    /// </summary>
+    /// <param name="document">A material document.</param>
+    /// <param name="channel">The texture channel.</param>
+    /// <returns>Whether the change was accepted; a channel with no texture has nothing to change.</returns>
+    public MaterialEditResult ResetSampling(Document document, string channel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        var content = ContentOf(document);
+        content.Gesture?.Finish(commit: true);
+        var source = content.Material.Source;
+        return source.TextureBindings.GetValueOrDefault(channel) is { } binding
+            ? this.ReplaceSource(document, content, source.WithTextureBinding(channel, new MaterialTextureBinding(binding.Texture)), $"Reset {channel} sampling")
+            : Accepted;
+    }
+
+    /// <summary>
+    ///     Copies how a channel reads its texture to every other channel that has a texture, as one history entry.
+    /// </summary>
+    /// <param name="document">A material document.</param>
+    /// <param name="channel">The texture channel to copy from.</param>
+    /// <returns>Whether the change was accepted; a channel with no texture has nothing to copy.</returns>
+    public MaterialEditResult ApplySamplingToAll(Document document, string channel)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(channel);
+        var content = ContentOf(document);
+        content.Gesture?.Finish(commit: true);
+        var source = content.Material.Source;
+        if (source.TextureBindings.GetValueOrDefault(channel) is not { } copied)
         {
-            return invalid;
+            return Accepted;
         }
 
-        this.Commit(document, content, updated, $"Edit {channel} texture");
-        return Accepted;
+        var updated = source;
+        foreach (var (other, binding) in source.TextureBindings)
+        {
+            updated = updated.WithTextureBinding(other, copied with { Texture = binding.Texture });
+        }
+
+        return this.ReplaceSource(document, content, updated, "Apply sampling to all textures");
+    }
+
+    /// <summary>
+    ///     Gives a material a procedural grid, or removes the one it has.
+    /// </summary>
+    /// <param name="document">A material document.</param>
+    /// <param name="grid">The grid, or <see langword="null"/> for none.</param>
+    /// <returns>Whether the change was accepted, and the published failure when it was not.</returns>
+    public MaterialEditResult SetProceduralGrid(Document document, MaterialProceduralGrid? grid)
+    {
+        var content = ContentOf(document);
+        content.Gesture?.Finish(commit: true);
+        return this.ReplaceSource(document, content, content.Material.Source with { ProceduralGrid = grid }, grid is null ? "Remove procedural grid" : "Add procedural grid");
     }
 
     /// <summary>
@@ -233,6 +282,17 @@ public sealed partial class MaterialEdits(
         ArgumentNullException.ThrowIfNull(document);
         return document.Content as MaterialContent
             ?? throw new ArgumentException($"'{document.Title}' is not a material document.", nameof(document));
+    }
+
+    private MaterialEditResult ReplaceSource(Document document, MaterialContent content, MaterialSource updated, string label)
+    {
+        if (this.ValidateEdited(document, updated) is { } invalid)
+        {
+            return invalid;
+        }
+
+        this.Commit(document, content, updated, label);
+        return Accepted;
     }
 
     // One entry per accepted change; undoing it records the inverse, which the history routes to the other stack.

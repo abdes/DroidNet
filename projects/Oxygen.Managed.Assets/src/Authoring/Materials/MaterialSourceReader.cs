@@ -72,6 +72,12 @@ public static class MaterialSourceReader
                 DescriptorFormat.Describe(evaluation));
         }
 
+        if (descriptor.TryGetProperty("procedural_grid", out var grid)
+            && (OptionalScalar(grid, "fade_end") ?? 0.0f) < (OptionalScalar(grid, "fade_start") ?? 0.0f))
+        {
+            throw DescriptorFormat.Problem(MaterialSourceCodes.GridFadeReversed, "The procedural grid's fade ends before it starts.");
+        }
+
         if (descriptor.TryGetProperty("textures", out var textures))
         {
             foreach (var texture in textures.EnumerateObject())

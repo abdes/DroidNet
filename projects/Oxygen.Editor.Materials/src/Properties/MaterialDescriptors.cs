@@ -26,7 +26,7 @@ namespace Oxygen.Editor.Materials.Properties;
 /// without disturbing the canonical authoring schema used by cooking.
 /// </para>
 /// </remarks>
-public sealed class MaterialDescriptors
+public sealed partial class MaterialDescriptors
 {
     /// <summary>
     /// The component kind id for material property identities.
@@ -70,6 +70,9 @@ public sealed class MaterialDescriptors
 
     /// <summary>Gets the alpha mode descriptor.</summary>
     public static PropertyId<MaterialAlphaMode> AlphaMode { get; } = new(Kind, "/alpha_mode");
+
+    /// <summary>Gets the descriptor of how the ambient occlusion value combines with its texture.</summary>
+    public static PropertyId<MaterialAmbientOcclusionMode> AmbientOcclusionMode { get; } = new(Kind, "/ambient_occlusion_mode");
 
     /// <summary>Gets the shared catalog instance.</summary>
     public static MaterialDescriptors Catalog { get; } = Build();
@@ -174,6 +177,17 @@ public sealed class MaterialDescriptors
             static value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(MaterialDiagnosticCodes.PropertyValueUndefined, "Alpha mode is not supported."));
+
+        Register(
+            byId,
+            AmbientOcclusionMode,
+            new EditorAnnotation { Group = "Identity", Renderer = "enum-dropdown" },
+            static state => state.Source.AmbientOcclusionMode,
+            static (state, v) => state.Replace(s => s with { AmbientOcclusionMode = v }),
+            ValidateDefined);
+
+        RegisterSampling(byId);
+        RegisterGrid(byId);
 
         return new MaterialDescriptors(byId);
     }

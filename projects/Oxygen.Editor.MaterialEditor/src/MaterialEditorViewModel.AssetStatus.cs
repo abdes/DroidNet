@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Textures;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -49,9 +50,10 @@ public sealed partial class MaterialEditorViewModel
                 .Where(item => item.DescriptorPath is { } descriptorPath
                     ? Texture.TryRead(project.FileSystem, descriptorPath, item.Identity)?.HasSourceImage(project, item.Identity) == true
                     : item.CookedMetadata?.Texture is { Is2D: true })];
+            var bindings = ((MaterialContent)this.document.Content).Material.Source.TextureBindings;
             foreach (var channel in this.TextureChannels)
             {
-                channel.Refresh(this.availableTextures, channel.SelectedTexture);
+                channel.Refresh(this.availableTextures, bindings.GetValueOrDefault(channel.Channel));
             }
         }
     }

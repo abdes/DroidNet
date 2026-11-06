@@ -329,6 +329,39 @@ public sealed class MaterialSourceTests
     }
 
     [TestMethod]
+    public void TheGridsEngineDefaultsAreTheSchemas()
+    {
+        var schema = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Schemas", "oxygen.material-descriptor.schema.json")))!;
+        var fields = schema["definitions"]!["procedural_grid"]!["properties"]!.AsObject();
+        var source = MaterialSourceReader.Read(AuthoredFiles.Material(Anchor.VirtualPath).Bytes, Anchor) with { ProceduralGrid = MaterialProceduralGrid.EngineDefaults };
+        var defaults = MaterialSourceWriter.ToJson(source, Anchor)["procedural_grid"]!.AsObject();
+
+        _ = defaults.Select(static field => field.Key).Should().BeEquivalentTo(fields.Select(static field => field.Key));
+        foreach (var (name, field) in fields)
+        {
+            _ = Numbers(defaults[name]!).Should().Equal(Numbers(field!["default"]!), $"{name} states the schema's default");
+        }
+
+        static float[] Numbers(JsonNode node)
+        {
+            var parsed = JsonDocument.Parse(node.ToJsonString()).RootElement;
+            return parsed.ValueKind == JsonValueKind.Array ? [.. parsed.EnumerateArray().Select(static item => item.GetSingle())] : [parsed.GetSingle()];
+        }
+    }
+
+    [TestMethod]
+    public void AFadeThatEndsBeforeItStartsIsRefused()
+    {
+        var bytes = AuthoredFiles.Material(Anchor.VirtualPath)
+            .Set("/procedural_grid", new JsonObject { ["fade_start"] = 20.0, ["fade_end"] = 10.0 })
+            .Bytes;
+
+        Action read = () => MaterialSourceReader.Read(bytes, Anchor);
+
+        _ = read.Should().Throw<AssetFormatException>().Which.Problem.Code.Should().Be(MaterialSourceCodes.GridFadeReversed);
+    }
+
+    [TestMethod]
     public void AMaterialWithoutAlphaModeOrDomainIsOpaque()
         => _ = MaterialSourceReader.Read(AuthoredFiles.Material(Anchor.VirtualPath).Bytes, Anchor).AlphaMode.Should().Be(MaterialAlphaMode.Opaque);
 

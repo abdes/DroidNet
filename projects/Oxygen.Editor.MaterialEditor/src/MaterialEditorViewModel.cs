@@ -104,19 +104,20 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.MaterialUriText = this.document.File.Asset.ToUriString();
         this.TextureChannels =
         [
-            new("base_color", "Base color", this.OnTextureSelectionChanged),
-            new("normal", "Normal", this.OnTextureSelectionChanged),
-            new("metallic", "Metallic", this.OnTextureSelectionChanged),
-            new("roughness", "Roughness", this.OnTextureSelectionChanged),
-            new("ambient_occlusion", "Ambient occlusion", this.OnTextureSelectionChanged),
-            new("emissive", "Emissive", this.OnTextureSelectionChanged),
-            new("specular", "Specular", this.OnTextureSelectionChanged),
-            new("sheen_color", "Sheen color", this.OnTextureSelectionChanged),
-            new("clearcoat", "Clearcoat", this.OnTextureSelectionChanged),
-            new("clearcoat_normal", "Clearcoat normal", this.OnTextureSelectionChanged),
-            new("transmission", "Transmission", this.OnTextureSelectionChanged),
-            new("thickness", "Thickness", this.OnTextureSelectionChanged),
+            this.NewChannel("base_color", "Base color"),
+            this.NewChannel("normal", "Normal"),
+            this.NewChannel("metallic", "Metallic"),
+            this.NewChannel("roughness", "Roughness"),
+            this.NewChannel("ambient_occlusion", "Ambient occlusion"),
+            this.NewChannel("emissive", "Emissive"),
+            this.NewChannel("specular", "Specular"),
+            this.NewChannel("sheen_color", "Sheen color"),
+            this.NewChannel("clearcoat", "Clearcoat"),
+            this.NewChannel("clearcoat_normal", "Clearcoat normal"),
+            this.NewChannel("transmission", "Transmission"),
+            this.NewChannel("thickness", "Thickness"),
         ];
+        this.Grid = new MaterialGridSection(this.ApplyEdit, this.OnGridToggled);
 
         this.assetStatusSubscription = assetProvider.Items.ObserveOn(uiScheduler)
             .Subscribe(this.ApplyAssetItems, this.OnAssetStatusFailed);
@@ -134,6 +135,19 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     /// <summary>Gets all native material texture channels and their current assignment choices.</summary>
     public IReadOnlyList<MaterialTextureChannel> TextureChannels { get; }
+
+    /// <summary>Gets the procedural grid section.</summary>
+    public MaterialGridSection Grid { get; }
+
+    /// <summary>Gets the occlusion value's unit: Factor multiplies the sample, while Strength is a blend.</summary>
+    public string OcclusionUnit => this.OcclusionModeIndex == (int)MaterialAmbientOcclusionMode.Factor ? "×" : string.Empty;
+
+    /// <summary>Gets whether the caution shows that Strength has no effect without an ambient occlusion texture.</summary>
+    public Visibility OcclusionCautionVisibility
+        => this.OcclusionModeIndex == (int)MaterialAmbientOcclusionMode.Strength
+            && !((MaterialContent)this.document.Content).Material.Source.TextureBindings.ContainsKey("ambient_occlusion")
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
     /// <summary>Gets a value indicating whether the editor shows the document's authored values.</summary>
     public bool IsLoaded => !this.isLoading;
@@ -180,6 +194,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     [ObservableProperty]
     public partial bool DoubleSided { get; set; }
+
+    /// <summary>Gets or sets how the occlusion value combines with its texture, as an index of <see cref="MaterialAmbientOcclusionMode"/>.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(OcclusionUnit))]
+    [NotifyPropertyChangedFor(nameof(OcclusionCautionVisibility))]
+    public partial int OcclusionModeIndex { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CookStatusText))]
@@ -398,6 +418,55 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.DoubleSided, value));
 
+    // A control that has lost its selection reports -1, which is no mode.
+    partial void OnOcclusionModeIndexChanged(int value)
+    {
+        if (value >= 0)
+        {
+            this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AmbientOcclusionMode, (MaterialAmbientOcclusionMode)value));
+        }
+    }
+
+    private MaterialTextureChannel NewChannel(string channel, string displayName)
+        => new(channel, displayName, this.OnTextureSelectionChanged, this.ApplyEdit, this.OnResetSampling, this.OnApplySamplingToAll);
+
+    private void OnResetSampling(MaterialTextureChannel channel)
+        => this.ChangeSource(() => this.edits.ResetSampling(this.document, channel.Channel), "The sampling reset was rejected.");
+
+    private void OnApplySamplingToAll(MaterialTextureChannel channel)
+        => this.ChangeSource(() => this.edits.ApplySamplingToAll(this.document, channel.Channel), "Applying the sampling to all textures was rejected.");
+
+    private void OnGridToggled(bool isShown)
+        => this.ChangeSource(() => this.edits.SetProceduralGrid(this.document, isShown ? new MaterialProceduralGrid() : null), "The procedural grid change was rejected.");
+
+    private void ChangeSource(Func<MaterialEditResult> change, string rejected)
+    {
+        if (!this.isLoading && !this.isClosing && !this.isDisposed && this.acceptsInput)
+        {
+            _ = this.ChangeSourceAsync(change, rejected);
+        }
+    }
+
+    private async Task ChangeSourceAsync(Func<MaterialEditResult> change, string rejected)
+    {
+        await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            var result = this.ApplyOwnEdit(change);
+            this.RefreshFromDocument();
+            this.StatusText = result.Succeeded ? string.Empty : rejected;
+        }
+        finally
+        {
+            _ = this.editGate.Release();
+        }
+    }
+
     [RelayCommand]
     private async Task SaveMaterialAsync()
     {
@@ -548,12 +617,15 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             this.AlphaMode = ToDisplayAlphaMode(source.AlphaMode);
             this.AlphaCutoff = source.AlphaCutoff;
             this.DoubleSided = source.DoubleSided;
+            this.OcclusionModeIndex = (int)source.AmbientOcclusionMode;
             foreach (var channel in this.TextureChannels)
             {
-                _ = source.TextureReferences.TryGetValue(channel.Channel, out var texture);
-                channel.Refresh(this.availableTextures, texture);
+                channel.Refresh(this.availableTextures, source.TextureBindings.GetValueOrDefault(channel.Channel));
+                channel.HasOtherAssignedSlots = source.TextureBindings.Keys.Any(other => !string.Equals(other, channel.Channel, StringComparison.Ordinal));
             }
 
+            this.Grid.Refresh(source.ProceduralGrid);
+            this.OnPropertyChanged(nameof(this.OcclusionCautionVisibility));
             this.IsDirty = this.document.IsDirty;
             this.OnPropertyChanged(nameof(this.BaseColorBrush));
         }
