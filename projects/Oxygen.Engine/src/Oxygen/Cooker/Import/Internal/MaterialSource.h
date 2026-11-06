@@ -105,9 +105,11 @@ struct MaterialProceduralGrid {
   std::array<float, 2> spacing = { 1.0F, 1.0F };
   //! Minor cells per major line.
   uint32_t major_every = 10;
-  float line_thickness = 1.0F;
-  float major_thickness = 2.0F;
-  float axis_thickness = 2.0F;
+  //! Line widths in world units, as the ground grid's: a minor line as wide as
+  //! the spacing fills the surface.
+  float line_thickness = 0.02F;
+  float major_thickness = 0.04F;
+  float axis_thickness = 0.06F;
   //! View distances over which the grid fades out; none when the end is not
   //! past the start.
   float fade_start = 0.0F;

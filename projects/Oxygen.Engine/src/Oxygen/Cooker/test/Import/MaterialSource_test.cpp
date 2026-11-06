@@ -183,7 +183,27 @@ namespace {
     EXPECT_EQ(result->procedural_grid->major_every, 5U);
     EXPECT_FLOAT_EQ(result->procedural_grid->fade_end, 20.0F);
     EXPECT_FLOAT_EQ(result->procedural_grid->origin_color[3], 0.4F);
-    EXPECT_FLOAT_EQ(result->procedural_grid->major_thickness, 2.0F);
+    EXPECT_FLOAT_EQ(result->procedural_grid->major_thickness, 0.04F);
+  }
+
+  //! An empty grid draws thin lines: a minor line as wide as the spacing would
+  //! fill the surface with its color.
+  NOLINT_TEST(MaterialSourceTest, EmptyGridHasLinesThinnerThanItsSpacing)
+  {
+    std::vector<ImportDiagnostic> diagnostics;
+    const auto result = MaterialSource::FromDescriptor(
+      MaterialDescriptor { "/Content/Materials/Floor.omat" }
+        .Set("/procedural_grid", nlohmann::json::object())
+        .Text(),
+      "material.json", "", diagnostics);
+
+    ASSERT_HAS_VALUE(result);
+    ASSERT_HAS_VALUE(result->procedural_grid);
+    const auto& grid = *result->procedural_grid;
+    EXPECT_FLOAT_EQ(grid.line_thickness, 0.02F);
+    EXPECT_FLOAT_EQ(grid.major_thickness, 0.04F);
+    EXPECT_FLOAT_EQ(grid.axis_thickness, 0.06F);
+    EXPECT_LT(grid.line_thickness, grid.spacing[0]);
   }
 
   NOLINT_TEST(MaterialSourceTest, GridFadeMustEndAfterItStarts)

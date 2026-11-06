@@ -202,9 +202,9 @@ struct MaterialAssetDesc {
   // --- Procedural grid extension ---
   float grid_spacing[2] = { 1.0F, 1.0F };
   uint32_t grid_major_every = 10;
-  float grid_line_thickness = 1.0F;
-  float grid_major_thickness = 2.0F;
-  float grid_axis_thickness = 2.0F;
+  float grid_line_thickness = 0.02F;
+  float grid_major_thickness = 0.04F;
+  float grid_axis_thickness = 0.06F;
   float grid_fade_start = 0.0F;
   float grid_fade_end = 0.0F;
 

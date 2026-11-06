@@ -72,72 +72,72 @@ namespace {
     {
       .importer = Importer::kGltf,
       .scenario = "",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "bd09cb1a1aa8a469e64c1448ff04b05fdcd6d2b68f848103cb76a79269f80da7",
+      = "d8659a2855f9fcbd66a29776c4950f0b6070b4a06c89be1d9ed53ce53fd42eed",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "textured",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "08e5658dca656f88fafb654d9d6a291363f6fe9507e0034b7988364312e07afb",
+      = "0ce290af34028795c2ddaf4b349fe75158db586e8103725feb418138ecdc0893",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "lights",
-      .revision = 15,
+      .revision = 16,
       .digest
       = "7cff02e78035d2f8744b263dc6433c38c2c6fb80ae5908ee80eaca3c3602d277",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "remap",
-      .revision = 15,
+      .revision = 16,
       .digest
       = "c349260223166825f8bd6cca65ffd17a7a80c88b5c7f24baa939cd53f2ba0026",
     },
     {
       .importer = Importer::kGltf,
       .scenario = "tuned",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "b7adca6024af36196b110d49cc126bea5c798e01c6027c16fbb9157d323057f9",
+      = "c32f9ab02c432176067e88636302faa0d735de5c6a6762c5d09a10ccc170a6b9",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "47a1dfece3bf1bcdad9e5785c5f5c18e2d04aeb0f1ab7a395bf10dfd816c1d0e",
+      = "450a2089ac35b2bca7100de6055dbc7bd45fc90781e70ec74ec46547feb9e52b",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "textured",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "894500ad9d8ef7a4bd710093a33f49eb0f70c06a8dee8f11a426b9104da4d483",
+      = "bb763427510ad6d4a991402e4f547ec491afbbd414cf34a5b2bf6512bc03c12c",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "skinned",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "8d7affedea93b2a921bf5929f5c584d340a3e9ad835fe07a9739dfd626bd3684",
+      = "9b1081413fab6dc6ab334649bb6f58edfc5dff7014a075d4f53b1504c96602fc",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "lights",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "29932f678424d5f2dfab2c4e67e614724aaf02bc8a0b27bc94bf4e2c8b5e90d2",
+      = "1196f90371b38d9e4fc4906015791f1e79b3713f3c7cad675f759ec1a15a9268",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "tuned",
-      .revision = 15,
+      .revision = 16,
       .digest
-      = "2ed004b95ca1b0ea968b32391c4c0f1ce572c52d0de62d3fd1efd5213d463f83",
+      = "171d372f368b1e8306add9bd3264910e43b75304bae1bf9f4a964402d685fe35",
     },
     {
       .importer = Importer::kTexture,
@@ -153,9 +153,9 @@ namespace {
     },
     {
       .importer = Importer::kMaterialDescriptor,
-      .revision = 5,
+      .revision = 6,
       .digest
-      = "9fef274e10f0b088fe8f48fa135d50e518a0e7faeacf4f551d8d07978c60fd95",
+      = "11ce80140b83f824999bd1d72d065e891c31ba2938480bba083018b3d2eb8652",
     },
     {
       .importer = Importer::kPhysicsMaterialDescriptor,

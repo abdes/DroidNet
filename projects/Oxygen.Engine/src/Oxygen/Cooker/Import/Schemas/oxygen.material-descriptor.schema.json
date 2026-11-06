@@ -217,36 +217,49 @@
           "default": 10
         },
         "line_thickness": {
-          "$ref": "#/definitions/non_negative_float"
+          "description": "World-unit width of minor lines.",
+          "$ref": "#/definitions/non_negative_float",
+          "default": 0.02
         },
         "major_thickness": {
-          "$ref": "#/definitions/non_negative_float"
+          "description": "World-unit width of major lines.",
+          "$ref": "#/definitions/non_negative_float",
+          "default": 0.04
         },
         "axis_thickness": {
-          "$ref": "#/definitions/non_negative_float"
+          "description": "World-unit width of the axis lines.",
+          "$ref": "#/definitions/non_negative_float",
+          "default": 0.06
         },
         "fade_start": {
           "description": "View distance at which the grid starts to fade.",
-          "$ref": "#/definitions/non_negative_float"
+          "$ref": "#/definitions/non_negative_float",
+          "default": 0.0
         },
         "fade_end": {
           "description": "View distance at which the grid is gone; it does not fade when this is not past fade_start.",
-          "$ref": "#/definitions/non_negative_float"
+          "$ref": "#/definitions/non_negative_float",
+          "default": 0.0
         },
         "minor_color": {
-          "$ref": "#/definitions/vec4_01"
+          "$ref": "#/definitions/vec4_01",
+          "default": [0.35, 0.35, 0.35, 1.0]
         },
         "major_color": {
-          "$ref": "#/definitions/vec4_01"
+          "$ref": "#/definitions/vec4_01",
+          "default": [0.55, 0.55, 0.55, 1.0]
         },
         "axis_color_x": {
-          "$ref": "#/definitions/vec4_01"
+          "$ref": "#/definitions/vec4_01",
+          "default": [0.9, 0.2, 0.2, 1.0]
         },
         "axis_color_y": {
-          "$ref": "#/definitions/vec4_01"
+          "$ref": "#/definitions/vec4_01",
+          "default": [0.2, 0.6, 0.9, 1.0]
         },
         "origin_color": {
-          "$ref": "#/definitions/vec4_01"
+          "$ref": "#/definitions/vec4_01",
+          "default": [1.0, 1.0, 1.0, 1.0]
         }
       }
     },

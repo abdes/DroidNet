@@ -657,13 +657,13 @@ Validation rules:
 
 #### 7.2.8 `procedural_grid` Settings
 
-| Key                                                                          | Type        | Range  | Default       |
-| ---------------------------------------------------------------------------- | ----------- | ------ | ------------- |
-| `spacing`                                                                    | `number[2]` | > 0    | `[1, 1]`      |
-| `major_every`                                                                | `integer`   | ≥ 1    | `10`          |
-| `line_thickness`, `major_thickness`, `axis_thickness`                        | `number`    | ≥ 0    | `1`, `2`, `2` |
-| `fade_start`, `fade_end`                                                     | `number`    | ≥ 0    | `0`, `0`      |
-| `minor_color`, `major_color`, `axis_color_x`, `axis_color_y`, `origin_color` | `number[4]` | [0, 1] | the format's  |
+| Key                                                                          | Type        | Range  | Default                |
+| ---------------------------------------------------------------------------- | ----------- | ------ | ---------------------- |
+| `spacing`                                                                    | `number[2]` | > 0    | `[1, 1]`               |
+| `major_every`                                                                | `integer`   | ≥ 1    | `10`                   |
+| `line_thickness`, `major_thickness`, `axis_thickness`                        | `number`    | ≥ 0    | `0.02`, `0.04`, `0.06` |
+| `fade_start`, `fade_end`                                                     | `number`    | ≥ 0    | `0`, `0`               |
+| `minor_color`, `major_color`, `axis_color_x`, `axis_color_y`, `origin_color` | `number[4]` | [0, 1] | the format's           |
 
 The grid shades in world space on any surface, blending the three world planes
 by the surface normal. It fades over the view distances `fade_start` to

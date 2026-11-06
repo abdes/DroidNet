@@ -453,7 +453,7 @@ namespace {
     EXPECT_FLOAT_EQ(desc.grid_fade_end, 20.0F);
     EXPECT_FLOAT_EQ(desc.grid_origin_color[3], 0.4F);
     // What it does not say keeps the format's defaults.
-    EXPECT_FLOAT_EQ(desc.grid_major_thickness, 2.0F);
+    EXPECT_FLOAT_EQ(desc.grid_major_thickness, 0.04F);
   }
 
   //! A material's domain and alpha mode cook to one answer, and say so when
