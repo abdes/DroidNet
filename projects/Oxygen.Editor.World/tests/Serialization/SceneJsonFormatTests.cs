@@ -181,9 +181,9 @@ public sealed class SceneJsonFormatTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes("{ not valid json }"));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -192,9 +192,9 @@ public sealed class SceneJsonFormatTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes("{\"Name\":"));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -208,8 +208,8 @@ public sealed class SceneJsonFormatTests
             """));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>("a stale scene fails to open instead of being saved without what it held").ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>("a stale scene fails to open instead of being saved without what it held");
     }
 }

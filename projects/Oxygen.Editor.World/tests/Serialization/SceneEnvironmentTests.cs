@@ -35,7 +35,7 @@ public sealed class SceneEnvironmentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Environment.Should().Be(new SceneEnvironmentData());
     }
@@ -54,7 +54,7 @@ public sealed class SceneEnvironmentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Environment.Fog.Should().Be(new FogEnvironmentData());
     }
@@ -73,7 +73,7 @@ public sealed class SceneEnvironmentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Environment.Background.Should().Be(new BackgroundEnvironmentData { Enabled = true, ColorRgb = new Vector3(0.1f, 0.2f, 0.3f) });
         _ = scene.Environment.LegacyBackgroundColor.Should().BeNull();
@@ -81,7 +81,7 @@ public sealed class SceneEnvironmentTests
         _ = scene.Environment.SkyLight.Should().Be(new SkyLightEnvironmentData());
         var saved = new MemoryStream();
         await using var savedLifetime = saved.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(saved, scene).ConfigureAwait(false);
+        saved.Write(SceneSerializer.Write(scene, TestSupport.SceneTestSupport.Identity));
         _ = Encoding.UTF8.GetString(saved.ToArray()).Should().NotContain("BackgroundColor");
     }
 
@@ -99,7 +99,7 @@ public sealed class SceneEnvironmentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Environment.Background.ColorRgb.Should().Be(new Vector3(1f, 0f, 0.25f));
     }
@@ -142,8 +142,8 @@ public sealed class SceneEnvironmentTests
             """;
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
-        var deserialize = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
-        _ = await deserialize.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        Action deserialize = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
+        _ = deserialize.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -182,7 +182,7 @@ public sealed class SceneEnvironmentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Environment.SkyAtmosphere.Should().Be(new SkyAtmosphereEnvironmentData());
     }

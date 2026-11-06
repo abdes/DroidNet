@@ -274,6 +274,27 @@ public sealed class DocumentScenesTests
     }
 
     [TestMethod]
+    public async Task PreviewFile_SpellsItsReferencesFromItself()
+    {
+        var sky = AssetPath.Parse(Car.Parent!.VirtualPath + "/Sky.otex");
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
+        using var scenes = new DocumentScenes(documents.Open, session: documents.Session, files: documents.Files);
+        var document = await documents.OpenModelAsync(Car).ConfigureAwait(false);
+        var preview = scenes.Of(document)!;
+        var environment = preview.Scene.Environment with { SkySphere = preview.Scene.Environment.SkySphere with { Cubemap = sky } };
+        SceneAssert.Applied(await preview.Authoring.ExecuteAsync(new SetSceneEnvironment(environment, "Sky")).ConfigureAwait(false));
+
+        await scenes.FlushAsync().ConfigureAwait(false);
+        documents.Open.Close(document);
+        var reopened = scenes.Of(await documents.OpenModelAsync(Car).ConfigureAwait(false))!;
+
+        var file = documents.Project.PathOf(AssetFileTypes.PreviewOf(Car.ToString()));
+        var text = await documents.Project.Context.FileSystem.File.ReadAllTextAsync(file.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = text.Should().Contain("\"Sky.otex\"").And.NotContain(AssetPath.UriScheme + ":");
+        _ = reopened.Scene.Environment.SkySphere.Cubemap.Should().Be(sky);
+    }
+
+    [TestMethod]
     public async Task ResetPreview_ForgetsTheFileAndShowsTheDefaultPreview()
     {
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));

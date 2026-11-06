@@ -112,7 +112,7 @@ public sealed class PropertyScenarioTests
         _ = document.History.UndoStack.Should().ContainSingle();
         _ = document.IsDirty.Should().BeFalse("the saved file holds the committed value");
         var stored = await documents.Files.ReadAsync(document.File.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var file = JsonSerializer.Deserialize(stored.Content.AsSpan(), SceneJsonContext.Default.SceneData)!;
+        var file = Oxygen.Editor.Scenes.Documents.SceneFiles.Decode(stored.Content.AsSpan(), document.File.Asset);
         _ = file.RootNodes.Single(node => node.Id == SampleScene.A).Components.OfType<TransformData>().Single().Position.X.Should().Be(5f);
     }
 

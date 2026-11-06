@@ -38,11 +38,7 @@ public sealed class SourceAnalysisReuseTests
             Geometry = EngineAssets.BasicShape("Cube"),
         });
         second.RootNodes.Add(node);
-        var source = File.Create(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"));
-        await using (source.ConfigureAwait(false))
-        {
-            await Oxygen.Editor.World.Serialization.SceneSerializer.SerializeAsync(source, second).ConfigureAwait(false);
-        }
+        await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"), Oxygen.Editor.World.Serialization.SceneSerializer.Write(second, AssetPath.Parse("/Content/Scenes/Second.oscene")), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

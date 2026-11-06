@@ -9,7 +9,7 @@ viewport.
 A scene does not know where it is stored, which project opened it or how the
 Scene Explorer arranges it. Whoever holds the scene knows that.
 
-**At a glance**
+## At a glance
 
 - **Scene → nodes → components.** A scene holds a tree of nodes; every node has
   a transform and any other components.
@@ -235,13 +235,18 @@ one light per node and one directional light per atmosphere light.
 
 #### Links to assets
 
-A scene links to an asset by its URI, an absolute `asset:` URI such as
-`asset:///Content/Geometry/Crate.ogeo`. `GeometryComponent.Geometry`,
-and a material override's `AssetPath` value are required and check the form
-when set (`AssetUris.EnsureAssetUri`), so neither code nor a file
-can put a missing link, a file path or a web address in a scene. A link to an
-asset that does not exist is still a valid link: Live Preview and the cook
-report the missing asset.
+In memory a scene links to an asset by its `AssetPath`, such as
+`/Content/Geometry/Crate.ogeo`. In its file it writes a reference spelled from
+the scene's identity: relative in its mount, such as `../Geometry/Crate.ogeo`
+from `/Content/Scenes/Main.oscene`, and by virtual path from another mount.
+`SceneSerializer` is the one place that resolves and spells them, for every field
+of `SceneReferenceFields.All`, script asset parameters included, so a scene read
+at another identity holds other assets and nothing past the serializer sees the
+written text. A reference the grammar refuses, such as an `asset:` URI or its own
+mount by virtual path, fails the read with its field and code.
+`GeometryComponent.Geometry` and a material override's `AssetPath` value are
+required. A link to an asset that does not exist is still a valid link: Live
+Preview and the cook report the missing asset.
 
 The scene holds no facts about the linked asset. Code that needs them asks the
 module that owns the asset's family, by the URI: the asset feed for its kind,
@@ -397,7 +402,7 @@ when empty:
       "Kind": "surface",
       "Id": "<surface id>",
       "LayoutRevision": "<64 lowercase hex>",
-      "Values": { "/material": "asset:///Content/Materials/RedPaint.omat" }
+      "Values": { "/material": "../Materials/RedPaint.omat" }
     }
   ]
 }
@@ -416,8 +421,9 @@ when empty:
 
 `Oxygen.Editor.Scenes` reads and writes scene files. Its file record extends
 `SceneData` with the Explorer layout, so readers of `SceneData`, such as the
-cook, ignore it. `SceneSerializer` reads and writes a bare `SceneData` stream;
-the cook and the tests use it.
+cook, ignore it. Both read and write through `SceneSerializer`, which takes the
+scene's identity: the file record through `SceneFiles.Decode` and `Encode`, and
+the cook a bare `SceneData`.
 
 ### What hydration rejects
 
@@ -425,7 +431,7 @@ the cook and the tests use it.
 | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | A node without exactly one transform                                                                    | `JsonException`                                                                  |
 | Lights that fail `LightValidation`                                                                      | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
-| A geometry or material link that is missing or not an absolute `asset:` URI                             | `JsonException`                                                                  |
+| A geometry or material link that is missing, or a reference the grammar refuses                         | `JsonException`                                                                  |
 | An override of a property that is not overridable, or with a value of the wrong type                    | `JsonException`                                                                  |
 | A member a record does not declare, such as a removed key in `GeometryComponentData` or `SceneNodeData` | `JsonException`; the scene fails to open                                         |
 | Component identities empty or repeated in a node                                                        | Not rejected: they are replaced with new identities                              |

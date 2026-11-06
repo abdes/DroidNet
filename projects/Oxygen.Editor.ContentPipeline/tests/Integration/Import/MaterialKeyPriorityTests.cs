@@ -73,11 +73,7 @@ public sealed class MaterialKeyPriorityTests
             consumer, api, geometry, AssetPath.Parse("/Art/Materials/Shared.omat"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.AddComponent(geometry);
         second.RootNodes.Add(node);
-        var stream = File.Create(Path.Combine(consumer.Root, "Content/Scenes/Project.oscene.json"));
-        await using (stream.ConfigureAwait(false))
-        {
-            await SceneSerializer.SerializeAsync(stream, second).ConfigureAwait(false);
-        }
+        await File.WriteAllBytesAsync(Path.Combine(consumer.Root, "Content/Scenes/Project.oscene.json"), SceneSerializer.Write(second, AssetPath.Parse("/Content/Scenes/Project.oscene")), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var folder = AssetPath.Parse("/Content/Scenes");
         var uris = new[] { AssetPath.Parse("/Content/Scenes/Main.oscene"), AssetPath.Parse("/Content/Scenes/Project.oscene") };

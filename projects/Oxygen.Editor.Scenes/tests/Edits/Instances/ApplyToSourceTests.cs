@@ -251,8 +251,8 @@ public sealed class ApplyToSourceTests
             ])
             .Build();
         var torch = new SceneBuilder().Named("Torch").Node(Flame, "Flame").Build();
-        _ = fixture.Project.WriteFile(WatchtowerFile, JsonSerializer.SerializeToUtf8Bytes(watchtower, SceneFileJsonContext.Default.SceneFileData));
-        _ = fixture.Project.WriteFile(TorchFile, JsonSerializer.SerializeToUtf8Bytes(torch, SceneFileJsonContext.Default.SceneFileData));
+        _ = fixture.Project.WriteFile(WatchtowerFile, SceneFiles.Encode(watchtower, AssetPath.Parse(Watchtower)));
+        _ = fixture.Project.WriteFile(TorchFile, SceneFiles.Encode(torch, AssetPath.Parse(TorchScene)));
         var scene = new StructureScene(Guid.NewGuid(), AssetPath.Parse(Watchtower).VirtualPath);
         var inner = new StructureScene(Guid.NewGuid(), VirtualPath: null);
         fixture.Structures.Publish(new SceneStructure(

@@ -5,13 +5,16 @@
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// Utility class for serializing and deserializing scenes using high-performance source-generated JSON.
+/// Reads and writes the text a scene file holds. A file spells its references from the scene's identity; everything past
+/// this class holds asset paths.
 /// </summary>
 public static class SceneSerializer
 {
@@ -36,53 +39,74 @@ public static class SceneSerializer
         return true;
     });
 
-    /// <summary>
-    /// Deserializes a scene from a stream.
-    /// </summary>
-    /// <param name="stream">The stream containing the JSON scene data.</param>
-    /// <returns>A new <see cref="Scene"/> instance populated with the deserialized data.</returns>
-    /// <exception cref="JsonException">Thrown if deserialization fails.</exception>
-    public static async Task<Scene> DeserializeAsync(Stream stream)
+    /// <summary>Reads a scene file into a scene.</summary>
+    /// <param name="file">The file's bytes, with or without a UTF-8 byte order mark.</param>
+    /// <param name="identity">The scene's identity, which its references are read from.</param>
+    /// <returns>A new scene.</returns>
+    /// <exception cref="JsonException">The file is not a scene, or writes a reference the grammar refuses.</exception>
+    public static Scene Read(ReadOnlySpan<byte> file, AssetPath identity)
     {
         EnsureFactories();
-        var data = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
-            .ConfigureAwait(false) ?? throw new JsonException("Failed to deserialize scene data.");
-
-        // Use the canonical factory to set required init-only properties then hydrate.
-        return Scene.CreateAndHydrate(data);
+        return Scene.CreateAndHydrate(Read(file, identity, SceneJsonContext.Default.SceneData));
     }
 
-    /// <summary>
-    /// Deserializes scene data into an existing scene instance.
-    /// </summary>
-    /// <param name="stream">The stream containing the JSON scene data.</param>
-    /// <param name="targetScene">The existing scene to populate with deserialized data.</param>
-    /// <exception cref="JsonException">Thrown if deserialization fails.</exception>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public static async Task DeserializeIntoAsync(Stream stream, Scene targetScene)
+    /// <summary>Reads what a scene file holds, its references resolved to their asset paths.</summary>
+    /// <typeparam name="T">The record the file is read as.</typeparam>
+    /// <param name="file">The file's bytes, with or without a UTF-8 byte order mark.</param>
+    /// <param name="identity">The scene's identity, which its references are read from.</param>
+    /// <param name="type">The record's serialization contract.</param>
+    /// <returns>The record.</returns>
+    /// <exception cref="JsonException">The file is not a scene, or writes a reference the grammar refuses.</exception>
+    public static T Read<T>(ReadOnlySpan<byte> file, AssetPath identity, JsonTypeInfo<T> type)
+        where T : SceneData
     {
-        var data = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
-            .ConfigureAwait(false);
-
-        if (data == null)
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(type);
+        var content = file.StartsWith(Encoding.UTF8.Preamble) ? file[Encoding.UTF8.Preamble.Length..] : file;
+        var root = JsonNode.Parse(content) ?? throw new JsonException("The file holds no scene.");
+        foreach (var reference in References(root))
         {
-            return;
+            var written = reference.GetValue<string>();
+            if (!AssetPath.TryResolveReference(identity, written, VirtualPathRuleSet.Authored, out var asset, out var error))
+            {
+                throw new JsonException($"{reference.GetPath()} writes '{written}', which the scene '{identity.VirtualPath}' cannot read: {error.Value.ToCode()}.");
+            }
+
+            reference.ReplaceWith(JsonValue.Create(asset.ToUriString()));
         }
 
-        targetScene.Hydrate(data);
+        return root.Deserialize(type) ?? throw new JsonException("The file holds no scene.");
     }
 
-    /// <summary>
-    /// Serializes a scene to a stream.
-    /// </summary>
-    /// <param name="stream">The stream to write the JSON scene data to.</param>
-    /// <param name="scene">The scene to serialize.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public static async Task SerializeAsync(Stream stream, Scene scene)
+    /// <summary>Gets the bytes of a scene's file.</summary>
+    /// <param name="scene">The scene.</param>
+    /// <param name="identity">The scene's identity, which its references are spelled from.</param>
+    /// <returns>The file's content.</returns>
+    public static byte[] Write(Scene scene, AssetPath identity)
     {
-        var data = scene.Dehydrate();
-        await JsonSerializer.SerializeAsync(stream, data, SceneJsonContext.Default.SceneData)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(scene);
+        return Write(scene.Dehydrate(), identity, SceneJsonContext.Default.SceneData);
+    }
+
+    /// <summary>Gets the bytes of a scene's file from what it holds, its asset paths spelled as references.</summary>
+    /// <typeparam name="T">The record the file is written from.</typeparam>
+    /// <param name="data">The record.</param>
+    /// <param name="identity">The scene's identity, which its references are spelled from.</param>
+    /// <param name="type">The record's serialization contract.</param>
+    /// <returns>The file's content.</returns>
+    public static byte[] Write<T>(T data, AssetPath identity, JsonTypeInfo<T> type)
+        where T : SceneData
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        ArgumentNullException.ThrowIfNull(type);
+        var root = JsonSerializer.SerializeToNode(data, type)!;
+        foreach (var reference in References(root))
+        {
+            var asset = AssetPath.ParseUri(reference.GetValue<string>());
+            reference.ReplaceWith(JsonValue.Create(asset.ToReference(identity)));
+        }
+
+        return JsonSerializer.SerializeToUtf8Bytes(root, new JsonSerializerOptions { WriteIndented = type.Options.WriteIndented, Encoder = type.Options.Encoder });
     }
 
     /// <summary>
@@ -114,4 +138,7 @@ public static class SceneSerializer
     /// Registers the component factories that hydration looks types up in.
     /// </summary>
     internal static void EnsureFactories() => _ = FactoriesInitialized.Value;
+
+    private static JsonValue[] References(JsonNode root)
+        => [.. SceneReferenceFields.All.SelectMany(field => field.Select(root))];
 }

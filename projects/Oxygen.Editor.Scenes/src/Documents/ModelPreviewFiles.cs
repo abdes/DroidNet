@@ -31,8 +31,9 @@ internal sealed partial class ModelPreviewFiles(IProjectSession session, IAtomic
 
     /// <summary>Encodes what a preview scene keeps: its environment and its sun, without the model it places.</summary>
     /// <param name="scene">The preview scene, whose last root node is the sun.</param>
+    /// <param name="anchor">The file's identity, which its references are spelled from.</param>
     /// <returns>The file's content.</returns>
-    public static byte[] Encode(Scene scene)
+    public static byte[] Encode(Scene scene, AssetPath anchor)
     {
         var data = scene.Dehydrate();
         var kept = new SceneData
@@ -42,13 +43,21 @@ internal sealed partial class ModelPreviewFiles(IProjectSession session, IAtomic
             RootNodes = [data.RootNodes[^1]],
             Environment = data.Environment,
         };
-        return JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(kept, explorerLayout: []), SceneFileJsonContext.Default.SceneFileData);
+        return SceneFiles.Encode(new SceneFileData(kept, explorerLayout: []), anchor);
     }
+
+    /// <summary>Gets what a model's preview file spells its references from: its own identity in its mount, so that
+    /// relocation reads it the same way, or the model's identity for a file in no mount.</summary>
+    /// <param name="document">The model document.</param>
+    /// <returns>The identity.</returns>
+    public AssetPath AnchorOf(Document document)
+        => session.Context.FindByFilePath(PathOf(document))?.Identity ?? document.File.Asset;
 
     /// <summary>Reads a model's preview file.</summary>
     /// <param name="path">The file.</param>
+    /// <param name="anchor">The file's identity, which its references are read from.</param>
     /// <returns>The kept scene, or <see langword="null"/> when there is none or it cannot be read, which is reported.</returns>
-    public SceneData? Read(FileSystemPath path)
+    public SceneData? Read(FileSystemPath path, AssetPath anchor)
     {
         var fileSystem = session.Context.FileSystem;
         if (!fileSystem.File.Exists(path.FullPath))
@@ -58,7 +67,7 @@ internal sealed partial class ModelPreviewFiles(IProjectSession session, IAtomic
 
         try
         {
-            return JsonSerializer.Deserialize(fileSystem.File.ReadAllBytes(path.FullPath), SceneFileJsonContext.Default.SceneFileData);
+            return SceneFiles.Decode(fileSystem.File.ReadAllBytes(path.FullPath), anchor);
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or NotSupportedException)
         {

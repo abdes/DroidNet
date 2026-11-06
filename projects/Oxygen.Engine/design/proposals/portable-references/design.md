@@ -2,7 +2,7 @@
 
 Status: proposal
 
-Last updated: 2026-10-31
+Last updated: 2026-11-06
 
 This is the component design of the [portable references proposal](README.md).
 The proposal states the rules (R1 to R11) and the scenarios they serve; this
@@ -578,9 +578,10 @@ into its own mount relative. `oxygen.asset-package.schema.json` lives in
 
 ### Oxygen.Editor.World and Oxygen.Editor.Scenes
 
-Scene documents are read and written in one place: `SceneFiles` in Scenes
-owns `SceneFileJsonContext`, and `SceneSerializer`, `SceneDocumentKind`,
-`SceneContent` and `ModelPreviewFiles` call it. Reading takes the scene's
+Scene documents are read and written in one place: `SceneSerializer` in World,
+since the cook reads scenes and Scenes depends on the cook. `SceneFiles` in Scenes
+adds the explorer layout, and `SceneDocumentKind`, `SceneContent`,
+`SourceApplication` and `ModelPreviewFiles` call it. Reading takes the scene's
 identity and resolves every field of `SceneReferenceFields.All` and script
 asset parameters into canonical `AssetPath`s before the typed model is built;
 writing spells them back with `ToReference`. The in-memory scene keeps

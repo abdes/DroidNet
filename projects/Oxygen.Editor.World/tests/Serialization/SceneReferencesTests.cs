@@ -91,7 +91,7 @@ public sealed class SceneReferencesTests
         _ = restored.References.Should().BeEquivalentTo(references);
         var emptyStream = new MemoryStream();
         await using var emptyStreamLifetime = emptyStream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(emptyStream, new Scene { Name = "Empty References" }).ConfigureAwait(false);
+        emptyStream.Write(SceneSerializer.Write(new Scene { Name = "Empty References" }, TestSupport.SceneTestSupport.Identity));
         var json = Encoding.UTF8.GetString(emptyStream.ToArray());
         _ = json.Should().NotContain("\"References\"");
     }

@@ -19,10 +19,9 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>
 /// Reads and rewrites the asset references of authored files. Each format names its reference fields
-/// (<see cref="AssetFileType.ReferenceFields"/>, <see cref="SceneReferenceFields"/>). In an engine format a reference
-/// resolves against the file's identity and is respelled from it; a scene or a preview holds an asset URI or a canonical
-/// virtual path. Any other string is left alone. Geometry buffers are file-relative paths; textures and import sidecars
-/// are read and written through their typed formats.
+/// (<see cref="AssetFileType.ReferenceFields"/>, <see cref="SceneReferenceFields"/>). A reference resolves against the
+/// file's identity and is respelled from it. Any other string is left alone. Geometry buffers are file-relative paths;
+/// textures and import sidecars are read and written through their typed formats.
 /// </summary>
 internal static class AuthoredReferenceFormat
 {
@@ -55,9 +54,8 @@ internal static class AuthoredReferenceFormat
         }
 
         var root = JsonNode.Parse(StripBom(content.Span));
-        var anchor = AnchorOf(path, identity);
         return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
-            .Select(node => TryParseReference(path, anchor, node.GetValue<string>(), out var target, out _) ? new AuthoredReference(node.GetPath(), target, node.GetValue<string>()) : null)
+            .Select(node => TryParseReference(path, identity, node.GetValue<string>(), out var target) ? new AuthoredReference(node.GetPath(), target, node.GetValue<string>()) : null)
             .OfType<AuthoredReference>()];
     }
 
@@ -69,7 +67,7 @@ internal static class AuthoredReferenceFormat
     /// <exception cref="JsonException">The descriptor is not JSON.</exception>
     public static IReadOnlyList<RefusedReference> ReadRefusedReferences(FileSystemPath path, AssetPath identity, ReadOnlyMemory<byte> content)
     {
-        if (IsTexture(path) || IsEditorFormat(path))
+        if (IsTexture(path))
         {
             return [];
         }
@@ -183,22 +181,19 @@ internal static class AuthoredReferenceFormat
     private static AssetPath? IdentityOf(ProjectContext project, FileSystemPath path)
         => project.FindByFilePath(path)?.Identity;
 
-    // The editor's own formats still hold URIs and absolute paths; the engine's hold references from the file's identity.
-    private static bool IsEditorFormat(FileSystemPath path)
-        => path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal) || AssetFileTypes.Is(path.Name, AssetFileCategory.ModelPreview);
-
-    private static AssetPath? AnchorOf(FileSystemPath path, AssetPath? identity)
-        => IsEditorFormat(path) ? null : identity;
-
     // A reference follows its target, and is spelled from where the referring file now is.
     private static bool RewriteReferences(ProjectContext project, FileSystemPath path, FileSystemPath target, IEnumerable<JsonValue> references, RelocationMap? map)
     {
-        var anchor = AnchorOf(path, IdentityOf(project, path));
-        var newAnchor = AnchorOf(path, IdentityOf(project, target)) ?? anchor;
+        if (IdentityOf(project, path) is not { } anchor)
+        {
+            return false;
+        }
+
+        var newAnchor = IdentityOf(project, target) ?? anchor;
         var changed = false;
         foreach (var node in references.ToArray())
         {
-            if (!TryParseReference(path, anchor, node.GetValue<string>(), out var identity, out var isUri))
+            if (!TryParseReference(path, anchor, node.GetValue<string>(), out var identity))
             {
                 continue;
             }
@@ -206,7 +201,7 @@ internal static class AuthoredReferenceFormat
             var mapped = map?.MapIdentity(identity) ?? identity;
             if (mapped != identity || newAnchor != anchor)
             {
-                node.ReplaceWith(JsonValue.Create(isUri || newAnchor is null ? Format(mapped, isUri) : mapped.ToReference(newAnchor)));
+                node.ReplaceWith(JsonValue.Create(mapped.ToReference(newAnchor)));
                 changed = true;
             }
         }
@@ -289,28 +284,17 @@ internal static class AuthoredReferenceFormat
         return changed ? Serialize(TextureSourceWriter.ToJson(relocated, IdentityOf(project, target) ?? identity), content.Span) : null;
     }
 
-    // A reference names an asset; a mount is not an asset, and an input mapping's local name is no reference. With an
-    // anchor it is the reference grammar; without one, an asset URI or a virtual path.
-    private static bool TryParseReference(FileSystemPath path, AssetPath? anchor, string value, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity, out bool isUri)
+    // A reference names an asset; a mount is not an asset, and an input mapping's local name is no reference.
+    private static bool TryParseReference(FileSystemPath path, AssetPath anchor, string value, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity)
     {
-        isUri = false;
         identity = null;
         if (AssetFileTypes.Is(path.Name, AssetFileCategory.Input) && !new InputActionReference(value).IsReference)
         {
             return false;
         }
 
-        if (anchor is not null)
-        {
-            return AssetPath.TryResolveReference(anchor, value, VirtualPathRuleSet.Authored, out identity, out _) && !identity.IsMount;
-        }
-
-        isUri = value.StartsWith(AssetPath.UriScheme + ":", StringComparison.OrdinalIgnoreCase);
-        var parsed = isUri ? AssetPath.TryParseUri(value, out identity) : AssetPath.TryParse(value, out identity);
-        return parsed && !identity!.IsMount;
+        return AssetPath.TryResolveReference(anchor, value, VirtualPathRuleSet.Authored, out identity, out _) && !identity.IsMount;
     }
-
-    private static string Format(AssetPath identity, bool isUri) => isUri ? identity.ToUriString() : identity.VirtualPath;
 
     private static byte[] Serialize(JsonNode root, ReadOnlySpan<byte> original)
     {

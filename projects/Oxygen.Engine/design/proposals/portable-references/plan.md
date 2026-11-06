@@ -42,7 +42,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S8    | Done, committed                                                |
 | S9    | Done, committed                                                |
 | S10   | Done, committed                                                |
-| S11   | Not started                                                    |
+| S11   | Done, committed                                                |
 | S12   | Not started                                                    |
 | S13   | Not started                                                    |
 | S14   | Not started (waits on S18)                                     |
@@ -690,6 +690,17 @@ identity, resolution and spelling of `SceneReferenceFields.All` and script
 parameters. Unit tests: World and Scenes serialization tests with relative,
 cross-mount and refused references. Docs: `Oxygen.Editor.World/README.md` and
 `Serialization/README.md`, `scene-authoring-model.md`.
+
+Beyond this text:
+
+- The resolving and spelling is in World's `SceneSerializer`, since the cook reads
+  scenes and Scenes depends on the cook; `SceneFiles` adds the explorer layout.
+- `AuthoredReferenceFormat` reads scenes and previews as the engine's formats, from
+  the file's identity, so relocation respells them and the reference check lists
+  their refused references. A preview spells from its own identity, so relocation
+  reads it the same way.
+- An existing project's scenes hold `asset:///` URIs, which now refuse to open with
+  their field and code, until the migration script (S19) respells them.
 
 ### S12. Relocation
 

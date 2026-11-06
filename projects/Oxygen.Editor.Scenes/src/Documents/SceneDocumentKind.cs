@@ -43,7 +43,7 @@ public sealed class SceneDocumentKind(
     /// must name each folder once and only nodes of the scene, each once.
     /// </remarks>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The decoded SceneContent is handed to the DocumentDecodeResult, whose consumer (the opened document) owns and disposes it; nothing between its construction and the return can throw.")]
-    public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
+    public Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(file);
         ArgumentNullException.ThrowIfNull(context);
@@ -52,10 +52,7 @@ public sealed class SceneDocumentKind(
         Scene scene;
         try
         {
-            var stream = new MemoryStream(content.ToArray(), writable: false);
-            await using var lifetime = stream.ConfigureAwait(true);
-            data = await JsonSerializer.DeserializeAsync(stream, SceneFileJsonContext.Default.SceneFileData, cancellationToken).ConfigureAwait(true)
-                ?? throw new JsonException("The file holds no scene.");
+            data = SceneFiles.Decode(content.Span, file.Asset);
             cancellationToken.ThrowIfCancellationRequested();
             scene = Scene.CreateAndHydrate(data);
         }
@@ -63,19 +60,19 @@ public sealed class SceneDocumentKind(
         {
             // Malformed JSON, a node without its required components or a value the scene model rejects: the file is
             // not a scene this editor opens, and the document fails to open with the reason.
-            return DocumentDecodeResult.Failed($"'{file.Path.Name}' is not a valid scene: {exception.Message}");
+            return Task.FromResult(DocumentDecodeResult.Failed($"'{file.Path.Name}' is not a valid scene: {exception.Message}"));
         }
 
         var layout = data.ExplorerLayout ?? [];
         var nodeIds = new HashSet<NodeId>();
         if (scene.AllNodes.Any(node => node.Id.IsEmpty || !nodeIds.Add(node.Id)))
         {
-            return DocumentDecodeResult.Failed($"'{file.Path.Name}' has nodes with missing or duplicate identities.");
+            return Task.FromResult(DocumentDecodeResult.Failed($"'{file.Path.Name}' has nodes with missing or duplicate identities."));
         }
 
         if (!IsLayoutValid(layout, nodeIds, [], []))
         {
-            return DocumentDecodeResult.Failed($"'{file.Path.Name}' has an explorer layout with duplicate or foreign identities.");
+            return Task.FromResult(DocumentDecodeResult.Failed($"'{file.Path.Name}' has an explorer layout with duplicate or foreign identities."));
         }
 
         scene.Name = SceneContent.NameOf(file.Path.Name);
@@ -85,7 +82,7 @@ public sealed class SceneDocumentKind(
         Func<AssetPath, SceneStructure?>? structureOf = session is not null && structures is not null
             ? source => structures.Find(session.Context, source)
             : null;
-        return DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects, references, file.Asset, structureOf, session is null ? null : new ProjectSceneFiles(session), modelRecords));
+        return Task.FromResult(DocumentDecodeResult.Decoded(new SceneContent(scene, layout, context, interaction, redirects, references, file.Asset, structureOf, session is null ? null : new ProjectSceneFiles(session), modelRecords)));
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)

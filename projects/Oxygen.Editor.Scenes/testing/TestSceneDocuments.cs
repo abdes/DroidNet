@@ -109,7 +109,7 @@ public sealed partial class TestSceneDocuments : IDisposable
         var content = layout is null && data is SceneFileData stored ? stored : new SceneFileData(data, layout);
         var path = file.Path.FullPath;
         _ = this.Project.Context.FileSystem.Directory.CreateDirectory(this.Project.Context.FileSystem.Path.GetDirectoryName(path)!);
-        this.Project.Context.FileSystem.File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(content, SceneFileJsonContext.Default.SceneFileData));
+        this.Project.Context.FileSystem.File.WriteAllBytes(path, SceneFiles.Encode(content, file.Asset));
     }
 
     /// <summary>Writes a scene to the file of its name and opens it.</summary>

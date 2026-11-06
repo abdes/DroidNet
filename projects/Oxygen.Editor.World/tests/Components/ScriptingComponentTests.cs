@@ -103,10 +103,10 @@ public sealed class ScriptingComponentTests
     {
         var saved = new MemoryStream();
         await using var savedLifetime = saved.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(saved, scene).ConfigureAwait(false);
+        saved.Write(SceneSerializer.Write(scene, TestSupport.SceneTestSupport.Identity));
         var reopened = new MemoryStream(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(saved.ToArray())));
         await using var reopenedLifetime = reopened.ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        return await SceneSerializer.DeserializeAsync(reopened).ConfigureAwait(false);
+        return SceneSerializer.Read(reopened.ToArray(), TestSupport.SceneTestSupport.Identity);
     }
 }

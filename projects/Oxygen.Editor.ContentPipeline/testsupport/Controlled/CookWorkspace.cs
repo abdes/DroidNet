@@ -11,6 +11,7 @@ using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -168,9 +169,7 @@ internal sealed partial class CookWorkspace : IDisposable
     {
         var path = Path.Combine(this.Root, relativePath.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var stream = File.Create(path);
-        await using var lifetime = stream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(stream, this.Scene).ConfigureAwait(false);
+        await File.WriteAllBytesAsync(path, SceneSerializer.Write(this.Scene, AssetPath.Parse("/" + relativePath[..^".json".Length]))).ConfigureAwait(false);
     }
 
     public void Dispose()

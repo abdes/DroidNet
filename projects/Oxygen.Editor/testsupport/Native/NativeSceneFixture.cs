@@ -221,7 +221,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <returns>The task that completes once the saved scene is shown.</returns>
     public async Task SaveSceneChangedInMemoryAsync(CancellationToken cancellationToken)
     {
-        WriteSceneFile(this.Document.File.Path, new SceneFileData(this.Source.Dehydrate(), this.Layout));
+        WriteSceneFile(this.Document.File, new SceneFileData(this.Source.Dehydrate(), this.Layout));
         _ = (await this.Document.CheckFileAsync(cancellationToken).ConfigureAwait(true)).Should().Be(DocumentFileState.Reloaded);
         await this.AdoptContentAsync(cancellationToken).ConfigureAwait(true);
     }
@@ -232,7 +232,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var data = this.Source.Dehydrate();
         var environment = data.Environment;
-        WriteSceneFile(this.Document.File.Path, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
+        WriteSceneFile(this.Document.File, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
         var reload = await this.Document.ReloadAsync().ConfigureAwait(true);
         _ = reload.Succeeded.Should().BeTrue(reload.Problem);
         await this.AdoptContentAsync(CancellationToken.None).ConfigureAwait(true);
@@ -491,10 +491,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
     }
 
-    private static void WriteSceneFile(FileSystemPath path, SceneFileData data)
+    private static void WriteSceneFile(DocumentFile file, SceneFileData data)
     {
-        _ = Disk.Directory.CreateDirectory(path.Parent!.FullPath);
-        Disk.File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
+        _ = Disk.Directory.CreateDirectory(file.Path.Parent!.FullPath);
+        Disk.File.WriteAllBytes(file.Path.FullPath, SceneFiles.Encode(data, file.Asset));
     }
 
     // The session's scene editor services over the fixture's engine and project, without play sessions.
@@ -576,7 +576,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private DocumentFile WriteScene(Scene scene, IList<ExplorerEntryData>? layout = null)
     {
         var file = new DocumentFile(this.ProjectRoot.Combine("Content").Combine("Scenes").Combine($"{scene.Name}.oscene.json"), AssetPath.Create("Content", $"Scenes/{scene.Name}.oscene"));
-        WriteSceneFile(file.Path, new SceneFileData(scene.Dehydrate(), layout));
+        WriteSceneFile(file, new SceneFileData(scene.Dehydrate(), layout));
         return file;
     }
 

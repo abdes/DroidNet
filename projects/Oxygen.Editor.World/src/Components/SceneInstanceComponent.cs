@@ -39,8 +39,8 @@ public partial class SceneInstanceComponent : GameComponent
     /// Gets or sets the instanced source.
     /// </summary>
     /// <value>
-    /// An absolute <c>asset:</c> URI: a model's source file, such as <c>asset:///Content/Vehicles/Car.glb</c>, or an
-    /// authored scene, such as <c>asset:///Content/Prefabs/Watchtower.oscene</c>. Changing it keeps the changes; those of
+    /// A model, such as <c>/Content/Vehicles/Car.glb</c>, or an authored scene, such as
+    /// <c>/Content/Prefabs/Watchtower.oscene</c>. Changing it keeps the changes; those of
     /// a node the new source does not have stay unresolved until they are removed.
     /// </value>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>

@@ -198,13 +198,13 @@ public static class SampleScene
     /// <param name="postX">Post's position x.</param>
     /// <returns>The file's bytes.</returns>
     public static byte[] TowerSource(float postX = 0f)
-        => JsonSerializer.SerializeToUtf8Bytes(
+        => Oxygen.Editor.Scenes.Documents.SceneFiles.Encode(
             new SceneBuilder()
                 .WithId(SceneId.FromValue(Tagged(0, "70E")))
                 .Named("Tower")
                 .Node(Post.Nodes[0], "Post", transform: Transform(position: new Vector3(postX, 0, 0)))
                 .Build(),
-            SceneFileJsonContext.Default.SceneFileData);
+            TowerScene);
 
     /// <summary>
     /// Makes a fixed id with a readable tag, such as <c>00000000-0000-0000-0001-0000000000a1</c>.

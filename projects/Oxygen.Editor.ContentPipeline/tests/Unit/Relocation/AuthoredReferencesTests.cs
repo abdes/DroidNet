@@ -61,7 +61,7 @@ public sealed class AuthoredReferencesTests
             { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "{{name}}",
               "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000001", "Components": [ { "$type": "Metadata", "Name": "Instance" },
                 { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Hierarchy", "Name": "Hierarchy" },
-                { "$type": "SceneInstance", "Name": "Scene Instance", "Source": "{{source.ToUriString()}}" } ] } ] }
+                { "$type": "SceneInstance", "Name": "Scene Instance", "Source": "{{source.ToReference(AssetPath.Parse("/Content/Scenes/" + name + ".oscene"))}}" } ] } ] }
             """;
 
     private static RelocationWorkspace CreateProject()

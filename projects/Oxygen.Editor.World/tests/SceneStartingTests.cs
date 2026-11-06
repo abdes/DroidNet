@@ -32,16 +32,16 @@ public class SceneStartingTests
         var stream = new MemoryStream();
         await using var streamLifetime = stream.ConfigureAwait(false);
 
-        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Write(SceneSerializer.Write(scene, TestSupport.SceneTestSupport.Identity));
         stream.Position = 0;
-        var restored = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var restored = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = restored.StartingCamera.Should().Be(NodeReference.To(camera.Id));
         _ = restored.StartingInputContexts.Should().Equal(contexts);
         _ = restored.StartingInputContexts[1].Priority.Should().BeNull();
         var defaultStream = new MemoryStream();
         await using var defaultLifetime = defaultStream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(defaultStream, new Scene { Name = "Default Start" }).ConfigureAwait(false);
+        defaultStream.Write(SceneSerializer.Write(new Scene { Name = "Default Start" }, TestSupport.SceneTestSupport.Identity));
         var json = Encoding.UTF8.GetString(defaultStream.ToArray());
         _ = json.Should().NotContain("\"StartingCamera\"").And.NotContain("\"StartingInputContexts\"");
     }

@@ -961,13 +961,10 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = environment.GetProperty("sky_light").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
     }
 
-    private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene)
+    private static Task<Scene> RoundTripSavedSceneAsync(Scene scene)
     {
-        var stream = new MemoryStream();
-        await using var lifetime = stream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-        return await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var identity = AssetPath.Parse("/Content/Scenes/Main.oscene");
+        return Task.FromResult(SceneSerializer.Read(SceneSerializer.Write(scene, identity), identity));
     }
 
     private sealed partial class DescriptorWorkspace : IDisposable

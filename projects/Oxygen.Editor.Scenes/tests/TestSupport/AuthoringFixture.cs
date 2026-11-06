@@ -226,7 +226,7 @@ public sealed partial class AuthoringFixture : IDisposable
         var file = new DocumentFile(
             project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData);
+        var bytes = SceneFiles.Encode(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), file.Asset);
         var result = await kind.DecodeAsync(file, bytes, new DocumentDecodeContext(document, history), CancellationToken.None).ConfigureAwait(true);
         return result.Content as SceneContent ?? throw new InvalidOperationException($"The test scene did not decode: {result.Problem}");
     }

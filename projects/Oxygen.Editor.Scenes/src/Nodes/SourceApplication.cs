@@ -5,6 +5,7 @@
 using System.Text.Json;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Properties;
@@ -124,7 +125,7 @@ public sealed class SourceApplication(ProjectContext project)
                 Changes = component.Changes,
                 Remaining = remaining,
                 Previous = file.Bytes,
-                Applied = JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(written.Dehydrate(), file.Data.ExplorerLayout), SceneFileJsonContext.Default.SceneFileData),
+                Applied = SceneFiles.Encode(new SceneFileData(written.Dehydrate(), file.Data.ExplorerLayout), target.Scene),
                 Kept = kept,
             },
             Refusal: null);
@@ -280,7 +281,7 @@ public sealed class SourceApplication(ProjectContext project)
         try
         {
             var bytes = await project.FileSystem.File.ReadAllBytesAsync(location.File.FullPath, cancellationToken).ConfigureAwait(true);
-            return JsonSerializer.Deserialize(bytes, SceneFileJsonContext.Default.SceneFileData) is { } data ? (bytes, data) : null;
+            return (bytes, SceneFiles.Decode(bytes, scene));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {

@@ -347,7 +347,7 @@ public sealed partial class DocumentScenes : IDisposable
     // The kept preview, or the default one when the model has none or it cannot be shown.
     private Scene BuildKeptPreviewScene(Document document, ModelContent model)
     {
-        var kept = this.previewFiles?.Read(ModelPreviewFiles.PathOf(document));
+        var kept = this.previewFiles?.Read(ModelPreviewFiles.PathOf(document), this.previewFiles.AnchorOf(document));
         var id = this.SourceIdentityOf(document) ?? kept?.Id ?? SceneId.New();
         if (kept is not null)
         {
@@ -383,7 +383,7 @@ public sealed partial class DocumentScenes : IDisposable
             return;
         }
 
-        var pending = preview.Keep(ModelPreviewFiles.Encode(preview.Content.Scene));
+        var pending = preview.Keep(ModelPreviewFiles.Encode(preview.Content.Scene, this.previewFiles.AnchorOf(document)));
         try
         {
             await Task.Delay(SaveDelay, pending).ConfigureAwait(true);

@@ -41,6 +41,12 @@ Follow these rules when adding or modifying serialization behaviour:
     `init` property its JSON leaves out. `SceneJsonDefaultsTests` checks that
     every record read from JSON with absent values matches the declared record.
 
+- `SceneSerializer.Read` and `Write` are the one reader and writer of a scene
+  file's text. They take the scene's identity, resolve every field of
+  `SceneReferenceFields.All` to an asset path on reading and spell it back as a
+  reference on writing, so these records hold asset paths and a file holds
+  reference text. Copies in memory, such as an edit's payload, stay as records.
+
 - `SceneSerializer.ReadId` is the one reader of the identity a scene file holds.
   Finding a scene by id, guarding the start scene and creating a project from a
   template use it rather than loading the scene.

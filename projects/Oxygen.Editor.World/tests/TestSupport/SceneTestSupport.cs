@@ -16,6 +16,9 @@ namespace Oxygen.Editor.World.Tests.TestSupport;
 [ExcludeFromCodeCoverage]
 internal static class SceneTestSupport
 {
+    /// <summary>Gets the identity the scenes of these tests are read and written at.</summary>
+    public static AssetPath Identity { get; } = AssetPath.Parse("/Content/Scenes/Test.oscene");
+
     /// <summary>
     /// Creates the four required component DTOs of a node, in canonical order with the hierarchy last.
     /// </summary>
@@ -44,18 +47,16 @@ internal static class SceneTestSupport
         return new SceneNodeData { Id = NodeId.New(), Components = components };
     }
 
-    public static async Task<MemoryStream> SerializeToStreamAsync(Scene scene)
-    {
-        var stream = new MemoryStream();
-        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-        stream.Position = 0;
-        return stream;
-    }
+    public static Task<MemoryStream> SerializeToStreamAsync(Scene scene)
+        => Task.FromResult(new MemoryStream(SceneSerializer.Write(scene, Identity)));
 
     public static async Task<Scene> DeserializeFromStreamAsync(Stream stream)
     {
         stream.Position = 0;
-        return await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var content = new MemoryStream();
+        await using var lifetime = content.ConfigureAwait(false);
+        await stream.CopyToAsync(content).ConfigureAwait(false);
+        return SceneSerializer.Read(content.ToArray(), Identity);
     }
 
     public static async Task<Scene> RoundTripAsync(Scene scene)

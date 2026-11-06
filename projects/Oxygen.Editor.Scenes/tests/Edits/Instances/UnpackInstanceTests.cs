@@ -230,7 +230,7 @@ public sealed class UnpackInstanceTests
             }
             ])
             .Build();
-        _ = fixture.Project.WriteFile(WatchtowerFile, JsonSerializer.SerializeToUtf8Bytes(watchtower, SceneFileJsonContext.Default.SceneFileData));
+        _ = fixture.Project.WriteFile(WatchtowerFile, Oxygen.Editor.Scenes.Documents.SceneFiles.Encode(watchtower, AssetPath.Parse(Watchtower)));
         PublishCar(fixture);
         return fixture;
     }

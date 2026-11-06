@@ -429,7 +429,7 @@ internal sealed partial class SceneInstanceSectionTests
             var watchtower = new Scene { Name = "Watchtower" };
             var body = new SceneNode(watchtower, "Body");
             watchtower.RootNodes.Add(body);
-            _ = this.Project.WriteFile("/Content/Prefabs/Watchtower.oscene.json", JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
+            _ = this.Project.WriteFile("/Content/Prefabs/Watchtower.oscene.json", Oxygen.Editor.Scenes.Documents.SceneFiles.Encode(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), AssetPath.Parse("/Content/Prefabs/Watchtower.oscene")));
             this.Structures.Publish(Structure(Watchtower, (NodePath.Of(body.Id), "Body", null, false)));
             return body.Id;
         }

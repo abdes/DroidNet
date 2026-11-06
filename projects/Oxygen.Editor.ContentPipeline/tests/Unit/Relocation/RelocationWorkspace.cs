@@ -86,15 +86,10 @@ internal sealed partial class RelocationWorkspace : IDisposable
     /// <returns>The scene file's full path.</returns>
     public async Task<string> WriteSceneAsync(string relative, Scene scene, CancellationToken token)
     {
-        var stream = new MemoryStream();
-        await using (stream.ConfigureAwait(false))
-        {
-            await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
-            var path = this.PathOf(relative);
-            _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(path)!);
-            await this.FileSystem.File.WriteAllBytesAsync(path, stream.ToArray(), token).ConfigureAwait(false);
-            return path;
-        }
+        var path = this.PathOf(relative);
+        _ = this.FileSystem.Directory.CreateDirectory(this.FileSystem.Path.GetDirectoryName(path)!);
+        await this.FileSystem.File.WriteAllBytesAsync(path, SceneSerializer.Write(scene, SceneIdentityOf(relative)), token).ConfigureAwait(false);
+        return path;
     }
 
     /// <summary>Reads a scene file back through the production serializer.</summary>
@@ -104,12 +99,12 @@ internal sealed partial class RelocationWorkspace : IDisposable
     public async Task<Scene> ReadSceneAsync(string relative, CancellationToken token)
     {
         var bytes = await this.FileSystem.File.ReadAllBytesAsync(this.PathOf(relative), token).ConfigureAwait(false);
-        var stream = new MemoryStream(bytes);
-        await using (stream.ConfigureAwait(false))
-        {
-            return await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
-        }
+        return SceneSerializer.Read(bytes, SceneIdentityOf(relative));
     }
+
+    // A scene file's identity is its path below the project, without the source's suffix.
+    private static AssetPath SceneIdentityOf(string relative)
+        => AssetPath.Parse("/" + relative.Replace('\\', '/').TrimStart('/')[..^".json".Length]);
 
     public string Read(string relative) => this.FileSystem.File.ReadAllText(this.PathOf(relative));
 

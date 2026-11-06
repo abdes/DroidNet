@@ -128,13 +128,28 @@ public static class SceneFiles
         try
         {
             var bytes = await project.FileSystem.File.ReadAllBytesAsync(location.File.FullPath, cancellationToken).ConfigureAwait(true);
-            return JsonSerializer.Deserialize(bytes, SceneFileJsonContext.Default.SceneFileData) is { } data ? Scene.CreateAndHydrate(data) : null;
+            return Scene.CreateAndHydrate(Decode(bytes, scene));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
         {
             return null;
         }
     }
+
+    /// <summary>Reads what a scene file holds: the scene, its references resolved to asset paths, and its explorer layout.</summary>
+    /// <param name="file">The file's bytes.</param>
+    /// <param name="identity">The scene's identity, which its references are read from.</param>
+    /// <returns>What the file holds.</returns>
+    /// <exception cref="JsonException">The file is not a scene, or writes a reference the grammar refuses.</exception>
+    public static SceneFileData Decode(ReadOnlySpan<byte> file, AssetPath identity)
+        => SceneSerializer.Read(file, identity, SceneFileJsonContext.Default.SceneFileData);
+
+    /// <summary>Gets the bytes of a scene file, with its references spelled from the scene's identity.</summary>
+    /// <param name="data">The scene and its explorer layout.</param>
+    /// <param name="identity">The scene's identity.</param>
+    /// <returns>The file's content.</returns>
+    public static byte[] Encode(SceneFileData data, AssetPath identity)
+        => SceneSerializer.Write(data, identity, SceneFileJsonContext.Default.SceneFileData);
 
     /// <summary>Reads the identity a scene file of the project holds.</summary>
     /// <param name="project">The project, through whose file system the file is read.</param>

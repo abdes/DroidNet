@@ -49,9 +49,9 @@ Scene: Id, Name, ordered RootNodes, Environment
       TransformComponent    local transform           (engine TransformComponent)
       NodeFlagsComponent    node flags (section 4)    (engine NodeData)
     Optional, zero or one each:
-      GeometryComponent     asset URI, overrides      (engine RenderableComponent)
+      GeometryComponent     asset path, overrides     (engine RenderableComponent)
       CameraComponent, LightComponent, ScriptingComponent
-      SceneInstanceComponent  model or scene URI, changes (engine scene instance)
+      SceneInstanceComponent  model or scene, changes   (engine scene instance)
   ExplorerLayout (editor layout, never native nodes)
 ```
 
@@ -181,7 +181,7 @@ composition, not visibility or light participation.
 
 ### 5.1 Surfaces
 
-Geometry references an asset URI. A geometry asset owns its surfaces, each
+Geometry references an asset. A geometry asset owns its surfaces, each
 identified by an engine-owned `SurfaceId`, an opaque 128-bit ID serialized as a
 canonical UUID. Import allocates one surface per distinct source material of
 the geometry, and each surface binds one submesh per LOD; separate source
@@ -502,7 +502,7 @@ without what it held:
 ```json
 "Overrides": {
   "Parts": [ { "Kind": "surface", "Id": "…", "LayoutRevision": "…",
-               "Values": { "/material": "asset:///Content/Materials/Red.omat" } } ]
+               "Values": { "/material": "../Materials/Red.omat" } } ]
 }
 ```
 

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
@@ -80,13 +79,13 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     public DocumentCapture Capture()
         => this.Authoring.IsRetired
             ? DocumentCapture.Refused("The scene was closed or replaced before it could be saved.")
-            : Encoded(new SceneFileData(this.Scene.Dehydrate(), this.Authoring.Layout));
+            : Encoded(new SceneFileData(this.Scene.Dehydrate(), this.Authoring.Layout), this.Authoring.Asset!);
 
     /// <inheritdoc/>
     public DocumentCapture CaptureCopy(DocumentFile copy)
     {
         ArgumentNullException.ThrowIfNull(copy);
-        return Encoded(new SceneFileData(this.Scene.Dehydrate() with { Id = SceneId.New(), Name = NameOf(copy.Path.Name) }, this.Authoring.Layout));
+        return Encoded(new SceneFileData(this.Scene.Dehydrate() with { Id = SceneId.New(), Name = NameOf(copy.Path.Name) }, this.Authoring.Layout), copy.Asset);
     }
 
     /// <inheritdoc/>
@@ -148,10 +147,10 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
         return changes;
     }
 
-    private static DocumentCapture Encoded(SceneFileData data)
+    private static DocumentCapture Encoded(SceneFileData data, AssetPath identity)
     {
         // The data is serialized now: it shares collections with the scene and its layout, which go on changing.
-        ReadOnlyMemory<byte> bytes = JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData);
+        ReadOnlyMemory<byte> bytes = SceneFiles.Encode(data, identity);
         return DocumentCapture.Of(_ => Task.FromResult(bytes));
     }
 }

@@ -27,22 +27,9 @@ public sealed class SceneSerializerTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes("null"));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
-    }
-
-    [TestMethod]
-    public async Task DeserializeIntoAsync_WhenStreamContainsNullJson_IsNoOp()
-    {
-        var scene = new Scene { Name = "Original Name" };
-        var stream = new MemoryStream(Encoding.UTF8.GetBytes("null"));
-        await using var lifetime = stream.ConfigureAwait(false);
-
-        await SceneSerializer.DeserializeIntoAsync(stream, scene).ConfigureAwait(false);
-
-        _ = scene.Name.Should().Be("Original Name");
-        _ = scene.RootNodes.Should().BeEmpty();
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -59,7 +46,7 @@ public sealed class SceneSerializerTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
         _ = scene.Name.Should().Be("Scene with Unknown Property");
         _ = scene.Id.Should().Be(SceneId.FromValue(Guid.Parse("99999999-9999-9999-9999-999999999999")));
@@ -98,7 +85,7 @@ public sealed class SceneSerializerTests
         var scene = SceneTestSupport.CreateCompleteScene();
         var stream = new MemoryStream();
         await using var lifetime = stream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Write(SceneSerializer.Write(scene, TestSupport.SceneTestSupport.Identity));
 
         _ = SceneSerializer.ReadId(stream.ToArray()).Should().Be(scene.Id);
         _ = SceneSerializer.ReadId([.. Encoding.UTF8.Preamble, .. stream.ToArray()]).Should().Be(scene.Id);

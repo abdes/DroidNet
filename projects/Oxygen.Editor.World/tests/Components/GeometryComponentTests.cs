@@ -91,14 +91,14 @@ public sealed class GeometryComponentTests
     }
 
     [TestMethod]
-    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { "/shade": "asset:///Content/Materials/Stone.omat" } } ] }""", DisplayName = "An unknown key")]
-    [DataRow("""{ "Parts": [ { "Kind": "section", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { "/material": "asset:///Content/Materials/Stone.omat" } } ] }""", DisplayName = "An unknown part kind")]
+    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { "/shade": "../Materials/Stone.omat" } } ] }""", DisplayName = "An unknown key")]
+    [DataRow("""{ "Parts": [ { "Kind": "section", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { "/material": "../Materials/Stone.omat" } } ] }""", DisplayName = "An unknown part kind")]
     [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { "/material": 3 } } ] }""", DisplayName = "A value of another type")]
-    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "rev-1", "Values": { "/material": "asset:///Content/Materials/Stone.omat" } } ] }""", DisplayName = "An invalid layout revision")]
-    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "00000000-0000-0000-0000-000000000000", "LayoutRevision": "REVISION", "Values": { "/material": "asset:///Content/Materials/Stone.omat" } } ] }""", DisplayName = "An empty part id")]
+    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "rev-1", "Values": { "/material": "../Materials/Stone.omat" } } ] }""", DisplayName = "An invalid layout revision")]
+    [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "00000000-0000-0000-0000-000000000000", "LayoutRevision": "REVISION", "Values": { "/material": "../Materials/Stone.omat" } } ] }""", DisplayName = "An empty part id")]
     [DataRow("""{ "Parts": [ { "Kind": "surface", "Id": "30000000-0000-0000-0000-000000000001", "LayoutRevision": "REVISION", "Values": { } } ] }""", DisplayName = "A part without values")]
-    [DataRow("""{ "Values": { "/material": "asset:///Content/Materials/Stone.omat" } }""", DisplayName = "A part property without its part")]
-    [DataRow("""{ "Values": { "/geometry_uri": "asset:///Content/Meshes/Pillar.ogeo" } }""", DisplayName = "A property without a source")]
+    [DataRow("""{ "Values": { "/material": "../Materials/Stone.omat" } }""", DisplayName = "A part property without its part")]
+    [DataRow("""{ "Values": { "/geometry_uri": "../Meshes/Pillar.ogeo" } }""", DisplayName = "A property without a source")]
     public async Task Deserialize_InvalidOverrides_ThrowsJsonException(string overrides)
     {
         var scene = new Scene { Name = "Crates" };
@@ -113,9 +113,9 @@ public sealed class GeometryComponentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json.ToJsonString()));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -135,9 +135,9 @@ public sealed class GeometryComponentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json.ToJsonString()));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>("a stale scene fails to open instead of losing its overrides on save").ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>("a stale scene fails to open instead of losing its overrides on save");
     }
 
     [TestMethod]
@@ -153,7 +153,6 @@ public sealed class GeometryComponentTests
 
     [TestMethod]
     [DataRow("")]
-    [DataRow("Content/Crate.ogeo")]
     [DataRow("https://example.com/Content/Crate.ogeo")]
     [DataRow("asset://Content/Crate.ogeo")]
     public async Task Deserialize_GeometryUriNotAnAsset_ThrowsJsonException(string value)
@@ -170,9 +169,9 @@ public sealed class GeometryComponentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json.ToJsonString()));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -190,9 +189,9 @@ public sealed class GeometryComponentTests
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(json.ToJsonString()));
         await using var lifetime = stream.ConfigureAwait(false);
 
-        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        Action act = () => _ = SceneSerializer.Read(stream.ToArray(), TestSupport.SceneTestSupport.Identity);
 
-        _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]

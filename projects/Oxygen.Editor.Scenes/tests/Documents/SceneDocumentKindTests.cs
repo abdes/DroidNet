@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -58,5 +59,47 @@ public sealed class SceneDocumentKindTests
 
         _ = result.Content.Should().BeNull();
         _ = result.Problem.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [TestMethod]
+    [DataRow("../Models/Car.glb", "/Content/Models/Car.glb", DisplayName = "In its mount")]
+    [DataRow("/Vendor/Models/Car.glb", "/Vendor/Models/Car.glb", DisplayName = "From another mount")]
+    public async Task AScene_ReadsItsReferencesFromItsIdentity(string written, string asset)
+    {
+        var result = await DecodeInstanceAsync(written, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var content = result.Content.Should().BeOfType<SceneContent>().Subject;
+        using var lifetime = content;
+        _ = content.Scene.RootNodes[0].Components.OfType<SceneInstanceComponent>().Single().Source.Should().Be(AssetPath.Parse(asset));
+    }
+
+    [TestMethod]
+    [DataRow("asset:///Content/Models/Car.glb", DisplayName = "An asset URI")]
+    [DataRow("/Content/Models/Car.glb", DisplayName = "Its own mount by virtual path")]
+    public async Task AScene_WritingARefusedReferenceFailsToOpenNamingIt(string written)
+    {
+        var result = await DecodeInstanceAsync(written, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Content.Should().BeNull();
+        _ = result.Problem.Should().Contain("Source").And.Contain(written).And.Contain("vpath.");
+    }
+
+    private static Task<DocumentDecodeResult> DecodeInstanceAsync(string written, CancellationToken cancellationToken)
+    {
+        var project = TestProject.Create(new MockFileSystem());
+        var file = new DocumentFile(
+            project.PathOf($"/Content/Scenes/Main{AssetFileTypes.SceneDescriptor}"),
+            AssetPath.Parse($"/Content/Scenes/Main{AssetFileTypes.Scene}"));
+        var json = $$"""
+            { "Id": "00000000-0000-4000-8000-000000000101", "Name": "Main", "RootNodes": [ { "Id": "00000000-0000-4000-8000-000000000201",
+              "Components": [ { "$type": "Metadata", "Name": "Car" }, { "$type": "Transform", "Name": "Transform" },
+                { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Hierarchy", "Name": "Hierarchy" },
+                { "$type": "SceneInstance", "Name": "Scene Instance", "Source": "{{written}}" } ] } ] }
+            """;
+        return new SceneDocumentKind().DecodeAsync(
+            file,
+            Encoding.UTF8.GetBytes(json),
+            new DocumentDecodeContext(DocumentId.New(), new HistoryKeeper(file)),
+            cancellationToken);
     }
 }

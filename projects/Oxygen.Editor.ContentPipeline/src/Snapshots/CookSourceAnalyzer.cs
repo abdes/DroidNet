@@ -220,9 +220,7 @@ internal sealed partial class CookSourceAnalyzer(
         var sourcePath = snapshot is null ? input.SourceAbsolutePath.FullPath : Path.Combine(snapshot.InputRoot, CookPaths.StoragePathOf(input.SourceCookPath));
         var bytes = await CookSavedSourceReader.ReadAsync(sourcePath, cancellationToken).ConfigureAwait(false);
         ImmutableArray<CookSnapshotInput> managed = [new(input.AssetUri, input.SourceAbsolutePath, input.SourceCookPath, Convert.ToHexString(SHA256.HashData(bytes)))];
-        var stream = new MemoryStream(bytes, writable: false);
-        await using var lifetime = stream.ConfigureAwait(false);
-        var scene = await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+        var scene = SceneSerializer.Read(bytes, input.AssetUri);
 
         // A scene's name is its file name, whatever the file says; a scene a relocation renamed keeps its old name
         // inside the file until it is saved again.

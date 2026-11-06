@@ -183,7 +183,7 @@ internal sealed partial class SceneExplorerInstanceMenuTests : DroidNet.Tests.Vi
                 var doorNode = new SceneNode(watchtower, "Door_FL");
                 watchtower.RootNodes.Add(doorNode);
                 door = doorNode.Id;
-                _ = project.WriteFile(scene.VirtualPath + ".json", JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), SceneFileJsonContext.Default.SceneFileData));
+                _ = project.WriteFile(scene.VirtualPath + ".json", Oxygen.Editor.Scenes.Documents.SceneFiles.Encode(new SceneFileData(watchtower.Dehydrate(), explorerLayout: null), scene));
             }
 
             var document = TestScenes.Open(new Scene { Name = "Harbor" }, project: project);

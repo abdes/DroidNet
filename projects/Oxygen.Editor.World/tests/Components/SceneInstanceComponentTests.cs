@@ -56,7 +56,7 @@ public sealed class SceneInstanceComponentTests
 
         var component = json["RootNodes"]![0]!["Components"]!.AsArray()
             .Single(static entry => string.Equals(entry!["$type"]!.GetValue<string>(), "SceneInstance", StringComparison.Ordinal))!;
-        _ = component["Source"]!.GetValue<string>().Should().Be(Car.ToUriString());
+        _ = component["Source"]!.GetValue<string>().Should().Be("../Vehicles/Car.glb");
         var changes = component["Changes"]!.AsArray();
         _ = changes.Should().HaveCount(2);
         var door = changes.Single(static entry => entry!["Path"]!.AsArray().Count == 2)!;
@@ -64,7 +64,7 @@ public sealed class SceneInstanceComponentTests
         _ = door["Components"]!["transform"]!["Values"]!["/local_rotation_euler_degrees"].Should().NotBeNull();
         var body = changes.Single(static entry => entry!["Path"]!.AsArray().Count == 1)!;
         var part = body["Components"]!["geometry"]!["Parts"]![0]!;
-        _ = part["Values"]!["/material"]!.GetValue<string>().Should().Be(Red.ToUriString());
+        _ = part["Values"]!["/material"]!.GetValue<string>().Should().Be("../Paint/Red.omat");
     }
 
     /// <summary>Relocation finds the instanced source and every asset a change names.</summary>
@@ -77,7 +77,7 @@ public sealed class SceneInstanceComponentTests
 
         var references = SceneReferenceFields.All.SelectMany(field => field.Select(json)).Select(static value => value.GetValue<string>()).ToList();
 
-        _ = references.Should().Contain(Car.ToUriString()).And.Contain(Red.ToUriString());
+        _ = references.Should().Contain("../Vehicles/Car.glb").And.Contain("../Paint/Red.omat");
     }
 
     /// <summary>An instanced node's changes may change any property with an override id, which a source's overrides may
@@ -140,7 +140,7 @@ public sealed class SceneInstanceComponentTests
         _ = loaded.Changes.Should().Be(instance.Changes);
         _ = loaded.Changes.Of(NodePath.Of(Body)).Parameters[Guard].Keys.Should().Equal("horn", "speed", "target");
         _ = SceneReferenceFields.All.SelectMany(field => field.Select(json)).Select(static value => value.GetValue<string>())
-            .Should().Contain(horn.ToUriString());
+            .Should().Contain("../Audio/Horn.oaudio");
         _ = instance.Changes.Assets.Should().Contain(horn);
     }
 
@@ -203,7 +203,7 @@ public sealed class SceneInstanceComponentTests
     {
         var stream = new MemoryStream();
         await using var lifetime = stream.ConfigureAwait(false);
-        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+        stream.Write(SceneSerializer.Write(scene, TestSupport.SceneTestSupport.Identity));
         return JsonNode.Parse(Encoding.UTF8.GetString(stream.ToArray()))!;
     }
 }

@@ -16,7 +16,7 @@ public sealed record ScriptSlot
     /// <summary>Gets the stable slot identity, cooked as the slot id.</summary>
     public Guid Id { get; init; } = Guid.NewGuid();
 
-    /// <summary>Gets the script asset identity, such as <c>asset:///Content/Player/move.oscript</c>; null until one is
+    /// <summary>Gets the script asset identity, such as <c>/Content/Player/move.oscript</c>; null until one is
     /// picked. A reference to a script that no longer exists stays until changed.</summary>
     public AssetPath? Script { get; init; }
 
