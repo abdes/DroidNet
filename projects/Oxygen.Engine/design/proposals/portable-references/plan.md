@@ -45,12 +45,12 @@ ledger: every old form found in the code, with the slice that removes it.
 | S11   | Done, committed                                                |
 | S12   | Done, committed                                                |
 | S13   | Done, committed                                                |
-| S14   | Not started                                                    |
+| S14   | Done, committed                                                |
 | S15   | Not started                                                    |
 | S16   | Not started                                                    |
 | S17   | Not started                                                    |
 | S18   | Done, committed                                                |
-| S19   | Not started                                                    |
+| S19   | Script written, `Oxygen Projects` migrated; rest not started   |
 | S20   | Not started                                                    |
 | S21   | Not started                                                    |
 
@@ -761,6 +761,27 @@ mounts and its mount reports `mount.cooked_dependency_missing`. Functional tests
 `CookedLibraryFoldersTests`, `PreviewSession` swap over a fake engine port,
 `PlaySession` launch roots. Docs: `content-folders-ui.md`, `live-preview.md`.
 
+Beyond this text: the engine's and the editor's tables made a loose root with an
+unmet requirement `Invalid`, against the design's preview and the runtime, so both
+leave it `Bound` with the finding, with a shared case; the engine's finding no longer
+says it contributes no assets. The swap uses the existing whole-set commit through
+`MountsFileWatcher`, not `MountLooseCookedGeneration`: the session, catalogs and
+reference check already follow it, and it needs no interop. Mount declarations now
+follow the content priority, because a table checks needs against the mounts declared
+before it. Loose libraries are tree nodes over their virtual folders, like paks,
+so a tree folder is the path of what it holds; `VirtualFolderMountTreeItemAdapter`
+is output folders only, and its rename and the unsaved-mounts path it fed are
+deleted. Tree Local Folder adds source folders only. Dialog buttons stay Apply and
+Cancel with an inline Add library, not the mockup's footer, as every add is staged.
+
+Also beyond this text, found while checking S14 in the editor: the editor knew no
+buffer container, though S7 read the references to its products. The reference check
+reported every buffer one names as missing, and a geometry using one could not cook.
+`.buffers.json` is now a file type and a cook input: a geometry's cook brings in the
+container that names its buffers, the check counts what containers and geometries
+name, and relocation respells a container's fields. `BufferContainerCookTests` is
+an integration test because only the native cook reaches this.
+
 ### S15. Retarget
 
 Adds the Problems command, with its option for the other references of the same
@@ -801,6 +822,15 @@ renamed, a library project with project schema version 3. Adds
 `Examples/Studio`. Done when every
 migrated project opens with no unexpected problem, and Showcase, F1 Validation,
 Instancing and Racer cook.
+
+The script and its in-memory tests exist, and the owner's `Oxygen Projects` were
+migrated with S14, backed up beside them in `Oxygen Projects.pre-portable-references`.
+It handles what those projects hold: `Project.oxy`, `.mounts.json`, records, retired
+sidecars, scenes, materials and textures. Still to do here: the other descriptor
+kinds and import manifests when Showcase needs them, Showcase as a library project,
+`Examples/Studio`, and the cooks of the done-when. F1 Validation's two cubemaps,
+`/Content/Textures/skybox.otex` and `pisa.otex`, name assets its project never had;
+the check reports them, and they are the owner's to repoint.
 
 ### S20. Integration tests
 

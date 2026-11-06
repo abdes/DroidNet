@@ -221,7 +221,9 @@ the check the runtime makes when it mounts the pak above the others.
 
 A `Cooked` mount that breaks a rule is `Invalid`: it stays in the table with
 its finding, a warning, contributes no assets, provides nothing to the mounts
-after it and is never mounted for a job. An import job reads its own output
+after it and is never mounted for a job. A loose root that lacks only what it
+requires stays `Bound` with the finding, as the runtime mounts it: it is content
+being authored, and a load of what it names fails. An import job reads its own output
 root, then the bound `Cooked` mounts of its mount table in table order, then
 its cooked context roots.
 

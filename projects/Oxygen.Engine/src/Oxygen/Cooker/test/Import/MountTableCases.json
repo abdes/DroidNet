@@ -926,6 +926,38 @@
       "codes": ["mount.cooked_dependency_missing"]
     },
     {
+      "name": "a loose root whose requirement no mount below provides",
+      "cooked_sources": [
+        {
+          "path": "Libs/Props",
+          "kind": "loose",
+          "roots": ["Props"],
+          "requirements": [
+            {
+              "mount": "Vehicles",
+              "path": "/Vehicles/Paint.omat",
+              "type": "Material"
+            }
+          ]
+        }
+      ],
+      "declarations": [
+        { "name": "Props", "kind": "Cooked", "path": "../../Libs/Props" }
+      ],
+      "mounts": [
+        {
+          "name": "Props",
+          "kind": "Cooked",
+          "scope": "declared",
+          "state": "Bound",
+          "origin": "committed",
+          "folder": "Libs/Props",
+          "role": "Shared"
+        }
+      ],
+      "codes": ["mount.cooked_dependency_missing"]
+    },
+    {
       "name": "a pak whose requirement a mount below provides as another type",
       "cooked_sources": [
         {

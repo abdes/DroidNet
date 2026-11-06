@@ -14,7 +14,8 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <remarks>
 /// The two differ in what is committed, not in where the folder is. A folder on the project's drive is saved in
 /// <c>Project.oxy</c> unless the user chooses otherwise; one on another drive has no relative path, so it can only be
-/// bound on this machine.
+/// bound on this machine. A library's place is usually a fact of each machine, so outside the project it starts on this
+/// machine.
 /// </remarks>
 /// <param name="projectRoot">The project root the relative path starts from.</param>
 public sealed partial class MountPlacement(FileSystemPath projectRoot) : ObservableObject
@@ -23,6 +24,9 @@ public sealed partial class MountPlacement(FileSystemPath projectRoot) : Observa
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RelativePath), nameof(CanSaveInProject), nameof(InProjectText))]
     public partial string Location { get; set; } = string.Empty;
+
+    /// <summary>Gets or sets a value indicating whether a location outside the project starts on this machine.</summary>
+    public bool KeepsOutsideOnThisMachine { get; set; }
 
     /// <summary>Gets or sets a value indicating whether the location is saved in <c>Project.oxy</c>.</summary>
     [ObservableProperty]
@@ -50,7 +54,7 @@ public sealed partial class MountPlacement(FileSystemPath projectRoot) : Observa
     /// <summary>Gets the text of the choice that saves the location in <c>Project.oxy</c>.</summary>
     public string InProjectText => this.RelativePath is { } relative
         ? $"In Project.oxy, as {relative}"
-        : "In Project.oxy (not available: the folder is on another drive)";
+        : "In Project.oxy (not available: it is on another drive)";
 
     /// <summary>Gets the path <c>Project.oxy</c> declares: the relative path, or <see langword="null"/> for a
     /// placeholder.</summary>
@@ -60,8 +64,9 @@ public sealed partial class MountPlacement(FileSystemPath projectRoot) : Observa
     /// <see langword="null"/> when <c>Project.oxy</c> holds it.</summary>
     public FileSystemPath? LocalLocation => this.SaveInProject || this.Location.Length == 0 ? null : FileSystemPath.From(this.Location);
 
-    // A newly chosen location takes the default: in Project.oxy when it has a relative path.
-    partial void OnLocationChanged(string value) => this.SaveInProject = this.CanSaveInProject;
+    // A newly chosen location takes the default: in Project.oxy when it has a relative path, for a library inside the project.
+    partial void OnLocationChanged(string value)
+        => this.SaveInProject = this.CanSaveInProject && (!this.KeepsOutsideOnThisMachine || !this.RelativePath!.StartsWith("..", StringComparison.Ordinal));
 
     partial void OnSaveInProjectChanged(bool value)
     {

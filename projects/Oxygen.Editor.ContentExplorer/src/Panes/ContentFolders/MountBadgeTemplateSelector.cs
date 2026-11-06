@@ -28,7 +28,7 @@ public partial class MountBadgeTemplateSelector : DataTemplateSelector
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
         => item switch
         {
-            VirtualFolderMountTreeItemAdapter or PakMountTreeItemAdapter => this.ReadOnlyTemplate,
+            VirtualFolderMountTreeItemAdapter or LibraryMountTreeItemAdapter => this.ReadOnlyTemplate,
             AuthoringMountPointTreeItemAdapter { IsBoundOnThisMachine: true } => this.ThisMachineTemplate,
             UnavailableMountTreeItemAdapter => this.UnavailableTemplate,
             _ => null,

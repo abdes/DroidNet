@@ -43,7 +43,7 @@ public sealed class UnavailableMountTests : DroidNet.Tests.VisualUserInterfaceTe
         _ = mounts["Media"].Annotation.Should().Be("Folder missing");
         _ = mounts["Media"].StateToolTip.Should().Contain("../Missing-Media");
         _ = (await mounts["Media"].Children.ConfigureAwait(true)).Should().BeEmpty();
-        _ = fixture.Folders.BuildFolderMenu(mounts["Studio"]).Items.Select(static item => item.Text).Should().Contain(["Bind to a folder…", "Open Mounts…"]);
+        _ = fixture.Folders.BuildFolderMenu(mounts["Studio"]).Items.Select(static item => item.Text).Should().Contain(["Bind to a pak file…", "Bind to a cooked folder…", "Open Mounts…"]);
         _ = fixture.Folders.BuildFolderMenu(mounts["Media"]).Items.Select(static item => item.Text).Should().Contain("Override folder…");
         await WaitForRenderAsync().ConfigureAwait(true);
     });

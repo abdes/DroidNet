@@ -19,6 +19,7 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Persistence.Publication;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -95,6 +96,31 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.BaseLibrary);
         _ = fixture.Paused.Should().BeFalse();
+    });
+
+    /// <summary>
+    /// A library project's new cook reaches the engine as the generation its head selects, in the mounted library's place,
+    /// and the player's launch roots name that generation.
+    /// </summary>
+    /// <returns>The asynchronous swap regression.</returns>
+    [TestMethod]
+    public Task ALibrarysNewCookSwapsItsGeneration() => EnqueueAsync(async () =>
+    {
+        using var fixture = new MountTransactionFixture();
+        await fixture.InitializeAsync().ConfigureAwait(true);
+        var first = fixture.PublishGeneration("Props");
+        fixture.Candidate.Mounts[1] = new ProjectMount("Props", MountKind.Cooked, "PropsProject/.cooked");
+        fixture.Candidate.CookedContentOrder = [new(CookedContentSourceKind.Cooked, "Props"), new(CookedContentSourceKind.ProjectOutput)];
+        _ = (await fixture.Session.ChangeMountsAsync(fixture.ProjectSession.Context, fixture.Candidate, MountBindings.None, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = fixture.Roots.Should().Contain(first).And.NotContain(fixture.Library);
+
+        var second = fixture.PublishGeneration("Props");
+        var current = fixture.ProjectSession.Context;
+        _ = (await fixture.Session.ChangeMountsAsync(current, TestProject.InfoOf(current), MountBindings.None, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
+
+        _ = fixture.Roots.Should().Contain(second).And.NotContain(first);
+        _ = fixture.ProjectSession.Context.Mounts.Single(static mount => mount.Name == "Props").BoundTo.Should().Be(current.Mounts.Single(static mount => mount.Name == "Props").BoundTo);
+        _ = (await fixture.LaunchRootsAsync(this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Contain(second).And.NotContain(first);
     });
 
     private sealed partial class MountTransactionFixture : IDisposable
@@ -177,6 +203,43 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
 
             // Only the changes after the preview started count.
             this.ProjectSession.ContextChanged += this.OnContextChanged;
+        }
+
+        /// <summary>Publishes a new generation of a library project's one root, its head moving last, as its cook does.</summary>
+        /// <param name="mount">The root.</param>
+        /// <returns>The generation's folder.</returns>
+        public string PublishGeneration(string mount)
+        {
+            var key = Guid.CreateVersion7();
+            var cooked = Path.Combine(this.directory.FullName, mount + "Project", ".cooked");
+            var root = Path.Combine(cooked, CookPublicationFormat.GenerationPath(key).Replace('/', Path.DirectorySeparatorChar));
+            _ = Directory.CreateDirectory(root);
+            byte[] bytes = [1];
+            File.WriteAllBytes(Path.Combine(root, "Material.omat"), bytes);
+            using (var stream = File.Create(Path.Combine(root, "container.index.bin")))
+            {
+                Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, key, [new(AssetKey.FromVirtualPath($"/{mount}/Material.omat"), "Material.omat", $"/{mount}/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
+            }
+
+            foreach (var (path, content) in Oxygen.Managed.Assets.Testing.CookedLibraryFixture.Publication((mount, key)).OrderBy(static file => file.Key == CookPublicationFormat.HeadFileName))
+            {
+                var target = Path.Combine(cooked, path.Replace('/', Path.DirectorySeparatorChar));
+                _ = Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.WriteAllBytes(target, content);
+            }
+
+            return root;
+        }
+
+        /// <summary>Gets the roots Play writes in the player's launch file.</summary>
+        /// <param name="cancellationToken">Cancels the read.</param>
+        /// <returns>The roots.</returns>
+        public async Task<IReadOnlyList<string>> LaunchRootsAsync(CancellationToken cancellationToken)
+        {
+            var context = this.ProjectSession.Context;
+            using var reader = await this.publication.AcquireForMountAsync(context, cancellationToken).ConfigureAwait(true);
+            using var mounts = await Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService.PrepareAsync(context, reader, cancellationToken).ConfigureAwait(true);
+            return [.. mounts.Roots];
         }
 
         public void Dispose()

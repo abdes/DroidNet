@@ -120,7 +120,10 @@ no script with an external source (`mount.cooked_external_script`), what it
 requires lies below it (`mount.cooked_dependency_missing`; the engine's content
 lies below every mount), and this build can read it
 (`mount.cooked_format_unsupported`). A mount with a finding is `Invalid`: it stays
-in the table with its `Findings`, and contributes no assets.
+in the table with its `Findings`, and contributes no assets. The exception is a
+loose library that lacks what it requires: it stays `Bound` with the finding, and
+a load of what it names fails, as the engine mounts it. `LibraryRead` reads the same
+facts of a library that is not mounted yet.
 
 `ProjectContext.Mounts` is the resolved table: each mount's location, role
 (`Own` for a source folder inside the project, else `Shared`), where it came from

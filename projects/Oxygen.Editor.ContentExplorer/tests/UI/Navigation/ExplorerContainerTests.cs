@@ -52,7 +52,7 @@ public sealed partial class ExplorerContainerTests : DroidNet.Tests.VisualUserIn
     [TestMethod]
     public void PakTreeHasNoContainerFolders()
     {
-        var pak = new PakMountTreeItemAdapter("Kit", FileSystemPath.From("C:/Kit.pak"), []);
+        var pak = new LibraryMountTreeItemAdapter("Kit", FileSystemPath.From("C:/Kit.pak"), isPak: true, []);
 
         var folders = CookedFolderTreeItemAdapter.Build(pak, ["Models/Ship.glb/Hull.ogeo", "Input/Player.input/Jump.oiact", "Props/Box.ogeo"]);
 

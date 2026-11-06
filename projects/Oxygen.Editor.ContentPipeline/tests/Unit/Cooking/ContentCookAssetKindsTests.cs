@@ -21,6 +21,7 @@ public sealed class ContentCookAssetKindsTests
     [DataRow("/Content/Scenes/Main.oscene.json", ContentCookAssetKind.Scene)]
     [DataRow("/Content/Models/Ship.GLB", ContentCookAssetKind.ForeignSource)]
     [DataRow("/Content/Input/Player.input.json", ContentCookAssetKind.Input)]
+    [DataRow("/Content/Geo/Box.buffers.json", ContentCookAssetKind.BufferContainer)]
     [DataRow("/Content/Scripts/Door.lua", ContentCookAssetKind.Script)]
     [DataRow("/Content/Scripts/Door.luau", ContentCookAssetKind.Script)]
     [DataRow("/Content/Scripts/Door.oscript", ContentCookAssetKind.Script)]

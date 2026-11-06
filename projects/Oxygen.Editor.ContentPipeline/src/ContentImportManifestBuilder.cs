@@ -134,8 +134,9 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Name: input.Kind == ContentCookAssetKind.Input ? null : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceCookPath)))
         {
             // A source that cooks one asset names it, and the cooker places its descriptor there; an input source
-            // names itself, and the cooker names its actions and contexts under it.
-            VirtualPath = input.AssetUri.VirtualPath,
+            // names itself, and the cooker names its actions and contexts under it. A buffer container's identity is
+            // its source's, and its buffers are named from it.
+            VirtualPath = input.Kind == ContentCookAssetKind.BufferContainer ? null : input.AssetUri.VirtualPath,
             DerivedFrom = input.DerivedFrom,
         };
 
@@ -178,6 +179,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.ForeignSource => [Path.GetExtension(input.SourceCookPath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf"],
             ContentCookAssetKind.Input => ["input"],
             ContentCookAssetKind.Script => ["script"],
+            ContentCookAssetKind.BufferContainer => ["buffer_container"],
             _ => throw new ArgumentOutOfRangeException(nameof(input), input.Kind, "Unsupported manifest job asset kind."),
         };
 
@@ -263,6 +265,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Texture => "texture-descriptor",
             ContentCookAssetKind.Input => "input",
             ContentCookAssetKind.Script => "script",
+            ContentCookAssetKind.BufferContainer => "buffer-container",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 
@@ -280,6 +283,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.ForeignSource => "model",
             ContentCookAssetKind.Input => "input",
             ContentCookAssetKind.Script => "script",
+            ContentCookAssetKind.BufferContainer => "buffers",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 

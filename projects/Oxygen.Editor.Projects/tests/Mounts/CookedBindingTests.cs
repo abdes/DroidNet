@@ -88,6 +88,44 @@ public sealed class CookedBindingTests
         _ = MountCodes.IsWarning(context.MountFindings.Single().Code).Should().BeTrue();
     }
 
+    [TestMethod]
+    public void InspectingACookedFolder_NamesTheLibraryFromItsOneRoot()
+    {
+        var generation = Guid.CreateVersion7();
+        var fileSystem = FilesOf(("Props", generation));
+        WriteGeneration(fileSystem, generation, "/Props/Crate.omat");
+
+        var read = LibraryRead.Inspect(fileSystem, FileSystemPath.From(LibraryCooked), static (code, message) => Assert.Fail($"{code}: {message}"));
+
+        _ = read!.Container.Should().Be(MountContainer.Generation);
+        _ = read.Facts.Roots.Should().Equal("Props");
+    }
+
+    [TestMethod]
+    public void InspectingACookedFolderWithSeveralRoots_HasNoName()
+    {
+        var fileSystem = FilesOf(("Props", Guid.CreateVersion7()), ("Vehicles", Guid.CreateVersion7()));
+        string? found = null;
+
+        var read = LibraryRead.Inspect(fileSystem, FileSystemPath.From(LibraryCooked), (code, _) => found = code);
+
+        _ = read.Should().BeNull();
+        _ = found.Should().Be(MountCodes.CookedRootMultiple);
+    }
+
+    [TestMethod]
+    public void InspectingWhatIsNoLibrary_CannotBeRead()
+    {
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Studio\Plain");
+        string? found = null;
+
+        var read = LibraryRead.Inspect(fileSystem, FileSystemPath.From(@"C:\Studio\Plain"), (code, _) => found = code);
+
+        _ = read.Should().BeNull();
+        _ = found.Should().Be(MountCodes.CookedFormatUnsupported);
+    }
+
     private static MockFileSystem FilesOf(params (string Root, Guid SourceKey)[] roots)
     {
         var fileSystem = new MockFileSystem();

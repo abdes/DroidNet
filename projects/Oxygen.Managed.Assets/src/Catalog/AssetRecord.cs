@@ -19,9 +19,6 @@ public sealed record AssetRecord(AssetPath Identity)
     /// <summary>Gets indexed cooked identity, type and location without inferring them from the virtual filename.</summary>
     public CookedAssetMetadata? Cooked { get; init; }
 
-    /// <summary>Gets lower-priority indexed representations masked by this asset's resolved source.</summary>
-    public IReadOnlyList<CookedAssetMetadata> OverriddenCookedSources { get; init; } = [];
-
     /// <summary>Gets the asset's file name without its extension.</summary>
     public string Name => Path.GetFileNameWithoutExtension(this.Identity.Name);
 }

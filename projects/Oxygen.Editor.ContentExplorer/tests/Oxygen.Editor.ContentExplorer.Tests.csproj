@@ -15,6 +15,7 @@
         <PackageReference Include="Testably.Abstractions.Testing" />
         <ProjectReference Include="..\src\Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="..\..\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="..\..\Oxygen.Managed.Assets\testing\Oxygen.Managed.Assets.Testing.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />

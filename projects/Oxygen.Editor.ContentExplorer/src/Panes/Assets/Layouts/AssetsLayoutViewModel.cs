@@ -421,11 +421,10 @@ public abstract partial class AssetsLayoutViewModel(
 
         // Rows show the session project's assets and read its files.
         var project = this.session.Context;
-        var scopedItems = CookedLibraryFolders.ForFolders(items, project, this.contentExplorerState.SelectedFolders);
 
         // A container is one asset, its source file: its products (a model's materials, an input source's
         // actions) are not listed, and pickers and references reach them by identity.
-        var inScope = scopedItems.Where(item => AssetFileTypes.ContainerOf(item.Identity) is null && this.IsInSelectedFolders(item)).ToArray();
+        var inScope = items.Where(item => AssetFileTypes.ContainerOf(item.Identity) is null && this.IsInSelectedFolders(item)).ToArray();
         this.scopeCount = inScope.Length;
         var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches), project);
         this.isReplacingRows = true;

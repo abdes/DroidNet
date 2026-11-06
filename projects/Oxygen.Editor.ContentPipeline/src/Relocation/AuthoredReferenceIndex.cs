@@ -18,11 +18,12 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 internal sealed class AuthoredReferenceIndex
 {
-    private AuthoredReferenceIndex(IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<FileSystemPath> unreadable)
+    private AuthoredReferenceIndex(IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<FileSystemPath> unreadable, IReadOnlySet<AssetPath> bufferProducts)
     {
         this.Descriptors = descriptors;
         this.Imports = imports;
         this.Unreadable = unreadable;
+        this.BufferProducts = bufferProducts;
     }
 
     /// <summary>Gets every readable descriptor with its references.</summary>
@@ -33,6 +34,9 @@ internal sealed class AuthoredReferenceIndex
 
     /// <summary>Gets the descriptors and sidecars that could not be read or parsed; their references are unknown.</summary>
     public IReadOnlyList<FileSystemPath> Unreadable { get; }
+
+    /// <summary>Gets the buffers buffer containers and geometry descriptors produce: they have no file of their own.</summary>
+    public IReadOnlySet<AssetPath> BufferProducts { get; }
 
     /// <summary>Reads every authored descriptor in the project's writable mounts, and the model import records of the
     /// models in them.</summary>
@@ -46,11 +50,13 @@ internal sealed class AuthoredReferenceIndex
         var descriptors = new List<Descriptor>();
         var imports = new List<ImportSource>();
         var unreadable = new List<FileSystemPath>();
+        var bufferProducts = new HashSet<AssetPath>();
         foreach (var path in mounts.SelectMany(mount => EnumerateFiles(project.FileSystem, mount.Location!)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isDescriptor = AuthoredReferenceFormat.IsReferencingSource(path.FullPath);
-            if (!isDescriptor || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
+            var producesBuffers = AuthoredReferenceFormat.ProducesBuffers(path.FullPath);
+            if ((!isDescriptor && !producesBuffers) || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
             {
                 continue;
             }
@@ -68,11 +74,19 @@ internal sealed class AuthoredReferenceIndex
 
             try
             {
-                var identity = AssetFileTypes.ToIdentity(virtualPath);
-                descriptors.Add(new(path, virtualPath, identity, AuthoredReferenceFormat.ReadReferences(path, identity, content))
+                if (producesBuffers)
                 {
-                    Refused = AuthoredReferenceFormat.ReadRefusedReferences(path, identity, content),
-                });
+                    bufferProducts.UnionWith(AuthoredReferenceFormat.ReadBufferProducts(virtualPath, content));
+                }
+
+                if (isDescriptor)
+                {
+                    var identity = AssetFileTypes.ToIdentity(virtualPath);
+                    descriptors.Add(new(path, virtualPath, identity, AuthoredReferenceFormat.ReadReferences(path, identity, content))
+                    {
+                        Refused = AuthoredReferenceFormat.ReadRefusedReferences(path, identity, content),
+                    });
+                }
             }
             catch (Exception error) when (error is JsonException or AssetFormatException or InvalidDataException or InvalidOperationException)
             {
@@ -98,7 +112,7 @@ internal sealed class AuthoredReferenceIndex
             }
         }
 
-        return new(descriptors, imports, unreadable);
+        return new(descriptors, imports, unreadable, bufferProducts);
     }
 
     /// <summary>Finds the imported model a path names: its identity, its record, or a source file at its identity.</summary>

@@ -20,6 +20,7 @@ public sealed class AssetFileTypesTests
     [DataRow("/Content/Scripts/Door.lua", AssetFileCategory.Script, "/Content/Scripts/Door.oscript", AssetType.Script)]
     [DataRow("/Content/Scripts/Door.luau", AssetFileCategory.Script, "/Content/Scripts/Door.oscript", AssetType.Script)]
     [DataRow("/Content/Input/Player.input.json", AssetFileCategory.Input, null, AssetType.Unknown)]
+    [DataRow("/Content/Geo/Box.buffers.json", AssetFileCategory.BufferContainer, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.gltf.import.json", AssetFileCategory.ImportSettings, null, AssetType.Unknown)]
     [DataRow("/Content/Models/Crate.glb.preview.json", AssetFileCategory.ModelPreview, null, AssetType.Unknown)]
     [DataRow("C:/Models/Crate.FBX", AssetFileCategory.Model, null, AssetType.Unknown)]

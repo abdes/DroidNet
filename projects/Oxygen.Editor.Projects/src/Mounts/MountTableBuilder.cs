@@ -5,9 +5,6 @@
 using System.IO.Abstractions;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Persistence;
-using Oxygen.Managed.Assets.Persistence.LooseCooked;
-using Oxygen.Managed.Assets.Persistence.Pak;
-using Oxygen.Managed.Assets.Persistence.Publication;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects.Mounts;
@@ -189,21 +186,29 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
         var findings = new List<MountFinding>();
         void Add(string code, string message) => findings.Add(new MountFinding(code, $"Cooked mount '{mount.Name}' ('{bound}') {message}; it contributes no assets.", mount.Name, mount.OriginFile));
 
-        var read = this.ReadLibrary(mount.Name, bound, isFolder, Add);
-        if (read is { Facts: { } facts })
+        var read = LibraryRead.Of(fileSystem, bound, isFolder, mount.Name, Add);
+        if (read is not null)
         {
-            CheckLibrary(mount.Name, facts, Add);
-            findings.AddRange(this.UnprovidedOf(mount, bound, facts));
+            CheckLibrary(mount.Name, read.Facts, Add);
         }
 
-        if (findings.Count != 0)
+        var broken = read is null || findings.Count != 0;
+        if (read is not null)
         {
-            this.findings.AddRange(findings);
-            return mount with { State = MountState.Invalid, Findings = findings };
+            findings.AddRange(this.UnprovidedOf(mount, bound, read.Facts));
         }
 
-        this.libraries.Add((mount.Name, read!.Facts!));
-        return mount with { Location = read.Location, Container = read.Container, Library = read.Facts };
+        this.findings.AddRange(findings);
+
+        // A loose library with an unmet requirement is content being authored: it mounts, and a load of what it names
+        // fails. A pak is shipped content.
+        if (broken || (read!.Container == MountContainer.Pak && findings.Count != 0))
+        {
+            return mount with { State = MountState.Invalid, Findings = findings, Container = read?.Container ?? MountContainer.None, Library = read?.Facts };
+        }
+
+        this.libraries.Add((mount.Name, read!.Facts));
+        return mount with { Location = read.Location, Container = read.Container, Library = read.Facts, Findings = findings };
     }
 
     private static void CheckLibrary(string name, LibraryFacts facts, Action<string, string> add)
@@ -231,7 +236,7 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
             foreach (var requirement in dependency.Requirements.Where(requirement => !this.IsProvidedBelow(dependency.Library, requirement)))
             {
                 var what = requirement.IsTexture ? $"texture {requirement.Key}" : $"{(AssetType)requirement.AssetType} {requirement.Key}";
-                findings.Add(new MountFinding(MountCodes.CookedDependencyMissing, $"Cooked mount '{mount.Name}' ('{bound}') requires {what} of mount '{dependency.Library}', which no mount below it provides; it contributes no assets.", mount.Name, mount.OriginFile));
+                findings.Add(new MountFinding(MountCodes.CookedDependencyMissing, $"Cooked mount '{mount.Name}' ('{bound}') requires {what} of mount '{dependency.Library}', which no mount below it provides.", mount.Name, mount.OriginFile));
             }
         }
 
@@ -273,53 +278,6 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
         return false;
     }
 
-    private LibraryRead? ReadLibrary(string name, FileSystemPath bound, bool isFolder, Action<string, string> add)
-    {
-        try
-        {
-            return !isFolder ? this.ReadPak(bound)
-                : fileSystem.File.Exists(bound.Combine(CookPublicationFormat.HeadFileName).FullPath) ? this.ReadGeneration(name, bound, add)
-                : this.ReadLooseRoot(bound, MountContainer.LooseRoot);
-        }
-        catch (Exception exception) when (exception is InvalidDataException or IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            add(MountCodes.CookedFormatUnsupported, $"cannot be read: {exception.Message}");
-            return null;
-        }
-    }
-
-    private LibraryRead ReadPak(FileSystemPath file)
-    {
-        using var stream = fileSystem.File.OpenRead(file.FullPath);
-        return new(file, MountContainer.Pak, LibraryFacts.Of(PakIndex.Read(stream)));
-    }
-
-    private LibraryRead ReadLooseRoot(FileSystemPath folder, MountContainer container)
-    {
-        var indexPath = folder.Combine(LooseCookedIndex.FileName).FullPath;
-        if (!fileSystem.File.Exists(indexPath))
-        {
-            throw new InvalidDataException("it is neither a loose cooked root, a pak nor a project's cooked output");
-        }
-
-        using var stream = fileSystem.File.OpenRead(indexPath);
-        return new(folder, container, LibraryFacts.Of(LooseCookedIndex.Read(stream), relative => fileSystem.File.ReadAllBytes(folder.Combine(relative).FullPath)));
-    }
-
-    // A library project's output folder: head.json selects the publication, whose document selects the mount root's generation.
-    private LibraryRead? ReadGeneration(string name, FileSystemPath cooked, Action<string, string> add)
-    {
-        var head = CookPublicationFormat.ReadHead(fileSystem.File.ReadAllBytes(cooked.Combine(CookPublicationFormat.HeadFileName).FullPath));
-        var document = fileSystem.File.ReadAllBytes(cooked.Combine(CookPublicationFormat.DocumentPath(head.PublicationId)).FullPath);
-        if (CookPublicationFormat.SelectGeneration(head, document, name) is not { } sourceKey)
-        {
-            add(MountCodes.CookedRootMismatch, $"selects no generation for the root '{name}': a cooked source's one root is its mount name");
-            return null;
-        }
-
-        return this.ReadLooseRoot(cooked.Combine(CookPublicationFormat.GenerationPath(sourceKey)), MountContainer.Generation);
-    }
-
     private void CheckFolders(List<ResolvedMount> mounts)
     {
         var folders = mounts.Where(this.HasFolder).ToArray();
@@ -341,8 +299,6 @@ internal sealed class MountTableBuilder(IFileSystem fileSystem, FileSystemPath p
 
     private bool HasFolder(ResolvedMount mount)
         => mount.BoundTo is { } bound && (mount.Kind == MountKind.Source || fileSystem.Directory.Exists(bound.FullPath));
-
-    private sealed record LibraryRead(FileSystemPath Location, MountContainer Container, LibraryFacts Facts);
 
     private sealed record Binding(string Text, FileSystemPath Base, MountOrigin Origin, FileSystemPath? File);
 

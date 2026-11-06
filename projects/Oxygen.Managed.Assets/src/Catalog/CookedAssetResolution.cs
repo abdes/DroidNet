@@ -4,33 +4,18 @@
 
 namespace Oxygen.Managed.Assets.Catalog;
 
-/// <summary>Projects unqualified native lookup using last-mounted path resolution followed by asset-key resolution.</summary>
+/// <summary>Projects native lookup: an identity is an asset of one mount, so the last mounted record of it is the asset.</summary>
 public static class CookedAssetResolution
 {
     /// <summary>Resolves indexed sources before applying a browser query.</summary>
     /// <param name="records">Complete source snapshots in mount order, lowest priority first.</param>
     /// <param name="query">The query applied to resolved logical identities.</param>
-    /// <returns>One row per logical URI with the effective native source and masked representations.</returns>
+    /// <returns>One row per logical URI, with its native source when it has one.</returns>
     public static IReadOnlyList<AssetRecord> Resolve(IEnumerable<AssetRecord> records, AssetQuery query)
     {
         ArgumentNullException.ThrowIfNull(records);
         ArgumentNullException.ThrowIfNull(query);
-        var snapshot = records.ToArray();
-        var native = snapshot.Where(static record => record.Cooked is not null).ToArray();
-        var byKey = native.GroupBy(static record => record.Cooked!.AssetKey).ToDictionary(static group => group.Key, static group => group.ToArray());
-        return AssetQueryMatcher.Apply(query, snapshot.GroupBy(static record => record.Identity).Select(group =>
-        {
-            var pathWinner = group.LastOrDefault(static record => record.Cooked is not null);
-            if (pathWinner?.Cooked is not { } indexed)
-            {
-                return group.First();
-            }
-
-            var keyVersions = byKey[indexed.AssetKey];
-            var winner = keyVersions[^1].Cooked!;
-            var overridden = group.Concat(keyVersions).Select(static record => record.Cooked).OfType<CookedAssetMetadata>()
-                .Where(candidate => candidate != winner).Distinct().ToArray();
-            return pathWinner with { Cooked = winner, OverriddenCookedSources = overridden };
-        }));
+        return AssetQueryMatcher.Apply(query, records.GroupBy(static record => record.Identity).Select(static group =>
+            group.LastOrDefault(static record => record.Cooked is not null) ?? group.First()));
     }
 }

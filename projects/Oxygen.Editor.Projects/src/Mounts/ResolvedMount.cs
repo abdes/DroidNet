@@ -37,13 +37,13 @@ public sealed record ResolvedMount(
     /// <summary>Gets whether the project owns the mount's folder. A cooked mount is always shared.</summary>
     public MountRole Role { get; init; } = MountRole.Shared;
 
-    /// <summary>Gets why the mount is <see cref="MountState.Invalid"/>.</summary>
+    /// <summary>Gets why the mount is <see cref="MountState.Invalid"/>, or what a bound loose library needs and lacks.</summary>
     public IReadOnlyList<MountFinding> Findings { get; init; } = [];
 
     /// <summary>Gets how a bound cooked mount's content is stored; <see cref="MountContainer.None"/> for any other.</summary>
     public MountContainer Container { get; init; }
 
-    /// <summary>Gets what a bound cooked mount's content holds, read when the table resolved; else <see langword="null"/>.</summary>
+    /// <summary>Gets what a cooked mount's content holds, read when the table resolved; <see langword="null"/> when it could not be read.</summary>
     public LibraryFacts? Library { get; init; }
 
     /// <summary>

@@ -19,6 +19,9 @@ public enum MountBindingState
     /// <summary>The folder or pak file it is bound to is missing.</summary>
     FolderMissing,
 
+    /// <summary>The library is there and breaks a mount rule; it contributes no assets.</summary>
+    Invalid,
+
     /// <summary>It has no binding to change: the engine's content, or an output folder node.</summary>
     Fixed,
 }

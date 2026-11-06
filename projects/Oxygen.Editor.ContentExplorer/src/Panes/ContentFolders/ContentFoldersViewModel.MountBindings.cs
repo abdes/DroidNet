@@ -26,8 +26,7 @@ public partial class ContentFoldersViewModel
         {
             AuthoringMountPointTreeItemAdapter source => source.MountPoint.Name,
             UnavailableMountTreeItemAdapter unavailable => unavailable.Mount.Name,
-            VirtualFolderMountTreeItemAdapter library => library.MountPointName,
-            PakMountTreeItemAdapter pak => pak.MountPointName,
+            LibraryMountTreeItemAdapter library => library.MountPointName,
             _ => null,
         };
         var project = session.Context;
@@ -41,13 +40,26 @@ public partial class ContentFoldersViewModel
             _ = builder.AddSeparator();
         }
 
-        _ = builder.AddMenuItem(new MenuItemData
+        var verb = mount.State == MountState.Unbound ? "Bind to" : "Override with";
+        void AddBind(string text, bool pakFile) => _ = builder.AddMenuItem(new MenuItemData
         {
-            Text = mount.State == MountState.Unbound ? "Bind to a folder…" : "Override folder…",
+            Text = text,
             Icon = new FontIconSource { Glyph = "" },
             IsEnabled = this.CanChangeMounts,
-            Command = new AsyncRelayCommand(() => this.BindMountAsync(mount.Name)),
+            Command = new AsyncRelayCommand(() => this.BindMountAsync(mount.Name, pakFile)),
         });
+
+        // A library's form is a fact of this machine: a pak file or a cooked folder.
+        if (mount.Kind == MountKind.Cooked)
+        {
+            AddBind($"{verb} a pak file…", pakFile: true);
+            AddBind($"{verb} a cooked folder…", pakFile: false);
+        }
+        else
+        {
+            AddBind(mount.State == MountState.Unbound ? "Bind to a folder…" : "Override folder…", pakFile: false);
+        }
+
         if (mount.OriginFile == project.ProjectRoot.Combine(ProjectMounts.FileName) && mount.Scope == MountScope.Declared)
         {
             _ = builder.AddMenuItem(new MenuItemData
@@ -69,7 +81,7 @@ public partial class ContentFoldersViewModel
     }
 
     // Binds a mount to the folder or pak file the user picks, in the project's own .mounts.json.
-    private async Task BindMountAsync(string name)
+    private async Task BindMountAsync(string name, bool pakFile)
     {
         var expected = session.Context;
         if (expected.Mounts.FirstOrDefault(mount => string.Equals(mount.Name, name, StringComparison.Ordinal)) is not { } mount)
@@ -80,7 +92,7 @@ public partial class ContentFoldersViewModel
         string? location;
         try
         {
-            location = await MountLocationPicker.PickAsync(dialogService, mount.IsPakFile, mount.Location?.FullPath, session.Lifetime).ConfigureAwait(true);
+            location = await MountLocationPicker.PickAsync(dialogService, pakFile, mount.BoundTo?.FullPath, session.Lifetime).ConfigureAwait(true);
         }
         catch (IOException failure)
         {

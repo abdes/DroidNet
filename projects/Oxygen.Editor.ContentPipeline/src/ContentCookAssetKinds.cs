@@ -20,6 +20,7 @@ internal static class ContentCookAssetKinds
         {
             { Category: AssetFileCategory.Model } => ContentCookAssetKind.ForeignSource,
             { Category: AssetFileCategory.Input } => ContentCookAssetKind.Input,
+            { Category: AssetFileCategory.BufferContainer } => ContentCookAssetKind.BufferContainer,
             { Category: AssetFileCategory.Script or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Script } => ContentCookAssetKind.Script,
             { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Texture } => ContentCookAssetKind.Texture,
             { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Material } => ContentCookAssetKind.Material,

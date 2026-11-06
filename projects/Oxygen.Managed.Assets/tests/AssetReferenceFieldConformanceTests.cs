@@ -24,6 +24,7 @@ public sealed class AssetReferenceFieldConformanceTests
     [DataRow(AssetFileTypes.PhysicsSceneDescriptor, "oxygen.physics-sidecar.schema.json")]
     [DataRow(AssetFileTypes.TextureDescriptor, "oxygen.texture-descriptor.schema.json")]
     [DataRow(AssetFileTypes.InputFile, "oxygen.input.schema.json")]
+    [DataRow(AssetFileTypes.BufferContainer, "oxygen.buffer-container.schema.json")]
     [DataRow(AssetFileTypes.ImportSettings, "oxygen.model-import.schema.json")]
     public void TheTypeTableNamesTheFieldsTheSchemaDoes(string suffix, string schemaFile)
     {

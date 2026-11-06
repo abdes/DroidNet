@@ -88,6 +88,23 @@ public sealed class AssetRelocationTests
         _ = workspace.ReadJson("Content/Shapes/Box.ocshape.json")["name"]!.GetValue<string>().Should().Be("/Content/Materials/Red.omat");
     }
 
+    /// <summary>A buffer container that moves keeps naming its buffers and their files.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AMovedBufferContainerKeepsItsBuffersAndTheirFiles()
+    {
+        using var workspace = await CreateContentAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = workspace.FileSystem.Directory.CreateDirectory(workspace.PathOf("Content/Packed"));
+        _ = workspace.Write("Content/Geo/mesh.bin", "bytes");
+        _ = workspace.Write("Content/Geo/Box.buffers.json", new JsonObject { ["buffers"] = new JsonArray(new JsonObject { ["source"] = "mesh.bin", ["virtual_path"] = "Box_vb.obuf" }) }.ToJsonString());
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Geo/Box.buffers.json", "/Content/Packed/Box.buffers.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var buffer = workspace.ReadJson("Content/Packed/Box.buffers.json")["buffers"]![0]!;
+        _ = buffer["source"]!.GetValue<string>().Should().Be("../Geo/mesh.bin");
+        _ = buffer["virtual_path"]!.GetValue<string>().Should().Be("../Geo/Box_vb.obuf");
+    }
+
     /// <summary>A relocation undoes and redoes through the history it was recorded in.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

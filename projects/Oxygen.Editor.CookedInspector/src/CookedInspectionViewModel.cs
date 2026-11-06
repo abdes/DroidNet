@@ -308,7 +308,7 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
             await previous.ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
             var project = this.GetCurrentProject(request);
-            var asset = request.Asset is { } identity ? await this.ResolveInspectedAssetAsync(identity, project, request, cancellation.Token).ConfigureAwait(true) : null;
+            var asset = request.Asset is { } identity ? await this.ResolveInspectedAssetAsync(identity, request, cancellation.Token).ConfigureAwait(true) : null;
 
             // A packaged asset is read from its pak: the project has no cooked output of it to inspect.
             var report = asset is { IsPackaged: true }
@@ -345,17 +345,13 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
     }
 
-    private async Task<AssetEntry?> ResolveInspectedAssetAsync(AssetPath identity, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
+    private async Task<AssetEntry?> ResolveInspectedAssetAsync(AssetPath identity, CookedInspectionScope request, CancellationToken cancellationToken)
     {
         var asset = await assetProvider.ResolveAsync(identity, cancellationToken).ConfigureAwait(true);
-        if (asset is not null && request.CookedSource is { } requested)
-        {
-            var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
-                .FirstOrDefault(candidate => candidate.ContainerPath == requested.ContainerPath && candidate.VirtualPath == requested.VirtualPath);
-            return source is null ? null : AssetIdentity.FromCookedSource(asset, source, project);
-        }
-
-        return asset;
+        return asset is not null && request.CookedSource is { } requested
+            && (asset.CookedMetadata?.ContainerPath != requested.ContainerPath || asset.CookedMetadata.VirtualPath != requested.VirtualPath)
+                ? null
+                : asset;
     }
 
     private void ApplyReport(CookedOutputReport report)
@@ -390,13 +386,6 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
 
     private InspectionAssetRow CreateAssetRow(CookedRootReport root, CookedAssetEntry asset)
     {
-        var scoped = this.ScopedAsset is { CookedMetadata: { } metadata } candidate
-            && metadata.ContainerPath == FileSystemPath.From(root.Inspection.CookedRoot)
-            && string.Equals((metadata.VirtualPath ?? candidate.Identity).VirtualPath, asset.VirtualPath, StringComparison.Ordinal) ? candidate : null;
-        return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal)))
-        {
-            ResolutionText = scoped?.IsCookedSourceOverridden == true ? scoped.PrimaryBadgeTooltip : string.Empty,
-            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.ContainerPath).Distinct().Select(static root => root.FullPath).ToArray() ?? [],
-        };
+        return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal)));
     }
 }

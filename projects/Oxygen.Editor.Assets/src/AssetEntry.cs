@@ -43,19 +43,6 @@ public sealed record AssetEntry(
     /// <summary>Gets the indexed native identity and physical origin of the cooked representation.</summary>
     public CookedAssetMetadata? CookedMetadata { get; init; }
 
-    /// <summary>Gets the indexed sources masked by the resolved native asset.</summary>
-    public IReadOnlyList<CookedAssetMetadata> OverriddenCookedSources { get; init; } = [];
-
-    /// <summary>Gets the effective source when this row explicitly displays a library's own representation.</summary>
-    public CookedAssetMetadata? EffectiveCookedSource { get; init; }
-
-    /// <summary>Gets the source label used to explain a masked library copy.</summary>
-    public string? EffectiveCookedSourceName { get; init; }
-
-    /// <summary>Gets a value indicating whether ordinary assignments resolve to a different source than this displayed library copy.</summary>
-    public bool IsCookedSourceOverridden => this.CookedMetadata is { } displayed && this.EffectiveCookedSource is { } effective
-        && (displayed.AssetKey != effective.AssetKey || displayed.ContainerPath != effective.ContainerPath);
-
     /// <summary>Gets supplemental information from this snapshot without starting discovery, loading or cooking.</summary>
     public AssetInformation Information => AssetInformation.FromAsset(this);
 
@@ -92,14 +79,11 @@ public sealed record AssetEntry(
     };
 
     /// <summary>Gets the primary asset-state badge.</summary>
-    public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden"
-        : this.IsPackaged ? this.PackagedBadge : this.IsRawSource ? "Not imported"
+    public string PrimaryBadge => this.IsPackaged ? this.PackagedBadge : this.IsRawSource ? "Not imported"
         : AssetStatusText.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
-    public string PrimaryBadgeTooltip => this.IsCookedSourceOverridden
-        ? "Scene assignments use " + this.EffectiveCookedSourceName + " instead of this copy."
-        : this.IsPackaged
+    public string PrimaryBadgeTooltip => this.IsPackaged
         ? $"Packaged in {this.CookedMetadata?.ContainerPath.Name}: read-only, and cooks reference it without copying it."
             + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
         : this.IsRawSource ? (this.Kind == AssetKind.Model ? "Import this model to create usable geometry, materials and scenes." : "Import this image to create a texture.")

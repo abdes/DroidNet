@@ -48,4 +48,9 @@ public enum ContentCookAssetKind
     /// Luau script source, cooked to the script asset next to it.
     /// </summary>
     Script,
+
+    /// <summary>
+    /// Buffer container, which cooks to the buffers it names; a geometry's cook brings it in.
+    /// </summary>
+    BufferContainer,
 }

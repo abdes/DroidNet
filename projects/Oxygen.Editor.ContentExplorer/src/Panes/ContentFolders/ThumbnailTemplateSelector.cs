@@ -42,7 +42,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
     public DataTemplate? UnavailableMountTemplate { get; set; }
 
     /// <summary>
-    ///     Gets or sets the template used for <see cref="VirtualFolderMountTreeItemAdapter"/> and <see cref="PakMountTreeItemAdapter"/> items.
+    ///     Gets or sets the template used for <see cref="VirtualFolderMountTreeItemAdapter"/> and <see cref="LibraryMountTreeItemAdapter"/> items.
     /// </summary>
     public DataTemplate? VirtualFolderMountTemplate { get; set; }
 
@@ -54,7 +54,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
             ProjectRootTreeItemAdapter => this.ProjectRootTemplate ?? this.DefaultTemplate,
             AuthoringMountPointTreeItemAdapter => this.AuthoringMountTemplate ?? this.DefaultTemplate,
             UnavailableMountTreeItemAdapter => this.UnavailableMountTemplate ?? this.DefaultTemplate,
-            VirtualFolderMountTreeItemAdapter or PakMountTreeItemAdapter => this.VirtualFolderMountTemplate ?? this.DefaultTemplate,
+            VirtualFolderMountTreeItemAdapter or LibraryMountTreeItemAdapter => this.VirtualFolderMountTemplate ?? this.DefaultTemplate,
             _ => this.DefaultTemplate,
         };
 }

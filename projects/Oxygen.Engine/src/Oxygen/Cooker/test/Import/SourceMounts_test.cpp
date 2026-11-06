@@ -37,7 +37,9 @@
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
 #include <Oxygen/Cooker/testing/ScriptBuilder.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexEncoder.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -1129,6 +1131,7 @@ protected:
     std::string path;
     AssetType type = AssetType::kUnknown;
     std::vector<std::byte> descriptor;
+    std::vector<oxygen::data::loose_cooked::IndexedRequirement> requirements;
   };
 
   //! The descriptor of an asset of `type` that a case names.
@@ -1188,6 +1191,7 @@ protected:
         .leaf = entry.path.substr(separator + 1),
         .mount = entry.path.substr(1, separator - 1),
         .descriptor = entry.descriptor,
+        .requirements = entry.requirements,
       }));
     }
     return root.Files();
@@ -1303,6 +1307,15 @@ protected:
         .path = asset.at("path").get<std::string>(),
         .type = type,
         .descriptor = DescriptorOf(type),
+      });
+    }
+    for (const auto& required : recipe.value("requirements", json::array())) {
+      const auto path = required.at("path").get<std::string>();
+      entries.front().requirements.push_back({
+        .mount = required.at("mount").get<std::string>(),
+        .kind = oxygen::data::KeyReferenceKind::kAsset,
+        .key = oxygen::data::AssetKey::FromVirtualPath(path),
+        .type = ParseAssetType(required.at("type").get<std::string>()),
       });
     }
     auto loose = LooseFilesOf(entries);

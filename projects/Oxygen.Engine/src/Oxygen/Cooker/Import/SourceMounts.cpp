@@ -42,6 +42,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedFormatError.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Serio/AnyDevice.h>
 #include <Oxygen/Serio/FileLock.h>
@@ -847,6 +848,7 @@ namespace {
         findings.Report(mount_codes::kCookedExternalScript, subject, mount.name,
           folder, script);
       }
+      const auto broken = !mount.findings.empty();
       for (const auto& dependency : summary.requirements) {
         for (const auto& requirement : dependency.requirements) {
           if (!IsProvidedBelow(dependency.mount, requirement)) {
@@ -855,10 +857,13 @@ namespace {
           }
         }
       }
-      if (!mount.findings.empty()) {
+      table_->diagnostics.insert(table_->diagnostics.end(),
+        mount.findings.begin(), mount.findings.end());
+      // A loose root with an unmet requirement is content being authored: it
+      // mounts, and a load of what it names fails. A pak is shipped content.
+      const auto pak = summary.kind == data::CookedSourceKind::kPak;
+      if (broken || (pak && !mount.findings.empty())) {
         mount.state = MountState::kInvalid;
-        table_->diagnostics.insert(table_->diagnostics.end(),
-          mount.findings.begin(), mount.findings.end());
         return;
       }
       cooked_sources_.emplace_back(mount.name, std::move(summary));

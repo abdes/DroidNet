@@ -15,6 +15,7 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
     [
         with(StringComparer.Ordinal),
         "texture-descriptor",
+        "buffer-container",
         "material-descriptor",
         "geometry-descriptor",
         "scene-descriptor",

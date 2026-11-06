@@ -80,32 +80,13 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     public override string Label
     {
         get => this.label;
-        set
-        {
-            if (string.Equals(value, this.label, StringComparison.Ordinal))
-            {
-                return;
-            }
-
-            var oldName = this.MountPointName;
-            this.label = value;
-            this.MountPointName = value;
-
-            this.OnPropertyChanged();
-            this.OnPropertyChanged(nameof(this.MountPointName));
-            this.OnPropertyChanged(nameof(this.VirtualRootPath));
-
-            if (this.Parent is ProjectRootTreeItemAdapter root)
-            {
-                root.NotifyMountRenamed(this, oldName);
-            }
-        }
+        set => throw new InvalidOperationException("An output folder keeps its reserved name.");
     }
 
     /// <summary>
     ///     Gets the mount point identity name.
     /// </summary>
-    public string MountPointName { get; private set; }
+    public string MountPointName { get; }
 
     /// <inheritdoc />
     public AssetPath VirtualRootPath => AssetPath.Create(this.MountPointName);
@@ -145,7 +126,7 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     }
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => ProjectAssetFiles.ValidateDeclaredMountName(name) is null;
+    public override bool ValidateItemName(string name) => false;
 
     /// <inheritdoc />
     public override bool Equals(ITreeItem? other)

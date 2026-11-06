@@ -76,6 +76,31 @@ public static class CookPublicationFormat
         ArgumentNullException.ThrowIfNull(head);
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(root);
+        foreach (var (name, sourceKey) in ReadProjectRoots(head, document))
+        {
+            if (string.Equals(name, root, StringComparison.Ordinal))
+            {
+                return sourceKey;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Lists the roots a project published, from the document a head names.</summary>
+    /// <param name="head">The head.</param>
+    /// <param name="document">The document's bytes.</param>
+    /// <returns>The names of the project's roots.</returns>
+    /// <exception cref="InvalidDataException">The document is not the one the head names, or not one this editor reads.</exception>
+    public static IReadOnlyList<string> ProjectRoots(CookPublicationHead head, byte[] document)
+    {
+        ArgumentNullException.ThrowIfNull(head);
+        ArgumentNullException.ThrowIfNull(document);
+        return [.. ReadProjectRoots(head, document).Select(static root => root.Name)];
+    }
+
+    private static List<(string Name, Guid SourceKey)> ReadProjectRoots(CookPublicationHead head, byte[] document)
+    {
         if (!string.Equals(Convert.ToHexString(SHA256.HashData(document)), head.DocumentSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("The publication document is not the one its head names.");
@@ -90,16 +115,16 @@ public static class CookPublicationFormat
                 throw new InvalidDataException($"The publication document is in format {version}; this editor reads format {DocumentVersion}.");
             }
 
+            var roots = new List<(string Name, Guid SourceKey)>();
             foreach (var entry in parsed.RootElement.GetProperty("roots").EnumerateArray())
             {
-                if (entry.GetProperty("owner").GetInt32() == ProjectOwner
-                    && string.Equals(entry.GetProperty("name").GetString(), root, StringComparison.Ordinal))
+                if (entry.GetProperty("owner").GetInt32() == ProjectOwner)
                 {
-                    return entry.GetProperty("sourceKey").GetGuid();
+                    roots.Add((entry.GetProperty("name").GetString() ?? string.Empty, entry.GetProperty("sourceKey").GetGuid()));
                 }
             }
 
-            return null;
+            return roots;
         }
         catch (Exception exception) when (exception is JsonException or KeyNotFoundException or FormatException or InvalidOperationException)
         {

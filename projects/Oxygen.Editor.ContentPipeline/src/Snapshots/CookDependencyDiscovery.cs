@@ -71,6 +71,7 @@ internal sealed class CookDependencyDiscovery(
         // Each identity has one producing source; identities differing only in case are one file in a cooked root.
         private readonly Dictionary<string, ContentCookInput> producers = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<AssetPath, ImmutableArray<AssetPath>> resourceDependencies = [];
+        private readonly Lazy<IReadOnlyDictionary<string, AssetPath>> bufferContainers = new(() => BufferContainers.ProductsOf(project));
 
         public void AddPreparedImport(CookDependencyGraph prepared)
         {
@@ -244,7 +245,10 @@ internal sealed class CookDependencyDiscovery(
             var bufferDependencies = new HashSet<AssetPath>();
             foreach (var reference in external.Where(static reference => string.Equals(reference.Kind, "buffer", StringComparison.Ordinal)))
             {
-                var owner = this.producers.GetValueOrDefault(reference.VirtualPath) ?? resolveProducer?.Invoke(reference.VirtualPath);
+                var owner = this.producers.GetValueOrDefault(reference.VirtualPath) ?? resolveProducer?.Invoke(reference.VirtualPath)
+                    ?? (this.bufferContainers.Value.TryGetValue(reference.VirtualPath, out var container)
+                        ? CookInputResolver.Resolve(project, container, ContentCookInputRole.Dependency)
+                        : null);
                 if (owner is null)
                 {
                     // Native linking validates existing local sidecars and rejects foreign-root indices.

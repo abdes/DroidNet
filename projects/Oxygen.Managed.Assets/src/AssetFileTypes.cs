@@ -56,6 +56,9 @@ public static class AssetFileTypes
     /// <summary>The cooked physics resource descriptor extension.</summary>
     public const string PhysicsResource = ".opres";
 
+    /// <summary>The suffix of a buffer container, which produces the buffers it names; it has no identity of its own.</summary>
+    public const string BufferContainer = ".buffers.json";
+
     /// <summary>The authored material descriptor suffix.</summary>
     public const string MaterialDescriptor = Material + DescriptorSuffix;
 
@@ -121,6 +124,10 @@ public static class AssetFileTypes
                     new("contexts/*/mappings/*/triggers/*/combo_actions/*/action"),
                     new("contexts/*/mappings/*/triggers/*/aux/*/action"),
                 ],
+            },
+            new(BufferContainer, AssetFileCategory.BufferContainer, CookedExtension: null, AssetType.Unknown)
+            {
+                ReferenceFields = [new("buffers/*/virtual_path")],
             },
             new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown)
             {

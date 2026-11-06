@@ -84,4 +84,18 @@ public sealed partial class MountsFileWatcher
             LogRefused(this.logger, failure, this.session.Context.ProjectRoot.FullPath);
         }
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "A library of project '{ProjectRoot}' published a generation that a pak above it cannot use; the old generation stays. {Finding}")]
+    private static partial void LogGenerationRefused(ILogger logger, string projectRoot, string finding);
+
+    private void LogGenerationRefused(MountFinding finding)
+    {
+        if (this.logger.IsEnabled(LogLevel.Warning))
+        {
+            LogGenerationRefused(this.logger, this.session.Context.ProjectRoot.FullPath, finding.Message);
+        }
+    }
 }

@@ -390,8 +390,11 @@ Required job type mapping:
 | FBX source media import                             | `fbx`                             |
 | texture source or descriptor                        | `texture` or `texture-descriptor` |
 | input source `*.input.json`                         | `input` (section 24)              |
+| buffer container `*.buffers.json`                   | `buffer-container`                |
 
 Scene jobs depend on the material and geometry jobs needed by their renderables.
+A geometry's job depends on the job of the buffer container that names its
+buffers, which joins the cook with it.
 Folder/project cook generates a manifest and validates it against the native
 `oxygen.import-manifest.schema.json` contract before execution. Use the shared
 schema-aligned validator for the accepted V0.1 manifest subset; native

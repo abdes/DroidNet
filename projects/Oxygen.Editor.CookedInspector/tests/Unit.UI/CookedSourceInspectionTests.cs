@@ -19,45 +19,39 @@ using static Oxygen.Editor.CookedInspector.Unit.UI.Tests.TestSupport.TestProject
 
 namespace Oxygen.Editor.CookedInspector.Unit.UI.Tests;
 
-/// <summary>The inspection of a library copy and of a packaged engine asset.</summary>
+/// <summary>The inspection of a library asset and of a packaged engine asset.</summary>
 [TestClass]
 internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Inspecting a masked library copy keeps that physical source and explains what assignments will use.</summary>
+    /// <summary>Inspecting a library asset reports it from the library's root.</summary>
     /// <returns>The asynchronous physical-source report regression.</returns>
     [TestMethod]
-    public Task LibraryInspectionReportsTheSelectedCopyAndEffectiveSource() => EnqueueAsync(async () =>
+    public Task LibraryInspectionReportsTheLibrarysRoot() => EnqueueAsync(async () =>
     {
         var directory = Directory.CreateTempSubdirectory("Oxygen-LibraryInspection-");
         try
         {
             using var session = CreateQueryProject();
-            var asset = AssetPath.Parse("/Content/Shared.omat");
+            var asset = AssetPath.Parse("/Library/Shared.omat");
             await File.WriteAllBytesAsync(Path.Combine(directory.FullName, "Shared.omat"), [1], this.TestContext.CancellationToken).ConfigureAwait(true);
-            var low = new CookedAssetMetadata(FileSystemPath.From(directory.FullName), "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
+            var library = new CookedAssetMetadata(FileSystemPath.From(directory.FullName), "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
             {
                 VirtualPath = asset,
             };
-            var high = low with
+            var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: library.ContainerPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
             {
-                ContainerPath = session.Context.ProjectRoot.Combine(".cooked").Combine("generations").Combine(Guid.NewGuid().ToString("N")),
-                AssetKey = new(3, 4),
-            };
-            var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.ContainerPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
-            {
-                CookedMetadata = high,
-                OverriddenCookedSources = [low],
+                CookedMetadata = library,
             };
             var provider = new Mock<IAssetFeed>();
             _ = provider.Setup(value => value.ResolveAsync(asset, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
             var scope = new CookedInspectionScope(session.Context, AssetPath.Parse("/Library/Shared.omat"), Validate: false)
             {
                 Asset = asset,
-                CookedSource = low,
+                CookedSource = library,
             };
-            var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(asset.VirtualPath, ContentCookAssetKind.Material)], [], []);
+            var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, library.SourceIdentity, [new(asset.VirtualPath, ContentCookAssetKind.Material)], [], []);
             var report = new CookedOutputReport(session.Context.ProjectId, scope.Scope, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
             var pipeline = new Mock<IContentPipelineService>();
             _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), validate: false, session.Context)).ReturnsAsync(report);
@@ -76,10 +70,8 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
             await LoadTestContentAsync(root).ConfigureAwait(true);
             await model.InspectAsync(scope).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
-            _ = model.ScopedAsset!.CookedMetadata.Should().Be(low);
-            _ = model.SelectedAsset!.ResolutionText.Should().Contain("project output");
-            _ = model.SelectedAsset.Root.Inspection.CookedRoot.Should().Be(directory.FullName);
-            _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text.Contains("project output", StringComparison.Ordinal));
+            _ = model.ScopedAsset!.CookedMetadata.Should().Be(library);
+            _ = model.SelectedAsset!.Root.Inspection.CookedRoot.Should().Be(directory.FullName);
         }
         finally
         {

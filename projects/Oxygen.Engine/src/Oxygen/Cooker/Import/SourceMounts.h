@@ -134,7 +134,7 @@ namespace mount_codes {
     .id = "mount.cooked_dependency_missing",
     .severity = ImportSeverity::kWarning,
     .message = "Cooked mount '{}' ('{}') requires {} of mount '{}', which no "
-               "mount below it provides; it contributes no assets",
+               "mount below it provides",
   };
   inline constexpr auto kParentIgnored = MountCode<std::string_view> {
     .id = "mount.parent_ignored",
@@ -526,7 +526,8 @@ struct MountTable final {
  Every bound `Cooked` mount's summary is read (`cooked::ReadCookedSummary`): a
  cooked source that cannot be read, holds a mount other than the mount's name
  or more than one mount, or holds a script with an external source is
- `Invalid` with that finding, a warning.
+ `Invalid` with that finding, a warning. So is a pak with a requirement no
+ mount below it provides; a loose root with one stays `Bound` with the finding.
 
  Every mount's folder and origin is logged.
 */

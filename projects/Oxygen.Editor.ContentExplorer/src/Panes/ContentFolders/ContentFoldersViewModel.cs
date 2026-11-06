@@ -80,7 +80,6 @@ public partial class ContentFoldersViewModel(
     private int folderReloadQueued;
 
     private ITreeItem? selectedItem;
-    private bool hasUnsavedChanges;
 
     /// <summary>
     ///     Raised when the UI should begin in-place rename for the selected item.
@@ -95,21 +94,6 @@ public partial class ContentFoldersViewModel(
     {
         get => this.selectedItem;
         private set => this.SetProperty(ref this.selectedItem, value);
-    }
-
-    /// <summary>
-    ///     Gets a value indicating whether there are unsaved changes to the project mounts.
-    /// </summary>
-    public bool HasUnsavedChanges
-    {
-        get => this.hasUnsavedChanges;
-        private set
-        {
-            if (this.SetProperty(ref this.hasUnsavedChanges, value))
-            {
-                this.SaveProjectMountsCommand.NotifyCanExecuteChanged();
-            }
-        }
     }
 
     /// <inheritdoc />
@@ -342,9 +326,15 @@ public partial class ContentFoldersViewModel(
             return;
         }
 
+        // This names a source folder; a cooked folder is a library, whose name is what it holds.
+        if (await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, LooseCookedIndex.FileName)).ConfigureAwait(true))
+        {
+            _ = await this.ShowMountUpdateFailureAsync("This folder holds cooked content: add it as a library in Open Mounts…, which reads its name from it.").ConfigureAwait(true);
+            return;
+        }
+
         // A folder saved on this machine only is a placeholder, which the project's own .mounts.json binds to it.
-        var isCooked = await storage.DocumentExistsAsync(Path.Combine(definition.AbsoluteFolderPath, LooseCookedIndex.FileName)).ConfigureAwait(true);
-        candidate.Mounts.Add(new(definition.MountPointName, isCooked ? MountKind.Cooked : MountKind.Source, definition.CommittedPath));
+        candidate.Mounts.Add(new(definition.MountPointName, MountKind.Source, definition.CommittedPath));
         var bindings = definition.CommittedPath is null
             ? MountBindings.None.Bind(definition.MountPointName, FileSystemPath.From(definition.AbsoluteFolderPath))
             : MountBindings.None;
@@ -370,42 +360,6 @@ public partial class ContentFoldersViewModel(
         this.LogRestoreStateFinal(contentExplorerState.SelectedFolders);
     }
 
-    private void OnMountRenamed(object? sender, MountRenamedEventArgs e)
-    {
-        if (!this.IsApplyingMounts)
-        {
-            this.HasUnsavedChanges = true;
-            this.PendingMountChange = this.SaveProjectMountsAsync();
-        }
-    }
-
-    [RelayCommand(CanExecute = nameof(HasUnsavedChanges))]
-    private async Task SaveProjectMountsAsync()
-    {
-        var activeProject = session.Context;
-        var projectInfo = this.GetActiveProjectInfo();
-        if (this.projectRoot is null)
-        {
-            return;
-        }
-
-        foreach (var mount in projectInfo.Mounts.Where(mount => activeProject.Mounts.FirstOrDefault(resolved => string.Equals(resolved.Name, mount.Name, StringComparison.Ordinal))?.IsPakFile != true).ToList())
-        {
-            _ = projectInfo.Mounts.Remove(mount);
-        }
-
-        projectInfo.OutputFolderViews.Clear();
-
-        var children = await this.projectRoot.Children.ConfigureAwait(true);
-        foreach (var child in children)
-        {
-            this.AddMountToProjectInfo(projectInfo, child);
-        }
-
-        RemapPriorityNames(activeProject, projectInfo);
-        await this.ApplyMountCandidateAsync(activeProject, projectInfo, MountBindings.None).ConfigureAwait(true);
-    }
-
     private async Task LoadPersistedMountsAsync(ProjectRootTreeItemAdapter root, ProjectContext context)
     {
         foreach (var view in context.OutputFolderViews)
@@ -413,12 +367,7 @@ public partial class ContentFoldersViewModel(
             await this.RestoreMountAsync(root, context, view.Name, view.Folder, isProjectRelative: true, view.IsExpanded).ConfigureAwait(true);
         }
 
-        foreach (var mount in context.LibraryMounts.Where(static mount => mount.Container != MountContainer.Pak))
-        {
-            await this.RestoreMountAsync(root, context, mount.Name, mount.Location!.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
-        }
-
-        await this.MountPaksAsync(root, context).ConfigureAwait(true);
+        await this.MountLibrariesAsync(root, context).ConfigureAwait(true);
     }
 
     private Task PreloadRecentTemplatesAsync() => this.ReloadMountTreeAsync();
@@ -573,7 +522,7 @@ public partial class ContentFoldersViewModel(
             .FirstOrDefault(m => string.Equals(m.MountPoint.Name, mountName, StringComparison.Ordinal));
         mount ??= children.OfType<VirtualFolderMountTreeItemAdapter>()
             .FirstOrDefault(m => string.Equals(m.MountPointName, mountName, StringComparison.Ordinal));
-        mount ??= children.OfType<PakMountTreeItemAdapter>()
+        mount ??= children.OfType<LibraryMountTreeItemAdapter>()
             .FirstOrDefault(m => string.Equals(m.MountPointName, mountName, StringComparison.Ordinal));
 
         if (mount == null)
@@ -606,8 +555,8 @@ public partial class ContentFoldersViewModel(
                 case VirtualFolderMountTreeItemAdapter virtualMount:
                     _ = result.Add(virtualMount.MountPointName);
                     break;
-                case PakMountTreeItemAdapter pak:
-                    _ = result.Add(pak.MountPointName);
+                case LibraryMountTreeItemAdapter library:
+                    _ = result.Add(library.MountPointName);
                     break;
             }
         }
@@ -620,17 +569,9 @@ public partial class ContentFoldersViewModel(
         {
             AuthoringMountPointTreeItemAdapter authoring => authoring.VirtualRootPath,
             VirtualFolderMountTreeItemAdapter virtualMount => virtualMount.VirtualRootPath,
-            PakMountTreeItemAdapter pak => pak.VirtualRootPath,
+            LibraryMountTreeItemAdapter library => library.VirtualRootPath,
             FolderTreeItemAdapter folder => GetFolderVirtualPath(folder),
             CookedFolderTreeItemAdapter folder => folder.VirtualPath,
             _ => null,
         };
-
-    private void OnMountPointPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        if (string.Equals(e.PropertyName, nameof(ITreeItem.IsExpanded), StringComparison.Ordinal))
-        {
-            this.HasUnsavedChanges = true;
-        }
-    }
 }

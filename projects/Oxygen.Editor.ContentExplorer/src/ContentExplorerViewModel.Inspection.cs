@@ -58,11 +58,7 @@ public sealed partial class ContentExplorerViewModel
         => item.SourcePath is null && item.DescriptorPath is null && !item.IsPackaged;
 
     private static AssetPath? LibraryFolder(ProjectContext project, AssetEntry item)
-        => item.CookedMetadata is { } source
-            && project.LibraryMounts.FirstOrDefault(mount => mount.Container != MountContainer.Pak && mount.Location == source.ContainerPath) is { } library
-            && AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location)
-                ? location.Parent
-                : null;
+        => project.LibraryMounts.Any(mount => string.Equals(mount.Name, item.Identity.Mount, StringComparison.Ordinal)) ? item.Identity.Parent : null;
 
     private async Task<bool> RevealAssetsAsync(ProjectContext project, AssetEntry[] items)
     {

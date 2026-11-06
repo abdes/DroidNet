@@ -7,17 +7,23 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
-using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>Edits source precedence with the highest-priority source displayed first.</summary>
 public sealed partial class ContentPriorityViewModel : ObservableObject
 {
+    private readonly Dictionary<string, HashSet<string>> needs;
+
     /// <summary>Initializes a new instance of the <see cref="ContentPriorityViewModel"/> class.</summary>
     /// <param name="project">The accepted project configuration.</param>
     public ContentPriorityViewModel(ProjectContext project)
     {
+        ArgumentNullException.ThrowIfNull(project);
+        this.needs = project.CookedMounts.ToDictionary(
+            static mount => mount.Name,
+            static mount => (mount.Library?.Dependencies ?? []).Select(static dependency => dependency.Library).ToHashSet(StringComparer.Ordinal),
+            StringComparer.Ordinal);
         foreach (var source in CookedContentOrdering.Resolve(project).Reverse())
         {
             switch (source.Kind)
@@ -54,9 +60,13 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
     /// <returns>The order to persist on explicit Apply.</returns>
     public IReadOnlyList<CookedContentSource> GetMountOrder() => [.. this.Sources.Reverse().Select(static item => item.Source)];
 
-    private bool CanIncreasePriority() => this.SelectedSource is { } source && this.Sources.IndexOf(source) > 0;
+    // A library stays above what it needs: a move that would cross a need is refused.
+    private bool CanIncreasePriority() => this.SelectedSource is { } source && this.Sources.IndexOf(source) is var index && index > 0 && !this.Needs(this.Sources[index - 1], source);
 
-    private bool CanDecreasePriority() => this.SelectedSource is { } source && this.Sources.IndexOf(source) is var index && index >= 0 && index < this.Sources.Count - 1;
+    private bool CanDecreasePriority() => this.SelectedSource is { } source && this.Sources.IndexOf(source) is var index && index >= 0 && index < this.Sources.Count - 1 && !this.Needs(source, this.Sources[index + 1]);
+
+    private bool Needs(ContentPriorityItem upper, ContentPriorityItem lower)
+        => upper.Source.Name is { } name && lower.Source.Name is { } needed && this.needs.TryGetValue(name, out var names) && names.Contains(needed);
 
     [RelayCommand(CanExecute = nameof(CanIncreasePriority))]
     private void IncreasePriority() => this.Move(-1);

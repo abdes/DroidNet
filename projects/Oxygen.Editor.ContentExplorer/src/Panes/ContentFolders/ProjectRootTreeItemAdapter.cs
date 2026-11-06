@@ -27,7 +27,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     private readonly ILogger logger;
     private readonly IStorageProvider storage;
     private readonly Dictionary<string, VirtualFolderMountTreeItemAdapter> virtualFolderMounts;
-    private readonly List<PakMountTreeItemAdapter> pakMounts = [];
+    private readonly List<LibraryMountTreeItemAdapter> libraryMounts = [];
 
     private bool disposed;
 
@@ -57,11 +57,6 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
 
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
-
-    /// <summary>
-    ///     Raised when a virtual folder mount has been renamed.
-    /// </summary>
-    public event EventHandler<MountRenamedEventArgs>? MountRenamed;
 
     /// <inheritdoc />
     public override string Label
@@ -120,7 +115,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
 
         // A name equal to another mount's, or differing from it only in case, is refused: on a case-insensitive file
         // system the two would share their cooked folder.
-        return !this.virtualFolderMounts.Keys.Concat(this.pakMounts.Select(static pak => pak.MountPointName))
+        return !this.virtualFolderMounts.Keys.Concat(this.libraryMounts.Select(static library => library.MountPointName))
             .Any(existing => VirtualPathComparer.CaseFolded.Equals(existing, name));
     }
 
@@ -142,19 +137,19 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         return true;
     }
 
-    /// <summary>Adds a pak mount after the folder mounts; the engine content comes first, then the declared paks.</summary>
-    /// <param name="pak">The pak mount to add.</param>
+    /// <summary>Adds a library after the folder mounts; the engine content comes first, then the declared libraries.</summary>
+    /// <param name="library">The library to add.</param>
     /// <returns><see langword="true"/> when added; otherwise <see langword="false"/> when a mount with the same name already exists.</returns>
-    public bool MountPak(PakMountTreeItemAdapter pak)
+    public bool MountLibrary(LibraryMountTreeItemAdapter library)
     {
-        ArgumentNullException.ThrowIfNull(pak);
-        if (this.virtualFolderMounts.ContainsKey(pak.MountPointName)
-            || this.pakMounts.Exists(existing => string.Equals(existing.MountPointName, pak.MountPointName, StringComparison.Ordinal)))
+        ArgumentNullException.ThrowIfNull(library);
+        if (this.virtualFolderMounts.ContainsKey(library.MountPointName)
+            || this.libraryMounts.Exists(existing => string.Equals(existing.MountPointName, library.MountPointName, StringComparison.Ordinal)))
         {
             return false;
         }
 
-        this.pakMounts.Add(pak);
+        this.libraryMounts.Add(library);
         return true;
     }
 
@@ -177,22 +172,6 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         _ = this.virtualFolderMounts.Remove(mountPointName);
         mount.Dispose();
         return true;
-    }
-
-    /// <summary>
-    ///     Notifies the root that a virtual folder mount has been renamed.
-    /// </summary>
-    /// <param name="mount">The mount that was renamed.</param>
-    /// <param name="oldName">The previous name of the mount.</param>
-    internal void NotifyMountRenamed(VirtualFolderMountTreeItemAdapter mount, string oldName)
-    {
-        ArgumentNullException.ThrowIfNull(mount);
-
-        if (this.virtualFolderMounts.Remove(oldName))
-        {
-            this.virtualFolderMounts.Add(mount.MountPointName, mount);
-            this.MountRenamed?.Invoke(this, new MountRenamedEventArgs(mount));
-        }
     }
 
     /// <inheritdoc />
@@ -221,9 +200,9 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
                 this.AddChildInternal(mount);
             }
 
-            foreach (var pak in this.pakMounts)
+            foreach (var library in this.libraryMounts)
             {
-                this.AddChildInternal(pak);
+                this.AddChildInternal(library);
             }
         }
         catch (Exception ex)

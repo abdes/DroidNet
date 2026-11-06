@@ -184,8 +184,10 @@ browse index (see [paks](#paks)).
 
 A mount with a finding is `Invalid`: it stays in the table and in Content
 Explorer with its finding, contributes no assets, and is never added to a
-cook's, a run's or a preview's cooked roots. Findings are warnings for opening
-a project, like `mount.folder_missing`.
+cook's, a run's or a preview's cooked roots. A loose root or generation that
+lacks only what it requires stays `Bound` with the finding: the engine mounts it,
+and a load of what it names fails. Findings are warnings for opening a project,
+like `mount.folder_missing`.
 
 Further mount rules this design fixes:
 
@@ -615,14 +617,15 @@ that edit.
 ### Play and Live Preview
 
 `PlaySession` writes the generation folder selected at launch for each
-`.cooked` binding. `PreviewSession` watches the `head.json` of each `.cooked`
-binding next to `.mounts.json`; on a change it mounts the new generation with
-`MountLooseCookedGeneration(new, replaces: old)`. A loose generation mounts
-even when one of its requirements is unmet: the mount reports
-`mount.cooked_dependency_missing` from the engine's unmet requirements, and
-the rest of the content previews. A pak's unmet requirement refuses the swap;
-the old one stays with the same finding. The reference check then runs
-again.
+`.cooked` binding, which the table resolved. `MountsFileWatcher`, which already
+follows `.mounts.json`, also watches the `head.json` of each `.cooked` binding; on a
+change it resolves the table again and applies it as a mount change, so the
+catalogs, the reference check and the preview follow in one transaction, and the
+engine swaps the whole mount set through `PrepareMountsAsync` and
+`CommitPreparedMounts`. A loose generation mounts even when one of its requirements
+is unmet: the mount reports `mount.cooked_dependency_missing`, and the rest of the
+content previews. A generation that would make a pak above it `Invalid` is refused:
+the old one stays, and the finding is published as an operation result.
 
 ## User experience
 

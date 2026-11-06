@@ -35,7 +35,7 @@ internal static class AuthoredReferenceFormat
     /// <param name="path">The file path.</param>
     /// <returns>Whether the file is an authored descriptor, an input file or a model's preview.</returns>
     public static bool IsReferencingSource(string path)
-        => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input or AssetFileCategory.ModelPreview;
+        => AssetFileTypes.Find(path)?.Category is AssetFileCategory.Descriptor or AssetFileCategory.Input or AssetFileCategory.ModelPreview or AssetFileCategory.BufferContainer;
 
     /// <summary>Reads the asset identities a descriptor references in its reference fields, each with its field.</summary>
     /// <param name="path">The descriptor.</param>
@@ -57,6 +57,29 @@ internal static class AuthoredReferenceFormat
         return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
             .Select(node => TryParseReference(path, identity, node.GetValue<string>(), out var target) ? new AuthoredReference(node.GetPath(), target, node.GetValue<string>()) : null)
             .OfType<AuthoredReference>()];
+    }
+
+    /// <summary>Tests whether a file can produce buffers: a buffer container, or a geometry descriptor naming its own.</summary>
+    /// <param name="path">The file path.</param>
+    /// <returns>Whether the file can name buffer products.</returns>
+    public static bool ProducesBuffers(string path)
+        => path.EndsWith(AssetFileTypes.BufferContainer, StringComparison.Ordinal) || path.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal);
+
+    /// <summary>Reads the buffers a file produces, whose references resolve as any of the file's do.</summary>
+    /// <param name="file">The file's virtual path, which relative product names resolve against.</param>
+    /// <param name="content">The file's bytes.</param>
+    /// <returns>The identities of the products it names.</returns>
+    /// <exception cref="JsonException">The file is not JSON.</exception>
+    public static IReadOnlyList<AssetPath> ReadBufferProducts(AssetPath file, ReadOnlyMemory<byte> content)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        return JsonNode.Parse(StripBom(content.Span))?["buffers"] is not JsonArray buffers
+            ? []
+            : [.. buffers.OfType<JsonObject>()
+                .Select(static buffer => buffer["virtual_path"])
+                .OfType<JsonValue>()
+                .Select(name => name.TryGetValue<string>(out var text) && AssetPath.TryResolveReference(file, text, VirtualPathRuleSet.Cooked, out var product, out _) ? product : null)
+                .OfType<AssetPath>()];
     }
 
     /// <summary>Reads the references of an engine format that the reference grammar refuses, each with its field.</summary>
@@ -249,7 +272,7 @@ internal static class AuthoredReferenceFormat
 
     private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
     {
-        var nodes = path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal) && descriptor["buffers"] is JsonArray buffers
+        var nodes = ProducesBuffers(path.Name) && descriptor["buffers"] is JsonArray buffers
             ? buffers.OfType<JsonObject>().Select(static buffer => buffer["source"])
             : [];
         return [.. nodes.OfType<JsonValue>().Where(static node => node.TryGetValue<string>(out var value) && !string.IsNullOrWhiteSpace(value))];

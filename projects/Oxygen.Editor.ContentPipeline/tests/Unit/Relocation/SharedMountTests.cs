@@ -101,6 +101,33 @@ public sealed class SharedMountTests
         _ = unresolved.Should().ContainSingle().Which.Code.Should().Be(MountCodes.Unbound);
     }
 
+    /// <summary>A buffer a container or its geometry names has no file of its own, and resolves; one nothing names does not.</summary>
+    /// <param name="container">Whether a buffer container names it, rather than the geometry itself.</param>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    [DataRow(true, DisplayName = "In a buffer container")]
+    [DataRow(false, DisplayName = "In the geometry")]
+    public async Task ABufferItsProducerNames_Resolves(bool container)
+    {
+        using var workspace = CreateWorkspace();
+        var geometry = AuthoredFiles.Geometry("/Content/Geo/Box.ogeo").Set("/lods/0/buffers/vb_ref", "Box_vb.obuf").Set("/lods/0/buffers/ib_ref", "Gone_ib.obuf");
+        var product = new JsonObject { ["source"] = "mesh.bin", ["virtual_path"] = "Box_vb.obuf" };
+        if (container)
+        {
+            _ = workspace.Write("Content/Geo/Box.buffers.json", new JsonObject { ["buffers"] = new JsonArray(product) }.ToJsonString());
+        }
+        else
+        {
+            geometry = geometry.Append("/buffers", product);
+        }
+
+        _ = workspace.Write("Content/Geo/Box.ogeo.json", geometry.Text);
+
+        var unresolved = await ReferenceCheck.FindAsync(workspace.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = unresolved.Where(static reference => reference.File.Name == "Box.ogeo.json").Select(static reference => reference.Written).Should().Equal("Gone_ib.obuf");
+    }
+
     // Content holds a material that references a texture of Studio, a folder outside the project.
     /// <summary>A reference the grammar refuses names nothing: it is listed as written, with the refusal's code.</summary>
     /// <returns>The asynchronous test.</returns>

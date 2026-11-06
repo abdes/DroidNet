@@ -157,7 +157,7 @@
                     BorderThickness="0"
                     Command="{x:Bind ViewModel.ManageMountsCommand}"
                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                    ToolTipService.ToolTip="Add, bind, rename or unmount content sources">
+                    ToolTipService.ToolTip="Add, bind or unmount content sources">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="15" Glyph="&#xE8F4;" />
                         <TextBlock Text="Mounts" />

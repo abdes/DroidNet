@@ -130,7 +130,13 @@ public sealed class MountTableCasesTests
         entries.AddRange(assets.Select(asset => EntryOf(asset.Path, asset.Type, fileSystem, path, new byte[4])));
         using (var index = new MemoryStream())
         {
-            LooseCookedIndexFixture.Write(index, new Document(1, default, Guid.CreateVersion7(), entries, []));
+            var requirements = (recipe["requirements"]?.AsArray() ?? []).Select(static node => new AssetRequirement(
+                0,
+                node!["mount"]!.GetValue<string>(),
+                IsTexture: false,
+                AssetKey.FromVirtualPath(node["path"]!.GetValue<string>()),
+                (byte)Enum.Parse<AssetType>(node["type"]!.GetValue<string>())));
+            LooseCookedIndexFixture.Write(index, new Document(1, default, Guid.CreateVersion7(), entries, []) { Requirements = [.. requirements] });
             var bytes = index.ToArray();
             if (unsupported)
             {

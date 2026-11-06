@@ -92,8 +92,9 @@ Actors:
    material that needs cooking. It is cooked for preview and appears once
    mounted, with no further action.
 5. **Content changes underneath.** A cook publishes new output, or the user
-   changes the project's mounts. The engine swaps its content and keeps showing
-   the current scene.
+   changes the project's mounts, or a library the project follows through its
+   `.cooked` folder publishes a new cook. The engine swaps its content and keeps
+   showing the current scene.
 6. **Reload or close.** A scene reloaded from disk shows the reloaded content; a
    closed scene leaves the engine and releases its viewports.
 7. **See preview state of assets.** The Content Explorer shows whether each asset
@@ -344,6 +345,15 @@ public sealed partial class PreviewSession : ObservableObject, IContentMountChan
   (`Oxygen.Editor.ContentPipeline.Mounting`), through which the Content
   Explorer applies a confirmed mount change. The workspace shows `State` and
   `Failure`, and binds Retry.
+- `MountsFileWatcher` applies a change the session did not make: a `.mounts.json`
+  in the project root or above it, or the `head.json` of a library bound by its
+  `.cooked` folder. It resolves the table again and, when it differs, makes a mount
+  change, so a library's new cook reaches the catalogs, the reference check and the
+  engine in one transaction. A new generation that would make a pak above it
+  `Invalid` is refused: the old one stays, and the finding is published. A loose
+  generation with an unmet requirement mounts and its mount reports
+  `mount.cooked_dependency_missing`; a load of what it names fails. Play's launch
+  file names the generation the table selected.
 
 ### 5.7 Play
 

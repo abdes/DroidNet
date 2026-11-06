@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
-using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -21,9 +20,6 @@ public partial class ContentFoldersViewModel
     private bool isApplyingMounts;
     private TaskCompletionSource? treeReload;
     private long treeReloadVersion;
-
-    /// <summary>Gets completion of a rename-triggered mount update.</summary>
-    public Task PendingMountChange { get; private set; } = Task.CompletedTask;
 
     /// <summary>Gets a value indicating whether a confirmed configuration change is being validated and applied.</summary>
     public bool IsApplyingMounts
@@ -53,8 +49,7 @@ public partial class ContentFoldersViewModel
     /// <param name="expected">The project as it was when the dialog opened.</param>
     /// <param name="candidate">The editable copy that receives the mounts.</param>
     /// <param name="rows">The staged mounts in display order.</param>
-    /// <param name="isCookedLibrary">Tells whether a folder holds cooked content rather than authored sources.</param>
-    internal static void ApplyMountRows(ProjectContext expected, ProjectInfo candidate, IReadOnlyList<ContentMountRow> rows, Func<string, bool> isCookedLibrary)
+    internal static void ApplyMountRows(ProjectContext expected, ProjectInfo candidate, IReadOnlyList<ContentMountRow> rows)
     {
         candidate.Mounts.Clear();
         candidate.OutputFolderViews.Clear();
@@ -65,7 +60,7 @@ public partial class ContentFoldersViewModel
                 case ContentMountKind.EngineContent:
                     // Always mounted from the SDK; the project does not declare it.
                     continue;
-                case ContentMountKind.PakLibrary:
+                case ContentMountKind.Library:
                     AddDeclaredMount(candidate, row, MountKind.Cooked);
                     continue;
                 case ContentMountKind.ProjectSource:
@@ -74,17 +69,32 @@ public partial class ContentFoldersViewModel
                 case ContentMountKind.Derived:
                     candidate.OutputFolderViews.Add(new(row.RelativePath!, row.IsExpanded));
                     continue;
-                case ContentMountKind.LocalLibrary:
-                    // A new folder with a cooked index is a read-only library; any other new folder is a project source.
-                    AddDeclaredMount(candidate, row, row.IsNew && !isCookedLibrary(row.AbsolutePath!) ? MountKind.Source : MountKind.Cooked);
-                    continue;
                 default:
                     throw new InvalidOperationException("The Content mounts dialog staged an unknown mount kind.");
             }
         }
 
-        RemapPriorityNames(expected, candidate);
+        candidate.CookedContentOrder = [.. PriorityOf(expected, rows)];
     }
+
+    // The libraries that stay keep their priority; each new one lands above what it needs and below what needs it.
+    private static IReadOnlyList<CookedContentSource> PriorityOf(ProjectContext expected, IReadOnlyList<ContentMountRow> rows)
+    {
+        var libraries = rows.Where(static row => row.Kind == ContentMountKind.Library).ToArray();
+        IReadOnlyList<CookedContentSource> order = [.. CookedContentOrdering.Resolve(expected).Where(source => source.Kind == CookedContentSourceKind.ProjectOutput
+            || libraries.Any(row => !row.IsNew && string.Equals(row.Name, source.Name, StringComparison.Ordinal)))];
+        foreach (var row in libraries.Where(static row => row.IsNew))
+        {
+            var needs = NeedsOf(row);
+            var neededBy = libraries.Where(other => NeedsOf(other).Contains(row.Name)).Select(static other => other.Name).ToArray();
+            order = LibraryPlacement.Place(order, row.Name, needs, neededBy);
+        }
+
+        return order;
+    }
+
+    private static string[] NeedsOf(ContentMountRow row)
+        => [.. (row.Facts?.Dependencies ?? []).Select(static dependency => dependency.Library)];
 
     private static void AddDeclaredMount(ProjectInfo candidate, ContentMountRow row, MountKind kind)
     {
@@ -93,24 +103,6 @@ public partial class ContentFoldersViewModel
         {
             candidate.Mounts.Add(new(row.Name, kind, row.RelativePath, row.IsExpanded));
         }
-    }
-
-    // A library keeps its priority across a rename: its container is still declared, under a name that is new.
-    private static void RemapPriorityNames(ProjectContext previous, ProjectInfo candidate)
-    {
-        var before = DeclaredLibrary.Of(previous.DeclaredMounts);
-        var after = DeclaredLibrary.Of(candidate.Mounts);
-        candidate.CookedContentOrder = [.. previous.CookedContentOrder.Select(source =>
-        {
-            if (source.Kind == CookedContentSourceKind.ProjectOutput || after.Exists(library => library.Is(source)))
-            {
-                return source;
-            }
-
-            var old = before.Find(library => library.Is(source));
-            var renamed = old?.Container is null ? null : after.Find(library => library.Kind == old.Kind && string.Equals(library.Container, old.Container, StringComparison.Ordinal) && !before.Exists(original => string.Equals(original.Name, library.Name, StringComparison.Ordinal)));
-            return renamed is null ? null : new CookedContentSource(renamed.Kind, renamed.Name);
-        }).OfType<CookedContentSource>()];
     }
 
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
@@ -133,7 +125,7 @@ public partial class ContentFoldersViewModel
             return;
         }
 
-        ApplyMountRows(expected, candidate, model.Mounts, folder => expected.FileSystem.File.Exists(Path.Combine(folder, LooseCookedIndex.FileName)));
+        ApplyMountRows(expected, candidate, model.Mounts);
         var bindings = model.GetBindingChanges();
         if (candidate.Mounts.SequenceEqual(expected.DeclaredMounts) && candidate.OutputFolderViews.SequenceEqual(expected.OutputFolderViews) && bindings.IsEmpty)
         {
@@ -183,13 +175,14 @@ public partial class ContentFoldersViewModel
         try
         {
             candidate.CookedContentOrder = [.. CookedContentOrdering.Resolve(candidate)];
+            CookedContentOrdering.DeclareInOrder(candidate);
+            CookedContentOrdering.DeclareInOrder(candidate);
             if (!await mountChanges.ChangeMountsAsync(expected, candidate, bindings, session.Lifetime).ConfigureAwait(true))
             {
                 throw new InvalidOperationException("Another project became active before this content mount change could be shown.");
             }
 
             this.ReconcileSelectedMounts(expected, candidate);
-            this.HasUnsavedChanges = false;
         }
         catch (Exception exception)
         {
@@ -206,7 +199,6 @@ public partial class ContentFoldersViewModel
                 if (session.Context.ProjectId == expected.ProjectId)
                 {
                     await this.ReloadMountTreeAsync().ConfigureAwait(true);
-                    this.HasUnsavedChanges = false;
                 }
             }
             finally
@@ -314,20 +306,11 @@ public partial class ContentFoldersViewModel
     private async Task InstallMountTreeAsync(ProjectRootTreeItemAdapter tree)
     {
         var previous = this.projectRoot;
-        previous?.MountRenamed -= this.OnMountRenamed;
         this.projectRoot = tree;
-        tree.MountRenamed += this.OnMountRenamed;
         this.suppressTreeSelectionEvents = true;
         try
         {
             await this.InitializeRootAsync(tree, skipRoot: false).ConfigureAwait(true);
-            foreach (var child in await tree.Children.ConfigureAwait(true))
-            {
-                if (child is AuthoringMountPointTreeItemAdapter authoring)
-                {
-                    authoring.PropertyChanged += this.OnMountPointPropertyChanged;
-                }
-            }
         }
         finally
         {
@@ -359,41 +342,13 @@ public partial class ContentFoldersViewModel
         }
     }
 
+    // Selected folders of a mount that is gone leave the whole project shown.
     private void ReconcileSelectedMounts(ProjectContext previous, ProjectInfo candidate)
     {
-        var before = previous.Mounts.Select(static mount => (mount.Name, Root: mount.Location)).ToArray();
-        var after = candidate.Mounts.Select(mount => (mount.Name, Root: mount.Path is null ? null : previous.ProjectRoot.Combine(mount.Path))).ToArray();
-
-        // A renamed mount keeps its folders selected under its new name; a removed one leaves the whole project shown.
-        var selected = contentExplorerState.SelectedFolders.Select(folder =>
+        var gone = previous.Mounts.Select(static mount => mount.Name).Except(candidate.Mounts.Select(static mount => mount.Name), StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+        if (contentExplorerState.SelectedFolders.Any(folder => gone.Contains(folder.Mount)))
         {
-            if (after.Any(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal)))
-            {
-                return folder;
-            }
-
-            var (oldName, oldRoot) = before.FirstOrDefault(mount => string.Equals(mount.Name, folder.Mount, StringComparison.Ordinal));
-            if (oldName is null)
-            {
-                return folder;
-            }
-
-            var (newName, _) = oldRoot is null ? default : after.FirstOrDefault(mount => mount.Root == oldRoot);
-            return newName is null ? null : folder.IsMount ? AssetPath.Create(newName) : AssetPath.Create(newName, folder.RelativePath);
-        }).ToArray();
-        contentExplorerState.SetSelectedFolders(selected.Any(static folder => folder is null) ? [] : selected.OfType<AssetPath>());
-    }
-
-    /// <summary>A declared library: a cooked folder or a pak file, with the committed path that identifies it across renames.</summary>
-    /// <param name="Kind">The library's kind in the content priority.</param>
-    /// <param name="Name">The library's mount name.</param>
-    /// <param name="Container">The committed path of the folder or the pak file, or <see langword="null"/> for a placeholder.</param>
-    private sealed record DeclaredLibrary(CookedContentSourceKind Kind, string Name, string? Container)
-    {
-        public static List<DeclaredLibrary> Of(IEnumerable<ProjectMount> mounts)
-            => [.. mounts.Where(static mount => mount.Kind == MountKind.Cooked)
-                .Select(static mount => new DeclaredLibrary(CookedContentSourceKind.Cooked, mount.Name, mount.Path))];
-
-        public bool Is(CookedContentSource source) => this.Kind == source.Kind && string.Equals(this.Name, source.Name, StringComparison.Ordinal);
+            contentExplorerState.SetSelectedFolders([]);
+        }
     }
 }

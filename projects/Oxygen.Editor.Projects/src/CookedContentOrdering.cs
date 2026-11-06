@@ -29,6 +29,27 @@ public static class CookedContentOrdering
         return Resolve(project.DeclaredMounts, project.CookedContentOrder);
     }
 
+    /// <summary>
+    /// Declares a project's cooked mounts in its priority order, lowest first: a mount table resolves a library's needs
+    /// against the mounts declared before it, which must be the layers the runtime mounts below it.
+    /// </summary>
+    /// <param name="project">The project manifest.</param>
+    /// <exception cref="InvalidDataException">The manifest's libraries or saved order are invalid.</exception>
+    public static void DeclareInOrder(ProjectInfo project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var order = Resolve(project).Where(static source => source.Kind == CookedContentSourceKind.Cooked).Select(static source => source.Name!).ToList();
+        var cooked = project.Mounts.Where(static mount => mount.Kind == MountKind.Cooked).OrderBy(mount => order.IndexOf(mount.Name)).ToArray();
+        var next = 0;
+        for (var index = 0; index < project.Mounts.Count; index++)
+        {
+            if (project.Mounts[index].Kind == MountKind.Cooked)
+            {
+                project.Mounts[index] = cooked[next++];
+            }
+        }
+    }
+
     /// <summary>Expands the saved order with newly declared libraries directly below project output.</summary>
     /// <param name="mounts">The declared mounts; their cooked mounts, in declaration order, oldest first.</param>
     /// <param name="savedOrder">Explicit source priority in mount order, lowest first.</param>

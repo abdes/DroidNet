@@ -25,7 +25,7 @@ public sealed class UnavailableMountTreeItemAdapter : TreeItemAdapter
         ArgumentNullException.ThrowIfNull(projectRoot);
         this.Mount = mount;
         this.IsDimmed = true;
-        this.Annotation = mount.State switch { MountState.Unbound => "Not bound", MountState.Invalid => "Cannot be used", _ => "Folder missing" };
+        this.Annotation = mount.State switch { MountState.Unbound => "Not bound", MountState.Invalid => "Invalid", _ => "Folder missing" };
         this.StateToolTip = mount.State == MountState.Invalid
             ? string.Join('\n', mount.Findings.Select(static finding => finding.Message))
             : mount.State == MountState.Unbound

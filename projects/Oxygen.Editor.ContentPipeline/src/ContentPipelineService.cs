@@ -276,10 +276,16 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookAssetKind GetAssetKind(AssetPath assetUri)
     {
-        // An input source is named by its identity (Player.input) and cooks from its source, which the resolver finds.
+        // An input source or buffer container is named by its identity (Player.input) and cooks from its source, which the
+        // resolver finds.
         var kind = ContentCookAssetKinds.Of(assetUri.Name);
-        return kind != ContentCookAssetKind.Unknown ? kind
-            : ContentCookAssetKinds.Of(assetUri.WithAuthoringSuffix().Name) == ContentCookAssetKind.Input ? ContentCookAssetKind.Input
+        if (kind != ContentCookAssetKind.Unknown)
+        {
+            return kind;
+        }
+
+        var authored = ContentCookAssetKinds.Of(assetUri.WithAuthoringSuffix().Name);
+        return authored is ContentCookAssetKind.Input or ContentCookAssetKind.BufferContainer ? authored
             : throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri));
     }
 

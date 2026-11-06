@@ -6,7 +6,7 @@
 
     <!--  Where a new mount's folder is saved: committed beside the project, or bound on this machine only.  -->
     <StackPanel Spacing="4">
-        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="Save the folder" />
+        <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="Save the location" />
         <RadioButton
             GroupName="MountPlacement"
             IsChecked="{x:Bind Placement.SaveInProject, Mode=TwoWay}"
@@ -16,7 +16,7 @@
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
-                    Text="Shared through the repository: everyone gets the folder at the same place beside the project."
+                    Text="Shared through the repository: everyone gets it at the same place beside the project."
                     TextWrapping="Wrap" />
             </StackPanel>
         </RadioButton>
@@ -26,7 +26,7 @@
                 <TextBlock
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
-                    Text="Project.oxy commits a placeholder; each person binds it to their own folder."
+                    Text="Project.oxy commits a placeholder; each person binds it on their machine."
                     TextWrapping="Wrap" />
             </StackPanel>
         </RadioButton>

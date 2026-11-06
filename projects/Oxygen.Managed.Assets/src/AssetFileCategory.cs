@@ -36,4 +36,7 @@ public enum AssetFileCategory
     /// editor's scene format. It stands for no asset and never cooks.
     /// </summary>
     ModelPreview,
+
+    /// <summary>A buffer container, which produces the buffers it names beside it.</summary>
+    BufferContainer,
 }

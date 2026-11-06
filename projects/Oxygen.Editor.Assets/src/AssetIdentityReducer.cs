@@ -142,7 +142,6 @@ internal sealed class AssetIdentityReducer
             IsSelectable: true)
         {
             CookedMetadata = selected.Cooked,
-            OverriddenCookedSources = selected.OverriddenCookedSources,
         };
 
     private static bool IsIncluded(AssetEntry item, bool includeMissing)
@@ -174,12 +173,6 @@ internal sealed class AssetIdentityReducer
     // Any file of the project opens from its row; only the files of authoring mounts cook.
     private static ProjectAssetLocation? FindProjectFile(ProjectContext project, AssetPath path)
         => project.Find(path) is { IsProjectFile: true, IsMountRoot: false } location ? location : null;
-
-    private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
-    {
-        var local = selected.Cooked is { DescriptorRelativePath: not null } cooked ? project.LibraryMounts.FirstOrDefault(mount => mount.Location == cooked.ContainerPath) : null;
-        return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : selected.Identity.VirtualPath;
-    }
 
     private static bool IsDescriptor(AssetRecord record)
         => record.Cooked is null && AssetFileTypes.Is(record.Identity.Name, AssetFileCategory.Descriptor);
@@ -247,7 +240,7 @@ internal sealed class AssetIdentityReducer
             PrimaryState: primaryState,
             DerivedState: derivedState,
             RuntimeAvailability: cooks ? AssetRuntimeAvailability.NotMounted : AssetRuntimeAvailability.NotApplicable,
-            DisplayPath: GetDisplayPath(descriptor ?? cooked ?? selected, project),
+            DisplayPath: (descriptor ?? cooked ?? selected).Identity.VirtualPath,
             SourcePath: sourcePath,
             DescriptorPath: descriptorPath,
             CookedPath: cookedPath,
@@ -256,7 +249,6 @@ internal sealed class AssetIdentityReducer
             IsSelectable: primaryState is not AssetState.Broken and not AssetState.Missing)
         {
             CookedMetadata = cooked?.Cooked,
-            OverriddenCookedSources = cooked?.OverriddenCookedSources ?? [],
         };
     }
 

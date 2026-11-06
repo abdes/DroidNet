@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Mounts;
-using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -18,14 +17,6 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <summary>Separates mount presentation, persistence and restoration operations.</summary>
 public partial class ContentFoldersViewModel
 {
-    private static void AddDeclarationOf(ProjectInfo projectInfo, ResolvedMount? mount, string name, bool isExpanded)
-    {
-        if (mount?.Declaration is { } declaration)
-        {
-            projectInfo.Mounts.Add(declaration with { Name = name, IsExpanded = isExpanded });
-        }
-    }
-
     // A new publication reaches the catalog as a burst of record changes; one check on the UI thread covers the burst.
     private void OnCatalogChanged()
     {
@@ -131,25 +122,6 @@ public partial class ContentFoldersViewModel
         return await dialogService.ShowAsync(spec, session.Lifetime).ConfigureAwait(true) == DialogButton.Primary;
     }
 
-    private void AddMountToProjectInfo(ProjectInfo projectInfo, ITreeItem child)
-    {
-        switch (child)
-        {
-            case VirtualFolderMountTreeItemAdapter { BackingPathKind: VirtualFolderMountBackingPathKind.ProjectRelative } view when ProjectOutputFolders.Contains(view.BackingPath):
-                projectInfo.OutputFolderViews.Add(new OutputFolderView(view.BackingPath, child.IsExpanded));
-                break;
-            case VirtualFolderMountTreeItemAdapter library:
-                var folder = FileSystemPath.From(library.RootFolder.Location);
-                AddDeclarationOf(projectInfo, session.Context.LibraryMounts.FirstOrDefault(mount => mount.Location == folder), library.MountPointName, child.IsExpanded);
-                break;
-            case AuthoringMountPointTreeItemAdapter authoring:
-                AddDeclarationOf(projectInfo, authoring.MountPoint, authoring.MountPoint.Name, child.IsExpanded);
-                break;
-            default:
-                break;
-        }
-    }
-
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed mount is reported independently so remaining persisted mounts can still be restored.")]
     private async Task RestoreMountAsync(ProjectRootTreeItemAdapter root, ProjectContext context, string name, string backingPath, bool isProjectRelative, bool expanded)
     {
@@ -189,7 +161,6 @@ public partial class ContentFoldersViewModel
                     IsExpanded = expanded,
                     CookedVirtualPaths = outputPaths,
                 };
-                mount.PropertyChanged += this.OnMountPointPropertyChanged;
                 if (await root.MountVirtualFolderAsync(mount).ConfigureAwait(true))
                 {
                     mount = null;
@@ -206,35 +177,30 @@ public partial class ContentFoldersViewModel
         }
     }
 
-    // The engine content is listed first, its folders relative to /Engine; a declared pak's folders are its assets'
-    // whole virtual paths, under the pak's mount name. A pak that cannot be read is reported and left out.
-    private async Task MountPaksAsync(ProjectRootTreeItemAdapter root, ProjectContext project)
+    // The engine content is listed first, then each library that can be read; a library's folders are those of what it
+    // holds, below its mount.
+    private async Task MountLibrariesAsync(ProjectRootTreeItemAdapter root, ProjectContext project)
     {
         try
         {
             var engine = await engineContent.ReadAsync(CancellationToken.None).ConfigureAwait(true);
-            var below = AssetPath.Engine.VirtualPath + "/";
-            _ = root.MountPak(new(AssetPath.Engine.Mount, engineContent.Path, engine.Assets
-                .Where(asset => asset.VirtualPath.StartsWith(below, StringComparison.Ordinal))
-                .Select(asset => asset.VirtualPath[below.Length..])));
+            _ = root.MountLibrary(new(AssetPath.Engine.Mount, engineContent.Path, isPak: true, BelowMount(AssetPath.Engine.Mount, engine.Assets.Select(static asset => asset.VirtualPath))));
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             this.LogPakMountFailure(failure, AssetPath.Engine.Mount, engineContent.Path);
         }
 
-        foreach (var mount in project.LibraryMounts.Where(static mount => mount.Container == MountContainer.Pak))
+        foreach (var mount in project.LibraryMounts)
         {
-            var location = mount.Location!;
-            try
-            {
-                var pak = await PakIndex.ReadFileAsync(location, CancellationToken.None).ConfigureAwait(true);
-                _ = root.MountPak(new(mount.Name, location, pak.Assets.Select(static asset => asset.VirtualPath.TrimStart('/'))) { IsExpanded = mount.IsExpanded });
-            }
-            catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
-            {
-                this.LogPakMountFailure(failure, mount.Name, location);
-            }
+            var paths = mount.Library!.Assets.Select(static asset => asset.VirtualPath).Concat(mount.Library.Textures.Keys);
+            _ = root.MountLibrary(new(mount.Name, mount.Location!, mount.Container == MountContainer.Pak, BelowMount(mount.Name, paths)) { IsExpanded = mount.IsExpanded });
         }
+    }
+
+    private static IEnumerable<string> BelowMount(string mount, IEnumerable<string> virtualPaths)
+    {
+        var prefix = "/" + mount + "/";
+        return virtualPaths.Where(path => path.StartsWith(prefix, StringComparison.Ordinal)).Select(path => path[prefix.Length..]);
     }
 }

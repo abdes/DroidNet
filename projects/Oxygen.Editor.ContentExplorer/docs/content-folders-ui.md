@@ -10,9 +10,10 @@ refactoring tasks needed to support **mount points** consistent with the
   adapters.
 - The Content Folders pane adds a `DroidNet.Controls.ToolBar` **below** the tree for
   **mount / unmount / rename** actions.
-- The mount UI offers exactly three choices: **Cooked**, **Build**, **Local
-  Folder**. Cooked and Build are output folder nodes, view state that is never a
-  mount.
+- The mount UI offers three choices: **Cooked**, **Build**, **Local Folder**.
+  Cooked and Build are output folder nodes, view state that is never a mount; a
+  local folder is a `Source` mount. Libraries are added in the Content mounts
+  dialog, named by what they hold.
 
 Non-goals (out of scope for this doc): drag/drop,
 filtering/search inside the tree, extra configuration pages.
@@ -81,7 +82,8 @@ Enable/disable rules:
 - **Unmount** is enabled only when the current selection is a _mount point node_
   (not the project root; not a folder inside a mount).
 - **Rename** is enabled only when the current selection is renameable (project
-  root, folder, or mount point).
+  root or folder). A mount's name is the first segment of every asset inside it:
+  an output folder keeps its reserved name and a library is named by its root.
 
 ### Mount choices and display names
 
@@ -120,12 +122,16 @@ The tree is composed of the following adapter types:
   - Label: mount point name (e.g. `Content`, `Engine`)
   - Root folder: the mount's resolved `Location`, inside or outside the project
   - Children: folders within that mount
-- **Mount point node** (new adapter)
-  - Note: this represents a **virtual folder mount** (internal/utility roots
-    the `.cooked` or `.build` output folder node, or an arbitrary folder
-    selected by the user).
-  - Label: `Cooked`, `Build`, or the user-provided mount point name
-  - Children: folders within that mounted folder
+- **Output folder node** (`VirtualFolderMountTreeItemAdapter`)
+  - Note: the `.cooked` or `.build` output folder.
+  - Label: `Cooked` or `Build`
+  - Children: folders within that output folder
+- **Library node** (`LibraryMountTreeItemAdapter`)
+  - Backing: the engine content pak, or a `Cooked` mount of `ProjectContext.Mounts`
+    bound to a pak, a loose cooked root or a library project's `.cooked` folder
+  - Label: the mount's name, which is the library's one root
+  - Children: the virtual folders of the assets it holds, read from its
+    `LibraryFacts`, so a folder's path is the path of the assets inside it
 - **Folder node** (existing or revised adapter)
   - Label: folder name
   - Children: subfolders
@@ -180,19 +186,25 @@ Authoring mount points are the `Source` mounts of `ProjectInfo.Mounts`
 
 ### Mounts this machine cannot read
 
-A declared mount that no `.mounts.json` binds, or whose folder or pak file is
-missing, stays in the tree as an `UnavailableMountTreeItemAdapter`: dimmed, with
-`Not bound` or `Folder missing` beside its name, a caution badge whose tooltip
-names the committed path and the folder looked for, and no children. Opening
-the project never fails because of it.
+A declared mount that no `.mounts.json` binds, whose folder or pak file is
+missing, or that breaks a library rule stays in the tree as an
+`UnavailableMountTreeItemAdapter`: dimmed, with `Not bound`, `Folder missing` or
+`Invalid` beside its name, a caution badge whose tooltip names the committed path
+and the folder looked for, or an `Invalid` mount's findings, and no children.
+Opening the project never fails because of it.
+
+A loose library that lacks only what it needs stays usable: it is bound, its
+finding `mount.cooked_dependency_missing` shows in the Content mounts dialog, and
+a load of what it names fails. A pak in that state is `Invalid`.
 
 ### Mount menu
 
 Every mount row has a context menu after its folder actions:
 
 - **Bind to a folder…** for an unbound mount, **Override folder…** for any
-  other: picks a folder, or a pak file for a `Pak` mount, and writes it to the
-  project's own `.mounts.json`.
+  other: picks a folder and writes it to the project's own `.mounts.json`. A
+  `Cooked` mount offers **Bind to a pak file…** and **Bind to a cooked folder…**,
+  or **Override with…** the same: a library's form is a fact of each machine.
 - **Remove binding** when the project's own `.mounts.json` binds a mount that
   `Project.oxy` declares.
 - **Open Mounts…** opens the Content mounts dialog.
@@ -203,19 +215,40 @@ change restores the bindings it replaced.
 ### Content mounts dialog
 
 Each row shows the mount's name and what `Project.oxy` commits for it (its
-relative path, or `Placeholder`), its kind (`Source`, `Cooked`, `Pak`,
-`Output`), and where it is on this machine: `Committed`, `This machine` with
-the bound folder, `Not bound` or `Folder missing` with a caution, or `Always
-mounted` for the engine content. A row this machine cannot read offers
-**Bind…** or **Override…**; a readable one offers to change its binding, and one
-the project's own `.mounts.json` binds offers to remove it. A binding from a
-`.mounts.json` above the project is shown and left as it is. Apply writes
+relative path, or `Placeholder`), its kind (`Source`, `Cooked`, `Output`), and
+where it is on this machine: `Committed`, `This machine` with the bound folder,
+`Not bound` or `Folder missing` with a caution, `Invalid` with the finding in
+words and its code, or `Always mounted` for the engine content. A row this machine
+cannot read offers **Bind…** or **Override…**; a readable one offers to change its
+binding, and one the project's own `.mounts.json` binds offers to remove it. A
+binding from a `.mounts.json` above the project is shown and left as it is. Only a
+source folder added in this dialog can be renamed before Apply. Apply writes
 `Project.oxy` and the project's own `.mounts.json` together.
+
+The add form offers **Source folder**, with a typed name; **Library**; and the
+output folders. See the
+[mockup](../../../design/editor/lld/mockups/add-library.svg).
+
+**Library** picks a pak file, a cooked folder or a library project's `.cooked`
+folder. Its name is read from its one root and never typed, and the form shows the
+name, the form, what it needs and where it lands:
+
+- It lands above the libraries it needs and below those that need it, so libraries
+  can be added in any order. Declarations follow the priority, because a mount table
+  resolves a library's needs against the mounts declared before it, and Content
+  priority refuses a move that would cross a need.
+- A need nothing provides warns and the library can be added: a pak is `Invalid`
+  until the library arrives, and loose content mounts with the finding.
+- What cannot be read, holds several roots or an external script, or has a name in
+  use is refused with its code, and Add is off.
+- `MountPlacementView` starts on this machine for a location outside the project,
+  whose place is usually a fact of each machine, and in `Project.oxy` for one inside
+  it.
 
 ### Local Folder mount dialog
 
 When “Local Folder” is chosen, show a modal dialog (OK/Cancel) to collect a
-stable mount definition.
+stable mount definition of a source folder.
 
 Implementation note:
 
@@ -243,9 +276,9 @@ Behavior:
 - **OK** is enabled only when:
   - Mount point name is non-empty, and
   - A folder path is selected.
-- On OK, the dialog returns `(Name, Path, CommittedPath)` and the mount point
-  is added: a folder with a cooked index as a `Cooked` mount, any other folder
-  as a `Source` mount.
+- On OK, the dialog returns `(Name, Path, CommittedPath)` and the folder is
+  added as a `Source` mount. A folder with a cooked index is refused and pointed at
+  the Content mounts dialog: a library's name is what it holds.
 - On Cancel, nothing changes.
 
 Collision policy:
@@ -434,9 +467,6 @@ Naming rule:
     virtual-path builder/validator appropriate for
     `/{MountPoint}/{RelativePath}`.
 
-- [x] For “Local Folder” mounts: should the user be able to **rename** the mount
-      point name, or is deriving it from the folder name sufficient for now?
-      USER CAN RENAME MOUNT POINT (logical name not physical folder)
 - [x] Should Local Folder mounts be allowed to point outside the project root
       (expected: yes)? YES
 

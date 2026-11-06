@@ -109,9 +109,8 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
     {
         using var fixture = new ExplorerRevealFixture();
         await fixture.OpenAsync().ConfigureAwait(true);
-        var library = Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, ".cooked", "main");
+        var library = Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, "Examples");
         _ = Directory.CreateDirectory(library);
-        await File.WriteAllBytesAsync(Path.Combine(library, "container.index.bin"), Oxygen.Managed.Assets.Testing.CookedLibraryFixture.LooseIndex("/Examples/Materials/Red.omat"), this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
             .Returns((DialogSpec spec, CancellationToken _) =>
             {
@@ -141,15 +140,15 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         _ = view.ViewModel.Should().BeSameAs(fixture.Folders);
         await fixture.Folders.MountLocalFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Session.Context.LibraryMounts.Should().ContainSingle(mount => mount.Name == "Examples" && mount.Kind == MountKind.Cooked);
-        _ = fixture.Folders.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
+        _ = fixture.Session.Context.SourceMounts.Should().ContainSingle(mount => mount.Name == "Examples");
+        _ = fixture.Folders.ShownItems.Should().Contain(item => item is AuthoringMountPointTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
         var displayed = view.FindDescendant<DynamicTree>()!.DisplayedItems.Should().BeAssignableTo<IEnumerable<ITreeItem>>().Subject;
         _ = displayed.Should().Contain(item => item.Label == "Examples");
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
         _ = Directory.CreateDirectory(Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, "Refreshed"));
         await fixture.Explorer.RefreshCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Folders.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
+        _ = fixture.Folders.ShownItems.Should().Contain(item => item is AuthoringMountPointTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
         _ = fixture.Folders.ShownItems.Should().Contain(item => item.Label == "Refreshed");
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Refreshed").Should().NotBeNull();

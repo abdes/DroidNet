@@ -4,6 +4,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Oxygen.Editor.Projects.Mounts;
+using Oxygen.Managed.Assets.Persistence;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
@@ -47,12 +49,11 @@ public sealed partial class ContentMountRow : ObservableObject
     {
         ContentMountKind.ProjectSource => "Source",
         ContentMountKind.Derived => "Output",
-        ContentMountKind.PakLibrary or ContentMountKind.EngineContent => "Pak",
-        _ => this.IsNew ? "Folder" : "Cooked",
+        _ => "Cooked",
     };
 
     /// <summary>Gets the row's icon glyph: a drive for folders, a package for pak files.</summary>
-    public string Glyph => this.Kind is ContentMountKind.PakLibrary or ContentMountKind.EngineContent ? "" : "";
+    public string Glyph => this.IsPak || this.Kind == ContentMountKind.EngineContent ? "" : "";
 
     /// <summary>Gets a value indicating whether the mount is fixed: the engine content is always mounted, under its own name.</summary>
     public bool IsLocked => this.Kind == ContentMountKind.EngineContent;
@@ -87,6 +88,18 @@ public sealed partial class ContentMountRow : ObservableObject
     /// <summary>Gets a value indicating whether the mount is added by this dialog.</summary>
     public bool IsNew { get; init; }
 
+    /// <summary>Gets a value indicating whether a library is bound to a pak file.</summary>
+    public bool IsPak { get; init; }
+
+    /// <summary>Gets a value indicating whether the mount breaks a mount rule, as the table resolved it.</summary>
+    public bool IsInvalid { get; init; }
+
+    /// <summary>Gets what the table found, as it resolved it.</summary>
+    public IReadOnlyList<MountFinding> Findings { get; init; } = [];
+
+    /// <summary>Gets what a library holds; <see langword="null"/> when it could not be read.</summary>
+    public LibraryFacts? Facts { get; init; }
+
     /// <summary>Gets the current virtual name.</summary>
     [ObservableProperty]
     public partial string Name { get; private set; }
@@ -103,8 +116,8 @@ public sealed partial class ContentMountRow : ObservableObject
     /// <summary>Gets or sets the location the project's own <c>.mounts.json</c> binds the mount to on this machine;
     /// <see langword="null"/> for none.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(Binding), nameof(BindingText), nameof(BindingDetail), nameof(IsCaution), nameof(BindActionText),
-        nameof(IsBindButtonVisible), nameof(IsChangeBindingVisible), nameof(IsRemoveBindingVisible), nameof(ChangeBindingToolTip))]
+    [NotifyPropertyChangedFor(nameof(Binding), nameof(BindingText), nameof(BindingDetail), nameof(BindingToolTip), nameof(IsCaution), nameof(ShowsInvalid), nameof(ShowsCaution), nameof(BindActionText),
+        nameof(IsBindButtonVisible), nameof(IsLibraryBindButtonVisible), nameof(IsChangeBindingVisible), nameof(IsLibraryChangeBindingVisible), nameof(IsRemoveBindingVisible), nameof(ChangeBindingToolTip))]
     [NotifyCanExecuteChangedFor(nameof(RemoveBindingCommand))]
     public partial string? LocalLocation { get; set; }
 
@@ -130,6 +143,11 @@ public sealed partial class ContentMountRow : ObservableObject
                 return MountBindingState.Fixed;
             }
 
+            if (this.IsInvalid && this.IsAsResolved)
+            {
+                return MountBindingState.Invalid;
+            }
+
             if ((this.LocalLocation ?? this.ParentLocation) is { } bound)
             {
                 return this.owner.Exists(bound) ? MountBindingState.ThisMachine : MountBindingState.FolderMissing;
@@ -144,18 +162,32 @@ public sealed partial class ContentMountRow : ObservableObject
     /// <summary>Gets the binding's state, as the row shows it.</summary>
     public string BindingText => this.Binding switch
     {
-        MountBindingState.Committed => "Committed",
-        MountBindingState.ThisMachine => "This machine",
+        MountBindingState.Committed => this.HasCurrentFindings ? "Committed · " + FindingText(this.Findings[0].Code) : "Committed",
+        MountBindingState.ThisMachine => this.HasCurrentFindings ? "This machine · " + FindingText(this.Findings[0].Code) : "This machine",
+        MountBindingState.Invalid => this.HasCurrentFindings ? "Invalid: " + FindingText(this.Findings[0].Code) : "Invalid",
         MountBindingState.NotBound => "Not bound",
         MountBindingState.FolderMissing => "Folder missing",
         _ => this.IsLocked ? "Always mounted" : "Shown",
     };
 
     /// <summary>Gets the folder the binding names, or the one that is missing; empty when the committed path says it.</summary>
-    public string BindingDetail => this.LocalLocation ?? this.ParentLocation
-        ?? (this.Binding == MountBindingState.FolderMissing && this.RelativePath is { } relative
-            ? this.owner.ProjectRoot.Combine(relative).FullPath
-            : string.Empty);
+    public string BindingDetail => this.Binding == MountBindingState.Invalid && this.HasCurrentFindings
+        ? this.Findings[0].Code
+        : this.LocalLocation ?? this.ParentLocation
+            ?? (this.Binding == MountBindingState.FolderMissing && this.RelativePath is { } relative
+                ? this.owner.ProjectRoot.Combine(relative).FullPath
+                : string.Empty);
+
+    /// <summary>Gets the binding's tooltip: what the table found in words, else the location.</summary>
+    public string BindingToolTip => this.HasCurrentFindings
+        ? string.Join('\n', this.Findings.Select(static finding => finding.Message))
+        : this.BindingDetail;
+
+    /// <summary>Gets a value indicating whether the row marks the mount as breaking a mount rule.</summary>
+    public bool ShowsInvalid => this.Binding == MountBindingState.Invalid;
+
+    /// <summary>Gets a value indicating whether the row marks a caution: it cannot be read here, or a loose library lacks what it needs.</summary>
+    public bool ShowsCaution => this.IsCaution || (this.HasCurrentFindings && !this.ShowsInvalid);
 
     /// <summary>Gets a value indicating whether the mount cannot be read on this machine: not bound, or its folder is
     /// missing.</summary>
@@ -168,10 +200,16 @@ public sealed partial class ContentMountRow : ObservableObject
     public string BindActionText => this.Binding == MountBindingState.NotBound ? "Bind…" : "Override…";
 
     /// <summary>Gets a value indicating whether the row offers Bind or Override.</summary>
-    public bool IsBindButtonVisible => this.CanBind && this.IsCaution;
+    public bool IsBindButtonVisible => this.CanBind && this.IsCaution && this.Kind != ContentMountKind.Library;
+
+    /// <summary>Gets a value indicating whether the row offers Bind or Override for a library, which picks a pak file or a folder.</summary>
+    public bool IsLibraryBindButtonVisible => this.CanBind && this.IsCaution && this.Kind == ContentMountKind.Library;
 
     /// <summary>Gets a value indicating whether the row offers to change where a readable mount is on this machine.</summary>
-    public bool IsChangeBindingVisible => this.CanBind && !this.IsCaution && !this.IsPrimary;
+    public bool IsChangeBindingVisible => this.CanBind && !this.IsCaution && !this.IsPrimary && this.Kind != ContentMountKind.Library;
+
+    /// <summary>Gets a value indicating whether the row offers to change where a readable library is on this machine, a pak file or a folder.</summary>
+    public bool IsLibraryChangeBindingVisible => this.CanBind && !this.IsCaution && this.Kind == ContentMountKind.Library;
 
     /// <summary>Gets a value indicating whether the row offers to remove the binding of the project's own <c>.mounts.json</c>.</summary>
     public bool IsRemoveBindingVisible => this.LocalLocation is not null && !this.IsLocal;
@@ -182,11 +220,14 @@ public sealed partial class ContentMountRow : ObservableObject
         : $"Bind {this.Name} to another folder on this machine.";
 
     /// <summary>
-    /// Gets a value indicating whether the mount can be renamed. A project source's name is the first segment of
-    /// every asset identity inside it, so it keeps its name until relocation updates references; an output folder node
-    /// keeps its reserved name.
+    /// Gets a value indicating whether the mount can be renamed: only a source folder this dialog adds. A source's name
+    /// is the first segment of every asset identity inside it, a library's is the root of what it holds, and an output
+    /// folder node keeps its reserved name.
     /// </summary>
-    public bool CanRename => this.Kind is not (ContentMountKind.ProjectSource or ContentMountKind.Derived or ContentMountKind.EngineContent);
+    public bool CanRename => this.Kind == ContentMountKind.ProjectSource && this.IsNew;
+
+    /// <summary>Gets a value indicating whether the row shows the rename button; a library's name is its content's, so it has none.</summary>
+    public bool IsRenameVisible => this.HasActions && this.Kind != ContentMountKind.Library;
 
     /// <summary>Gets a value indicating whether the row offers rename and unmount; the project's own content and the engine content have neither.</summary>
     public bool HasActions => !this.IsPrimary && !this.IsLocked;
@@ -205,6 +246,10 @@ public sealed partial class ContentMountRow : ObservableObject
         ? $"Unmount {this.Name}. Files are not changed."
         : this.ParentBindingFile is { } file ? $"'{file}' adds {this.Name}; change that file to remove it." : "The project's content is always mounted.";
 
+    private bool IsAsResolved => string.Equals(this.LocalLocation, this.OriginalLocalLocation, StringComparison.Ordinal);
+
+    private bool HasCurrentFindings => this.Findings.Count != 0 && this.IsAsResolved;
+
     /// <summary>Accepts the typed name when it is valid.</summary>
     /// <returns>Whether the rename finished.</returns>
     internal bool TryCommitRename()
@@ -220,6 +265,16 @@ public sealed partial class ContentMountRow : ObservableObject
         this.owner.ErrorMessage = string.Empty;
         return true;
     }
+
+    private static string FindingText(string code) => code switch
+    {
+        MountCodes.CookedRootMismatch => "holds another root",
+        MountCodes.CookedRootMultiple => "holds several roots",
+        MountCodes.CookedExternalScript => "holds an external script",
+        MountCodes.CookedDependencyMissing => "lacks a library it needs",
+        MountCodes.CookedFormatUnsupported => "cannot be read",
+        _ => code,
+    };
 
     partial void OnNameChanged(string value)
     {
@@ -253,11 +308,17 @@ public sealed partial class ContentMountRow : ObservableObject
     [RelayCommand(CanExecute = nameof(CanUnmount))]
     private void Unmount() => this.owner.Remove(this);
 
-    // Bind, Override and Change binding pick a folder, or a pak file for a pak mount, for this machine's .mounts.json.
+    // Bind, Override and Change binding pick a folder for this machine's .mounts.json; a library's form is a machine fact,
+    // so it may pick a pak file instead.
     [RelayCommand(CanExecute = nameof(CanBind))]
-    private async Task BindAsync(CancellationToken cancellationToken)
+    private Task BindAsync(CancellationToken cancellationToken) => this.PickBindingAsync(pakFile: false, cancellationToken);
+
+    [RelayCommand(CanExecute = nameof(CanBind))]
+    private Task BindPakAsync(CancellationToken cancellationToken) => this.PickBindingAsync(pakFile: true, cancellationToken);
+
+    private async Task PickBindingAsync(bool pakFile, CancellationToken cancellationToken)
     {
-        if (await this.owner.PickLocationAsync(this.Kind == ContentMountKind.PakLibrary, this.LocalLocation ?? this.AbsolutePath, cancellationToken).ConfigureAwait(true) is { } location)
+        if (await this.owner.PickLocationAsync(pakFile, this.LocalLocation ?? this.AbsolutePath, cancellationToken).ConfigureAwait(true) is { } location)
         {
             this.LocalLocation = location;
         }

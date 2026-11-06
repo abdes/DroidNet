@@ -127,7 +127,7 @@ public sealed partial class ReferenceCheck : IReferenceCheck, IAssetProblemSourc
         foreach (var descriptor in index.Descriptors)
         {
             found.AddRange(descriptor.Fields
-                .Select(field => (Field: field, Code: UnresolvedCode(project, descriptor.Identity, field.Identity)))
+                .Select(field => (Field: field, Code: index.BufferProducts.Contains(field.Identity) ? null : UnresolvedCode(project, descriptor.Identity, field.Identity)))
                 .Where(static check => check.Code is not null)
                 .Select(check => new UnresolvedReference(descriptor.Location, check.Field.Property, check.Field.Written, check.Field.Identity.VirtualPath, check.Code!)));
             found.AddRange(descriptor.Refused.Select(refused => new UnresolvedReference(descriptor.Location, refused.Property, refused.Written, Resolved: null, refused.Code)));

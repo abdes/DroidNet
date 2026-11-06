@@ -98,8 +98,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>Whether dependency discovery should retain the cooked identity.</returns>
     public bool IsLibraryPreferred(AssetPath uri)
     {
-        var (root, asset) = this.FindUri(uri);
-        return asset is not null && !this.ProjectSourceWins(uri, root);
+        var (_, asset) = this.FindUri(uri);
+        return asset is not null;
     }
 
     /// <summary>Finds the selected library asset while this read set retains its files.</summary>
@@ -107,8 +107,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>The preferred physical root and index entry, or null when the project wins.</returns>
     public PreferredLibraryAsset? FindPreferredAsset(AssetPath uri)
     {
-        var (root, asset) = this.FindUri(uri);
-        if (asset is null || this.ProjectSourceWins(uri, root))
+        var (_, asset) = this.FindUri(uri);
+        if (asset is null)
         {
             return null;
         }
@@ -356,20 +356,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             return;
         }
 
-        var candidate = found.Asset is null || this.ProjectSourceWins(found.Asset.Identity, found.Root)
-            ? await this.ResolveProjectKeyAsync(dependency, expansion.Inspector as ICookedAssetKeyProvider, expansion.OperationRoot, expansion.Artifacts, cancellationToken).ConfigureAwait(false) : null;
-        if (candidate is not null && (found.Asset is null || this.ProjectHasPriority(found.Root)))
+        if (found.Asset is not null)
+        {
+            pending.Enqueue(found);
+            return;
+        }
+
+        if (await this.ResolveProjectKeyAsync(dependency, expansion.Inspector as ICookedAssetKeyProvider, expansion.OperationRoot, expansion.Artifacts, cancellationToken).ConfigureAwait(false) is { } candidate)
         {
             this.AddProjectSource(candidate, expansion.Projects, expansion.ImportedOutputs);
-        }
-        else if (found.Asset is not null)
-        {
-            if (this.projectIdentities?.IsPending == true && this.ProjectSourceWins(found.Asset.Identity, found.Root))
-            {
-                expansion.Diagnostics.Add(PendingIdentitiesIssue(consumer));
-            }
-
-            pending.Enqueue(found);
         }
         else
         {
@@ -384,8 +379,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         var pending = new Queue<(Root Root, AssetRecord Asset)>();
         foreach (var uri in references)
         {
-            var (root, asset) = this.FindUri(uri);
-            if (asset is not null && !this.ProjectSourceWins(uri, root))
+            var (_, asset) = this.FindUri(uri);
+            if (asset is not null)
             {
                 pending.Enqueue(this.FindKey(asset.Cooked!.AssetKey.ToString()));
             }
@@ -415,7 +410,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         return this.projectIdentities.Resolve(key);
     }
 
-    // A project key wins over the library copy: the project source is cooked in its place.
+    // A key no library holds is the project's: its source is cooked.
     private void AddProjectSource(AssetPath candidate, Dictionary<AssetPath, ContentCookInput> projects, HashSet<AssetPath> importedOutputs)
     {
         var source = this.resolveImported?.Invoke(candidate) ?? CookInputResolver.Resolve(this.project, candidate, ContentCookInputRole.Dependency);
@@ -425,14 +420,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             _ = importedOutputs.Add(candidate);
         }
     }
-
-    private bool ProjectHasPriority(Root root)
-        => this.order.Last(source => source.Kind == CookedContentSourceKind.ProjectOutput
-            || string.Equals(source.Name, root.Name, StringComparison.Ordinal)).Kind == CookedContentSourceKind.ProjectOutput;
-
-    private bool ProjectSourceWins(AssetPath uri, Root root)
-        => this.ProjectHasPriority(root) && (this.resolveImported?.Invoke(uri) is not null
-            || CookInputResolver.HasProjectSource(this.project, uri));
 
     private (Root Root, AssetRecord Asset) FindUri(AssetPath uri)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => asset.Identity == uri).Select(asset => (root, asset))).FirstOrDefault();

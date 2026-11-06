@@ -48,7 +48,6 @@ public sealed partial class GeometryViewModel
         this.latestAssets = assets;
         this.GeometryChoices.Update(AssetRule.For(AssetKind.Geometry).Apply(assets, selectedGeometry));
         if (previousGeometry?.CookedMetadata != currentGeometry?.CookedMetadata
-            || previousGeometry?.EffectiveCookedSource != currentGeometry?.EffectiveCookedSource
             || previousGeometry?.CookStatus?.Freshness != currentGeometry?.CookStatus?.Freshness
             || previousGeometry?.CookStatus?.HasAvailableOutput != currentGeometry?.CookStatus?.HasAvailableOutput)
         {
