@@ -73,17 +73,29 @@ public sealed class SceneImportReplacement
             throw new IOException("The retained source changed during review. Review it again.");
         }
 
-        return new(folder.Combine(bundleName + "/" + primary), CookPaths.Of(project, bundle), primary, record, before);
+        return new(record.Identity, CookPaths.Of(project, bundle), primary, record, before);
     }
 
+    /// <summary>Gets this replacement with the folder as it is now, after the model's record, which lies in it, was saved.</summary>
+    /// <param name="project">The reviewed project.</param>
+    /// <param name="cancellationToken">Cancels the capture.</param>
+    /// <returns>The replacement to cook.</returns>
+    internal async Task<SceneImportReplacement> AfterRecordSavedAsync(ProjectContext project, CancellationToken cancellationToken)
+    {
+        var root = CookPaths.FileOf(project, this.BundleRoot).FullPath;
+        var saved = await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false);
+        return new(this.SourceUri, this.BundleRoot, this.PrimaryRelativePath, this.Record, saved);
+    }
+
+    // What the model owns in its folder: its record, its primary, and every file its last import read.
     private static IEnumerable<string> OwnedFiles(ModelImportRecord record, FileSystemPath bundle)
     {
         var folder = Path.GetDirectoryName(record.SourcePath)!;
-        return record.Settings.SourceFingerprint?.Files
+        return (record.Settings.SourceFingerprint?.Files ?? [])
             .Select(file => FileSystemPath.From(Path.GetFullPath(Path.Combine(folder, file.Path))))
+            .Append(FileSystemPath.From(record.SourcePath))
+            .Append(FileSystemPath.From(record.RecordPath))
             .Where(path => path != bundle && path.IsSameOrInside(bundle))
-            .Select(path => path.GetPathBelow(bundle))
-            .Append(FileSystemPath.From(record.SourcePath).GetPathBelow(bundle))
-            ?? [FileSystemPath.From(record.SourcePath).GetPathBelow(bundle)];
+            .Select(path => path.GetPathBelow(bundle));
     }
 }

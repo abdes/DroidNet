@@ -16,6 +16,7 @@ using Oxygen.Editor.ModelEditor.Settings;
 using Oxygen.Editor.ModelEditor.TestSupport;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Models.Documents;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Selection;
@@ -95,7 +96,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
         await editor.ReimportCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
 
         _ = car.IsDirty.Should().BeFalse("the reimport saved the settings it imports with");
-        _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!).Settings).Should().Be(false);
+        _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!, Car).Settings).Should().Be(false);
         this.services.ContentPipeline.Verify(value => value.ReimportSourceAsync(It.IsAny<AssetPath>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never(), "saving the settings is the import");
     }
 
@@ -135,7 +136,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
 
         _ = result.Outcome.Should().Be(DocumentSaveOutcome.Saved);
         _ = car.IsDirty.Should().BeFalse();
-        _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!).Settings).Should().Be(false);
+        _ = ModelImportSettingCatalog.ImportCameras.ReadFrom(ModelImportSettings.Parse(written!, Car).Settings).Should().Be(false);
         this.services.Results.Verify(value => value.Publish(It.Is<OperationResult>(published => published.Title == "Save import settings")), Times.Once);
     }
 
@@ -261,6 +262,25 @@ public sealed class ModelEditorSettingsTests : IDisposable
     }
 
     [TestMethod]
+    public async Task AfterTheNextImportEntriesAloneShowAContinuedNode()
+    {
+        // The import that took the entry gave the node its anchor's ID: it is neither new nor vanished.
+        _ = LateRecordWriter.WriteRecord(this.documents, Car, change: record => record with
+        {
+            NodeContinuity = [new("Body/Door_Front_L", "Body/Door_FL")],
+            PublishedNodes = [new("Body/Door_Front_L", Guid.NewGuid())],
+        });
+        var (_, editor) = await this.OpenAsync().ConfigureAwait(false);
+
+        var group = editor.Settings.Continuity!;
+
+        _ = group.New.Should().BeEmpty();
+        _ = group.Vanished.Should().BeEmpty();
+        _ = group.Entries.Should().ContainSingle().Which.Continues.Should().Be("Body/Door_FL");
+        _ = group.Summary.Should().Be("The last import kept every node.");
+    }
+
+    [TestMethod]
     public async Task ForgetDropsAVanishedAnchorUntilSave()
     {
         _ = LateRecordWriter.WriteRecord(this.documents, Car, change: record => record with { VanishedNodes = [new("world", Guid.NewGuid())] });
@@ -375,7 +395,7 @@ public sealed class ModelEditorSettingsTests : IDisposable
         });
 
     private string RecordPathOf(ModelImportSettings record)
-        => ModelImportSettings.PathFor(this.documents.Project.Root.FullPath, record.VirtualPath);
+        => ModelRecords.PathOf(this.documents.Project.Context, record.Identity.VirtualPath);
 
     private async Task<(Document Car, ModelEditorViewModel Editor)> OpenAsync()
     {

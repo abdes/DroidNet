@@ -327,7 +327,7 @@ flowchart LR
         T1 -->|cook| T2[".otex"]
     end
     subgraph geometry["Geometry (no family module)"]
-        G0["Ship.glb"] --- G1["Imports/Content/Ship.glb.import.json<br/>model import record"]
+        G0["Ship.glb"] --- G1["Ship.glb.import.json<br/>model import record"]
         G0 -->|cook| G2["Ship.glb/Hull.ogeo, Ship.glb/Paint.omat,<br/>Ship.glb/Ship.oscene"]
     end
     subgraph script["Script (Scripting)"]

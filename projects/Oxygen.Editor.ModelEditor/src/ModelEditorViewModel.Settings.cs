@@ -275,7 +275,7 @@ public sealed partial class ModelEditorViewModel
         }
 
         var project = this.services.Session.Context;
-        var latest = ModelRecordLookup.TryFind(project, this.Source) is { } found ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath) : null;
+        var latest = ModelRecordLookup.TryFind(project, this.Source) is { } found ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath, found.Identity) : null;
         if (latest is not null && this.Model.Saved is { } saved && latest.HoldsSameBytes(saved))
         {
             return;

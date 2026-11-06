@@ -27,11 +27,9 @@ internal static class RetainedModelScenario
 
         // The model is imported when its record names it; the record keeps the source's identity, and the first cook fills
         // in what the import establishes.
-        var identity = "/" + relative + "/" + filename;
-        var recordPath = ModelImportSettings.PathFor(workspace.Root, identity);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
-        var record = ModelImportSettings.Create(recordPath, identity, identity, ModelImportSettings.DefaultSettings(name));
-        await File.WriteAllBytesAsync(recordPath, record.ToBytes(), cancellationToken).ConfigureAwait(false);
-        return AssetPath.Parse(identity);
+        var identity = AssetPath.Parse("/" + relative + "/" + filename);
+        var record = ModelImportSettings.Create(identity, filename, ModelImportSettings.DefaultSettings(name));
+        await File.WriteAllBytesAsync(Path.Combine(directory, filename + ModelImportSettings.RecordSuffix), record.ToBytes(), cancellationToken).ConfigureAwait(false);
+        return identity;
     }
 }

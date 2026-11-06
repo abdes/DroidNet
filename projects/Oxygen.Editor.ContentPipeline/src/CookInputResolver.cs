@@ -65,7 +65,8 @@ internal static class CookInputResolver
 
         // A missing source is still the file the asset would cook from, so the cook reports it missing, and a cook of
         // a deleted source retires what it published. A deleted script is the script source that was requested.
-        var location = FindAuthoringFile(uri != identity && AssetFileTypes.SourcesOf(identity).Contains(uri) ? project.Find(uri) : project.LocateSource(identity));
+        var location = FindAuthoringFile(AssetFileTypes.Is(identity.Name, AssetFileCategory.Model) ? ModelSourceOf(project, identity)
+            : uri != identity && AssetFileTypes.SourcesOf(identity).Contains(uri) ? project.Find(uri) : project.LocateSource(identity));
         var kind = location is null || AssetFileTypes.Is(location.Path.Name, AssetFileCategory.Cooked) ? ContentCookAssetKind.Unknown : ContentCookAssetKinds.Of(location.Path.Name);
         if (kind == ContentCookAssetKind.Unknown)
         {
@@ -93,7 +94,7 @@ internal static class CookInputResolver
 
         var source = Resolve(project, container, role);
         return source.Kind != ContentCookAssetKind.ForeignSource
-            || Import.ModelRecordLookup.TryFind(project, source.SourceAbsolutePath) is not null ? source : null;
+            || Import.ModelRecordLookup.TryFind(project, source.AssetUri) is not null ? source : null;
     }
 
     /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from
@@ -116,6 +117,12 @@ internal static class CookInputResolver
 
         return new(identity, ContentCookAssetKind.Script, source.Path.Mount, CookPaths.Of(project, source.File), source.File, role);
     }
+
+    // A model cooks from the file its record names; a model without a record is the file at its identity.
+    private static ProjectAssetLocation? ModelSourceOf(ProjectContext project, AssetPath model)
+        => Import.ModelRecordLookup.TryFind(project, model) is { } record
+            ? project.FindByFilePath(FileSystemPath.From(record.SourcePath))
+            : project.Find(model);
 
     // The cook reads the files of authoring mounts only; a mount's own folder is not a source.
     private static ProjectAssetLocation? FindAuthoringFile(ProjectAssetLocation? location)

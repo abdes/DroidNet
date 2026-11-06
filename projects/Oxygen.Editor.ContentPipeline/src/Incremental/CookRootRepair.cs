@@ -105,14 +105,14 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(product);
-        if (product.SourceInput is not { } source || CookPaths.TryFileOf(project, source.SourceCookPath) is not { } file)
+        if (product.SourceInput is not { } source || CookPaths.TryFileOf(project, source.SourceCookPath) is null)
         {
             return false;
         }
 
         return !CookPaths.ExistsExactly(project, source.SourceCookPath)
             && (product.ImportedSource is null
-                || !new Models.ModelImportRecords(project).IsImported(file.FullPath));
+                || Import.ModelRecordLookup.TryFind(project, product.SourceUri) is null);
     }
 
     /// <summary>Finds the remaining products that use a removed product, so that cooking them again reports what they lost.</summary>

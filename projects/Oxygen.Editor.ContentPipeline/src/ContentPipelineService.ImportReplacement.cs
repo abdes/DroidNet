@@ -115,7 +115,7 @@ public sealed partial class ContentPipelineService
 
         var record = discovery.Replacement.Record;
         var bytes = await File.ReadAllBytesAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
-        _ = Models.ModelImportSettings.Parse(record.RecordPath, bytes);
+        _ = Models.ModelImportSettings.Parse(bytes, record.Identity);
         var captured = Path.Combine(snapshot.InputRoot, CookPaths.StoragePathOf(discovery.RecordRelative));
         _ = Directory.CreateDirectory(Path.GetDirectoryName(captured)!);
         await File.WriteAllBytesAsync(captured, bytes, cancellationToken).ConfigureAwait(false);
@@ -172,7 +172,7 @@ public sealed partial class ContentPipelineService
             throw new InvalidDataException("Replacement must use the existing source format. Import a different format into a new destination.");
         }
 
-        var recordRelative = ModelRecordLookup.RelativePath(operation.Project, replacement.Record);
+        var recordRelative = CookPaths.Of(operation.Project, FileSystemPath.From(replacement.Record.RecordPath));
         var discovery = new ReplacementDiscovery(source, replacement, incoming, recordRelative, resolveScopes, previous, libraries);
         var (snapshot, graph, replacementFiles) = await this.CaptureIncomingAsync(operation, discovery, artifacts, cancellationToken).ConfigureAwait(false);
         var replacementPaths = replacementFiles.Select(static file => file.CookPath).ToHashSet(StringComparer.Ordinal);

@@ -362,7 +362,7 @@ public sealed partial class ModelImportDialogViewModel : ObservableObject, IDisp
             if (this.ProjectSourceIdentity(file.SourcePath) is { } inPlace)
             {
                 // A model already imported in place is imported again: its record takes these settings.
-                file.IsReimport = records.IsImported(file.SourcePath);
+                file.IsReimport = records.TryFind(inPlace, out _);
                 return planned.Add(inPlace.VirtualPath) ? string.Empty : $"{file.FileName} is in this import twice.";
             }
 

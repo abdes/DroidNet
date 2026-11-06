@@ -9,7 +9,7 @@ namespace Oxygen.Editor.Models;
 /// <param name="Reason">Why it could not be read.</param>
 public sealed record ModelImportRecordProblem(string RecordPath, string Reason)
 {
-    /// <summary>Gets the mount path of the record's source when its mount is not bound on this machine; the record itself
-    /// is readable. Null when the record could not be read.</summary>
+    /// <summary>Gets the record's source as it spells it, a mount path, when its mount is not bound on this machine; the
+    /// record itself is readable. Null when the record could not be read.</summary>
     public string? UnboundSource { get; init; }
 }

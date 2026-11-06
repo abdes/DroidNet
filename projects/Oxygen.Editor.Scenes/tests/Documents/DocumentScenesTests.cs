@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models;
 using Oxygen.Editor.Models.Documents;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
@@ -310,14 +311,9 @@ public sealed class DocumentScenesTests
         using var scenes = new DocumentScenes(documents.Open, session: documents.Session, files: documents.Files);
         var document = await documents.OpenModelAsync(Car).ConfigureAwait(false);
         var identity = Guid.CreateVersion7();
-        var root = documents.Project.Context.ProjectRoot.FullPath;
-        var record = ModelImportSettings.PathFor(root, Car.VirtualPath);
-        var files = documents.Project.Context.FileSystem;
-        _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("{}"))
         {
-            var created = ModelImportSettings.Create(record, Car.VirtualPath, Car.VirtualPath, settings.RootElement, identity);
-            await files.File.WriteAllBytesAsync(record, created.ToBytes(), this.TestContext.CancellationToken).ConfigureAwait(false);
+            _ = ModelRecords.Write(documents.Project.Context, Car.VirtualPath, Car.VirtualPath, settings.RootElement, identity);
         }
 
         _ = scenes.Of(document)!.Scene.Id.Should().Be(new SceneId(identity), "per-user view state, such as the camera, survives the model's renames");

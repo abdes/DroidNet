@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets;
@@ -156,6 +157,44 @@ public sealed partial class AssetIdentityReducerTests
         var rows = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/Content/Models/Crate.glb.preview.json"))]);
 
         _ = rows.Should().BeEmpty("a model's preview belongs to the model and is no asset of its own");
+    }
+
+    [TestMethod]
+    public void Reduce_WhenARecordIsBesideItsModel_ShouldPublishOneRowOnTheModelsFile()
+    {
+        using var workspace = new TempWorkspace();
+        var source = workspace.SourcePath("Content/Models/Crate.glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        File.WriteAllText(source, "glTF");
+        var model = AssetPath.Parse("/Content/Models/Crate.glb");
+        File.WriteAllBytes(source + ModelImportSettings.RecordSuffix, ModelImportSettings.Create(model, "Crate.glb", ModelImportSettings.DefaultSettings("Crate")).ToBytes());
+
+        var rows = Reduce(workspace, [new AssetRecord(model), new AssetRecord(model.WithName("Crate.glb" + ModelImportSettings.RecordSuffix))]);
+
+        var row = rows.Should().ContainSingle().Subject;
+        _ = row.Identity.Should().Be(model);
+        _ = row.Kind.Should().Be(AssetKind.Model);
+        _ = row.SourcePath.Should().Be(FileSystemPath.From(source));
+    }
+
+    [TestMethod]
+    public void Reduce_WhenARecordNamesASourceElsewhere_ShouldPublishARowAtTheRecordsIdentity()
+    {
+        using var workspace = new TempWorkspace();
+        var source = workspace.SourcePath("Content/Media/Crate.fbx");
+        Directory.CreateDirectory(Path.GetDirectoryName(source)!);
+        File.WriteAllText(source, "fbx");
+        var record = workspace.SourcePath("Content/Models/Box.glb.import.json");
+        Directory.CreateDirectory(Path.GetDirectoryName(record)!);
+        var model = AssetPath.Parse("/Content/Models/Box.glb");
+        File.WriteAllBytes(record, ModelImportSettings.Create(model, "../Media/Crate.fbx", ModelImportSettings.DefaultSettings("Box")).ToBytes());
+
+        var rows = Reduce(workspace, [new AssetRecord(model.WithName("Box.glb" + ModelImportSettings.RecordSuffix))]);
+
+        var row = rows.Should().ContainSingle().Subject;
+        _ = row.Identity.Should().Be(model);
+        _ = row.Kind.Should().Be(AssetKind.Model);
+        _ = row.SourcePath.Should().Be(FileSystemPath.From(source));
     }
 
     [TestMethod]

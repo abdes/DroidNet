@@ -8,36 +8,35 @@ using AwesomeAssertions;
 using Oxygen.Editor.Projects.Mounts;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Testing;
+using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Models.Tests;
 
 /// <summary>
-/// A model import record holds the engine's schema: the editor writes what the ImportTool reads, the source is a mount
-/// path resolved through the project's mount table, relocation rewrites the source alone, and an import changes only
-/// what it establishes.
+/// A model import record holds the engine's schema: the editor writes what the ImportTool reads, the source is a file
+/// reference from the record resolved through the project's mount table, the record's identity is where it lives and never
+/// in the file, relocation rewrites the source alone, and an import changes only what it establishes.
 /// </summary>
 [TestClass]
 public sealed class ModelImportSettingsTests
 {
     private const string ProjectRoot = @"C:\Project";
-    private const string Source = "/Content/Car/Car.glb";
-    private const string VirtualPath = "/Content/Car/Car.glb";
+    private const string Source = "Car.glb";
+
+    private static readonly AssetPath Model = AssetPath.Parse("/Content/Car/Car.glb");
 
     private readonly Guid identity = Guid.CreateVersion7();
 
-    private string RecordPath => ModelImportSettings.PathFor(ProjectRoot, VirtualPath);
-
     [TestMethod]
-    public void ARecordLivesAtItsVirtualPathAndNamesItsSourceByMountPath()
+    public void ARecordNamesItsSourceRelativelyAndResolvesItThroughItsIdentity()
     {
         var record = this.Create();
         var project = TestProject.Create(new MockFileSystem(), ProjectRoot).Context;
 
-        _ = this.RecordPath.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Car", "Car.glb.import.json"));
-        _ = ModelImportSettings.RelativePathFor(VirtualPath).Should().Be("Imports/Content/Car/Car.glb.import.json");
+        _ = record.Identity.Should().Be(Model);
         _ = record.SourceIdentity.Should().Be(this.identity);
-        _ = record.Source.Should().Be("/Content/Car/Car.glb");
+        _ = record.Source.Should().Be("Car.glb");
         _ = record.ResolveSource(project)!.FullPath.Should().Be(Path.Combine(ProjectRoot, "Content", "Car", "Car.glb"));
         _ = record.SourceFingerprint.Should().BeNull("a record has no fingerprint before its first import");
     }
@@ -55,9 +54,10 @@ public sealed class ModelImportSettingsTests
         };
 
         var bytes = record.ToBytes();
-        var read = ModelImportSettings.Parse(this.RecordPath, bytes);
+        var read = ModelImportSettings.Parse(bytes, Model);
 
         _ = read.ToBytes().Should().Equal(bytes);
+        _ = read.Identity.Should().Be(Model);
         _ = read.NodeContinuity.Should().Equal(record.NodeContinuity);
         _ = read.PublishedNodes.Should().Equal(record.PublishedNodes);
         _ = read.NewNodes.Should().Equal(record.NewNodes);
@@ -66,55 +66,31 @@ public sealed class ModelImportSettingsTests
         using var document = JsonDocument.Parse(bytes);
         _ = document.RootElement.GetProperty("schema_version").GetInt32().Should().Be(ModelImportSettings.CurrentSchemaVersion);
         _ = document.RootElement.GetProperty("settings").GetProperty("unit_policy").GetString().Should().Be("normalize");
+        _ = document.RootElement.TryGetProperty("virtual_path", out _).Should().BeFalse("a record's identity is where it lives");
     }
 
     [TestMethod]
-    public void ARecordNotAtItsVirtualPathOrOffSchemaIsRefused()
+    public void ARecordOffSchemaOrHoldingItsIdentityIsRefused()
     {
         var bytes = this.Create().ToBytes();
 
-        var misplaced = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Car.import.json"), bytes);
-        var named = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Imports", "Content", "Car", $"{this.identity:D}.import.json"), bytes);
-        var elsewhere = () => ModelImportSettings.Parse(Path.Combine(ProjectRoot, "Content", "Car", "Car.glb.import.json"), bytes);
-        var invalid = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes($$"""{ "schema_version": {{ModelImportSettings.CurrentSchemaVersion}} }"""));
+        var invalid = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes($$"""{ "schema_version": {{ModelImportSettings.CurrentSchemaVersion}} }"""), Model);
+        var holdingItsIdentity = () => ModelImportSettings.Parse(Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(bytes).Replace(
+            "\"source\": \"Car.glb\"", "\"source\": \"Car.glb\", \"virtual_path\": \"/Content/Car/Car.glb\"", StringComparison.Ordinal)), Model);
 
-        _ = misplaced.Should().Throw<InvalidDataException>();
-        _ = named.Should().Throw<InvalidDataException>("the file name no longer carries the source identity");
-        _ = elsewhere.Should().Throw<InvalidDataException>("a record lives under Imports");
         _ = invalid.Should().Throw<InvalidDataException>();
-        _ = ModelImportSettings.Parse(this.RecordPath, bytes).VirtualPath.Should().Be(VirtualPath);
+        _ = holdingItsIdentity.Should().Throw<InvalidDataException>();
     }
 
     [TestMethod]
-    public void ANewRecordMustBeCreatedAtItsVirtualPathWithAUuidV7Identity()
+    public void ANewRecordHasAUuidV7Identity()
     {
         using var settings = JsonDocument.Parse("{}");
 
-        var misplaced = () => ModelImportSettings.Create(Path.Combine(ProjectRoot, "Imports", "Car.import.json"), Source, VirtualPath, settings.RootElement);
-        var notV7 = () => ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement, Guid.NewGuid());
-        var relative = () => ModelImportSettings.PathFor(ProjectRoot, "Content/Car/Car.glb");
+        var notV7 = () => ModelImportSettings.Create(Model, Source, settings.RootElement, Guid.NewGuid());
 
-        _ = misplaced.Should().Throw<ArgumentException>();
         _ = notV7.Should().Throw<ArgumentException>();
-        _ = relative.Should().Throw<ArgumentException>();
-        _ = ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement).SourceIdentity.Version.Should().Be(7);
-    }
-
-    [TestMethod]
-    public void ARecordGivenAnotherVirtualPathBelongsAtTheNewPlace()
-    {
-        var record = this.Create();
-        var path = record.VirtualPath.Replace("Car.glb", "Truck.glb", StringComparison.Ordinal);
-        var moved = record with { VirtualPath = path };
-
-        var newPlace = ModelImportSettings.PathFor(ProjectRoot, path);
-
-        _ = newPlace.Should().Be(Path.Combine(ProjectRoot, "Imports", "Content", "Car", "Truck.glb.import.json"));
-        _ = ModelImportSettings.ProjectRootOf(newPlace, moved.VirtualPath).Should().Be(ProjectRoot);
-        _ = ModelImportSettings.ProjectRootOf(this.RecordPath, moved.VirtualPath).Should().BeNull("the old place is no longer its place");
-        var parse = () => ModelImportSettings.Parse(this.RecordPath, moved.ToBytes());
-        _ = parse.Should().Throw<InvalidDataException>();
-        _ = ModelImportSettings.Parse(newPlace, moved.ToBytes()).SourceIdentity.Should().Be(record.SourceIdentity);
+        _ = ModelImportSettings.Create(Model, Source, settings.RootElement).SourceIdentity.Version.Should().Be(7);
     }
 
     [TestMethod]
@@ -122,9 +98,9 @@ public sealed class ModelImportSettingsTests
     {
         var record = this.Create();
 
-        var relocated = record.WithSource("/Content/Vehicles/Car.glb");
+        var relocated = record.WithSource("../Vehicles/Car.glb");
 
-        _ = relocated.Source.Should().Be("/Content/Vehicles/Car.glb");
+        _ = relocated.Source.Should().Be("../Vehicles/Car.glb");
         _ = relocated.DiffersOnlyByImport(record).Should().BeFalse();
         _ = (relocated with { Source = record.Source }).ToBytes().Should().Equal(record.ToBytes());
     }
@@ -148,15 +124,17 @@ public sealed class ModelImportSettingsTests
     [TestMethod]
     [DataRow("../../../Content/Car/Car.glb")]
     [DataRow("D:/Assets/Car.glb")]
-    [DataRow("/Content/../Car.glb")]
-    public void ASourceThatIsNotAMountPathIsRefused(string source)
+    [DataRow("/Content/Car/Car.glb")]
+    [DataRow("/Other/../Car.glb")]
+    public void ASourceThatIsNoFileReferenceFromTheRecordIsRefused(string source)
     {
         var record = this.Create();
 
         var rebind = () => record.WithSource(source);
-        var create = () => ModelImportSettings.Create(this.RecordPath, source, VirtualPath, record.Settings);
-        var parse = () => ModelImportSettings.Parse(this.RecordPath, Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(record.ToBytes()).Replace(
-            "\"source\": \"/Content/Car/Car.glb\"", "\"source\": \"" + source + "\"", StringComparison.Ordinal)));
+        var create = () => ModelImportSettings.Create(Model, source, record.Settings);
+        var parse = () => ModelImportSettings.Parse(
+            Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(record.ToBytes()).Replace("\"source\": \"Car.glb\"", "\"source\": \"" + source + "\"", StringComparison.Ordinal)),
+            Model);
 
         _ = rebind.Should().Throw<ArgumentException>();
         _ = create.Should().Throw<ArgumentException>();
@@ -185,7 +163,7 @@ public sealed class ModelImportSettingsTests
         _ = updated.SourceFingerprint!.Size.Should().Be(3);
         _ = updated.NodeContinuity.Should().Equal(record.NodeContinuity);
         _ = updated.DiffersOnlyByImport(record).Should().BeTrue();
-        _ = (updated with { VirtualPath = "/Content/Other.glb" }).DiffersOnlyByImport(record).Should().BeFalse();
+        _ = updated.WithSource("Other.glb").DiffersOnlyByImport(record).Should().BeFalse();
     }
 
     [TestMethod]
@@ -197,16 +175,51 @@ public sealed class ModelImportSettingsTests
 
         _ = continued.NodeContinuity.Should().Equal([new ModelNodeContinuity("Body/Door_Front_L", "Body/Door_FL")]);
         _ = (continued with { NodeContinuity = record.NodeContinuity }).ToBytes().Should().Equal(record.ToBytes(), "nothing else changes");
-        _ = ModelImportSettings.Parse(continued.ToBytes()).NodeContinuity.Should().Equal(continued.NodeContinuity);
+        _ = ModelImportSettings.Parse(continued.ToBytes(), Model).NodeContinuity.Should().Equal(continued.NodeContinuity);
         var again = () => continued.WithContinuity("Body/Door_Front_L", "Body/Door_RL");
         var itself = () => record.WithContinuity("Body", "Body");
         _ = again.Should().Throw<ArgumentException>();
         _ = itself.Should().Throw<ArgumentException>();
     }
 
+    [TestMethod]
+    public void ANodeRenamedBack_ReplacesTheEntryItWouldCloseACircleWith()
+    {
+        var renamed = this.Create().WithContinuity("Body/B", "Body/A");
+
+        var back = renamed.WithContinuity("Body/A", "Body/B");
+
+        _ = back.NodeContinuity.Should().Equal([new ModelNodeContinuity("Body/A", "Body/B")], "two entries that continue each other block the model");
+    }
+
+    [TestMethod]
+    public void AnEntryThatClosesALongerChain_ReplacesTheEntryItCloses()
+    {
+        var chain = this.Create().WithContinuity("B", "A").WithContinuity("C", "B").WithContinuity("D", "C");
+
+        var closed = chain.WithContinuity("A", "D");
+
+        _ = closed.NodeContinuity.Should().Equal(
+        [
+            new ModelNodeContinuity("C", "B"),
+            new ModelNodeContinuity("D", "C"),
+            new ModelNodeContinuity("A", "D"),
+        ]);
+    }
+
+    [TestMethod]
+    public void AnEntryThatClosesNoCircle_LeavesTheOthers()
+    {
+        var chain = this.Create().WithContinuity("B", "A");
+
+        var other = chain.WithContinuity("D", "C");
+
+        _ = other.NodeContinuity.Should().Equal([new ModelNodeContinuity("B", "A"), new ModelNodeContinuity("D", "C")]);
+    }
+
     private ModelImportSettings Create()
     {
         using var settings = JsonDocument.Parse("""{ "unit_policy": "normalize", "bake_transforms": false }""");
-        return ModelImportSettings.Create(this.RecordPath, Source, VirtualPath, settings.RootElement, this.identity);
+        return ModelImportSettings.Create(Model, Source, settings.RootElement, this.identity);
     }
 }

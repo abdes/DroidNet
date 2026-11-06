@@ -41,7 +41,7 @@ public sealed partial class ModelImportDialogViewModel
             {
                 // A model already imported in place starts from the settings of its last import, which it imports again.
                 var name = Path.GetFileNameWithoutExtension(path);
-                var settings = this.ProjectSourceIdentity(path) is not null && records.TryFindBySource(path, out var record)
+                var settings = this.ProjectSourceIdentity(path) is { } identity && records.TryFind(identity, out var record)
                     ? record.Settings.Settings.Clone()
                     : NewSettings(name);
                 added.Add(this.Append(new ModelImportFile(path, name, this.destination, settings)));

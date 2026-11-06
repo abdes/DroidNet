@@ -129,9 +129,15 @@ public sealed partial class ContentPipelineService(
     internal static bool IsCookableDescriptorFile(ProjectContext project, string path)
         => ContentCookAssetKinds.Of(path) switch
         {
+            // A model cooks once: from its file when one is at its identity, else from its record.
+            _ when AssetFileTypes.Is(path, AssetFileCategory.ImportSettings) => project.FindByFilePath(FileSystemPath.From(path)) is { Identity: var model }
+                && Import.ModelRecordLookup.TryFind(project, model) is not null
+                && project.Find(model) is { } file && !project.FileSystem.File.Exists(file.File.FullPath),
+
             // A script is a source, not a descriptor: it cooks with the scenes that use it, or on its own when it changes.
             ContentCookAssetKind.Unknown or ContentCookAssetKind.Script => false,
-            ContentCookAssetKind.ForeignSource => Import.ModelRecordLookup.TryFind(project, FileSystemPath.From(path)) is not null,
+            ContentCookAssetKind.ForeignSource => project.FindByFilePath(FileSystemPath.From(path)) is { Identity: var model }
+                && Import.ModelRecordLookup.TryFind(project, model) is not null,
             _ => !AssetFileTypes.Is(path, AssetFileCategory.Cooked),
         };
 

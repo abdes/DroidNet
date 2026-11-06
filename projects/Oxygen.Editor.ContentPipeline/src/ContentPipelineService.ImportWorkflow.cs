@@ -140,7 +140,7 @@ public sealed partial class ContentPipelineService
     private static ModelImportRecord? InPlaceRecord(ProjectContext project, SceneImportRequest request)
     {
         var source = FileSystemPath.From(Path.GetFullPath(request.SourcePath));
-        return CookInputResolver.FindAuthoringSourceUri(project, source) is null ? null : ModelRecordLookup.TryFind(project, source);
+        return CookInputResolver.FindAuthoringSourceUri(project, source) is { } identity ? ModelRecordLookup.TryFind(project, identity) : null;
     }
 
     private async Task<ContentCookResult> ImportSourceCoreAsync(ContentCookOperation operation, SceneImportRequest request, Action<SceneImportRequest> retainRecovery, CancellationToken cancellationToken)
@@ -156,8 +156,8 @@ public sealed partial class ContentPipelineService
             if (request.Replacement is { } replacement)
             {
                 retainedUri = replacement.SourceUri;
-                await this.SaveReplacementSettingsAsync(operation, replacement, request.Settings, cancellationToken).ConfigureAwait(false);
-                return await this.CookReplacementAsync(operation, request, retainRecovery, cancellationToken).ConfigureAwait(false);
+                var saved = await this.SaveReplacementSettingsAsync(operation, replacement, request.Settings, cancellationToken).ConfigureAwait(false);
+                return await this.CookReplacementAsync(operation, request with { Replacement = saved }, retainRecovery, cancellationToken).ConfigureAwait(false);
             }
 
             var retained = request.RetainedSource ?? await this.RetainRequestedSourceAsync(operation, request, cancellationToken).ConfigureAwait(false);
@@ -220,24 +220,25 @@ public sealed partial class ContentPipelineService
     {
         this.cookCoordinator.VerifyWriter(operation);
         var project = operation.Project;
-        if (ModelRecordLookup.TryFind(project, primary) is { } existing)
+        if (ModelRecordLookup.TryFind(project, identity) is { } existing)
         {
             // A retry finds the record its first attempt wrote.
-            if (!string.Equals(existing.Settings.VirtualPath, identity.VirtualPath, StringComparison.Ordinal))
+            if (FileSystemPath.From(existing.SourcePath) != primary)
             {
-                throw new InvalidOperationException("This source already has an import record. Use Reimport to keep its existing destination and asset identities.");
+                throw new InvalidOperationException($"The model {identity} already imports another source. Use Reimport to keep its existing source and asset identities.");
             }
 
             return;
         }
 
-        var path = ModelImportSettings.PathFor(project.ProjectRoot.FullPath, identity.VirtualPath);
-        var source = CookPaths.MountPathOf(project, primary)
+        var file = project.Find(identity.WithName(identity.Name + ModelImportSettings.RecordSuffix))
+            ?? throw new InvalidDataException($"The model {identity} is outside the project's source mounts.");
+        var source = project.ToFileReference(identity, primary)
             ?? throw new InvalidDataException("The model's source is outside the project's source mounts.");
-        var record = ModelImportSettings.Create(path, source, identity.VirtualPath, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
-        _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var record = ModelImportSettings.Create(identity, source, request.Settings ?? ModelImportSettings.DefaultSettings(request.Name), request.SourceIdentity);
+        _ = project.FileSystem.Directory.CreateDirectory(file.File.Parent!.FullPath);
         this.cookCoordinator.VerifyWriter(operation);
-        _ = await this.importRecordFiles.WriteAsync(path, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);
+        _ = await this.importRecordFiles.WriteAsync(file.File.FullPath, record.ToBytes(), DroidNet.Storage.FileVersion.Missing, cancellationToken).ConfigureAwait(false);
     }
 
     private Task<ContentCookResult> CookImportedSourcesAsync(ContentCookOperation operation, List<AssetPath> sources, ImportRunSettings run, CancellationToken cancellationToken)
@@ -323,7 +324,7 @@ public sealed partial class ContentPipelineService
 
                 try
                 {
-                    await this.SaveRecordSettingsAsync(operation, record.RecordPath, request.Settings, token).ConfigureAwait(false);
+                    await this.SaveRecordSettingsAsync(operation, record, request.Settings, token).ConfigureAwait(false);
                     return await this.CookImportedSourcesAsync(operation, [uri], run, token).ConfigureAwait(false);
                 }
                 catch (CookInputDiscoveryException failure)
@@ -339,16 +340,21 @@ public sealed partial class ContentPipelineService
     }
 
     // The replaced model keeps its record, which takes the settings chosen for the replacement before it cooks, as the
-    // Model Editor's Save does before its reimport; the cook captures the record as it then is.
-    private Task SaveReplacementSettingsAsync(ContentCookOperation operation, SceneImportReplacement replacement, JsonElement? settings, CancellationToken cancellationToken)
-        => this.SaveRecordSettingsAsync(operation, replacement.Record.RecordPath, settings, cancellationToken);
+    // Model Editor's Save does before its reimport; the cook captures the record as it then is. The record lies beside
+    // the model, so the reviewed folder is checked first and is what the save leaves.
+    private async Task<SceneImportReplacement> SaveReplacementSettingsAsync(ContentCookOperation operation, SceneImportReplacement replacement, JsonElement? settings, CancellationToken cancellationToken)
+    {
+        await VerifyReplacementTargetAsync(operation, replacement, cancellationToken).ConfigureAwait(false);
+        await this.SaveRecordSettingsAsync(operation, replacement.Record, settings, cancellationToken).ConfigureAwait(false);
+        return await replacement.AfterRecordSavedAsync(operation.Project, cancellationToken).ConfigureAwait(false);
+    }
 
     // Replaces a model's record when it holds the expected bytes; the replacement must be a valid record of the model.
     private async Task ReplaceRecordAsync(ContentCookOperation operation, AssetPath sourceUri, byte[] expected, byte[] replacement, CancellationToken cancellationToken)
     {
         var record = ModelRecordLookup.TryFind(operation.Project, sourceUri)
             ?? throw new InvalidDataException($"{sourceUri.Name} has no import record. Import it first.");
-        _ = ModelImportSettings.Parse(record.RecordPath, replacement);
+        _ = ModelImportSettings.Parse(replacement, record.Identity);
         this.cookCoordinator.VerifyWriter(operation);
         var snapshot = await this.importRecordFiles.ReadAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
         if (!snapshot.Content.AsSpan().SequenceEqual(expected))
@@ -361,7 +367,7 @@ public sealed partial class ContentPipelineService
     }
 
     // Writes the chosen settings into a model's record, leaving it untouched when they are the same.
-    private async Task SaveRecordSettingsAsync(ContentCookOperation operation, string path, JsonElement? settings, CancellationToken cancellationToken)
+    private async Task SaveRecordSettingsAsync(ContentCookOperation operation, ModelImportRecord target, JsonElement? settings, CancellationToken cancellationToken)
     {
         if (settings is not { } chosen)
         {
@@ -369,13 +375,13 @@ public sealed partial class ContentPipelineService
         }
 
         this.cookCoordinator.VerifyWriter(operation);
-        var snapshot = await this.importRecordFiles.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-        var record = ModelImportSettings.Parse(path, snapshot.Content.AsMemory());
+        var snapshot = await this.importRecordFiles.ReadAsync(target.RecordPath, cancellationToken).ConfigureAwait(false);
+        var record = ModelImportSettings.Parse(snapshot.Content.AsMemory(), target.Identity);
         var updated = (record with { Settings = chosen.Clone() }).ToBytes();
         if (!updated.AsSpan().SequenceEqual(record.ToBytes()))
         {
             this.cookCoordinator.VerifyWriter(operation);
-            _ = await this.importRecordFiles.WriteAsync(path, updated, snapshot.Version, cancellationToken).ConfigureAwait(false);
+            _ = await this.importRecordFiles.WriteAsync(target.RecordPath, updated, snapshot.Version, cancellationToken).ConfigureAwait(false);
         }
     }
 }

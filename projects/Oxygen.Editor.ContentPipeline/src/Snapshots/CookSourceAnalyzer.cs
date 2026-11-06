@@ -200,10 +200,10 @@ internal sealed partial class CookSourceAnalyzer(
         string? recordPath = null;
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
-            var record = ModelRecordLookup.Find(operation.Project, input.SourceAbsolutePath);
-            recordPath = ModelRecordLookup.RelativePath(operation.Project, record);
+            var record = ModelRecordLookup.Find(operation.Project, input.AssetUri);
+            recordPath = CookPaths.Of(operation.Project, FileSystemPath.From(record.RecordPath));
             var bytes = await CookSavedSourceReader.ReadAsync(record.RecordPath, cancellationToken).ConfigureAwait(false);
-            _ = ModelImportSettings.Parse(record.RecordPath, bytes);
+            _ = ModelImportSettings.Parse(bytes, record.Identity);
             managed.Add(new(AssetUri: null, FileSystemPath.From(record.RecordPath), recordPath, Convert.ToHexString(SHA256.HashData(bytes))));
         }
 

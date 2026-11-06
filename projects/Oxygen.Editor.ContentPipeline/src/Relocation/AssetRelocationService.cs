@@ -337,8 +337,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
             if (isDirectory)
             {
-                // A model deleted with its folder takes its record with it.
-                if (import.PrimaryPath.IsSameOrInside(path))
+                // A model deleted with its folder takes its record with it, wherever the record is.
+                if (import.PrimaryPath.IsSameOrInside(path) && !import.RecordPath.IsSameOrInside(path))
                 {
                     records.Add(import.RecordPath);
                 }
@@ -349,15 +349,16 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             var files = import.Files;
             if (path == import.PrimaryPath)
             {
-                // The model's preview, beside it, goes with it.
+                // The model's preview and its record, beside it, go with it.
                 var owned = files.ToHashSet();
                 _ = owned.Add(FileSystemPath.From(AssetFileTypes.PreviewOf(path.FullPath)));
+                _ = owned.Add(import.RecordPath);
                 var onlyThisModel = fileSystem.Directory.Exists(modelFolder.FullPath)
                     && fileSystem.Directory.EnumerateFiles(modelFolder.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
                 // A model alone in its folder goes with the folder, unless the folder is the project's or a mount's own.
                 return onlyThisModel && modelFolder != root && !project.SourceMounts.Any(mount => mount.Location == modelFolder)
-                    ? [modelFolder, import.RecordPath]
-                    : [.. owned.Where(file => fileSystem.File.Exists(file.FullPath)), import.RecordPath];
+                    ? import.RecordPath.IsSameOrInside(modelFolder) ? [modelFolder] : [modelFolder, import.RecordPath]
+                    : [.. owned.Where(file => fileSystem.File.Exists(file.FullPath))];
             }
 
             if (files.Contains(path))

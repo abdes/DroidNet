@@ -13,6 +13,7 @@
         <ProjectReference Include="..\src\Oxygen.Editor.Scenes.csproj" />
         <ProjectReference Include="..\testing\Oxygen.Editor.Scenes.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testing\Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Models\testing\Oxygen.Editor.Models.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
     </ItemGroup>
 

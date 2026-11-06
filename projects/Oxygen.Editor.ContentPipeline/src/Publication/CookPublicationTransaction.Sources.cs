@@ -86,27 +86,30 @@ internal sealed partial class CookPublicationTransaction
 
     private static string ProducedSourcePath(ProjectContext project, CookProducedSourceFile file)
     {
-        if (file.Before is null || file.After is null || string.IsNullOrWhiteSpace(file.RelativePath)
-            || Path.IsPathRooted(file.RelativePath) || file.RelativePath.Contains('\\', StringComparison.Ordinal)
-            || file.RelativePath.Split('/').Any(static segment => segment is "" or "." or ".."))
+        if (file.Before is null || file.After is null || !CookPaths.IsValid(file.RelativePath))
         {
             throw new InvalidDataException("Produced source settings contain an invalid path or byte payload.");
         }
 
-        var recordPath = project.ProjectRoot.Combine(file.RelativePath).FullPath;
-        var before = ModelImportSettings.Parse(recordPath, file.Before);
-        var after = ModelImportSettings.Parse(recordPath, file.After);
-        var expected = ModelImportSettings.RelativePathFor(before.VirtualPath);
-        if (!string.Equals(file.RelativePath, expected, StringComparison.Ordinal) || !before.DiffersOnlyByImport(after))
+        var record = CookPaths.TryFileOf(project, file.RelativePath);
+        var location = record is null ? null : project.FindByFilePath(record);
+        if (location is not { MountKind: ProjectMountKind.Authoring } || !AssetFileTypes.Is(location.Path.Name, AssetFileCategory.ImportSettings))
+        {
+            throw new InvalidDataException("A publication may update only what an import establishes in its model import record.");
+        }
+
+        var before = ModelImportSettings.Parse(file.Before, location.Identity);
+        var after = ModelImportSettings.Parse(file.After, location.Identity);
+        if (!before.DiffersOnlyByImport(after))
         {
             throw new InvalidDataException("A publication may update only what an import establishes in its model import record.");
         }
 
         var primary = before.ResolveSource(project)
             ?? throw new InvalidDataException("Produced metadata names a model in a mount that is not bound.");
-        var sourceUri = CookInputResolver.FindAuthoringSourceUri(project, primary)
+        _ = CookInputResolver.FindAuthoringSourceUri(project, primary)
             ?? throw new InvalidDataException("Produced metadata does not belong to a project authoring source.");
-        var source = CookInputResolver.Resolve(project, sourceUri, ContentCookInputRole.Dependency);
+        var source = CookInputResolver.Resolve(project, location.Identity, ContentCookInputRole.Dependency);
         if (source.Kind != ContentCookAssetKind.ForeignSource
             || !AssetFileTypes.Is(primary.Name, AssetFileCategory.Model)
             || source.SourceAbsolutePath != primary)
@@ -114,8 +117,8 @@ internal sealed partial class CookPublicationTransaction
             throw new InvalidDataException("Produced metadata does not identify its supported model source.");
         }
 
-        var path = project.ProjectRoot.FullPath;
-        foreach (var segment in file.RelativePath.Split('/'))
+        var path = location.MountRoot.FullPath;
+        foreach (var segment in location.File.GetPathBelow(location.MountRoot).Split('/'))
         {
             path = Path.Combine(path, segment);
             CookOutputLease.RejectReparsePoint(path);

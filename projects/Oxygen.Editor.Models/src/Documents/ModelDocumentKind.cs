@@ -8,8 +8,8 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.Models.Documents;
 
 /// <summary>
-///     The kind of a model document: a model's source file (<c>.glb</c>, <c>.gltf</c>, <c>.fbx</c>), opened to look at what
-///     its import gave.
+///     The kind of a model document: a model (<c>.glb</c>, <c>.gltf</c>, <c>.fbx</c>), opened at its identity to look at
+///     what its import gave.
 /// </summary>
 /// <remarks>
 ///     The document never writes its source file: the model is an import output, and what the user tunes is its import
@@ -38,8 +38,7 @@ public sealed class ModelDocumentKind(IProjectSession session, IModelImportRecor
         ArgumentNullException.ThrowIfNull(context);
         cancellationToken.ThrowIfCancellationRequested();
         var project = session.Context;
-        var records = new ModelImportRecords(project);
-        var record = records.TryFindBySource(file.Path.FullPath, out var found) ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath) : null;
+        var record = ModelImportRecords.TryRead(project, file.Asset) is { } found ? ModelImportRecordSnapshot.Read(project.FileSystem, found.RecordPath, found.Identity) : null;
         return Task.FromResult(DocumentDecodeResult.Decoded(new ModelContent(file.Asset, record, context.History, writer)));
     }
 }

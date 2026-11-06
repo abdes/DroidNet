@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -73,10 +74,10 @@ public sealed class TexturedModelImportTests
         _ = File.Exists(retainedImage).Should().BeTrue();
         _ = (await File.ReadAllBytesAsync(retainedImage, this.TestContext.CancellationToken).ConfigureAwait(false))
             .Should().Equal(await File.ReadAllBytesAsync(Path.Combine(original, imageName), this.TestContext.CancellationToken).ConfigureAwait(false));
-        var record = ModelRecordLookup.Find(workspace.ProjectContext, FileSystemPath.From(retained));
+        var record = ModelRecordLookup.Find(workspace.ProjectContext, workspace.ProjectContext.FindByFilePath(FileSystemPath.From(retained))!.Identity);
         _ = record.Settings.Settings.GetProperty("tangents_policy").GetString().Should().Be("generate");
         _ = record.Settings.SourceIdentity.Should().Be(request.SourceIdentity);
-        _ = record.RecordPath.Should().Be(ModelImportSettings.PathFor(workspace.Root, record.Settings.VirtualPath));
+        _ = record.RecordPath.Should().Be(retained + ModelImportSettings.RecordSuffix);
         _ = record.Settings.SurfaceProvenance.GetProperty("schema_version").GetInt32().Should().Be(2);
         _ = record.Settings.SurfaceProvenance.TryGetProperty("source_identity", out _).Should().BeFalse("the record's identity is the provenance's");
         _ = record.Settings.SourceFingerprint.Should().NotBeNull("the import established what it read");

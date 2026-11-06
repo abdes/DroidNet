@@ -12,10 +12,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 /// <remarks>
 /// A cook path names a file as the ImportTool records it. A file in a bound source mount, inside or outside the project
-/// tree, is named by its mount path (<c>/Content/Ship/Ship.glb</c>). Any other file of the project, such as a model
-/// import record or a generated scene descriptor, is named by its path relative to the project root
-/// (<c>Imports/Content/Ship/Ship.glb.import.json</c>). Cook facts persist cook paths, so they stay valid when a mount is
-/// bound to another folder.
+/// tree, is named by its mount path (<c>/Content/Ship/Ship.glb</c>), as is a model import record, beside its model. Any
+/// other file of the project, such as a generated scene descriptor, is named by its path relative to the project root.
+/// Cook facts persist cook paths, so they stay valid when a mount is bound to another folder.
 /// </remarks>
 internal static class CookPaths
 {

@@ -112,11 +112,15 @@ internal sealed class AssetIdentityReducer
             _ => false,
         };
 
-    // Import settings and model previews belong to their model and stand for no asset of their own.
+    // A model's record stands for its model, which is a row whether or not a file is at its identity. A model preview,
+    // or import settings of anything but a model, stand for no asset of their own.
     private static bool IsBrowsableRecord(AssetPath path)
-        => !AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings)
+        => (!AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings) || IsModelRecord(path))
             && !AssetFileTypes.Is(path.Name, AssetFileCategory.ModelPreview)
             && !IsDerivedRootMount(path.Mount);
+
+    private static bool IsModelRecord(AssetPath path)
+        => AssetFileTypes.Is(path.Name, AssetFileCategory.ImportSettings) && AssetFileTypes.Is(AssetFileTypes.ToIdentity(path).Name, AssetFileCategory.Model);
 
     private static bool IsDerivedRootMount(string mountPoint)
         => string.Equals(mountPoint, "Cooked", StringComparison.Ordinal)
@@ -144,9 +148,14 @@ internal sealed class AssetIdentityReducer
 
     private AssetEntry? CreateItem(AssetPath identity, List<AssetRecord> records, ProjectContext project)
     {
-        var descriptor = records.FirstOrDefault(IsDescriptor);
-        var cooked = records.FirstOrDefault(static record => record.Cooked is not null) ?? records.FirstOrDefault(IsCooked);
-        var source = records.FirstOrDefault(static record => record.Cooked is null && !IsDescriptor(record) && !IsCooked(record));
+        // A record listed alone is a model: its source is what the record names, wherever that is.
+        var authored = records.Where(static record => !IsModelRecord(record.Identity)).ToList();
+        var recordOnly = authored.Count == 0;
+        var descriptor = authored.FirstOrDefault(IsDescriptor);
+        var cooked = authored.FirstOrDefault(static record => record.Cooked is not null) ?? authored.FirstOrDefault(IsCooked);
+        var source = recordOnly
+            ? new AssetRecord(identity)
+            : authored.FirstOrDefault(static record => record.Cooked is null && !IsDescriptor(record) && !IsCooked(record));
         var selected = descriptor ?? source ?? cooked;
         if (selected is null)
         {
@@ -160,7 +169,9 @@ internal sealed class AssetIdentityReducer
 
         var sourceFile = source is null ? null : FindProjectFile(project, source.Identity);
         var descriptorFile = descriptor is null ? null : FindProjectFile(project, descriptor.Identity);
-        var sourcePath = sourceFile?.File;
+        var sourcePath = recordOnly && Models.ModelImportRecords.TryRead(project, identity) is { } named
+            ? FileSystemPath.From(named.SourcePath)
+            : sourceFile?.File;
         var descriptorPath = descriptorFile?.File;
         var cooks = cooked is not null
             || descriptorFile is { MountKind: ProjectMountKind.Authoring }

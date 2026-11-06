@@ -168,7 +168,6 @@ internal sealed partial class RelocationWorkspace : IDisposable
         _ = this.Write(bundle + "/" + primary, "{\"asset\":{\"version\":\"2.0\"},\"buffers\":[{\"uri\":\"mesh.bin\"}]}");
         _ = this.Write(bundle + "/mesh.bin", "bin");
         var record = ModelRecords.Create(
-            this.Project,
             "/" + bundle + "/" + primary,
             "/" + bundle + "/" + primary,
             ModelImportSettings.DefaultSettings(Path.GetFileNameWithoutExtension(primary))) with
@@ -179,7 +178,7 @@ internal sealed partial class RelocationWorkspace : IDisposable
         return record;
     }
 
-    /// <summary>Gets the path of a model's import record as it is now: it moves with the model's virtual path.</summary>
+    /// <summary>Gets the path of a model's import record as it is now: it moves with the model.</summary>
     /// <param name="record">The model's record as written.</param>
     /// <returns>The record's relative path in the project.</returns>
     public string RecordOf(ModelImportSettings record)

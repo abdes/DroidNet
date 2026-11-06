@@ -372,8 +372,7 @@ public sealed partial class DocumentScenes : IDisposable
             return null;
         }
 
-        var records = new ModelImportRecords(project);
-        return records.TryFindBySource(document.File.Path.FullPath, out var record) ? new SceneId(record.Settings.SourceIdentity) : null;
+        return ModelImportRecords.TryRead(project, document.File.Asset) is { } record ? new SceneId(record.Settings.SourceIdentity) : null;
     }
 
     // Each change of a preview writes its file once the changes settle; the content is read now, on the scene's thread.

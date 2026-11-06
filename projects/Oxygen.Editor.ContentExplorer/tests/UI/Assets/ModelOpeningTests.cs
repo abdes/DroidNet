@@ -34,11 +34,9 @@ internal sealed class ModelOpeningTests : DroidNet.Tests.VisualUserInterfaceTest
         var files = session.Context.FileSystem;
         _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(source.FullPath)!);
         files.File.WriteAllBytes(source.FullPath, "glTF"u8.ToArray());
-        var record = ModelImportSettings.PathFor(session.Context.ProjectRoot.FullPath, Car.VirtualPath);
-        _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("{}"))
         {
-            files.File.WriteAllBytes(record, ModelImportSettings.Create(record, Car.VirtualPath, Car.VirtualPath, settings.RootElement).ToBytes());
+            files.File.WriteAllBytes(source.FullPath + ModelImportSettings.RecordSuffix, ModelImportSettings.Create(Car, Car.Name, settings.RootElement).ToBytes());
         }
 
         var item = new AssetEntry(Car, Car.Name, AssetKind.Model, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, Car.VirtualPath, source, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)

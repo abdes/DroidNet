@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models.Testing;
 
@@ -25,31 +26,28 @@ public static class ModelRecords
     public static string PathOf(ProjectContext project, string identity)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return ModelImportSettings.PathFor(project.ProjectRoot.FullPath, identity);
+        return project.Find(AssetPath.Parse(identity + ModelImportSettings.RecordSuffix))!.File.FullPath;
     }
 
     /// <summary>Gets the text a record of the model <paramref name="identity"/> writes to name its source <paramref name="source"/>.</summary>
     /// <param name="identity">The model's identity.</param>
     /// <param name="source">The source file's mount path, such as <c>/Content/Vehicles/Car.glb</c>.</param>
-    /// <returns>Today, the source's mount path.</returns>
+    /// <returns>The file reference from the record: relative in its mount, the mount path from another.</returns>
     public static string SpellSource(string identity, string source)
     {
         ArgumentNullException.ThrowIfNull(identity);
         ArgumentNullException.ThrowIfNull(source);
-        return source;
+        return AssetPath.Parse(source).ToReference(AssetPath.Parse(identity));
     }
 
     /// <summary>Creates the record of a model without writing it.</summary>
-    /// <param name="project">The project that holds the record.</param>
     /// <param name="identity">The model's identity.</param>
     /// <param name="source">The source file's mount path.</param>
     /// <param name="settings">The import settings; empty when omitted.</param>
     /// <param name="sourceIdentity">The record's source identity; a new one when omitted.</param>
     /// <returns>The record.</returns>
-    public static ModelImportSettings Create(ProjectContext project, string identity, string source, JsonElement? settings = null, Guid? sourceIdentity = null)
-    {
-        return ModelImportSettings.Create(PathOf(project, identity), SpellSource(identity, source), identity, settings ?? EmptySettings, sourceIdentity);
-    }
+    public static ModelImportSettings Create(string identity, string source, JsonElement? settings = null, Guid? sourceIdentity = null)
+        => ModelImportSettings.Create(AssetPath.Parse(identity), SpellSource(identity, source), settings ?? EmptySettings, sourceIdentity);
 
     /// <summary>Writes the record of a model, creating its folders.</summary>
     /// <param name="project">The project that holds the record.</param>
@@ -60,7 +58,7 @@ public static class ModelRecords
     /// <returns>The record, as written.</returns>
     public static ModelImportSettings Write(ProjectContext project, string identity, string source, JsonElement? settings = null, Guid? sourceIdentity = null)
     {
-        var record = Create(project, identity, source, settings, sourceIdentity);
+        var record = Create(identity, source, settings, sourceIdentity);
         _ = Write(project, record);
         return record;
     }
@@ -73,9 +71,19 @@ public static class ModelRecords
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(record);
-        var path = PathOf(project, record.VirtualPath);
+        var path = PathOf(project, record.Identity.VirtualPath);
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         project.FileSystem.File.WriteAllBytes(path, record.ToBytes());
         return path;
+    }
+
+    /// <summary>Reads the record of the model <paramref name="identity"/> from its place.</summary>
+    /// <param name="project">The project that holds the record.</param>
+    /// <param name="identity">The model's identity.</param>
+    /// <returns>The record, as its file holds it.</returns>
+    public static ModelImportSettings Read(ProjectContext project, string identity)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        return ModelImportSettings.Parse(project.FileSystem.File.ReadAllBytes(PathOf(project, identity)), AssetPath.Parse(identity));
     }
 }

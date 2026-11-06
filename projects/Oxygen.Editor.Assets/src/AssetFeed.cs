@@ -216,9 +216,10 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             IsSelectable = state.Freshness == AssetCookFreshness.Unknown ? item.IsSelectable : state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
         };
 
-    // Any file of the project is a source a row can open, whether or not it cooks.
+    // Any file of the project is a source a row can open, whether or not it cooks; a model's source is what its record names.
     private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
-        => project.Find(path) is { IsProjectFile: true, IsMountRoot: false } location ? location.File : null;
+        => Oxygen.Editor.Models.ModelImportRecords.TryRead(project, path) is { } record ? FileSystemPath.From(record.SourcePath)
+            : project.Find(path) is { IsProjectFile: true, IsMountRoot: false } location ? location.File : null;
 
     // Cancelling the lifetime also ends the catalog subscription.
     private void Close()
@@ -254,10 +255,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease? publication = null,
         string? publicationError = null)
     {
-        // A model is imported when a record names it.
-        var records = new Oxygen.Editor.Models.ModelImportRecords(project);
+        // A model is imported when it has a record, at its identity.
         source = [.. source.Select(item => item.Kind == AssetKind.Model && item.SourcePath is { } path
-            && records.IsImported(path.FullPath)
+            && Oxygen.Editor.Models.ModelImportRecords.TryRead(project, item.Identity) is not null
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item)];
         var candidates = source.Where(item => item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)

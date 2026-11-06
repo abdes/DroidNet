@@ -6,6 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Testing;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models.Tests;
 
@@ -77,11 +78,11 @@ public sealed class ModelImportDefaultsTests
         var settings = ModelGeometryDefaults.WithLodPolicy(Empty(), "meshes/Body", new LodPolicy.Fixed(1));
         settings = ModelGeometryDefaults.WithSurfaceFlag(settings, "meshes/Body", Surface, ModelSurfaceFlag.CastsShadows, value: false);
         settings = ModelImportSettingScope.Texture("Paint_Normal").Write(ModelImportSettingCatalog.MaxTextureSize, settings, 1024);
-        var path = ModelImportSettings.PathFor(@"C:\Project", "/Content/Car.glb");
+        var model = AssetPath.Parse("/Content/Car.glb");
 
-        var record = ModelImportSettings.Create(path, "/Content/Car.glb", "/Content/Car.glb", settings);
+        var record = ModelImportSettings.Create(model, "Car.glb", settings);
 
-        _ = JsonElement.DeepEquals(ModelImportSettings.Parse(path, record.ToBytes()).Settings, settings).Should().BeTrue();
+        _ = JsonElement.DeepEquals(ModelImportSettings.Parse(record.ToBytes(), model).Settings, settings).Should().BeTrue();
     }
 
     private static JsonElement Empty() => JsonSerializer.SerializeToElement(new Dictionary<string, object>(StringComparer.Ordinal));

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Instances;
 using Oxygen.Editor.Scenes.Edits.Properties;
@@ -248,8 +249,7 @@ public sealed class KeptChangeTests
                 []));
         }
 
-        var recordPath = ModelImportSettings.PathFor(fixture.Project.Root.FullPath, SampleScene.CarModel.VirtualPath);
-        var record = ModelImportSettings.Create(recordPath, "/Content/Vehicles/Car.glb", SampleScene.CarModel.VirtualPath, ModelImportSettings.DefaultSettings("Car")) with
+        var record = ModelRecords.Create(SampleScene.CarModel.VirtualPath, "/Content/Vehicles/Car.glb", ModelImportSettings.DefaultSettings("Car")) with
         {
             PublishedNodes = [new("Body", Body.Nodes[0].Value), new(RenamedAnchor, RenamedDoor.Nodes[0].Value), new(MirrorAnchor, Mirror.Nodes[0].Value)],
             NewNodes = [new(RenamedAnchor, RenamedDoor.Nodes[0].Value)],
@@ -273,7 +273,7 @@ public sealed class KeptChangeTests
             new Dictionary<NodeId, IReadOnlyList<OverrideWrite>> { [root] = [new OverrideWrite(property, Part: null, LayoutRevision: null, value) { Path = path }] },
             "Change")).ConfigureAwait(false));
 
-    private static ModelImportSettings Record(AuthoringFixture fixture) => ModelImportSettings.Parse(fixture.ModelRecords.Read(SampleScene.CarModel)!);
+    private static ModelImportSettings Record(AuthoringFixture fixture) => ModelImportSettings.Parse(fixture.ModelRecords.Read(SampleScene.CarModel)!, SampleScene.CarModel);
 
     private static SceneInstanceComponent CarOf(AuthoringFixture fixture) => InstanceOf(fixture, SampleScene.Car);
 

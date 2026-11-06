@@ -79,11 +79,11 @@ imports but states no family rule), `ModelDocumentKind`, `ModelContent` and the
 model's problems; `Oxygen.Editor.ModelEditor` holds the document's view and
 view model, as `Oxygen.Editor.MaterialEditor` does for materials.
 
-`ModelDocumentKind` opens a model source file (`.glb`, `.gltf`, `.fbx`); the
+`ModelDocumentKind` opens a model (`.glb`, `.gltf`, `.fbx`) at its identity; the
 tab's title keeps the extension (`Car.glb`). The document's content,
-`ModelContent`, holds the model's source and follows it when it moves, and the
+`ModelContent`, holds the model's identity and follows it when it moves, and the
 model's import settings, `ModelImportSettings`, read from its model import
-record (`<ProjectRoot>/Imports/<virtual path>.import.json`,
+record (`<model identity>.import.json`,
 [scene instances](scene-instances.md) NGN14), which Save writes atomically and
 its history records. The editor never writes the source file.
 

@@ -8,106 +8,150 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models;
 
-/// <summary>The model import records of a project, by source path and by virtual path.</summary>
+/// <summary>The model import records of a project, by model identity and by the source they name.</summary>
 /// <remarks>
-/// A model is imported when a record names it. The index reads <c>&lt;ProjectRoot&gt;/Imports/</c>, recursively, when it
-/// is created, so a new index sees the folder as it is; callers create one per operation instead of keeping one. A record
-/// file is parsed again only when its size or last write time changed, so creating an index per lookup costs a folder
-/// listing. A record that cannot be read, that is not at the place of its virtual path, or whose source's mount is not a
-/// bound source mount on this machine, is skipped and listed in <see cref="Problems"/>, so one such record does not hide
-/// the others.
+/// A record is found at its identity, which <see cref="TryRead"/> does without listing anything. The few operations that
+/// need every record create an index, which lists the project's bound source mounts, own and shared, when it is created,
+/// so a new index sees them as they are; callers create one per operation instead of keeping one. A record file is parsed
+/// again only when its size or last write time changed. A record that cannot be read, whose name names no model, or whose
+/// source's mount is not a bound source mount on this machine, is skipped and listed in <see cref="Problems"/>, so one
+/// such record does not hide the others.
 /// </remarks>
 public sealed class ModelImportRecords
 {
     // The parsed record files of each file system, by path. A model's record can be large, and an asset listing looks
-    // up the record of every product of the model. A record's source is resolved for each index, through the mount
-    // table of its project.
+    // up the record of every model. A record's source is resolved for each read, through the mount table of its project.
     private static readonly ConditionalWeakTable<IFileSystem, ConcurrentDictionary<string, ParsedRecord>> Parsed = [];
 
-    private readonly ImmutableArray<ModelImportRecord> records;
+    private readonly ImmutableDictionary<AssetPath, ModelImportRecord> byIdentity;
+    private readonly ILookup<string, ModelImportRecord> bySource;
 
     /// <summary>Initializes a new instance of the <see cref="ModelImportRecords"/> class from the project's records.</summary>
-    /// <param name="project">The project: its file system, its root, the records' content root, and its mount table.</param>
+    /// <param name="project">The project: its file system and its mount table.</param>
     public ModelImportRecords(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        var fileSystem = project.FileSystem;
-        this.Folder = Path.Combine(project.ProjectRoot.FullPath, ModelImportSettings.RecordsFolder);
         var found = ImmutableArray.CreateBuilder<ModelImportRecord>();
         var problems = ImmutableArray.CreateBuilder<ModelImportRecordProblem>();
-        if (fileSystem.Directory.Exists(this.Folder))
+        foreach (var path in project.SourceMounts.SelectMany(mount => RecordFiles(project.FileSystem, mount.Location!)).Order(StringComparer.OrdinalIgnoreCase))
         {
-            foreach (var path in fileSystem.Directory.EnumerateFiles(this.Folder, "*" + ModelImportSettings.RecordSuffix, SearchOption.AllDirectories)
-                .Order(StringComparer.OrdinalIgnoreCase))
+            try
             {
-                try
+                var identity = IdentityOf(project, path)
+                    ?? throw new InvalidDataException($"The file '{path}' is named as a model import record, but names no model.");
+                var settings = Read(project.FileSystem, path, identity);
+                if (settings.ResolveSource(project) is { } source)
                 {
-                    var settings = Read(project.FileSystem, path);
-                    if (settings.ResolveSource(project) is { } source)
-                    {
-                        found.Add(new(path, settings, source.FullPath));
-                    }
-                    else
-                    {
-                        problems.Add(new(path, $"The record names its source '{settings.Source}' in a mount that is not bound on this machine.")
-                        {
-                            UnboundSource = settings.Source,
-                        });
-                    }
+                    found.Add(new(path, settings, source.FullPath));
                 }
-                catch (Exception failure) when (failure is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException)
+                else
                 {
-                    problems.Add(new(path, failure.Message));
+                    problems.Add(new(path, $"The record names its source '{settings.Source}' in a mount that is not bound on this machine.")
+                    {
+                        UnboundSource = settings.Source,
+                    });
                 }
+            }
+            catch (Exception failure) when (IsUnreadable(failure))
+            {
+                problems.Add(new(path, failure.Message));
             }
         }
 
-        this.records = found.ToImmutable();
+        this.All = found.ToImmutable();
         this.Problems = problems.ToImmutable();
+        this.byIdentity = this.All.ToImmutableDictionary(static record => record.Identity);
+        this.bySource = this.All.ToLookup(static record => record.SourcePath, StringComparer.Ordinal);
     }
 
-    /// <summary>Gets the folder that holds the records.</summary>
-    public string Folder { get; }
-
     /// <summary>Gets every readable record.</summary>
-    public IReadOnlyList<ModelImportRecord> All => this.records;
+    public IReadOnlyList<ModelImportRecord> All { get; }
 
     /// <summary>Gets the records that could not be read, each with why.</summary>
     public ImmutableArray<ModelImportRecordProblem> Problems { get; }
 
-    /// <summary>Gets whether a record names <paramref name="sourcePath"/> as its source.</summary>
-    /// <param name="sourcePath">A model source file.</param>
-    /// <returns><see langword="true"/> when the model is imported.</returns>
-    public bool IsImported(string sourcePath) => this.TryFindBySource(sourcePath, out _);
-
-    /// <summary>Finds the record whose source is <paramref name="sourcePath"/>.</summary>
-    /// <param name="sourcePath">A model source file.</param>
-    /// <param name="record">The record, when one names it.</param>
-    /// <returns><see langword="true"/> when one does.</returns>
-    /// <remarks>
-    /// A file may back several records, one per virtual path; this finds the first. Paths compare with their case: a
-    /// path that differs only in case names another asset, as after a rename that changes only case.
-    /// </remarks>
-    public bool TryFindBySource(string sourcePath, [NotNullWhen(true)] out ModelImportRecord? record)
+    /// <summary>Reads the record of a model at its identity, without listing the project's mounts.</summary>
+    /// <param name="project">The model's project.</param>
+    /// <param name="identity">The model's identity, such as <c>/Content/Vehicles/Car.glb</c>.</param>
+    /// <returns>The record, or <see langword="null"/> when the model has none, it cannot be read, or its source's mount is
+    /// not a bound source mount on this machine.</returns>
+    public static ModelImportRecord? TryRead(ProjectContext project, AssetPath identity)
     {
-        var path = Path.GetFullPath(sourcePath);
-        record = this.records.FirstOrDefault(entry => string.Equals(entry.SourcePath, path, StringComparison.Ordinal));
-        return record is not null;
+        ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(identity);
+        if (identity.IsMount || !AssetFileTypes.Is(identity.Name, AssetFileCategory.Model)
+            || project.Find(identity.WithName(identity.Name + ModelImportSettings.RecordSuffix)) is not { MountKind: ProjectMountKind.Authoring } location
+            || !project.FileSystem.File.Exists(location.File.FullPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            var settings = Read(project.FileSystem, location.File.FullPath, identity);
+            return settings.ResolveSource(project) is { } source ? new(location.File.FullPath, settings, source.FullPath) : null;
+        }
+        catch (Exception failure) when (IsUnreadable(failure))
+        {
+            return null;
+        }
     }
 
-    // The content of one record file, parsed again only when the file changed since it was last parsed.
-    private static ModelImportSettings Read(IFileSystem fileSystem, string path)
+    /// <summary>Finds the record of a model.</summary>
+    /// <param name="identity">The model's identity.</param>
+    /// <param name="record">The record, when the model has one.</param>
+    /// <returns><see langword="true"/> when it does.</returns>
+    public bool TryFind(AssetPath identity, [NotNullWhen(true)] out ModelImportRecord? record)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        return this.byIdentity.TryGetValue(identity, out record);
+    }
+
+    /// <summary>Gets every record that names a file as its source: a source has any number of records.</summary>
+    /// <param name="source">A source file.</param>
+    /// <returns>The records. Paths compare with their case: a path that differs only in case names another file, as after
+    /// a rename that changes only case.</returns>
+    public IReadOnlyList<ModelImportRecord> RecordsNaming(FileSystemPath source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return [.. this.bySource[source.FullPath]];
+    }
+
+    // The files named as records below a mount's folder; a dot-named folder is an output folder by rule.
+    private static IEnumerable<string> RecordFiles(IFileSystem fileSystem, FileSystemPath root)
+    {
+        if (!fileSystem.Directory.Exists(root.FullPath))
+        {
+            return [];
+        }
+
+        var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true };
+        return fileSystem.Directory.EnumerateFiles(root.FullPath, "*" + ModelImportSettings.RecordSuffix, options)
+            .Where(path => !FileSystemPath.From(path).GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
+    }
+
+    private static AssetPath? IdentityOf(ProjectContext project, string path)
+        => project.FindByFilePath(FileSystemPath.From(path)) is { Identity: var identity } && AssetFileTypes.Is(identity.Name, AssetFileCategory.Model) ? identity : null;
+
+    private static bool IsUnreadable(Exception failure)
+        => failure is IOException or InvalidDataException or System.Text.Json.JsonException or UnauthorizedAccessException;
+
+    // The content of one record file, parsed again only when the file changed since it was last parsed, or a project binds
+    // its folder under another mount.
+    private static ModelImportSettings Read(IFileSystem fileSystem, string path, AssetPath identity)
     {
         var parsed = Parsed.GetValue(fileSystem, static _ => new(StringComparer.Ordinal));
         var file = fileSystem.FileInfo.New(path);
         var length = file.Length;
         var written = file.LastWriteTimeUtc;
-        if (!parsed.TryGetValue(path, out var known) || known.Length != length || known.Written != written)
+        if (!parsed.TryGetValue(path, out var known) || known.Length != length || known.Written != written || known.Settings.Identity != identity)
         {
-            known = new(length, written, ModelImportSettings.Parse(path, fileSystem.File.ReadAllBytes(path)));
+            known = new(length, written, ModelImportSettings.Parse(fileSystem.File.ReadAllBytes(path), identity));
             parsed[path] = known;
         }
 

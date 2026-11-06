@@ -7,6 +7,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ModelEditor.Importing;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ModelEditor.TestSupport.ImportDialogs;
@@ -81,11 +82,9 @@ public sealed class ModelImportDialogViewModelTests
         var source = Path.Combine(root, "Content", "Scenes", "BurgerPiz.glb");
         _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(source)!);
         project.FileSystem.File.WriteAllText(source, "model");
-        var record = ModelImportSettings.PathFor(root, "/Content/Scenes/BurgerPiz.glb");
-        _ = project.FileSystem.Directory.CreateDirectory(Path.GetDirectoryName(record)!);
         using (var settings = JsonDocument.Parse("""{"name":"BurgerPiz","unit_policy":"preserve"}"""))
         {
-            project.FileSystem.File.WriteAllBytes(record, ModelImportSettings.Create(record, "/Content/Scenes/BurgerPiz.glb", "/Content/Scenes/BurgerPiz.glb", settings.RootElement).ToBytes());
+            _ = ModelRecords.Write(project, "/Content/Scenes/BurgerPiz.glb", "/Content/Scenes/BurgerPiz.glb", settings.RootElement);
         }
 
         using var dialog = Create(project);

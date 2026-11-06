@@ -153,11 +153,9 @@ public sealed partial class AssetFeedTests
         await File.WriteAllTextAsync(path, "{}", cancellationToken).ConfigureAwait(false);
         if (configured)
         {
-            // A model is imported when a record under the project's Imports folder names it.
-            var recordPath = ModelImportSettings.PathFor(workspace.Root.FullPath, identity.VirtualPath);
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(recordPath)!);
-            var record = ModelImportSettings.Create(recordPath, identity.VirtualPath, identity.VirtualPath, ModelImportSettings.DefaultSettings("Crate"));
-            await File.WriteAllBytesAsync(recordPath, record.ToBytes(), cancellationToken).ConfigureAwait(false);
+            // A model is imported when it has a record at its identity.
+            var record = ModelImportSettings.Create(identity, identity.Name, ModelImportSettings.DefaultSettings("Crate"));
+            await File.WriteAllBytesAsync(path + ModelImportSettings.RecordSuffix, record.ToBytes(), cancellationToken).ConfigureAwait(false);
         }
 
         return identity;

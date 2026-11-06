@@ -4,22 +4,25 @@ The model family module: what is true of the editor's models whatever shows
 them. It holds no view, view model or dialog.
 
 - `ModelImportSettings` reads and writes a model's import record,
-  `<ProjectRoot>/Imports/<virtual path>.import.json` (the model
-  `/Content/Models/Ship.glb` has `Imports/Content/Models/Ship.glb.import.json`),
+  `<model identity>.import.json` in the model's mount (the model
+  `/Content/Models/Ship.glb` has `/Content/Models/Ship.glb.import.json`),
   against the engine's `oxygen.model-import.schema.json` from the installed
-  SDK. The ImportTool reads and writes the same records. A record holds the model's source, its
-  virtual path and its import settings, and what earlier imports established:
-  the source identity, the surface provenance, the node continuity, the
-  published nodes and the source fingerprint.
-- Relocating a model rewrites the record's source (`WithSource`) and its
-  virtual path, and moves the record to the place of the new virtual path
-  (`PathFor`). An import changes only what it establishes
-  (`WithImportUpdate`, checked by `DiffersOnlyByImport`).
-- `ModelImportRecords` indexes a project's records by source path and by
-  virtual path. A model is imported when a record names it. The index reads
-  `Imports/` recursively when it is created, so callers create one per
-  operation; a record not at the place of its virtual path is listed as a
-  problem.
+  SDK. The ImportTool reads and writes the same records. A record's identity is
+  where it lives, never in the file (`Parse(bytes, identity)`). It holds the
+  model's source, a file reference from the record (`Ship.glb`,
+  `../Media/Ship.glb`, or `/RawMedia/Ship.glb` in another mount), its import
+  settings, and what earlier imports established: the source identity, the
+  surface provenance, the node continuity, the published nodes and the source
+  fingerprint.
+- Relocating a source respells the record's source (`WithSource`); a record
+  beside the model it names moves with it. An import changes only what it
+  establishes (`WithImportUpdate`, checked by `DiffersOnlyByImport`).
+- `ModelImportRecords.TryRead` finds a model's record at its identity, without
+  listing anything: a model is imported when it has one. An index of
+  `ModelImportRecords` lists the project's bound source mounts when it is
+  created, so callers create one per operation, for what needs every record:
+  `TryFind(identity)`, `RecordsNaming(source)`, since a source has any number
+  of records, and `Problems`, the files that could not be read.
 - `ModelImportSettingCatalog` lists the settings a person chooses, each a
   `ModelImportSetting`: a job key with the importer's default and the manifest
   schema's values and ranges, read and written without touching other keys.
@@ -36,8 +39,8 @@ them. It holds no view, view model or dialog.
   import and the run's settings, as an ImportTool import manifest.
 - `IModelImportPrompt` is the port of the Import model dialog: a UI surface asks
   it which models to import and gets a `ModelImportPlan`.
-- `ModelDocumentKind` opens a model source file as a document titled with its
-  extension. Its `ModelContent` names the model and follows its source when it
+- `ModelDocumentKind` opens a model as a document titled with its extension.
+  Its `ModelContent` names the model by its identity and follows it when it
   moves. It edits the model's import record (settings and node continuity), each
   change one history step, and never writes the source. Save goes through the
   `IModelImportRecordWriter` port, which replaces the record and reimports the

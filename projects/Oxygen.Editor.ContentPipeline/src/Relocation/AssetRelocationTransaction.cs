@@ -7,7 +7,6 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -86,7 +85,6 @@ internal static partial class AssetRelocationTransaction
             throw new AssetRelocationException("The move failed and every file was restored: " + failure.Message, failure);
         }
 
-        PruneEmptyRecordFolders(project, plan);
         journal = journal with { Phase = Phase.Committed };
         await WriteJournalAsync(files, path, journal).ConfigureAwait(false);
         DeleteJournal(fileSystem, path, logger);
@@ -134,33 +132,6 @@ internal static partial class AssetRelocationTransaction
             else
             {
                 DeleteJournal(fileSystem, path, logger);
-            }
-        }
-    }
-
-    // A moved model import record leaves its old folders empty: remove each one between the record's old folder and the
-    // records folder (exclusive). The move is committed, so a folder that cannot be removed is left, not an error.
-    private static void PruneEmptyRecordFolders(ProjectContext project, AssetRelocationPlan plan)
-    {
-        var fileSystem = project.FileSystem;
-        var records = project.ProjectRoot.Combine(ModelImportSettings.RecordsFolder);
-        foreach (var move in plan.Moves.Where(static move => !move.IsDirectory))
-        {
-            for (var folder = move.Source.Parent; folder is not null && folder != records && folder.IsSameOrInside(records); folder = folder.Parent)
-            {
-                try
-                {
-                    if (!fileSystem.Directory.Exists(folder.FullPath) || fileSystem.Directory.EnumerateFileSystemEntries(folder.FullPath).Any())
-                    {
-                        break;
-                    }
-
-                    fileSystem.Directory.Delete(folder.FullPath);
-                }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-                {
-                    break;
-                }
             }
         }
     }

@@ -32,12 +32,12 @@ internal sealed class ModelRecordReplacementTests
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var record = ModelRecordLookup.TryFind(workspace.ProjectContext, source)!;
         var before = await File.ReadAllBytesAsync(record.RecordPath, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var replacement = ModelImportSettings.Parse(before).WithContinuity("Body/Door_Front_L", "Body/Door_FL").ToBytes();
+        var replacement = ModelImportSettings.Parse(before, source).WithContinuity("Body/Door_Front_L", "Body/Door_FL").ToBytes();
 
         var result = await service.ReplaceModelRecordAsync(source, before, replacement, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = (result.IsPublished || result.IsUpToDate).Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-        var written = ModelImportSettings.Parse(await File.ReadAllBytesAsync(record.RecordPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var written = ModelImportSettings.Parse(await File.ReadAllBytesAsync(record.RecordPath, this.TestContext.CancellationToken).ConfigureAwait(false), source);
         _ = written.NodeContinuity.Should().Equal([new ModelNodeContinuity("Body/Door_Front_L", "Body/Door_FL")]);
     }
 
@@ -51,8 +51,8 @@ internal sealed class ModelRecordReplacementTests
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var record = ModelRecordLookup.TryFind(workspace.ProjectContext, source)!;
         var current = await File.ReadAllBytesAsync(record.RecordPath, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var read = ModelImportSettings.Parse(current).WithContinuity("Body/Mirror", "Body/Old_Mirror").ToBytes();
-        var replacement = ModelImportSettings.Parse(current).WithContinuity("Body/Door_Front_L", "Body/Door_FL").ToBytes();
+        var read = ModelImportSettings.Parse(current, source).WithContinuity("Body/Mirror", "Body/Old_Mirror").ToBytes();
+        var replacement = ModelImportSettings.Parse(current, source).WithContinuity("Body/Door_Front_L", "Body/Door_FL").ToBytes();
 
         var result = await service.ReplaceModelRecordAsync(source, read, replacement, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -5,6 +5,7 @@
 using System.Text.Json;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Models;
+using Oxygen.Editor.Models.Testing;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Managed.Core;
 
@@ -29,13 +30,10 @@ internal sealed class LateRecordWriter : IModelImportRecordWriter
     {
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(source);
-        var files = documents.Project.Context.FileSystem;
-        var path = ModelImportSettings.PathFor(documents.Project.Root.FullPath, source.VirtualPath);
         using var parsed = JsonDocument.Parse(settings);
-        var record = ModelImportSettings.Create(path, source.VirtualPath, source.VirtualPath, parsed.RootElement);
+        var record = ModelRecords.Create(source.VirtualPath, source.VirtualPath, parsed.RootElement);
         record = change?.Invoke(record) ?? record;
-        _ = files.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        files.File.WriteAllBytes(path, record.ToBytes());
+        _ = ModelRecords.Write(documents.Project.Context, record);
         return record;
     }
 

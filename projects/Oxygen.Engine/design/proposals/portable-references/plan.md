@@ -40,7 +40,7 @@ ledger: every old form found in the code, with the slice that removes it.
 | S6f   | Done                                                           |
 | S7    | Done, committed                                                |
 | S8    | Done, committed                                                |
-| S9    | Not started                                                    |
+| S9    | Done, committed                                                |
 | S10   | Not started                                                    |
 | S11   | Not started                                                    |
 | S12   | Not started                                                    |
@@ -607,6 +607,36 @@ Each call site's behaviour test is its module's existing functional test,
 moved to the Models kit in S1. Docs: `Oxygen.Editor.Models/README.md`,
 `model-editor.md`, `scene-instances.md` NGN14, `asset-family-modules.md`.
 
+Beyond this text, because the record now lives in the mount:
+
+- `ModelImportRecords.TryRead` reads a record at its identity without listing,
+  so a row or a lookup does not walk the mounts.
+- `CookInputResolver` takes a model's source from its record, and a scan cooks
+  a model once: from its file, or from its record where no file is at its
+  identity. The record itself as the cook input stays S10's.
+- `ModelRecordLookup.RelativePath` is deleted: a record's cook path is its mount
+  path, through `CookPaths.Of`. The prefix rule of `CookDependencyDiscovery` and
+  `PruneEmptyRecordFolders` go here, since `RecordsFolder` does.
+- A record beside the model it names moves and renames with it; any other stays
+  and respells its source. Delete counts the record as the model's file. S12
+  keeps companions, copies and shared mounts.
+- `ProjectDocumentFiles` opens a model on the source its record names, at the
+  model's identity. A row of a model whose source is elsewhere still renames that
+  source, not the record: S12 owns that, with the other moves of members.
+- A replacement reads the reviewed folder again after saving the record's
+  settings, since the record now lies in it.
+- A second model of one source is allowed: the import refuses only a record at
+  the identity that names another source.
+
+Integration tests this slice leaves, for S20: the import integration tests and
+`ProducedSourceMetadataTests` in the test impact table. Record sites only changed
+to compile. ContentPipeline integration stands at 130 of 566: 52 fail native
+source analysis because the installed manifest schema refuses a model job's
+`record`, which S10 removes, so end-to-end model imports wait for S10; 9 are
+`ProducedSourceMetadataTests`, whose fixture provenance the schema refuses and
+whose paths are project-relative (S20); the other 69 are the refused references,
+cooked names, library fixtures and unexplained failures of the S8 count.
+
 ### S10. Cook and reference check
 
 Deletes: the `Imports/` cook path branch, `ContentImportJob.Record`, absolute
@@ -805,7 +835,7 @@ done only when its rows are gone from the code.
 | Library texture references skipped by analysis                                                                | `CookSourceAnalyzer.cs:285`                                                                                                                                        | S10          |
 | Five scene (de)serialization paths, `asset:///` in scene files                                                | `SceneSerializer`, `SceneFiles`, `SceneDocumentKind`, `SceneContent`, `ModelPreviewFiles`                                                                          | S11          |
 | Identity-field rewrite, absolute-only rewrite                                                                 | `AuthoredReferenceFormat`                                                                                                                                          | S12          |
-| `PruneEmptyRecordFolders`, records moved under `Imports/`                                                     | `AssetRelocationTransaction`, `AssetRelocationPlanner.cs:330`, `CookPublicationTransaction.Sources.cs:99`                                                          | S12          |
+| `PruneEmptyRecordFolders`, records moved under `Imports/`                                                     | `AssetRelocationTransaction`, `AssetRelocationPlanner.cs:330`, `CookPublicationTransaction.Sources.cs:99`                                                          | S9           |
 | Models not copyable, members not movable, folder-wide delete                                                  | `AssetRelocationService`, `AssetRelocationPlanner`, `AssetsViewModel.AssetActions`                                                                                 | S12          |
 | Writable mounts without roles; no R3 closure                                                                  | `RelocationPaths`, planner                                                                                                                                         | S12          |
 | Import destination follows the source's mount                                                                 | `ImportWorkflow.PlannedIdentity`, `ImportSourceRetention`                                                                                                          | S13          |

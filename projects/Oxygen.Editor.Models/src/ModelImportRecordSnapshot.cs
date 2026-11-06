@@ -4,6 +4,7 @@
 
 using System.Collections.Immutable;
 using System.IO.Abstractions;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models;
 
@@ -19,13 +20,14 @@ public sealed record ModelImportRecordSnapshot(ModelImportSettings Record, Immut
     /// <summary>Reads the record at <paramref name="recordPath"/>.</summary>
     /// <param name="fileSystem">The project's file system.</param>
     /// <param name="recordPath">The record's full path.</param>
+    /// <param name="identity">The model's identity, which is where the record lives.</param>
     /// <returns>The record and its bytes.</returns>
     /// <exception cref="InvalidDataException">The record cannot be read.</exception>
-    public static ModelImportRecordSnapshot Read(IFileSystem fileSystem, string recordPath)
+    public static ModelImportRecordSnapshot Read(IFileSystem fileSystem, string recordPath, AssetPath identity)
     {
         ArgumentNullException.ThrowIfNull(fileSystem);
         var bytes = fileSystem.File.ReadAllBytes(recordPath);
-        return new(ModelImportSettings.Parse(recordPath, bytes), [.. bytes]);
+        return new(ModelImportSettings.Parse(bytes, identity), [.. bytes]);
     }
 
     /// <summary>Gets the snapshot of a record as its writer writes it.</summary>

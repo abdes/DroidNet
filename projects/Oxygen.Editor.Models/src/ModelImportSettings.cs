@@ -14,13 +14,13 @@ namespace Oxygen.Editor.Models;
 
 /// <summary>A model's import state: the editor's reader and writer of its model import record.</summary>
 /// <remarks>
-/// The record lives under <c>&lt;ProjectRoot&gt;/Imports/</c> at its model's virtual path, outside every authoring mount:
-/// the model <c>/Content/Models/Ship.glb</c> has the record <c>Imports/Content/Models/Ship.glb.import.json</c>. It follows
-/// the engine's <c>oxygen.model-import.schema.json</c>, which the ImportTool reads and writes too. It holds what to import
-/// (the source, the model's virtual path, the settings) and what earlier imports established (the source identity, the
-/// surface provenance, the node continuity, the published nodes, the source fingerprint). The source identity, a UUIDv7
-/// the record holds, never changes. Relocating a model rewrites its <see cref="Source"/>; giving it another virtual path
-/// moves the record to <see cref="PathFor"/> of the new path.
+/// The record is the model's authored file: it lives in the model's mount at the model's identity, which the file never
+/// repeats, so the model <c>/Content/Models/Ship.glb</c> has the record <c>/Content/Models/Ship.glb.import.json</c>. It
+/// follows the engine's <c>oxygen.model-import.schema.json</c>, which the ImportTool reads and writes too. It holds what to
+/// import (the source, the settings) and what earlier imports established (the source identity, the surface provenance,
+/// the node continuity, the published nodes, the source fingerprint). The source identity, a UUIDv7 the record holds, never
+/// changes. <see cref="Source"/> is a file reference from the record: relative within the model's mount, the mount path of
+/// a file in another mount.
 /// </remarks>
 public sealed record ModelImportSettings
 {
@@ -29,9 +29,6 @@ public sealed record ModelImportSettings
 
     /// <summary>The version of the surface provenance a new record holds, before any import.</summary>
     public const int SurfaceProvenanceVersion = 3;
-
-    /// <summary>The folder of the project root that holds the records.</summary>
-    public const string RecordsFolder = "Imports";
 
     /// <summary>The suffix of a record's file name, after its model's file name.</summary>
     public const string RecordSuffix = AssetFileTypes.ImportSettings;
@@ -47,12 +44,13 @@ public sealed record ModelImportSettings
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Gets the primary source file by its mount path (<c>/Content/Car/Car.glb</c>), the same in every project
-    /// that mounts its folder, wherever the folder is.</summary>
+    /// <summary>Gets the primary source file, a file reference from the record: <c>Car.glb</c>, <c>../Media/Car.glb</c>, or
+    /// <c>/RawMedia/Cars/Car.glb</c> in another mount, the same in every project that mounts its folder.</summary>
     public required string Source { get; init; }
 
-    /// <summary>Gets the model's identity, under which its products are named (<c>/Content/Car/Car.glb</c>).</summary>
-    public required string VirtualPath { get; init; }
+    /// <summary>Gets the model's identity, under which its products are named (<c>/Content/Car/Car.glb</c>). The file does
+    /// not hold it: it is where the file lives.</summary>
+    public required AssetPath Identity { get; init; }
 
     /// <summary>Gets the model import settings, a JSON object in the vocabulary of an import manifest's model job.</summary>
     public required JsonElement Settings { get; init; }
@@ -78,50 +76,6 @@ public sealed record ModelImportSettings
     /// <summary>Gets the files the last import read; absent until the first import.</summary>
     public ModelSourceFingerprint? SourceFingerprint { get; init; }
 
-    /// <summary>Gets the path of the record of the model <paramref name="virtualPath"/>.</summary>
-    /// <param name="projectRoot">The project root, the records' content root.</param>
-    /// <param name="virtualPath">The model's virtual path, such as <c>/Content/Models/Ship.glb</c>.</param>
-    /// <returns>The record's full path, <c>&lt;ProjectRoot&gt;/Imports/Content/Models/Ship.glb.import.json</c>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="virtualPath"/> is not an absolute virtual path.</exception>
-    public static string PathFor(string projectRoot, string virtualPath)
-        => Path.Combine(Path.GetFullPath(projectRoot), RelativePathFor(virtualPath).Replace('/', Path.DirectorySeparatorChar));
-
-    /// <summary>Gets the path of the record of the model <paramref name="virtualPath"/> below its project root.</summary>
-    /// <param name="virtualPath">The model's virtual path, such as <c>/Content/Models/Ship.glb</c>.</param>
-    /// <returns>The path with <c>/</c> separators, <c>Imports/Content/Models/Ship.glb.import.json</c>.</returns>
-    /// <exception cref="ArgumentException"><paramref name="virtualPath"/> is not an absolute virtual path.</exception>
-    public static string RelativePathFor(string virtualPath)
-    {
-        ArgumentNullException.ThrowIfNull(virtualPath);
-        return IsMountPath(virtualPath)
-            ? RecordsFolder + virtualPath + RecordSuffix
-            : throw new ArgumentException($"A model import record is named by its model's virtual path, which '{virtualPath}' is not.", nameof(virtualPath));
-    }
-
-    /// <summary>Gets the project root a record belongs to, from its path and the virtual path it holds.</summary>
-    /// <param name="recordPath">A record's path.</param>
-    /// <param name="virtualPath">The virtual path the record holds.</param>
-    /// <returns>The project root, or <see langword="null"/> when the record is not at the place of its virtual path.</returns>
-    public static string? ProjectRootOf(string recordPath, string virtualPath)
-    {
-        var path = Path.GetFullPath(recordPath);
-        string relative;
-        try
-        {
-            relative = RelativePathFor(virtualPath).Replace('/', Path.DirectorySeparatorChar);
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-
-        return path.Length > relative.Length
-            && path.EndsWith(relative, StringComparison.OrdinalIgnoreCase)
-            && Path.EndsInDirectorySeparator(path[..^relative.Length])
-                ? Path.TrimEndingDirectorySeparator(path[..^relative.Length])
-                : null;
-    }
-
     /// <summary>Gets the settings of a new model: its name, units converted to meters, node transforms kept, and normals and
     /// tangents generated where the file has none.</summary>
     /// <param name="name">The import's name, shown for its cook job.</param>
@@ -137,20 +91,18 @@ public sealed record ModelImportSettings
         });
 
     /// <summary>Creates the record of a model before its first import.</summary>
-    /// <param name="recordPath">Where the record will live, <see cref="PathFor"/> of <paramref name="virtualPath"/>.</param>
-    /// <param name="source">The mount path of the model's primary source file, such as <c>/Content/Car/Car.glb</c>.</param>
-    /// <param name="virtualPath">The model's identity.</param>
+    /// <param name="identity">The model's identity, which decides where the record lives.</param>
+    /// <param name="source">The model's primary source file, a file reference from the record.</param>
     /// <param name="settings">The model import settings.</param>
     /// <param name="sourceIdentity">The model's source identity, a UUIDv7; a new one when omitted.</param>
     /// <returns>The record.</returns>
-    /// <exception cref="ArgumentException">The record path is not the place of <paramref name="virtualPath"/>, the source
-    /// is not a mount path, or the identity is not a UUIDv7.</exception>
-    public static ModelImportSettings Create(string recordPath, string source, string virtualPath, JsonElement settings, Guid? sourceIdentity = null)
+    /// <exception cref="ArgumentException">The source is not a file reference from the record, or the source identity is
+    /// not a UUIDv7.</exception>
+    public static ModelImportSettings Create(AssetPath identity, string source, JsonElement settings, Guid? sourceIdentity = null)
     {
-        _ = ProjectRootOf(recordPath, virtualPath)
-            ?? throw new ArgumentException($"A model import record lives at the place of its virtual path '{virtualPath}'.", nameof(recordPath));
-        var identity = sourceIdentity ?? Guid.CreateVersion7();
-        if (identity.Version != 7)
+        ArgumentNullException.ThrowIfNull(identity);
+        var stable = sourceIdentity ?? Guid.CreateVersion7();
+        if (stable.Version != 7)
         {
             throw new ArgumentException("A model's source identity is a UUIDv7.", nameof(sourceIdentity));
         }
@@ -158,9 +110,9 @@ public sealed record ModelImportSettings
         var record = new ModelImportSettings
         {
             Source = string.Empty,
-            VirtualPath = virtualPath,
+            Identity = identity,
             Settings = settings.Clone(),
-            SourceIdentity = identity,
+            SourceIdentity = stable,
             SurfaceProvenance = EmptyProvenance(),
         }.WithSource(source);
         _ = record.ToBytes();
@@ -169,10 +121,12 @@ public sealed record ModelImportSettings
 
     /// <summary>Reads and validates a record against the installed engine schema.</summary>
     /// <param name="bytes">The record's bytes.</param>
+    /// <param name="identity">The model's identity, which is where the record lives.</param>
     /// <returns>The record.</returns>
     /// <exception cref="InvalidDataException">The bytes are not a valid model import record.</exception>
-    public static ModelImportSettings Parse(ReadOnlyMemory<byte> bytes)
+    public static ModelImportSettings Parse(ReadOnlyMemory<byte> bytes, AssetPath identity)
     {
+        ArgumentNullException.ThrowIfNull(identity);
         using var document = JsonDocument.Parse(bytes);
         var root = document.RootElement;
         if (!Schema.Value.Evaluate(root).IsValid)
@@ -190,15 +144,15 @@ public sealed record ModelImportSettings
         }
 
         var source = root.GetProperty("source").GetString()!;
-        if (!IsMountPath(source))
+        if (WhyNotAReference(identity, source) is { } refusal)
         {
-            throw new InvalidDataException($"The model import record names its source '{source}', which is not a mount path.");
+            throw new InvalidDataException($"The model import record of {identity} names its source '{source}': {refusal}");
         }
 
         return new()
         {
             Source = source,
-            VirtualPath = root.GetProperty("virtual_path").GetString()!,
+            Identity = identity,
             Settings = root.GetProperty("settings").Clone(),
             SourceIdentity = root.GetProperty("source_identity").GetGuid(),
             SurfaceProvenance = root.TryGetProperty("surface_provenance", out var provenance) ? provenance.Clone() : EmptyProvenance(),
@@ -211,37 +165,26 @@ public sealed record ModelImportSettings
         };
     }
 
-    /// <summary>Reads a record from its file, which must be at the place of its virtual path.</summary>
-    /// <param name="recordPath">The record's path.</param>
-    /// <param name="bytes">The record's bytes.</param>
-    /// <returns>The record.</returns>
-    /// <exception cref="InvalidDataException">The record is invalid or not at its virtual path.</exception>
-    public static ModelImportSettings Parse(string recordPath, ReadOnlyMemory<byte> bytes)
-    {
-        var record = Parse(bytes);
-        return ProjectRootOf(recordPath, record.VirtualPath) is not null
-            ? record
-            : throw new InvalidDataException($"The model import record '{recordPath}' is not at the place of its virtual path '{record.VirtualPath}'.");
-    }
-
     /// <summary>Gets the record's source file, through the project's mount table.</summary>
     /// <param name="project">The project and its mount table.</param>
-    /// <returns>The source file, or <see langword="null"/> when its mount is not a bound source mount on this
-    /// machine.</returns>
+    /// <returns>The source file, or <see langword="null"/> when its mount is not bound on this machine.</returns>
     public FileSystemPath? ResolveSource(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
-        return project.SourceFileOf(this.Source);
+        return project.LocateReference(this.Identity, this.Source);
     }
 
     /// <summary>Gets the record with its source rewritten, as relocating the model does; nothing else changes.</summary>
-    /// <param name="source">The mount path of the source's new place, such as <c>/Content/Vehicles/Car.glb</c>.</param>
+    /// <param name="source">The source's new place, a file reference from the record.</param>
     /// <returns>The rebound record.</returns>
-    /// <exception cref="ArgumentException">The source is not a mount path.</exception>
+    /// <exception cref="ArgumentException">The source is not a file reference from the record.</exception>
     public ModelImportSettings WithSource(string source)
-        => IsMountPath(source)
-            ? this with { Source = source }
-            : throw new ArgumentException($"A model import record names its source by its mount path, which '{source}' is not.", nameof(source));
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return WhyNotAReference(this.Identity, source) is { } refusal
+            ? throw new ArgumentException($"The model import record of {this.Identity} cannot name its source '{source}': {refusal}", nameof(source))
+            : this with { Source = source };
+    }
 
     /// <summary>Gets the record with what an import established: the <c>model_import</c> of the engine's report, its
     /// surface provenance, published, new and vanished nodes and source fingerprint. Nothing else changes.</summary>
@@ -281,7 +224,8 @@ public sealed record ModelImportSettings
     }
 
     /// <summary>Gets the record with a node continuity entry: the node with <paramref name="anchor"/> continues the node
-    /// with <paramref name="continues"/>, and takes its ID on the next import. Nothing else changes.</summary>
+    /// with <paramref name="continues"/>, and takes its ID on the next import. Entries in a circle block the model, so an
+    /// entry that would close one replaces the entry it closes; nothing else changes.</summary>
     /// <param name="anchor">The continuing node's anchor.</param>
     /// <param name="continues">The anchor of the node it continues.</param>
     /// <returns>The record with the entry.</returns>
@@ -300,7 +244,7 @@ public sealed record ModelImportSettings
             throw new ArgumentException($"'{anchor}' already continues a node.", nameof(anchor));
         }
 
-        var updated = this with { NodeContinuity = this.NodeContinuity.Add(new ModelNodeContinuity(anchor, continues)) };
+        var updated = this with { NodeContinuity = this.WithoutEntryClosingCircle(anchor, continues).Add(new ModelNodeContinuity(anchor, continues)) };
         _ = updated.ToBytes();
         return updated;
     }
@@ -346,7 +290,6 @@ public sealed record ModelImportSettings
             writer.WriteStartObject();
             writer.WriteNumber("schema_version", CurrentSchemaVersion);
             writer.WriteString("source", this.Source);
-            writer.WriteString("virtual_path", this.VirtualPath);
             writer.WritePropertyName("settings");
             this.Settings.WriteTo(writer);
             writer.WriteString("source_identity", this.SourceIdentity.ToString("D"));
@@ -397,11 +340,26 @@ public sealed record ModelImportSettings
         writer.WriteEndArray();
     }
 
-    // A mount path, or a virtual path: '/', a mount name, then '/'-separated names, never '.' or '..'.
-    private static bool IsMountPath(string path)
-        => path.Length >= 2 && path[0] == '/' && !path.Contains('\\', StringComparison.Ordinal)
-            && path[1..].Split('/').All(static segment => segment is not ("" or "." or ".."));
+    // Why a text is not a file reference from the record, by the engine's grammar; null when it is.
+    private static string? WhyNotAReference(AssetPath identity, string source)
+        => AssetPath.TryResolveReference(identity, source, VirtualPathRuleSet.Cooked, out _, out var error) ? null : error.Value.ToMessage();
 
     private static JsonElement EmptyProvenance()
         => JsonSerializer.SerializeToElement(new { schema_version = SurfaceProvenanceVersion, geometries = Array.Empty<object>() });
+
+    // The entries left once the chain that starts at the continued node no longer leads back to the continuing node.
+    private ImmutableArray<ModelNodeContinuity> WithoutEntryClosingCircle(string anchor, string continues)
+    {
+        var next = this.NodeContinuity.ToDictionary(static entry => entry.Anchor, StringComparer.Ordinal);
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        for (var current = continues; visited.Add(current) && next.TryGetValue(current, out var entry); current = entry.Continues)
+        {
+            if (string.Equals(entry.Continues, anchor, StringComparison.Ordinal))
+            {
+                return this.NodeContinuity.Remove(entry);
+            }
+        }
+
+        return this.NodeContinuity;
+    }
 }

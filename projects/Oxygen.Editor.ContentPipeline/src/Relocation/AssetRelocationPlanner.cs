@@ -330,40 +330,57 @@ internal static class AssetRelocationPlanner
 
         foreach (var import in index.Imports)
         {
-            // The record's source and virtual path follow the model, so its products are named under the model's new
-            // path, and the record moves to the place of the new virtual path.
-            var target = map.MapPath(import.PrimaryPath);
-            var folder = target.Parent!;
-
-            // The primary may be renamed in its folder; the files it reads must keep their place beside it.
-            if (import.Files.Any(file => file != import.PrimaryPath && !string.Equals(
-                Path.GetRelativePath(import.Folder.FullPath, file.FullPath),
-                Path.GetRelativePath(folder.FullPath, map.MapPath(file).FullPath),
-                StringComparison.OrdinalIgnoreCase)))
+            var edit = await PlanRecordEditAsync(project, import, map, files, cancellationToken).ConfigureAwait(false);
+            if (edit is not null)
             {
-                throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.");
+                edits.Add(edit);
             }
-
-            // Paths compare without case on Windows; a rename that changes only case still renames the model.
-            if (string.Equals(target.FullPath, import.PrimaryPath.FullPath, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            var snapshot = await files.ReadAsync(import.RecordPath.FullPath, cancellationToken).ConfigureAwait(false);
-            var content = snapshot.Content.ToArray();
-            var virtualPath = RelocationPaths.ToVirtual(project, target)
-                ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's authoring mounts.");
-            var record = ModelImportSettings.Parse(import.RecordPath.FullPath, content);
-            var finalPath = FileSystemPath.From(ModelImportSettings.PathFor(
-                ModelImportSettings.ProjectRootOf(import.RecordPath.FullPath, record.VirtualPath)!, virtualPath.VirtualPath));
-            var source = CookPaths.MountPathOf(project, target)
-                ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's source mounts.");
-            var rewritten = (record with { VirtualPath = virtualPath.VirtualPath }).WithSource(source).ToBytes();
-            map.AddMove(new(import.RecordPath, finalPath, IsDirectory: false));
-            edits.Add(new(import.RecordPath, finalPath, snapshot.Version, content, rewritten));
         }
 
         return edits;
+    }
+
+    // A record beside the model it names moves and renames with it, so its products are named under the model's new path;
+    // any other stays where it is, or moves with its folder. Either way its source is spelled from where it now is.
+    private static async Task<RelocationEdit?> PlanRecordEditAsync(ProjectContext project, AuthoredReferenceIndex.ImportSource import, RelocationMap map, IAtomicFileStore files, CancellationToken cancellationToken)
+    {
+        var target = map.MapPath(import.PrimaryPath);
+        var folder = target.Parent!;
+
+        // The primary may be renamed in its folder; the files it reads must keep their place beside it.
+        if (import.Files.Any(file => file != import.PrimaryPath && !string.Equals(
+            Path.GetRelativePath(import.Folder.FullPath, file.FullPath),
+            Path.GetRelativePath(folder.FullPath, map.MapPath(file).FullPath),
+            StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new AssetRelocationException($"The move would separate '{import.PrimaryVirtualPath.Name}' from its files. Move the model's folder instead.");
+        }
+
+        // Paths compare without case on Windows; a rename that changes only case still renames the model.
+        var followsModel = import.Settings.Identity == import.PrimaryVirtualPath;
+        var mapped = map.MapPath(import.RecordPath);
+        var finalPath = followsModel && string.Equals(mapped.FullPath, import.RecordPath.FullPath, StringComparison.Ordinal)
+            ? target.Parent!.Combine(target.Name + ModelImportSettings.RecordSuffix)
+            : mapped;
+        if (string.Equals(target.FullPath, import.PrimaryPath.FullPath, StringComparison.Ordinal)
+            && string.Equals(finalPath.FullPath, import.RecordPath.FullPath, StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var snapshot = await files.ReadAsync(import.RecordPath.FullPath, cancellationToken).ConfigureAwait(false);
+        var content = snapshot.Content.ToArray();
+        var identity = RelocationPaths.ToVirtual(project, finalPath) is { } place
+            ? AssetFileTypes.ToIdentity(place)
+            : throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's authoring mounts.");
+        var source = project.ToFileReference(identity, target)
+            ?? throw new AssetRelocationException($"'{import.PrimaryVirtualPath.Name}' would leave the project's source mounts.");
+        var rewritten = (ModelImportSettings.Parse(content, import.Settings.Identity) with { Identity = identity }).WithSource(source).ToBytes();
+        if (!string.Equals(finalPath.FullPath, mapped.FullPath, StringComparison.Ordinal))
+        {
+            map.AddMove(new(import.RecordPath, finalPath, IsDirectory: false));
+        }
+
+        return rewritten.AsSpan().SequenceEqual(content) ? null : new(import.RecordPath, finalPath, snapshot.Version, content, rewritten);
     }
 }

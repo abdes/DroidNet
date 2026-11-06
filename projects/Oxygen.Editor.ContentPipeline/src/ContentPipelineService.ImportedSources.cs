@@ -31,8 +31,8 @@ public sealed partial class ContentPipelineService
                 throw new InvalidDataException("A model import names a source outside this cook.");
             }
 
-            var record = ModelRecordLookup.Find(snapshot.Operation.Project, source.SourceAbsolutePath);
-            var relative = ModelRecordLookup.RelativePath(snapshot.Operation.Project, record);
+            var record = ModelRecordLookup.Find(snapshot.Operation.Project, source.AssetUri);
+            var relative = CookPaths.Of(snapshot.Operation.Project, FileSystemPath.From(record.RecordPath));
             var input = snapshot.Inputs.Single(file => string.Equals(file.CookPath, relative, StringComparison.Ordinal));
             var before = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, CookPaths.StoragePathOf(relative)), cancellationToken).ConfigureAwait(false);
             if (input.IsAbsent || !string.Equals(Convert.ToHexString(SHA256.HashData(before)), input.DiscoveryHash, StringComparison.Ordinal))
@@ -40,7 +40,7 @@ public sealed partial class ContentPipelineService
                 throw new InvalidDataException("The captured model import record changed during native cooking.");
             }
 
-            var after = ModelImportSettings.Parse(record.RecordPath, before).WithImportUpdate(update).ToBytes();
+            var after = ModelImportSettings.Parse(before, record.Identity).WithImportUpdate(update).ToBytes();
             if (!before.AsSpan().SequenceEqual(after))
             {
                 outputs.Add(new(relative, before, after));
@@ -160,7 +160,7 @@ public sealed partial class ContentPipelineService
         if (models.Length != 0)
         {
             var jobs = models.Select(input => scope.NativeJobs.GetValueOrDefault(input.AssetUri)
-                ?? this.manifestBuilder.BuildJob(input, [], ModelRecordLookup.RelativePath(scope.Project, ModelRecordLookup.Find(scope.Project, input.SourceAbsolutePath)))).ToArray();
+                ?? this.manifestBuilder.BuildJob(input, [], CookPaths.Of(scope.Project, FileSystemPath.From(ModelRecordLookup.Find(scope.Project, input.AssetUri).RecordPath)))).ToArray();
             var manifest = new ContentImportManifest(
                 ContentImportManifest.CurrentSchemaVersion,
                 (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path,

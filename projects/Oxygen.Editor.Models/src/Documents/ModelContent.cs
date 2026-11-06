@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Models.Documents;
 
-/// <summary>What a model document shows and edits: the model, named by its source file, and its import settings.</summary>
+/// <summary>What a model document shows and edits: the model, named by its identity, and its import settings.</summary>
 /// <remarks>
 /// <para>
 /// The model's structure and values are read-only. The scene that previews it is built by the scenes module from
@@ -30,7 +30,7 @@ public sealed class ModelContent : IDocumentContent
     private ModelImportRecordSnapshot? saved;
 
     /// <summary>Initializes a new instance of the <see cref="ModelContent"/> class.</summary>
-    /// <param name="source">The model's source file, such as <c>/Content/Vehicles/Car.glb</c>.</param>
+    /// <param name="source">The model's identity, such as <c>/Content/Vehicles/Car.glb</c>.</param>
     /// <param name="record">The model's import record as its file holds it, or <see langword="null"/> when the model is not
     /// imported.</param>
     /// <param name="history">The document's history, which records each edit; none for a content that takes no edits.</param>
@@ -45,13 +45,13 @@ public sealed class ModelContent : IDocumentContent
         this.writer = writer;
     }
 
-    /// <summary>Occurs when the model's source file moved or was renamed, after <see cref="Source"/> follows it.</summary>
+    /// <summary>Occurs when the model moved or was renamed, after <see cref="Source"/> follows it.</summary>
     public event EventHandler<ModelRelocatedEventArgs>? Relocated;
 
     /// <summary>Occurs when the record changed: an edit, its undo or redo, or what <see cref="TakeRecord"/> took.</summary>
     public event EventHandler? Changed;
 
-    /// <summary>Gets the model's source file, which identifies the model and is what a scene places.</summary>
+    /// <summary>Gets the model's identity, which is what a scene places.</summary>
     public AssetPath Source { get; private set; }
 
     /// <summary>Gets the model's import record with this document's edits, or <see langword="null"/> when the model is not
@@ -100,7 +100,7 @@ public sealed class ModelContent : IDocumentContent
     }
 
     /// <summary>Takes the record as its file holds it now, after an import or a relocation rewrote it.</summary>
-    /// <param name="latest">The record as its file holds it, or <see langword="null"/> when no record names the model.</param>
+    /// <param name="latest">The record as its file holds it, or <see langword="null"/> when the model has none.</param>
     /// <param name="keepEdits">Whether the document's unsaved settings, node continuity and forgotten anchors stay over the
     /// file's.</param>
     public void TakeRecord(ModelImportRecordSnapshot? latest, bool keepEdits)
@@ -150,7 +150,7 @@ public sealed class ModelContent : IDocumentContent
     public DocumentCapture CaptureCopy(DocumentFile copy) => DocumentCapture.Refused("A model is copied as its source file, outside the editor.");
 
     /// <inheritdoc/>
-    /// <remarks>The model follows its source file to its new name.</remarks>
+    /// <remarks>The model follows its record to its new identity.</remarks>
     public void ApplyRelocation(DocumentRelocation relocation)
     {
         ArgumentNullException.ThrowIfNull(relocation);

@@ -44,7 +44,9 @@ public sealed partial class NodeContinuityGroup : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasVanished))]
     public partial IReadOnlyList<VanishedAnchorRow> Vanished { get; private set; } = [];
 
-    /// <summary>Gets the anchors new in the last import, each saying which anchor it continues, if any.</summary>
+    /// <summary>Gets the anchors new in the last import, each saying which anchor an entry not yet imported makes it
+    /// continue, if any. After the next import a node that continues its anchor is not new: <see cref="Entries"/> alone
+    /// shows it.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasNew))]
     public partial IReadOnlyList<NewAnchorRow> New { get; private set; } = [];
@@ -144,7 +146,7 @@ public sealed partial class NodeContinuityGroup : ObservableObject
     private static string? ContinuerOf(ModelImportSettings record, string vanished)
         => record.NodeContinuity.FirstOrDefault(entry => string.Equals(entry.Continues, vanished, StringComparison.Ordinal))?.Anchor;
 
-    // The anchor a node continues, if an entry says it does.
+    // The anchor a node continues, if an entry says it does: between adding the entry and the next import, for a new node.
     private static string? ContinuedBy(ModelImportSettings record, string anchor)
         => record.NodeContinuity.FirstOrDefault(entry => string.Equals(entry.Anchor, anchor, StringComparison.Ordinal))?.Continues;
 

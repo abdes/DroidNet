@@ -118,7 +118,7 @@ public sealed record ReassignKeptChange(NodeId Instance, NodePath From, NodePath
 
         try
         {
-            return ModelImportSettings.Parse(bytes);
+            return ModelImportSettings.Parse(bytes, instance.Source);
         }
         catch (Exception exception) when (exception is InvalidDataException or JsonException)
         {

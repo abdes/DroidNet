@@ -1120,8 +1120,7 @@ content, never from where the file sits, and it never requires deleting a
 file.
 
 **Why.** Node IDs (NGN2) and surface IDs are derived from the source identity
-kept in the model import record (`<content_root>/Imports/**/*.import.json`,
-NGN14).
+kept in the model import record (`<model identity>.import.json`, NGN14).
 Called with `--root` and a source but no `--record`, the ImportTool
 finds the record only through a recipe whose `source` is the same file
 (`RetainedModelImport::RecordPath`, `Cooker/Import/RetainedModelImport.cpp:375-412`);
@@ -1155,7 +1154,7 @@ both publish, with the same keys.
   | 1    | A record with this virtual path                                           | The user names this model: its source moved, was re-exported elsewhere, or a copy becomes its source; the original may stay | That record. If its source is another file, the recipe's `source` is rewritten and `import.source_rebound` (info) names the old and new files                                                                |
   | 2    | A record whose source is this file, under another virtual path            | Another model from the same file                                                                                            | A new record; `import.source_has_model` (info) names the existing record, for the user who meant to rename that model's virtual path, which `--record` does                                                  |
   | 3    | A record whose source is missing and whose fingerprint equals this file's | The same file moved, and its virtual path with it                                                                           | That record, its source and virtual path rewritten; `import.source_relocated` (info). If several records match, none is taken: `import.source_relocation_ambiguous` (warning) lists them, and step 4 applies |
-  | 4    | Nothing                                                                   | A new model                                                                                                                 | A new record at its virtual path under `Imports/`; see the hints below                                                                                                                                       |
+  | 4    | Nothing                                                                   | A new model                                                                                                                 | A new record at its identity in the model's mount; see the hints below                                                                                                                                       |
 
 - **Hints at step 4.** A record with the same fingerprint whose source still
   exists is the original of a copy: `import.source_copy` (info) names it and
@@ -1216,25 +1215,24 @@ settings) would otherwise be written twice.
 
 **How.**
 
-- **Place.** `<content_root>/Imports/<virtual path>.import.json`: the model
+- **Place.** `<model identity>.import.json` in the model's mount: the model
   `/Content/Models/Ship.glb` has the record
-  `Imports/Content/Models/Ship.glb.import.json`, and the folder is scanned
-  recursively. The editor's content root is the project root, so its records
-  live in `<ProjectRoot>/Imports/`, outside every authoring mount: the Content
-  Explorer never lists them. The ImportTool's is its `--root`, the project root.
-  A record not at the place of its virtual path is refused. The UUIDv7 source
-  identity stays inside the record (`source_identity`) and never changes.
-  Relocating a model rewrites the record's `source`; giving the model another
-  virtual path rewrites the record's `virtual_path` and moves the record to the
-  new place (the editor's relocation does it in its transaction; the engine's
-  `ModelImportRecord::Save` does it for the ImportTool).
+  `/Content/Models/Ship.glb.import.json`. The record is the model's authored
+  file: its identity is where it lives, never in the file, so the file is
+  found at the identity and nothing scans a records folder. The few operations
+  that need every record list `*.import.json` in the bound `Source` mounts
+  (`ModelImportRecords` in the editor, `ScanRecords` in the engine). The
+  Content Explorer shows a record as its model, never as a row of its own. The
+  UUIDv7 source identity stays inside the record (`source_identity`) and never
+  changes. A source has any number of records. Moving a source respells the
+  record's `source`; a record beside the model it names moves with it (the
+  editor's relocation does it in its transaction).
 - **Schema.** `oxygen.model-import.schema.json` replaces both schemas:
 
   | Field                | Holds                                                                                                                |
   | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
   | `schema_version`     | 1                                                                                                                    |
-  | `source`             | The primary source file, relative to the record; inside or outside the content root                                  |
-  | `virtual_path`       | The model's identity, under which its products are named                                                             |
+  | `source`             | The primary source file, a file reference from the record: relative in its mount, the mount path from another        |
   | `settings`           | The model import settings ([model editor](model-editor.md) section 5.3), in the import manifest's vocabulary         |
   | `source_identity`    | A UUID, from which node IDs (NGN2) and surface IDs are derived                                                       |
   | `surface_provenance` | As today, without a second copy of the identity                                                                      |
@@ -1244,8 +1242,8 @@ settings) would otherwise be written twice.
   | `vanished_nodes`     | The nodes earlier imports emitted whose ID the last did not, kept until emitted again: the anchors kept changes lost |
   | `source_fingerprint` | Size and SHA-256 of every file the last import read: NGN13's relocation proof and the editor's reimport check        |
 
-- **Left out, each owned elsewhere.** The content root: the record's path
-  without `Imports/` and its virtual path. The published generation:
+- **Left out, each owned elsewhere.** The model's identity: the record's path.
+  The published generation:
   publication state, never in the record, with one publisher per root. In an
   editor project that is the editor: a `model` job cooks into its mount's
   generation and the editor commits the record update with its publication
@@ -1253,9 +1251,9 @@ settings) would otherwise be written twice.
   the tool owns, `<--output>/<source_identity>/head.json`, never into a
   project's output folders. The bundle's file list: the source analysis reports it
   on every import. The importer's name: the schema version states it.
-- **One job.** An import manifest job of type `model` names a record:
-  `{ "type": "model", "record": "Imports/<virtual path>.import.json" }`. The
-  importer takes the source, virtual path, settings and identity from it, picks
+- **One job.** An import manifest job of type `model` names a model:
+  `{ "type": "model", "virtual_path": "<model identity>" }`. The importer reads
+  the record at that identity, takes the source, settings and identity from it, picks
   the glTF or FBX adapter from the source, and returns the record's new content
   (surface provenance, published nodes, fingerprint) in its report. The
   ImportTool's `gltf` and `fbx` verbs with `--record` and the editor's `batch`
@@ -1353,7 +1351,7 @@ shipped runtime meets a change it cannot apply.
    editing their JSON: scene files, whose starting camera and node-typed script
    parameters become node references (ED1); and each editor sidecar
    (`Car.glb.import.json`) and ImportTool retained record becomes a model
-   import record at `<content_root>/Imports/<virtual path>.import.json`
+   import record at `<model identity>.import.json`
    (NGN14), keeping its source identity in `source_identity`. Deleting one instead gives its model
    new node IDs, so only a model no scene has changes on may be imported again. The product reads only the current formats: no
    format in this release has migration code.
@@ -1929,11 +1927,9 @@ capabilities M-ED1 to M-ED9 and the engine's M-NGN1 to M-NGN10.
 - `Oxygen.Editor.Models`, a new family module, owns `ModelImportSettings`,
   the editor's reader and writer of the model import record (NGN14), which
   replaces `NativeSceneImportSettings` and its sidecar; `ModelImportRecords`,
-  an index from source path to record built from `<ProjectRoot>/Imports/` and
-  kept current by file watching, which replaces the six sidecar-existence
-  checks (`CookInputResolver.cs:95`, `CookSourceAnalyzer.cs:196-208`,
-  `AssetFeed.cs:260`, `CookRootRepair.cs:110`, `AssetsViewModel.cs:374`,
-  `AssetsViewModel.AssetActions.cs:183`); `ModelDocumentKind`, `ModelContent`,
+  which reads a model's record at its identity and, for what needs every record,
+  indexes the records of the bound source mounts by identity and by the source
+  they name; `ModelDocumentKind`, `ModelContent`,
   its problems and the `IModelImportPrompt` port.
 - The content pipeline runs a model's import as a `model` job naming its
   record: `ContentImportJob` loses its copied policies and surface identity,

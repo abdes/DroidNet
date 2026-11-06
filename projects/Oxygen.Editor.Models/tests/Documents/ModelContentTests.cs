@@ -201,10 +201,10 @@ public sealed class ModelContentTests : IDisposable
     }
 
     private ModelImportRecordSnapshot ReadSnapshot()
-        => ModelImportRecordSnapshot.Read(this.project.Context.FileSystem, this.recordPath);
+        => ModelImportRecordSnapshot.Read(this.project.Context.FileSystem, this.recordPath, this.source.Asset);
 
     private ModelImportSettings ReadRecord()
-        => ModelImportSettings.Parse(this.recordPath, this.project.Context.FileSystem.File.ReadAllBytes(this.recordPath));
+        => ModelImportSettings.Parse(this.project.Context.FileSystem.File.ReadAllBytes(this.recordPath), this.source.Asset);
 
     // The content pipeline's rule: the record is replaced only while it holds what was read.
     private sealed class RecordWriter(ModelContentTests test) : IModelImportRecordWriter

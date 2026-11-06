@@ -432,7 +432,7 @@ public partial class AssetsViewModel(
             var project = session.Context;
 
             // An imported model opens in its Model Editor; Reimport is a command of its own.
-            if (new ModelImportRecords(project).IsImported(sourcePath.FullPath))
+            if (ModelImportRecords.TryRead(project, args.InvokedItem.Identity) is not null)
             {
                 await this.OpenDocumentAsync(args.InvokedItem.Identity).ConfigureAwait(true);
             }
