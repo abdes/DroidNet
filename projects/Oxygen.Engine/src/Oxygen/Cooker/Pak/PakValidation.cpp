@@ -22,6 +22,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Pak/Internal/PakBaseLayers.h>
+#include <Oxygen/Cooker/Pak/Internal/PakLayoutRules.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
@@ -169,6 +171,24 @@ auto ValidatePlannedFileSize(ValidationState& state) -> void
   if (state.plan->PlannedFileSize() == 0U) {
     AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
       "pak.plan.file_size_zero", "Planned file size must be non-zero.");
+  }
+}
+
+//! The runtime reads the footer from the end of the file and each directory
+//! record where the record says it lies.
+auto ValidatePositionalLayout(ValidationState& state) -> void
+{
+  using Severity = pak::PakDiagnosticSeverity;
+  using Phase = pak::PakBuildPhase;
+
+  if (!pak::internal::DirectoryRecordsInPlace(state.plan->Directory())) {
+    AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
+      "pak.plan.directory_record_offset_invalid",
+      "A directory record does not state its own position in the directory.");
+  }
+  if (!pak::internal::FooterEndsFile(*state.plan)) {
+    AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
+      "pak.plan.footer_not_at_end", "The footer does not end the file.");
   }
 }
 
@@ -747,17 +767,16 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
   using Severity = pak::PakDiagnosticSeverity;
   using Phase = pak::PakBuildPhase;
 
-  std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
-  for (const auto& base : state.request->base_catalogs) {
-    for (const auto& entry : base.entries) {
-      const auto [it, inserted]
-        = base_asset_types.emplace(entry.asset_key, entry.asset_type);
-      if (!inserted && it->second != entry.asset_type) {
-        AddDiagnostic(state.output.diagnostics, Severity::kError,
-          Phase::kPlanning, "pak.plan.base_catalog_type_mismatch",
-          "Same AssetKey appears in base catalogs with different asset_type.",
-          entry.asset_key);
-      }
+  // The bases as the planner composed them: an asset a base deleted does not
+  // exist, and one a later base recreated does.
+  auto base = pak::internal::EffectiveBase {};
+  const auto no_textures = pak::PakTextures {};
+  for (const auto& catalog : state.request->base_catalogs) {
+    for (const auto& key : base.Apply(catalog, no_textures)) {
+      AddDiagnostic(state.output.diagnostics, Severity::kError,
+        Phase::kPlanning, "pak.plan.base_catalog_type_mismatch",
+        "Same AssetKey appears in base catalogs with different asset_type.",
+        key);
     }
   }
 
@@ -772,8 +791,8 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
 
     patch_keys.push_back(action.asset_key);
 
-    const auto base_it = base_asset_types.find(action.asset_key);
-    const auto exists_in_base = base_it != base_asset_types.end();
+    const auto base_it = base.entries.find(action.asset_key);
+    const auto exists_in_base = base_it != base.entries.end();
     if (state.policy->mode == pak::PakPlanMode::kPatch) {
       if ((action.action == pak::PakPatchAction::kReplace
             || action.action == pak::PakPatchAction::kDelete
@@ -793,7 +812,7 @@ auto ValidatePatchActionsAgainstBaseCatalogs(ValidationState& state) -> void
       }
 
       if (action.action == pak::PakPatchAction::kReplace && exists_in_base
-        && base_it->second != action.asset_type) {
+        && base_it->second.asset_type != action.asset_type) {
         AddDiagnostic(state.output.diagnostics, Severity::kError,
           Phase::kPlanning, "pak.plan.replace_type_mismatch",
           "Replace operation must preserve base asset_type.", action.asset_key,
@@ -878,6 +897,7 @@ auto PakValidation::Validate(const PakPlan& plan, const PakPlanPolicy& policy,
   ValidationState state(plan, policy, request);
 
   ValidatePlannedFileSize(state);
+  ValidatePositionalLayout(state);
   ValidateTablesAndSchemas(state);
   CollectRegionBoundsAndRanges(state);
   CollectTableRanges(state);

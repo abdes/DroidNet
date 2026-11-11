@@ -16,7 +16,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -29,6 +28,7 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/testing/GeometryBuilder.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
@@ -43,6 +43,7 @@
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/TempDirTest.h>
@@ -483,12 +484,9 @@ auto TexturedRoot(const uint8_t seed,
   return root;
 }
 
-//! Plans a patch of `patched` over the full pak of `base`, which holds the
-//! textures `base_textures`.
+//! Plans a patch of `patched` over the full pak of `base`.
 auto PlanTexturePatch(const LooseCookedRoot& base,
-  const LooseCookedRoot& patched,
-  const std::vector<std::string_view>& base_textures)
-  -> pak::PakPlanBuilder::BuildResult
+  const LooseCookedRoot& patched) -> pak::PakPlanBuilder::BuildResult
 {
   auto workspace = PakWorkspace {};
   const auto full = workspace.FullRequest({ workspace.Add(base) }, "base.pak");
@@ -496,20 +494,48 @@ auto PlanTexturePatch(const LooseCookedRoot& base,
   EXPECT_THAT(packed.Diagnostics(), HasNoErrors());
   auto request = workspace.PatchRequest(
     { workspace.Add(patched) }, { packed.planned.output_catalog }, "patch.pak");
-  auto keys = std::unordered_set<data::AssetKey> {};
-  for (const auto name : base_textures) {
-    keys.insert(GameTextureKey(name));
-  }
-  request.base_texture_keys = { std::move(keys) };
+  request.base_textures = { workspace.Textures(full.output_pak_path) };
   return pak::PakPlanBuilder {}.Build(request);
+}
+
+//! Whether the browse index of `plan` lists the texture `name`.
+auto ListsTexture(const pak::PakPlan& plan, const std::string_view name) -> bool
+{
+  const auto path = "/Game/Textures/" + std::string(name) + ".otex";
+  return std::ranges::contains(plan.BrowseIndex().textures, path,
+    &pak::PakBrowseTextureEntryPlan::virtual_path);
+}
+
+//! A patch leaves a texture its base holds unchanged to the base, and carries
+//! one its sources changed: the base's copy would hide the new one.
+NOLINT_TEST(PakPlanBuilderPatchTest, ChangedKeyedTextureTravelsInThePatch)
+{
+  auto patched = LooseCookedRoot { "Game", 2U };
+  patched.DescribeTexture("Textures/Sky.otex",
+    patched.AddTexture(fixtures::TextureBuilder {}.Size({
+      .width = 2U,
+      .height = 2U,
+    })));
+  patched.DescribeTexture(
+    "Textures/Moon.otex", patched.AddTexture(fixtures::TextureBuilder {}));
+  static_cast<void>(patched.Material("Wood.omat"));
+
+  const auto result
+    = PlanTexturePatch(TexturedRoot(1U, { "Sky", "Moon" }), patched);
+
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(result.plan);
+  EXPECT_TRUE(ListsTexture(*result.plan, "Sky"));
+  EXPECT_FALSE(ListsTexture(*result.plan, "Moon"));
+  EXPECT_TRUE(result.plan->DeletedTextures().empty());
 }
 
 //! A base texture the patch's sources no longer hold is deleted, as a
 //! dropped asset is.
 NOLINT_TEST(PakPlanBuilderPatchTest, DroppedBaseTextureIsDeleted)
 {
-  const auto result = PlanTexturePatch(TexturedRoot(1U, { "Sky", "Moon" }),
-    TexturedRoot(2U, { "Moon" }), { "Sky", "Moon" });
+  const auto result = PlanTexturePatch(
+    TexturedRoot(1U, { "Sky", "Moon" }), TexturedRoot(2U, { "Moon" }));
 
   ASSERT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.plan);
@@ -525,7 +551,7 @@ NOLINT_TEST(PakPlanBuilderPatchTest, DroppedBaseTextureIsDeleted)
 NOLINT_TEST(PakPlanBuilderPatchTest, HeldOrReferencedBaseTextureStays)
 {
   const auto result = PlanTexturePatch(TexturedRoot(1U, { "Sky", "Moon" }),
-    TexturedRoot(2U, { "Sky" }, GameTextureKey("Moon")), { "Sky", "Moon" });
+    TexturedRoot(2U, { "Sky" }, GameTextureKey("Moon")));
 
   ASSERT_THAT(result.diagnostics, HasNoErrors());
   ASSERT_HAS_VALUE(result.plan);
@@ -546,14 +572,16 @@ NOLINT_TEST(PakPlanBuilderPatchTest, BaseChainDeletionsApplyInOrder)
   auto first_request
     = workspace.PatchRequest({ workspace.Add(TexturedRoot(2U, { "Moon" })) },
       { base.planned.output_catalog }, "p1.pak");
-  first_request.base_texture_keys = { { GameTextureKey("Sky") } };
+  first_request.base_textures = { workspace.Textures(full.output_pak_path) };
   const auto first = PakWorkspace::Pack(first_request);
   ASSERT_THAT(first.Diagnostics(), HasNoErrors());
   auto second_request
     = workspace.PatchRequest({ workspace.Add(TexturedRoot(3U, {})) },
       { base.planned.output_catalog, first.planned.output_catalog }, "p2.pak");
-  second_request.base_texture_keys
-    = { { GameTextureKey("Sky") }, { GameTextureKey("Moon") } };
+  second_request.base_textures = {
+    workspace.Textures(full.output_pak_path),
+    workspace.Textures(first_request.output_pak_path),
+  };
 
   const auto second = pak::PakPlanBuilder {}.Build(second_request);
 
@@ -565,8 +593,8 @@ NOLINT_TEST(PakPlanBuilderPatchTest, BaseChainDeletionsApplyInOrder)
     ::testing::ElementsAre(GameTextureKey("Moon")));
 }
 
-//! Texture keys for some base catalogs only are refused.
-NOLINT_TEST(PakPlanBuilderPatchTest, BaseTextureKeysCoverEveryBase)
+//! The textures of some base paks only are refused.
+NOLINT_TEST(PakPlanBuilderPatchTest, BaseTexturesCoverEveryBase)
 {
   auto workspace = PakWorkspace {};
   const auto full = workspace.FullRequest(
@@ -576,12 +604,167 @@ NOLINT_TEST(PakPlanBuilderPatchTest, BaseTextureKeysCoverEveryBase)
   auto request
     = workspace.PatchRequest({ workspace.Add(TexturedRoot(2U, { "Sky" })) },
       { base.planned.output_catalog }, "patch.pak");
-  request.base_texture_keys = { { GameTextureKey("Sky") }, {} };
+  request.base_textures = { workspace.Textures(full.output_pak_path), {} };
 
   const auto result = pak::PakPlanBuilder {}.Build(request);
 
   EXPECT_THAT(
-    result.diagnostics, HasDiagnostic("pak.plan.base_texture_keys_mismatch"));
+    result.diagnostics, HasDiagnostic("pak.plan.base_textures_mismatch"));
+}
+
+//! Flattened, a texture a layer deletes is gone, and a texture a later layer
+//! recreates is held and not deleted: the runtime checks deletions first.
+NOLINT_TEST(PakPlanBuilderPatchTest, FlatteningComposesTextureDeletionsInOrder)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(TexturedRoot(1U, { "Sky" })) }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Pack(full).Diagnostics(), HasNoErrors());
+  auto deleting
+    = workspace.PatchRequest({ workspace.Add(TexturedRoot(2U, {})) },
+      { workspace.Catalog(full.output_pak_path) }, "delete.pak");
+  deleting.base_textures = { workspace.Textures(full.output_pak_path) };
+  ASSERT_THAT(PakWorkspace::Pack(deleting).Diagnostics(), HasNoErrors());
+  auto recreating
+    = workspace.PatchRequest({ workspace.Add(TexturedRoot(3U, { "Sky" })) },
+      {
+        workspace.Catalog(full.output_pak_path),
+        workspace.Catalog(deleting.output_pak_path),
+      },
+      "recreate.pak");
+  recreating.base_textures = {
+    workspace.Textures(full.output_pak_path),
+    workspace.Textures(deleting.output_pak_path),
+  };
+  ASSERT_THAT(PakWorkspace::Pack(recreating).Diagnostics(), HasNoErrors());
+  const auto builder = pak::PakPlanBuilder {};
+
+  const auto deleted = builder.Build(workspace.FullRequest(
+    {
+      PakWorkspace::PakSource(full.output_pak_path),
+      PakWorkspace::PakSource(deleting.output_pak_path),
+    },
+    "deleted.pak"));
+  const auto recreated = builder.Build(workspace.FullRequest(
+    {
+      PakWorkspace::PakSource(full.output_pak_path),
+      PakWorkspace::PakSource(deleting.output_pak_path),
+      PakWorkspace::PakSource(recreating.output_pak_path),
+    },
+    "recreated.pak"));
+
+  ASSERT_THAT(deleted.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(deleted.plan);
+  EXPECT_FALSE(ListsTexture(*deleted.plan, "Sky"));
+  EXPECT_THAT(
+    deleted.output_catalog.deleted, ::testing::Contains(GameTextureKey("Sky")));
+  ASSERT_THAT(recreated.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(recreated.plan);
+  EXPECT_TRUE(ListsTexture(*recreated.plan, "Sky"));
+  EXPECT_THAT(recreated.output_catalog.deleted,
+    ::testing::Not(::testing::Contains(GameTextureKey("Sky"))));
+}
+
+//=== Effective base ===------------------------------------------------------//
+
+//! A `Game` root with the materials `<name>.omat` of `materials`.
+auto MaterialRoot(const uint8_t seed,
+  const std::vector<std::string_view>& materials) -> LooseCookedRoot
+{
+  auto root = LooseCookedRoot { "Game", seed };
+  for (const auto name : materials) {
+    static_cast<void>(root.Material(std::string(name) + ".omat"));
+  }
+  return root;
+}
+
+//! An asset a base deleted is created again, against the bases as they
+//! compose: the base that held it no longer counts.
+NOLINT_TEST(PakPlanBuilderPatchTest, AssetDeletedThenRecreatedIsCreated)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(MaterialRoot(1U, { "Wood", "Extra" })) }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Pack(full).Diagnostics(), HasNoErrors());
+  const auto deleting
+    = workspace.PatchRequest({ workspace.Add(MaterialRoot(2U, { "Wood" })) },
+      { workspace.Catalog(full.output_pak_path) }, "delete.pak");
+  ASSERT_THAT(PakWorkspace::Pack(deleting).Diagnostics(), HasNoErrors());
+  const auto recreated = MaterialRoot(3U, { "Wood", "Extra" });
+  const auto request = workspace.PatchRequest({ workspace.Add(recreated) },
+    {
+      workspace.Catalog(full.output_pak_path),
+      workspace.Catalog(deleting.output_pak_path),
+    },
+    "recreate.pak");
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+
+  ASSERT_THAT(result.diagnostics, HasNoErrors());
+  ASSERT_HAS_VALUE(result.plan);
+  EXPECT_EQ(ActionOf(*result.plan, recreated.KeyOf("Extra.omat")),
+    PakPatchAction::kCreate);
+}
+
+//! A patch's sources are all it keeps: a reference to an asset only its base
+//! holds names an asset the patch deletes, and is missing.
+NOLINT_TEST(PakPlanBuilderPatchTest, ReferenceToAnAssetThePatchDeletesIsMissing)
+{
+  auto workspace = PakWorkspace {};
+  auto base = MaterialRoot(1U, { "Target" });
+  const auto target = base.KeyOf("Target.omat");
+  const auto full = workspace.FullRequest({ workspace.Add(base) }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Pack(full).Diagnostics(), HasNoErrors());
+  auto patched = LooseCookedRoot { "Game", 2U };
+  auto owner = fixtures::GeometryBuilder { "Owner" };
+  owner.Submesh(owner.ProceduralLod(),
+    data::SurfaceId::FromStableIdentity("owner"), target);
+  static_cast<void>(patched.Geometry("Owner.ogeo", owner));
+  const auto request = workspace.PatchRequest({ workspace.Add(patched) },
+    { workspace.Catalog(full.output_pak_path) }, "patch.pak");
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+
+  EXPECT_THAT(
+    result.diagnostics, HasDiagnostic("pak.plan.asset_reference_missing"));
+}
+
+//=== Layer identities ===----------------------------------------------------//
+
+//! A base with the output's identity is refused, naming the identity.
+NOLINT_TEST(PakPlanBuilderPatchTest, BaseWithTheOutputIdentityIsRefused)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(MaterialRoot(1U, { "Wood" })) }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Pack(full).Diagnostics(), HasNoErrors());
+  auto request
+    = workspace.PatchRequest({ workspace.Add(MaterialRoot(2U, { "Wood" })) },
+      { workspace.Catalog(full.output_pak_path) }, "patch.pak");
+  request.source_key = full.source_key;
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.plan.base_catalog_identity_conflict"));
+}
+
+//! A dependency with the identity of a base is refused.
+NOLINT_TEST(PakPlanBuilderPatchTest, DependencyWithABaseIdentityIsRefused)
+{
+  auto workspace = PakWorkspace {};
+  const auto full = workspace.FullRequest(
+    { workspace.Add(MaterialRoot(1U, { "Wood" })) }, "base.pak");
+  ASSERT_THAT(PakWorkspace::Pack(full).Diagnostics(), HasNoErrors());
+  auto request
+    = workspace.PatchRequest({ workspace.Add(MaterialRoot(2U, { "Wood" })) },
+      { workspace.Catalog(full.output_pak_path) }, "patch.pak");
+  request.dependencies = { workspace.Dependency(full.output_pak_path) };
+
+  const auto result = pak::PakPlanBuilder {}.Build(request);
+
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.plan.dependency_catalog_identity_conflict"));
 }
 
 //=== Incremental patches mounted by the resolver ===-------------------------//

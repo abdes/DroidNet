@@ -24,6 +24,7 @@
 #include <Oxygen/Base/Crc32.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/Internal/PakLayoutRules.h>
 #include <Oxygen/Cooker/Pak/Internal/PakResourceRows.h>
 #include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
@@ -60,9 +61,10 @@ struct WriterState final {
   pak::internal::PakSourceDevices sources;
   //! The pak being published; declared before `hashing`, which writes to it.
   std::unique_ptr<Publication> publication;
-  //! Every write goes through it, so the pak CRC (which skips its own footer
-  //! field) comes out of the write pass. Declared after `publication`, which
-  //! it writes to, so it is destroyed first.
+  //! When the request computes the CRC, every write goes through it, so the
+  //! pak CRC (which skips its own footer field) comes out of the write pass;
+  //! otherwise unset, and writes go straight to `publication`. Declared after
+  //! `publication`, which it writes to, so it is destroyed first.
   std::optional<serio::HashingWriteStream<Publication, oxygen::base::Crc32>>
     hashing;
   pak::PakWriter::WriteResult output {};
@@ -108,13 +110,15 @@ auto WriteRawBytes(WriterState& state, const std::span<const std::byte> bytes,
   if (bytes.empty()) {
     return true;
   }
-  if (!state.hashing.has_value()) {
+  if (state.publication == nullptr) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError, write_code,
       write_error, resource_kind, table_name, asset_key, state.cursor);
     return false;
   }
 
-  const auto write_result = state.hashing->Write(bytes);
+  const auto write_result = state.hashing.has_value()
+    ? state.hashing->Write(bytes)
+    : state.publication->Write(bytes);
   if (!write_result) {
     AddDiagnostic(state, pak::PakDiagnosticSeverity::kError, write_code,
       write_error, resource_kind, table_name, asset_key, state.cursor);
@@ -419,6 +423,19 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       "Plan CRC32 field absolute offset does not match PakFooter layout.",
       "footer", "footer", std::nullopt, footer.crc32_field_absolute_offset);
   }
+  // The runtime reads these by position: a plan that misplaces them would
+  // write a pak it cannot open.
+  if (!internal::DirectoryRecordsInPlace(plan.Directory())) {
+    AddDiagnostic(state, PakDiagnosticSeverity::kError,
+      "pak.write.directory_record_offset_invalid",
+      "A directory record does not state its own position in the directory.",
+      "directory", "asset_directory", std::nullopt, plan.Directory().offset);
+  }
+  if (!internal::FooterEndsFile(plan)) {
+    AddDiagnostic(state, PakDiagnosticSeverity::kError,
+      "pak.write.footer_not_at_end", "The footer does not end the file.",
+      "footer", "footer", std::nullopt, plan.PlannedFileSize());
+  }
   if (plan.ResourcePayloadSources().size() != plan.Resources().size()) {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.resource_source_count_mismatch",
@@ -446,11 +463,15 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   if (auto publication = request.storage->Publish(request.output_pak_path);
     publication) {
     state.publication = std::move(publication).value();
-    const auto crc_field = serio::ByteRange {
-      .offset = serio::ByteOffset { plan.Footer().crc32_field_absolute_offset },
-      .count = serio::ByteCount { kCrcFieldSize },
-    };
-    state.hashing.emplace(*state.publication, std::span { &crc_field, 1 });
+    // No CRC is requested: no byte is hashed.
+    if (request.options.compute_crc32) {
+      const auto crc_field = serio::ByteRange {
+        .offset
+        = serio::ByteOffset { plan.Footer().crc32_field_absolute_offset },
+        .count = serio::ByteCount { kCrcFieldSize },
+      };
+      state.hashing.emplace(*state.publication, std::span { &crc_field, 1 });
+    }
   } else {
     AddDiagnostic(state, PakDiagnosticSeverity::kError,
       "pak.write.stream_open_failed",
@@ -810,15 +831,17 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
   }
 
   if (!HasWriterErrors(state)) {
-    const auto flush_result = state.hashing->Flush();
+    const auto flush_result = state.hashing.has_value()
+      ? state.hashing->Flush()
+      : state.publication->Flush();
     if (!flush_result) {
       AddDiagnostic(state, PakDiagnosticSeverity::kError,
         "pak.write.stream_flush_failed", "Failed to flush output pak stream.");
     }
   }
 
-  if (!HasWriterErrors(state) && request.options.compute_crc32) {
-    state.output.pak_crc32 = std::get<0>(state.hashing.value().Digests());
+  if (!HasWriterErrors(state) && state.hashing.has_value()) {
+    state.output.pak_crc32 = std::get<0>(state.hashing->Digests());
     if (PatchCrc32(state,
           {
             .field_offset = plan.Footer().crc32_field_absolute_offset,

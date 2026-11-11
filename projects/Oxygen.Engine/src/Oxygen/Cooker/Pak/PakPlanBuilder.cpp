@@ -35,6 +35,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/Internal/PakBaseLayers.h>
 #include <Oxygen/Cooker/Pak/Internal/PakSourceDevices.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
@@ -43,6 +44,7 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -790,7 +792,7 @@ struct DependencyLayer final {
   std::unordered_map<data::AssetKey, data::AssetType> assets;
   //! The lower assets it deletes, which no reference resolves past.
   std::unordered_set<data::AssetKey> deleted;
-  std::unordered_set<data::AssetKey> textures;
+  pak::PakTextures textures;
 };
 
 struct PlanningState final {
@@ -814,12 +816,8 @@ struct PlanningState final {
   std::vector<PhysicsScenePair> physics_scene_pairs;
   std::unordered_map<data::AssetKey, size_t> asset_positions;
   std::unordered_set<data::AssetKey> tombstones;
-  //! Effective assets of the patch base layers, after their deletions.
-  std::unordered_map<data::AssetKey, data::PakCatalogEntry> base_entries;
-  //! Every asset type a base layer declares, deleted assets included.
-  std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
-  //! Keys of the textures the patch base layers hold, after their deletions.
-  std::unordered_set<data::AssetKey> base_textures;
+  //! The assets and textures of the patch base layers, after their deletions.
+  pak::internal::EffectiveBase base;
   //! Base textures the planned assets reference by key without a source of
   //! the patch holding them; a patch keeps them.
   std::unordered_set<data::AssetKey> referenced_base_textures;
@@ -844,6 +842,11 @@ struct PlanningState final {
   //! Texture descriptor paths by the source and source-local texture index
   //! they name; a later source's path replaces an earlier one.
   std::unordered_map<std::string, SourceTextureRef> browse_textures;
+  //! The `KeyedTextureDigest` of each texture row, by source and source-local
+  //! texture index.
+  std::unordered_map<size_t,
+    std::unordered_map<uint32_t, oxygen::base::Sha256Digest>>
+    texture_record_digests;
   std::vector<pak::PakBrowseTextureEntryPlan> planned_browse_textures;
   TableCounts table_counts {};
 };
@@ -931,11 +934,11 @@ auto ValidatePlanningRequest(PlanningState& state) -> void
       "Patch planning requires at least one base catalog.");
   }
 
-  if (!request.base_texture_keys.empty()
-    && request.base_texture_keys.size() != request.base_catalogs.size()) {
+  if (!request.base_textures.empty()
+    && request.base_textures.size() != request.base_catalogs.size()) {
     AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-      PakBuildPhase::kPlanning, "pak.plan.base_texture_keys_mismatch",
-      "Planning requires the texture keys of every base catalog, or none.");
+      PakBuildPhase::kPlanning, "pak.plan.base_textures_mismatch",
+      "Planning requires the textures of every base pak, or none.");
   }
 
   if (policy.mode == pak::PakPlanMode::kPatch
@@ -1062,13 +1065,21 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
       .catalog_digest = {},
     });
   }
+  // A layer's deletions remove the lower layers' textures of their keys, as
+  // its textures undo the lower layers' deletions of theirs: a texture
+  // deleted and recreated is held, and is not deleted.
   const auto& deleted = cooked_content.Summary().deleted;
   state.tombstones.insert(deleted.begin(), deleted.end());
+  std::erase_if(state.browse_textures, [&deleted](const auto& entry) -> bool {
+    return deleted.contains(data::TextureKeyFromVirtualPath(entry.first));
+  });
 
   for (const auto& texture : cooked_content.NamedTextures()) {
     const auto path = ToCanonicalVirtualPath(texture.virtual_path);
+    const auto key = data::TextureKeyFromVirtualPath(path);
+    state.tombstones.erase(key);
     context.digests.texture_index_by_key.insert_or_assign(
-      data::TextureKeyFromVirtualPath(path), texture.row.get());
+      key, texture.row.get());
     state.browse_textures.insert_or_assign(path,
       SourceTextureRef {
         .source_order = context.order,
@@ -1211,12 +1222,14 @@ auto CollectTextureResources(PlanningState& state, SourceCollection& context)
                                                    : record.alignment;
         return true;
       },
-      [&resource_state, &state, &diagnostics](const uint32_t local_index,
-        const core::TextureResourceDesc& record,
+      [&resource_state, &state, &diagnostics, source_order](
+        const uint32_t local_index, const core::TextureResourceDesc& record,
         PendingResource& pending) -> void {
         const auto pending_index = state.pending_resources.size();
         resource_state.texture_pending_positions.emplace(
           local_index, pending_index);
+        state.texture_record_digests[source_order].insert_or_assign(
+          local_index, pak::KeyedTextureDigest(record));
         if (const auto digest = ComputeNormalizedResourceDigest(
               state.sources, record, pending,
               [](core::TextureResourceDesc& normalized) -> void {
@@ -1637,12 +1650,16 @@ auto CollectSourceData(PlanningState& state) -> void
 auto CollectDependencies(PlanningState& state) -> void
 {
   auto& diagnostics = state.output.diagnostics;
-  auto identities = std::unordered_set<data::SourceKey> {};
-  for (const auto& base : state.request->base_catalogs) {
-    identities.insert(base.source_key);
+  //! Which layer holds each identity: the output, a base or a dependency.
+  auto identities = std::unordered_map<data::SourceKey, std::string> {};
+  identities.emplace(state.request->source_key, "the output");
+  for (size_t index = 0; index < state.request->base_catalogs.size(); ++index) {
+    identities.emplace(state.request->base_catalogs.at(index).source_key,
+      "base layer " + std::to_string(index));
   }
   auto mounts = std::unordered_set<std::string> {};
-  for (const auto& dependency : state.request->dependencies) {
+  for (size_t index = 0; index < state.request->dependencies.size(); ++index) {
+    const auto& dependency = state.request->dependencies.at(index);
     const auto& catalog = dependency.catalog;
     if (const auto valid = catalog.Validate(); !valid) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
@@ -1650,13 +1667,15 @@ auto CollectDependencies(PlanningState& state) -> void
         valid.error());
       continue;
     }
-    if (catalog.source_key == state.request->source_key
-      || !identities.insert(catalog.source_key).second) {
+    if (const auto [holder, inserted] = identities.emplace(
+          catalog.source_key, "dependency " + std::to_string(index));
+      !inserted) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning,
         "pak.plan.dependency_catalog_identity_conflict",
-        "Dependencies must have distinct identities different from the output "
-        "and its bases.");
+        "Dependency " + std::to_string(index) + " has the identity "
+          + data::to_string(catalog.source_key) + " of " + holder->second
+          + "; every layer has an identity of its own.");
       continue;
     }
     if (!mounts.insert(catalog.mount).second) {
@@ -1670,7 +1689,7 @@ auto CollectDependencies(PlanningState& state) -> void
       .mount = catalog.mount,
       .assets = {},
       .deleted = { catalog.deleted.begin(), catalog.deleted.end() },
-      .textures = dependency.texture_keys,
+      .textures = dependency.textures,
     };
     for (const auto& entry : catalog.entries) {
       layer.assets.emplace(entry.asset_key, entry.asset_type);
@@ -1735,7 +1754,8 @@ auto CollectBaseLayers(PlanningState& state) -> void
 
   auto& diagnostics = state.output.diagnostics;
   const auto& request = *state.request;
-  std::unordered_set<data::SourceKey> base_sources;
+  //! The index of the base layer of each identity.
+  std::unordered_map<data::SourceKey, size_t> base_sources;
   std::vector<data::PakCatalogBase> base_layers;
   for (size_t index = 0; index < request.base_catalogs.size(); ++index) {
     const auto& catalog = request.base_catalogs.at(index);
@@ -1756,31 +1776,33 @@ auto CollectBaseLayers(PlanningState& state) -> void
       .content_version = catalog.content_version,
       .catalog_digest = catalog.catalog_digest,
     });
-    if (catalog.source_key == state.request->source_key
-      || !base_sources.insert(catalog.source_key).second) {
+    const auto identity = data::to_string(catalog.source_key);
+    if (catalog.source_key == state.request->source_key) {
       AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
         PakBuildPhase::kPlanning, "pak.plan.base_catalog_identity_conflict",
-        "Base layers must have distinct identities different from the output.");
+        "Base layer " + std::to_string(index) + " has the identity " + identity
+          + " of the output; a patch has an identity of its own.");
       continue;
     }
-    for (const auto& entry : catalog.entries) {
-      const auto [it, inserted]
-        = state.base_asset_types.emplace(entry.asset_key, entry.asset_type);
-      if (!inserted && it->second != entry.asset_type) {
-        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.base_catalog_type_mismatch",
-          "Same AssetKey appears in base catalogs with different asset_type.");
-        continue;
-      }
-      state.base_entries.insert_or_assign(entry.asset_key, entry);
+    if (const auto [earlier, inserted]
+      = base_sources.emplace(catalog.source_key, index);
+      !inserted) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_identity_conflict",
+        "Base layers " + std::to_string(earlier->second) + " and "
+          + std::to_string(index) + " have the same identity " + identity
+          + ".");
+      continue;
     }
-    for (const auto& key : catalog.deleted) {
-      state.base_entries.erase(key);
-      state.base_textures.erase(key);
-    }
-    if (index < request.base_texture_keys.size()) {
-      const auto& textures = request.base_texture_keys.at(index);
-      state.base_textures.insert(textures.begin(), textures.end());
+    const auto no_textures = pak::PakTextures {};
+    const auto& textures = index < request.base_textures.size()
+      ? request.base_textures.at(index)
+      : no_textures;
+    for (const auto& key : state.base.Apply(catalog, textures)) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_type_mismatch",
+        "Base layer " + std::to_string(index) + " gives " + data::to_string(key)
+          + " another type than a lower base layer.");
     }
   }
 }
@@ -1822,14 +1844,20 @@ auto SourceTextureKeys(const PlanningState& state)
   return keys;
 }
 
-//! Whether a base or dependency pak holds the texture `key`.
-auto LowerLayerHoldsTexture(
-  const PlanningState& state, const data::AssetKey& key) -> bool
+//! Whether a base or dependency pak holds the texture `key` as `digest`
+//! describes it: a texture a source changed is not held below.
+auto LowerLayerHoldsSameTexture(const PlanningState& state,
+  const data::AssetKey& key, const oxygen::base::Sha256Digest& digest) -> bool
 {
-  return state.base_textures.contains(key)
+  const auto holds_same
+    = [&key, &digest](const pak::PakTextures& textures) -> bool {
+    const auto held = textures.find(key);
+    return held != textures.end() && held->second == digest;
+  };
+  return holds_same(state.base.textures)
     || std::ranges::any_of(
-      state.dependencies, [&key](const DependencyLayer& layer) -> bool {
-        return layer.textures.contains(key);
+      state.dependencies, [&holds_same](const DependencyLayer& layer) -> bool {
+        return holds_same(layer.textures);
       });
 }
 
@@ -1842,7 +1870,7 @@ auto ValidateTextureReference(PlanningState& state,
   if (source_textures.contains(key)) {
     return;
   }
-  if (state.base_textures.contains(key)) {
+  if (state.base.textures.contains(key)) {
     state.referenced_base_textures.insert(key);
     return;
   }
@@ -1869,18 +1897,15 @@ auto ValidateTextureReference(PlanningState& state,
 // Check the original pair before relocation; never repair stale authored input.
 auto ValidateAssetReferences(PlanningState& state) -> void
 {
-  // A reference resolves to an asset planned here, an asset of a patch base or
-  // an asset of a dependency, in that order; one that resolves into a
-  // dependency is a requirement of its mount.
+  // A reference resolves to an asset planned here or to an asset of a
+  // dependency; one that resolves into a dependency is a requirement of its
+  // mount. A patch's sources hold every asset it keeps, so an asset only a
+  // base holds is one the patch deletes: it resolves to nothing.
   const auto referenced_type
     = [&state](const data::AssetKey& key) -> std::optional<data::AssetType> {
     if (const auto planned = state.asset_positions.find(key);
       planned != state.asset_positions.end()) {
       return state.assets.at(planned->second).asset_type;
-    }
-    if (const auto base = state.base_entries.find(key);
-      base != state.base_entries.end()) {
-      return base->second.asset_type;
     }
     if (const auto* layer = FindDependencyAsset(state, key)) {
       const auto type = layer->assets.at(key);
@@ -2047,7 +2072,7 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
 
   // A source that changes a base asset's type is the patch validation's
   // `pak.plan.replace_type_mismatch`, reported once.
-  const auto& base_catalog_entries = state.base_entries;
+  const auto& base_catalog_entries = state.base.entries;
 
   state.data_plan.patch_actions.clear();
   state.data_plan.deleted_textures.clear();
@@ -2111,7 +2136,7 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
     // A patch deletes the base textures its sources dropped: those they
     // neither hold nor reference by key, as it deletes the dropped assets.
     const auto source_textures = SourceTextureKeys(state);
-    for (const auto& key : state.base_textures) {
+    for (const auto& key : state.base.textures | std::views::keys) {
       if (!source_textures.contains(key)
         && !state.referenced_base_textures.contains(key)) {
         state.data_plan.deleted_textures.push_back(key);
@@ -2264,7 +2289,8 @@ auto ReportDroppedResources(
 
 //! Selects the resources the pak holds, in full and patch mode alike: those an
 //! emitted asset binds, and those a loader reaches without a binding. A patch
-//! leaves a keyed texture its base or dependency paks hold to them, and a
+//! leaves a keyed texture its base or dependency paks hold unchanged to them,
+//! and a
 //! resource only unchanged assets bind to its base. Index zero of a texture,
 //! buffer or script table is a sentinel no binding names: a full pak keeps the
 //! first source's, which holds the fallback texture.
@@ -2281,8 +2307,15 @@ auto SelectPackedResources(PlanningState& state) -> void
   auto lower_layer_textures = SourceTextureIndices {};
   for (const auto& [path, texture] : state.browse_textures) {
     keyed_textures[texture.source_order].insert(texture.texture_index);
-    if (!full
-      && LowerLayerHoldsTexture(state, data::TextureKeyFromVirtualPath(path))) {
+    if (full) {
+      continue;
+    }
+    const auto& digests = state.texture_record_digests[texture.source_order];
+    const auto digest = digests.find(texture.texture_index);
+    const auto held_below = digest != digests.end()
+      && LowerLayerHoldsSameTexture(
+        state, data::TextureKeyFromVirtualPath(path), digest->second);
+    if (held_below) {
       lower_layer_textures[texture.source_order].insert(texture.texture_index);
     }
   }
@@ -2899,11 +2932,10 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
 
   const auto footer_end = state.data_plan.footer.offset
     + static_cast<uint64_t>(state.data_plan.footer.size_bytes);
-  const auto size_covers_footer
-    = state.data_plan.planned_file_size >= footer_end;
-  EnforceStageInvariant(state, size_covers_footer,
-    "pak.plan.stage.layout.file_size_before_footer_end",
-    "Planned file size is smaller than footer end.");
+  const auto footer_ends_file = state.data_plan.planned_file_size == footer_end;
+  EnforceStageInvariant(state, footer_ends_file,
+    "pak.plan.stage.layout.footer_not_at_end",
+    "Planned file size is not the footer end.");
 
   {
     std::vector<std::byte> browse_payload;

@@ -6,16 +6,18 @@
 
 // Covers: Pak/PakValidation.cpp, Pak/PakPlanPolicy.cpp
 
+#include <cstddef>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 #include "PakWriterTestSupport.h"
 
-#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -126,6 +128,36 @@ NOLINT_TEST_F(PakDomainValidationTest, RejectsAnUnpaddedPayloadRegion)
 
   EXPECT_THAT(result.diagnostics,
     HasDiagnostic("pak.plan.region_payload_alignment_mismatch"));
+}
+
+//! The runtime opens a directory record only where the record says it lies.
+NOLINT_TEST_F(PakDomainValidationTest, RejectsADirectoryRecordOffItsPosition)
+{
+  constexpr auto kDescriptorSize = size_t { 8U };
+  auto plan = BaselinePlan();
+  const auto descriptor = std::vector<std::byte>(kDescriptorSize);
+  paktest::AddGeometryAsset(plan,
+    oxygen::data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"), descriptor);
+  plan.directory.entries.front().entry_offset += 1U;
+
+  const auto result = Validate(std::move(plan));
+
+  EXPECT_FALSE(result.success);
+  EXPECT_THAT(result.diagnostics,
+    HasDiagnostic("pak.plan.directory_record_offset_invalid"));
+}
+
+//! The runtime reads the footer from the end of the file.
+NOLINT_TEST_F(PakDomainValidationTest, RejectsBytesAfterTheFooter)
+{
+  constexpr auto kTrailingBytes = uint64_t { 512U };
+  auto plan = BaselinePlan();
+  plan.planned_file_size += kTrailingBytes;
+
+  const auto result = Validate(std::move(plan));
+
+  EXPECT_FALSE(result.success);
+  EXPECT_THAT(result.diagnostics, HasDiagnostic("pak.plan.footer_not_at_end"));
 }
 
 } // namespace

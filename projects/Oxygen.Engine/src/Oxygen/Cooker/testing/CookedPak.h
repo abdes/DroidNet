@@ -9,11 +9,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -74,8 +74,8 @@ private:
   std::vector<LooseCookedRoot> roots_;
   std::vector<content::pak::PakDependency> dependencies_;
   std::vector<data::PakCatalog> bases_;
-  //! The texture keys of each of `bases_`, in its order.
-  std::vector<std::unordered_set<data::AssetKey>> base_texture_keys_;
+  //! The textures of each of `bases_`, in its order.
+  std::vector<content::pak::PakTextures> base_textures_;
   uint16_t content_version_ = 1U;
   std::optional<data::SourceKey> identity_;
 };

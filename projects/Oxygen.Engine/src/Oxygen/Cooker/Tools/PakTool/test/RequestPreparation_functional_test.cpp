@@ -347,7 +347,7 @@ NOLINT_TEST_F(
   ASSERT_EQ(prepared->build_request.dependencies.size(), 1U);
   const auto& dependency = prepared->build_request.dependencies.front();
   EXPECT_EQ(dependency.catalog.mount, "Engine");
-  EXPECT_TRUE(dependency.texture_keys.contains(
+  EXPECT_TRUE(dependency.textures.contains(
     oxygen::data::TextureKeyFromVirtualPath(grid)));
 }
 

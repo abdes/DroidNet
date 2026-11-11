@@ -285,8 +285,8 @@ NOLINT_TEST(PakCompactionTest, PatchOverCompactedBasePacksOnlyChangedResources)
   auto base = ContentRoot(1U);
   base.AddTexture(Payload(1U)); // An earlier cook's: nothing binds it.
   AddWood(base, base.AddTexture(Payload(2U)));
-  const auto sky
-    = base.DescribeTexture("Textures/Sky.otex", base.AddTexture(Payload(3U)));
+  static_cast<void>(
+    base.DescribeTexture("Textures/Sky.otex", base.AddTexture(Payload(3U))));
   AddCrate(base, base.AddBuffer(Payload(4U)));
   const auto base_request
     = workspace.FullRequest({ workspace.Add(base) }, "base.pak");
@@ -306,7 +306,7 @@ NOLINT_TEST(PakCompactionTest, PatchOverCompactedBasePacksOnlyChangedResources)
   const auto wood = AddWood(recooked, recooked.AddTexture(Payload(5U)));
   auto request = workspace.PatchRequest({ workspace.Add(recooked) },
     { workspace.Open(base_request.output_pak_path).Pak().Catalog() });
-  request.base_texture_keys = { { data::TextureKeyFromVirtualPath(sky) } };
+  request.base_textures = { workspace.Textures(base_request.output_pak_path) };
 
   // Act
   const auto packed = oxygen::cooker::testing::PakWorkspace::Pack(request);

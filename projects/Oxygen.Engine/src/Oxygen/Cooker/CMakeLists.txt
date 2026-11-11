@@ -184,7 +184,10 @@ set(
   "Pak/PakBuildResult.h"
   "Pak/PakBuildReport.h"
   "Pak/PakCatalogIo.h"
+  "Pak/PakTextures.h"
   "Pak/Internal/PakCatalogJson.h"
+  "Pak/Internal/PakLayoutRules.h"
+  "Pak/Internal/PakBaseLayers.h"
   "Pak/Internal/PakResourceRows.h"
   "Pak/Internal/PakSourceDevices.h"
 )
@@ -445,6 +448,7 @@ set(
   "Pak/PakWriter.cpp"
   "Pak/PakManifestWriter.cpp"
   "Pak/PakCatalogIo.cpp"
+  "Pak/PakTextures.cpp"
   "Pak/PakBuilder.cpp"
   "Pak/PakBuildToString.cpp"
   ${OXYGEN_COOKER_PRIVATE_HEADERS}

@@ -7,38 +7,22 @@
 #include <cstddef>
 #include <cstdint>
 #include <stdexcept>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakPlan.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/testing/CookedPak.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
-#include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::cooker::testing {
-
-namespace {
-
-  //! The textures the browse index of `pak` lists, by key.
-  auto TextureKeysOf(const PackedPak& pak) -> std::unordered_set<data::AssetKey>
-  {
-    auto keys = std::unordered_set<data::AssetKey> {};
-    for (const auto& texture : pak.Pak().BrowseTextures()) {
-      keys.insert(data::TextureKeyFromVirtualPath(texture.virtual_path));
-    }
-    return keys;
-  }
-
-} // namespace
 
 CookedPak::CookedPak(LooseCookedRoot root)
   : CookedPak(std::vector { std::move(root) })
@@ -58,7 +42,7 @@ auto CookedPak::DependsOn(const CookedPak& dependency) -> CookedPak&
   const auto pak = dependency.Open();
   dependencies_.push_back({
     .catalog = pak.Pak().Catalog(),
-    .texture_keys = TextureKeysOf(pak),
+    .textures = content::pak::ReadPakTextures(pak.Pak()),
   });
   return *this;
 }
@@ -67,7 +51,7 @@ auto CookedPak::PatchOf(const CookedPak& base) -> CookedPak&
 {
   const auto pak = base.Open();
   bases_.push_back(pak.Pak().Catalog());
-  base_texture_keys_.push_back(TextureKeysOf(pak));
+  base_textures_.push_back(content::pak::ReadPakTextures(pak.Pak()));
   return *this;
 }
 
@@ -96,7 +80,7 @@ auto CookedPak::Encode() const -> std::vector<std::byte>
   request.content_version = content_version_;
   request.source_key = identity_.value_or(DefaultIdentity());
   request.dependencies = dependencies_;
-  request.base_texture_keys = base_texture_keys_;
+  request.base_textures = base_textures_;
   const auto pak = workspace.PackOrThrow(request);
   const auto bytes = pak.Bytes();
   return { bytes.begin(), bytes.end() };

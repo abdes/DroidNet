@@ -17,6 +17,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MemoryFileSystem.h>
@@ -62,9 +63,10 @@ struct PackResult final {
 */
 class PakWorkspace final {
 public:
-  //! Where loose roots and paks are placed in the workspace.
-  inline static const auto kRoots = std::filesystem::path("/cooked");
-  inline static const auto kPaks = std::filesystem::path("/paks");
+  //! Where loose roots are placed in the workspace.
+  static constexpr auto kRootsFolder = std::string_view { "/cooked" };
+  //! Where paks are placed in the workspace.
+  static constexpr auto kPaksFolder = std::string_view { "/paks" };
 
   [[nodiscard]] auto Storage() noexcept -> MemoryFileSystem&
   {
@@ -116,6 +118,10 @@ public:
   [[nodiscard]] auto Catalog(const std::filesystem::path& path) const
     -> data::PakCatalog;
 
+  //! The textures of the pak at `path`, as a base of a patch.
+  [[nodiscard]] auto Textures(const std::filesystem::path& path) const
+    -> content::pak::PakTextures;
+
   //=== Building ===--------------------------------------------------------//
 
   //! Plans `request` and, when that succeeds, writes it.
@@ -129,7 +135,8 @@ public:
 
   //! Packs `request` and opens the pak; throws, with every diagnostic, when
   //! the build fails.
-  auto PackOrThrow(const content::pak::PakBuildRequest& request) -> PackedPak;
+  auto PackOrThrow(const content::pak::PakBuildRequest& request) const
+    -> PackedPak;
 
   //! Opens the pak at `path`.
   [[nodiscard]] auto Open(const std::filesystem::path& path) const -> PackedPak;

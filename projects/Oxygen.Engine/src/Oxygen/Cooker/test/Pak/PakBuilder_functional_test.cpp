@@ -203,7 +203,7 @@ protected:
     request.output_manifest_path = PakWorkspace::PakPath("layer.manifest.json");
     request.options.emit_manifest_in_full = true;
     request.dependencies = {
-      { .catalog = engine_pak.Pak().Catalog(), .texture_keys = {} },
+      { .catalog = engine_pak.Pak().Catalog(), .textures = {} },
     };
     return PakWorkspace::Build(request);
   }
@@ -344,12 +344,9 @@ NOLINT_TEST_F(PakBuilderExternalTextureTest, DependencyTextureIsRequired)
   auto engine = LooseCookedRoot { "Engine" };
   const auto grid = engine.DescribeTexture(
     kGrid, engine.AddTexture(oxygen::cooker::testing::SeedBytes(1U)));
-  const auto engine_pak = workspace_.PackOrThrow(
-    workspace_.FullRequest({ workspace_.Add(engine) }, "engine.pak"));
-  auto dependency = pak::PakDependency {
-    .catalog = engine_pak.Pak().Catalog(),
-    .texture_keys = { data::TextureKeyFromVirtualPath(grid) },
-  };
+  static_cast<void>(workspace_.PackOrThrow(
+    workspace_.FullRequest({ workspace_.Add(engine) }, "engine.pak")));
+  auto dependency = workspace_.Dependency(PakWorkspace::PakPath("engine.pak"));
 
   // Act
   const auto layer = BuildLayer(grid, {}, { std::move(dependency) });

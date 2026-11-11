@@ -9,11 +9,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -40,8 +40,8 @@ struct PakBuildOptions {
 struct PakDependency {
   //! Its catalog, which names its mount.
   data::PakCatalog catalog;
-  //! Keys of the textures its browse index lists.
-  std::unordered_set<data::AssetKey> texture_keys;
+  //! The textures its browse index lists (`ReadPakTextures`).
+  PakTextures textures;
 };
 
 struct PakBuildRequest {
@@ -55,11 +55,12 @@ struct PakBuildRequest {
   data::SourceKey source_key {};
 
   std::vector<data::PakCatalog> base_catalogs;
-  //! Keys of the textures each base pak's browse index lists, in the order of
-  //! `base_catalogs`; empty when no base pak holds a texture. Assets of a
-  //! patch may reference these by key without containing them, and a patch
-  //! deletes those its sources no longer hold.
-  std::vector<std::unordered_set<data::AssetKey>> base_texture_keys;
+  //! The textures each base pak's browse index lists (`ReadPakTextures`), in
+  //! the order of `base_catalogs`; empty when no base pak holds a texture.
+  //! Assets of a patch may reference these by key without containing them; a
+  //! patch carries a texture of its sources unless a base holds the same one,
+  //! and deletes those its sources no longer hold.
+  std::vector<PakTextures> base_textures;
   //! The paks this pak references without containing them, lowest first;
   //! full builds and patches alike.
   std::vector<PakDependency> dependencies;

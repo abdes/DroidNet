@@ -8,12 +8,12 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <string>
 #include <utility>
 #include <vector>
 
 #include "PakWriterTestSupport.h"
 
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -62,6 +62,39 @@ NOLINT_TEST_F(PakWriterPlanContractTest, InvalidCrcPatchOffsetEmitsDiagnostic)
     written.diagnostics, HasDiagnostic("pak.write.crc_field_offset_invalid"));
 }
 
+//! A directory record that misstates its position would write a pak whose
+//! asset the runtime cannot open: the writer refuses it.
+NOLINT_TEST_F(PakWriterPlanContractTest, DirectoryRecordOffItsPositionIsRefused)
+{
+  constexpr auto kContentVersion = uint16_t { 11U };
+  constexpr auto kDescriptorSize = size_t { 8U };
+  auto plan = CanonicalPlan({ .content_version = kContentVersion });
+  paktest::AddGeometryAsset(plan,
+    data::AssetKey::FromVirtualPath("/Game/Mesh.ogeo"),
+    PatternBytes(kDescriptorSize));
+  plan.directory.entries.front().entry_offset += 1U;
+
+  const auto written = Write(Request(kContentVersion), std::move(plan));
+
+  EXPECT_THAT(written.diagnostics,
+    HasDiagnostic("pak.write.directory_record_offset_invalid"));
+}
+
+//! Bytes after the footer would hide it from the runtime, which reads it from
+//! the end: the writer refuses the plan rather than padding after it.
+NOLINT_TEST_F(PakWriterPlanContractTest, BytesAfterTheFooterAreRefused)
+{
+  constexpr auto kContentVersion = uint16_t { 12U };
+  constexpr auto kTrailingBytes = uint64_t { 512U };
+  auto plan = CanonicalPlan({ .content_version = kContentVersion });
+  plan.planned_file_size += kTrailingBytes;
+
+  const auto written = Write(Request(kContentVersion), std::move(plan));
+
+  EXPECT_THAT(
+    written.diagnostics, HasDiagnostic("pak.write.footer_not_at_end"));
+}
+
 //! One texture entry is announced, but the table's byte size stays zero.
 NOLINT_TEST_F(
   PakWriterPlanContractTest, TablePayloadSizeMismatchEmitsDiagnostic)
@@ -81,8 +114,8 @@ NOLINT_TEST_F(
 
 enum class PayloadKind : uint8_t { kResource, kAsset };
 
-auto PayloadKindName(const ::testing::TestParamInfo<PayloadKind>& info)
-  -> std::string
+auto PayloadKindName(const ::testing::TestParamInfo<PayloadKind>& info) -> const
+  char*
 {
   return info.param == PayloadKind::kResource ? "Resource" : "Asset";
 }
@@ -136,9 +169,11 @@ NOLINT_TEST_P(PakWriterPlanContractPayloadKindTest,
     plan.resource_payload_sources
       = { MissingSource("texture.bin", kPayloadSize) };
     // Only the payload is missing; the descriptor source must exist.
-    plan.resource_descriptor_sources = { AddSource("texture_descriptor.bin",
-      std::vector<std::byte>(
-        sizeof(core::TextureResourceDesc), std::byte { 0 })) };
+    plan.resource_descriptor_sources = {
+      AddSource("texture_descriptor.bin",
+        std::vector<std::byte>(
+          sizeof(core::TextureResourceDesc), std::byte { 0 })),
+    };
   } else {
     plan.asset_payload_sources = { MissingSource("mesh.ogeo", kPayloadSize) };
   }

@@ -14,14 +14,15 @@
 #include <vector>
 
 #include <Oxygen/Base/Crc32.h>
+#include <Oxygen/Content/AssetValidation.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
+#include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/PackedPak.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
-#include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -34,19 +35,17 @@ namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
 
 using oxygen::cooker::testing::LooseCookedRoot;
+using oxygen::cooker::testing::MaterialBuilder;
 using oxygen::cooker::testing::PackedPak;
 using oxygen::cooker::testing::PakWorkspace;
-using oxygen::cooker::testing::SeedBytes;
 using oxygen::serio::testing::BytesEqual;
 
 constexpr auto kContentVersion = uint16_t { 17U };
 
-//! The bytes of the pak's one descriptor.
+//! The pak's one descriptor: a well-formed material, which the runtime loads.
 auto MaterialDescriptor() -> std::vector<std::byte>
 {
-  constexpr auto kByte = uint8_t { 0xABU };
-  constexpr auto kSize = size_t { 19U };
-  return SeedBytes(kByte, kSize);
+  return MaterialBuilder { "Single" }.Bytes();
 }
 
 //! The offset of the footer of a pak of `bytes`.
@@ -103,7 +102,7 @@ protected:
 private:
   PakWorkspace workspace_;
   pak::PakBuildRequest request_;
-  data::AssetKey material_ {};
+  data::AssetKey material_;
 };
 
 //! The header and footer carry their magics, the request's content version and
@@ -162,6 +161,19 @@ NOLINT_TEST_F(
   EXPECT_THAT(bytes.subspan(static_cast<size_t>(entry.desc_offset),
                 static_cast<size_t>(entry.desc_size)),
     BytesEqual(MaterialDescriptor()));
+}
+
+//! The packed material passes the runtime's own descriptor validation.
+NOLINT_TEST_F(PakBinaryConformanceTest, PackedDescriptorPassesRuntimeValidation)
+{
+  static_cast<void>(Build(true));
+
+  const auto pak = Packed();
+  const auto entry = pak.Pak().FindEntry(Material());
+  ASSERT_HAS_VALUE(entry);
+  EXPECT_NO_THROW(oxygen::content::ValidateAssetDescriptor(
+    data::AssetType::kMaterial, Material(), pak.Pak().DescriptorBytes(*entry),
+    pak.Pak().ReadAssetReferences(Material())));
 }
 
 NOLINT_TEST_F(PakBinaryConformanceTest, CrcDisabledBuildLeavesFooterCrcZero)

@@ -30,7 +30,6 @@ using oxygen::cooker::test::HasNoErrors;
 using oxygen::serio::testing::BytesEqual;
 using oxygen::serio::testing::PatternBytes;
 using oxygen::serio::testing::PatternSeed;
-using paktest::kFooterSize;
 using paktest::kHeaderSize;
 
 //! A texture table row of zeros: the writer patches its payload position.
@@ -91,12 +90,14 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
     Slice(bytes, descriptor_offset, kDescriptorSize), BytesEqual(descriptor));
 }
 
+//! Every gap the plan leaves is zero-filled: the padding before the payloads,
+//! after them, and before the footer, which ends the file.
 NOLINT_TEST_F(
-  PakWriterPayloadLayoutTest, ZeroFillsPlannedPaddingAndTrailingGaps)
+  PakWriterPayloadLayoutTest, ZeroFillsPlannedPaddingAndTheGapBeforeTheFooter)
 {
   constexpr auto kContentVersion = uint16_t { 2U };
   constexpr auto kTexturePayloadSize = size_t { 32U };
-  constexpr auto kTrailingGap = uint64_t { 512U };
+  constexpr auto kFooterGap = uint64_t { 512U };
   auto plan = CanonicalPlan({
     .content_version = kContentVersion,
     .texture_payload_size = kTexturePayloadSize,
@@ -105,14 +106,16 @@ NOLINT_TEST_F(
     = { AddSource("texture.bin", PatternBytes(kTexturePayloadSize)) };
   plan.resource_descriptor_sources
     = { AddSource("texture_descriptor.bin", BlankTextureDescriptor()) };
-  // A gap after the footer, which the writer must zero-fill too.
-  plan.planned_file_size += kTrailingGap;
+  // A gap before the footer, which the writer must zero-fill too.
+  const auto gap_offset = plan.footer.offset;
+  plan.footer.offset += kFooterGap;
+  plan.footer.crc32_field_absolute_offset += kFooterGap;
+  plan.planned_file_size += kFooterGap;
   const auto texture_offset = plan.resources.front().offset;
   const auto texture_end = texture_offset + kTexturePayloadSize;
   // The texture region is padded to a payload boundary, where the tables start.
   const auto table_offset = plan.tables.front().offset;
   const auto planned_size = plan.planned_file_size;
-  const auto footer_end = plan.footer.offset + kFooterSize;
   const auto request = Request(kContentVersion, "zero_fill.pak");
 
   const auto written = Write(request, std::move(plan));
@@ -124,7 +127,7 @@ NOLINT_TEST_F(
   EXPECT_TRUE(
     IsAllZero(Slice(bytes, kHeaderSize, texture_offset - kHeaderSize)));
   EXPECT_TRUE(IsAllZero(Slice(bytes, texture_end, table_offset - texture_end)));
-  EXPECT_TRUE(IsAllZero(Slice(bytes, footer_end, kTrailingGap)));
+  EXPECT_TRUE(IsAllZero(Slice(bytes, gap_offset, kFooterGap)));
 }
 
 } // namespace

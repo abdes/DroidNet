@@ -55,7 +55,7 @@ Current request/result contracts:
   - `content_version`
   - `source_key`
   - `base_catalogs` (patch baseline)
-  - `base_texture_keys` (textures the patch baseline holds)
+  - `base_textures` (textures the patch baseline holds, with their digests)
   - `dependencies` (paks the output references without containing: each
     catalog with the texture keys of its browse index)
   - `PakBuildOptions`
@@ -363,7 +363,9 @@ Rules:
 
 ### 7.4 Input Rules
 
-- Full builds may use zero sources and still produce an empty pak.
+- Full builds hold at least one asset or keyed texture: a pak names its one
+  mount from what it lists, and an empty one is refused
+  (`pak.plan.root_missing`).
 - Patch builds may use zero sources only when base catalogs are still supplied;
   this enables delete-only patches.
 - Source arguments are preserved in CLI order.
@@ -619,7 +621,7 @@ artifact publication.
 - `source-key` -> `source_key`
 - build flags -> `PakBuildOptions`
 - catalogs and browse index textures read from base PAKs (patch only) ->
-  `base_catalogs`, `base_texture_keys`
+  `base_catalogs`, `base_textures`
 - catalogs and browse index textures read from dependency PAKs (both commands)
   -> `dependencies`
 

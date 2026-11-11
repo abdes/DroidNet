@@ -367,7 +367,6 @@ It includes:
   - required base content versions.
   - required base catalog digest(s).
   - patch content version.
-- Effective compatibility policy snapshot (resolved `PatchCompatibilityPolicy` used for this build).
 - Diff basis identifier: `descriptor_plus_transitive_resources_v1`.
 - Patch source key and patch pak digest/CRC metadata.
 

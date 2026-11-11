@@ -104,7 +104,7 @@ NOLINT_TEST(PakWorkspaceTest, DependencyReadsTheBuiltPak)
 
   EXPECT_EQ(dependency.catalog.mount, "Engine");
   EXPECT_TRUE(
-    dependency.texture_keys.contains(data::TextureKeyFromVirtualPath(path)));
+    dependency.textures.contains(data::TextureKeyFromVirtualPath(path)));
 }
 
 } // namespace

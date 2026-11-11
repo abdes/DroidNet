@@ -5,17 +5,29 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
+#include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/PakWorkspace.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
-#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakCatalog.h>
 
 namespace oxygen::cooker::testing {
 
@@ -56,14 +68,15 @@ auto PakWorkspace::Exists(const std::filesystem::path& path) const -> bool
 
 auto PakWorkspace::Add(const LooseCookedRoot& loose) -> data::CookedSource
 {
-  const auto root = kRoots / (loose.Name() + "-" + std::to_string(++roots_));
+  const auto root = std::filesystem::path(kRootsFolder)
+    / (loose.Name() + "-" + std::to_string(++roots_));
   storage_.AddFiles(root, loose.Files());
   return { .kind = data::CookedSourceKind::kLooseCooked, .path = root };
 }
 
 auto PakWorkspace::PakPath(const std::string_view name) -> std::filesystem::path
 {
-  return kPaks / std::filesystem::path(name);
+  return std::filesystem::path(kPaksFolder) / std::filesystem::path(name);
 }
 
 auto PakWorkspace::PakSource(const std::filesystem::path& path)
@@ -84,7 +97,7 @@ auto PakWorkspace::FullRequest(std::vector<data::CookedSource> sources,
     .source_key
     = SourceKeyOf(static_cast<uint8_t>(kFirstRequestSeed + requests_++)),
     .base_catalogs = {},
-    .base_texture_keys = {},
+    .base_textures = {},
     .dependencies = {},
     .options = {},
     .storage = make_observer<content::cooked::CookerStorage>(&storage_),
@@ -107,21 +120,22 @@ auto PakWorkspace::Dependency(const std::filesystem::path& path) const
   -> pak::PakDependency
 {
   const auto pak = Open(path);
-  auto dependency = pak::PakDependency {
+  return pak::PakDependency {
     .catalog = pak.Pak().Catalog(),
-    .texture_keys = {},
+    .textures = pak::ReadPakTextures(pak.Pak()),
   };
-  for (const auto& texture : pak.Pak().BrowseTextures()) {
-    dependency.texture_keys.insert(
-      data::TextureKeyFromVirtualPath(texture.virtual_path));
-  }
-  return dependency;
 }
 
 auto PakWorkspace::Catalog(const std::filesystem::path& path) const
   -> data::PakCatalog
 {
   return Open(path).Pak().Catalog();
+}
+
+auto PakWorkspace::Textures(const std::filesystem::path& path) const
+  -> pak::PakTextures
+{
+  return pak::ReadPakTextures(Open(path).Pak());
 }
 
 auto PakWorkspace::Pack(const pak::PakBuildRequest& request) -> PackResult
@@ -144,7 +158,8 @@ auto PakWorkspace::Build(const pak::PakBuildRequest& request)
   return std::move(built).value();
 }
 
-auto PakWorkspace::PackOrThrow(const pak::PakBuildRequest& request) -> PackedPak
+auto PakWorkspace::PackOrThrow(const pak::PakBuildRequest& request) const
+  -> PackedPak
 {
   const auto result = Pack(request);
   const auto diagnostics = result.Diagnostics();

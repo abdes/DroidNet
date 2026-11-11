@@ -14,7 +14,6 @@
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -24,11 +23,11 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakTextures.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/PakToolOptions.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
-#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/SourceKey.h>
 
@@ -103,15 +102,10 @@ namespace {
       }
       try {
         const content::PakFile archive(path);
-        auto layer = pak::PakDependency {
+        paks.push_back(pak::PakDependency {
           .catalog = archive.Catalog(),
-          .texture_keys = {},
-        };
-        for (const auto& texture : archive.BrowseTextures()) {
-          layer.texture_keys.insert(
-            data::TextureKeyFromVirtualPath(texture.virtual_path));
-        }
-        paks.push_back(std::move(layer));
+          .textures = pak::ReadPakTextures(archive),
+        });
       } catch (const std::exception& error) {
         return ReadResult::Err(RequestPreparationError {
           .error_code = prefix + "_invalid",
@@ -555,7 +549,7 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
   build_request.source_key = source_key.value();
   for (auto& base : *base_paks) {
     build_request.base_catalogs.push_back(std::move(base.catalog));
-    build_request.base_texture_keys.push_back(std::move(base.texture_keys));
+    build_request.base_textures.push_back(std::move(base.textures));
   }
   build_request.dependencies = std::move(*dependency_paks);
   build_request.options.compute_crc32 = options.request.compute_crc32;

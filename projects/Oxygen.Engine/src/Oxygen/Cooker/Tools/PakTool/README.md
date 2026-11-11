@@ -146,8 +146,10 @@ diagnostics explain it or nothing failed) and the failed rollback steps.
 Preparation failures (exit code `2`) before the output paths are known write no
 report; a script sealing failure does.
 
-The catalog sidecar is the authoritative patch input artifact. The build report
-is informative only.
+A patch reads its bases from the base paks themselves (`--base-pak`): each pak
+embeds its catalog. The catalog sidecar is a copy of that catalog for tools
+that inspect a release without opening its pak. The build report is
+informative only.
 
 ## Script Sealing
 
@@ -205,7 +207,8 @@ out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe build `
   --source-key 018f8f8f-1234-7abc-8def-0123456789ab
 ```
 
-Patch build against a published base catalog:
+Patch build against a published base pak; a patch has a source key of its own,
+never one of its bases:
 
 ```powershell
 out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch `
@@ -214,8 +217,8 @@ out/build-vs/bin/Debug/Oxygen.Cooker.PakTool.exe patch `
   --out Examples/RenderScene/.build/pak/examples-patch-1.pak `
   --catalog-out Examples/RenderScene/.build/pak/examples-patch-1.catalog.json `
   --manifest-out Examples/RenderScene/.build/pak/examples-patch-1.manifest.json `
-  --content-version 1 `
-  --source-key 018f8f8f-1234-7abc-8def-0123456789ab
+  --content-version 2 `
+  --source-key 018f8f8f-1234-7abc-8def-0123456789ac
 ```
 
 Build with an emitted diagnostics report:
