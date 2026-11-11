@@ -28,7 +28,8 @@ public sealed class UnavailableMountTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         using var fixture = new ExplorerRevealFixture();
         var info = TestProject.InfoOf(fixture.Session.Context);
-        info.Mounts.Add(new ProjectMount("Studio"));
+        info.Mounts.Add(new ProjectMount("Studio", MountKind.Cooked));
+        info.Mounts.Add(new ProjectMount("Art"));
         info.Mounts.Add(new ProjectMount("Media", MountKind.Source, "../Missing-Media"));
         fixture.Session.ChangeContext(TestProject.Open(info, new RealFileSystem()).Context);
 
@@ -36,7 +37,7 @@ public sealed class UnavailableMountTests : DroidNet.Tests.VisualUserInterfaceTe
         var root = fixture.Folders.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var mounts = (await root.Children.ConfigureAwait(true)).OfType<UnavailableMountTreeItemAdapter>().ToDictionary(static mount => mount.Label, StringComparer.Ordinal);
 
-        _ = mounts.Keys.Should().BeEquivalentTo("Studio", "Media");
+        _ = mounts.Keys.Should().BeEquivalentTo("Studio", "Art", "Media");
         _ = mounts["Studio"].IsDimmed.Should().BeTrue();
         _ = mounts["Studio"].Annotation.Should().Be("Not bound");
         _ = mounts["Studio"].StateToolTip.Should().Contain(".mounts.json");
@@ -44,6 +45,7 @@ public sealed class UnavailableMountTests : DroidNet.Tests.VisualUserInterfaceTe
         _ = mounts["Media"].StateToolTip.Should().Contain("../Missing-Media");
         _ = (await mounts["Media"].Children.ConfigureAwait(true)).Should().BeEmpty();
         _ = fixture.Folders.BuildFolderMenu(mounts["Studio"]).Items.Select(static item => item.Text).Should().Contain(["Bind to a pak file…", "Bind to a cooked folder…", "Open Mounts…"]);
+        _ = fixture.Folders.BuildFolderMenu(mounts["Art"]).Items.Select(static item => item.Text).Should().Contain(["Bind to a folder…", "Open Mounts…"]);
         _ = fixture.Folders.BuildFolderMenu(mounts["Media"]).Items.Select(static item => item.Text).Should().Contain("Override folder…");
         await WaitForRenderAsync().ConfigureAwait(true);
     });

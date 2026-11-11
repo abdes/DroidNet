@@ -58,11 +58,14 @@ public partial class ContentFoldersViewModel
 
         var mounts = children.OfType<TreeItemAdapter>().Select(static child => child switch
         {
-            AuthoringMountPointTreeItemAdapter authoring => (Root: authoring.RootFolder, Path: authoring.VirtualRootPath),
-            VirtualFolderMountTreeItemAdapter { CookedVirtualPaths: null } mounted => (Root: mounted.RootFolder, Path: mounted.VirtualRootPath),
-            _ => (Root: (IFolder?)null, Path: (AssetPath?)null),
+            AuthoringMountPointTreeItemAdapter authoring => (Root: FileSystemPath.From(authoring.RootFolder.Location), Path: authoring.VirtualRootPath),
+            VirtualFolderMountTreeItemAdapter { CookedVirtualPaths: null } mounted => (Root: FileSystemPath.From(mounted.RootFolder.Location), Path: mounted.VirtualRootPath),
+
+            // A loose library's folders hold its assets at their paths below the mount.
+            LibraryMountTreeItemAdapter { IsPak: false } library => (Root: library.Location, Path: library.VirtualRootPath),
+            _ => (Root: (FileSystemPath?)null, Path: (AssetPath?)null),
         }).Where(static mount => mount.Root is not null)
-            .Select(static mount => (Root: FileSystemPath.From(mount.Root!.Location), Path: mount.Path!))
+            .Select(static mount => (Root: mount.Root!, Path: mount.Path!))
             .OrderByDescending(static mount => mount.Root.FullPath.Length);
         foreach (var (mountRoot, mountPath) in mounts.Where(mount => location.IsSameOrInside(mount.Root)))
         {

@@ -756,10 +756,11 @@ Beyond this text:
 ### S14. Libraries in the editor
 
 Follows the S18 mockups. Deletes: the typed-name library add, library rename,
-re-rooting under the mount name, the binary unavailable-state adapter, library
-copies of a project's asset (`OverriddenCookedSources`, `ProjectSourceWins`), which
-one root per library leaves unreachable. Adds:
-Add library, `Invalid` presentation, `.cooked` follow in Live Preview and Play,
+re-rooting under the mount name, library copies of a project's asset
+(`OverriddenCookedSources`, `ProjectSourceWins`), which one root per library leaves
+unreachable. Adds: Add library, `Invalid` presentation as the third state of
+`UnavailableMountTreeItemAdapter` beside Not bound and Folder missing (design.md's
+editor table), `.cooked` follow in Live Preview and Play,
 generation swap with `replaces`; a loose generation with unmet requirements
 mounts and its mount reports `mount.cooked_dependency_missing`. Functional tests: `ContentMountsViewModelTests`,
 `CookedLibraryFoldersTests`, `PreviewSession` swap over a fake engine port,

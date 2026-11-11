@@ -19,6 +19,8 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Models;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core;
@@ -129,6 +131,51 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = inspected.Should().Be(source.Identity);
         reveal.Verify(value => value.RevealAsync(It.IsAny<IReadOnlyList<AssetPath>>()), Times.Never);
+    });
+
+    /// <summary>
+    /// A raw source model is a row with Import: the Import menu's Import item opens the Import model dialog with the
+    /// selected source, and nothing is reimported.
+    /// </summary>
+    /// <returns>The asynchronous rendered action regression.</returns>
+    [TestMethod]
+    public Task ImportMenuImportsTheSelectedRawSource() => EnqueueAsync(async () =>
+    {
+        var source = TestAssetEntries.ImportedModel(imported: false);
+        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source]);
+        var provider = CreateQueryProvider(updates);
+        using var session = CreateQuerySession();
+        var state = new ContentExplorerState();
+        var prompted = new List<ModelImportPromptRequest>();
+        var prompt = new Mock<IModelImportPrompt>();
+        _ = prompt.Setup(value => value.ShowAsync(It.IsAny<ModelImportPromptRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<ModelImportPromptRequest, CancellationToken>((request, _) => prompted.Add(request))
+            .ReturnsAsync((ModelImportPlan?)null);
+        var pipeline = new Mock<IContentPipelineService>();
+        using var layout = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        var layoutView = new TilesLayoutView
+        {
+            ViewModel = layout,
+        };
+        await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        await layout.InitialLoad.ConfigureAwait(true);
+        using var browser = CreateAssetsModel(provider.Object, session, state, layout, layoutView, pipeline.Object, modelImport: prompt.Object);
+        await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
+        browser.LoadContent(layout, "right");
+        var view = new AssetsView
+        {
+            ViewModel = browser,
+        };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        layout.SelectedAsset = source;
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = browser.ReimportSelectedSourceCommand.CanExecute(parameter: null).Should().BeFalse("a raw source has no import to repeat");
+
+        await InvokeImportMenuActionAsync(view, "Import", () => browser.ImportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
+
+        _ = prompted.Should().ContainSingle();
+        _ = prompted[0].Files.Should().Equal(source.SourcePath!.FullPath);
+        pipeline.Verify(value => value.ReimportSourceAsync(It.IsAny<AssetPath>(), It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never);
     });
 
     private static async Task InvokeImportMenuActionAsync(AssetsView view, string text, Func<Task?> execution)
