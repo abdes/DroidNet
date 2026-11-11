@@ -10,8 +10,10 @@
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Content/Loaders/PhysicsAssetLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -39,6 +41,12 @@ public:
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
+
+    // The runtime reads it first; a descriptor it refuses is not printed.
+
+    static_cast<void>(
+
+      DecodeAsset(pak, entry, &loaders::LoadPhysicsMaterialDescriptor));
 
     const auto mat_read = serio::CopyAt<PhysicsMaterialAssetDesc>(*data);
     if (!mat_read) {

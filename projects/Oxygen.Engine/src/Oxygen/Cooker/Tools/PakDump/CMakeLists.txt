@@ -28,9 +28,9 @@ asap_push_module("${META_MODULE_NAME}")
 
 # -- Input System Example ------------------------------------------------------
 
-add_executable(
-  ${META_MODULE_TARGET}
-  "main.cpp"
+add_library(
+  oxygen-cooker-pakdump-core
+  STATIC
   "PakDumpCommand.cpp"
   "PakDumpCommand.h"
   "AssetDumpers.h"
@@ -51,28 +51,22 @@ add_executable(
   "PakFileDumper.h"
   "PrintUtils.h"
   "PrintUtils.cpp"
+  "DecodedAsset.h"
 )
-
-# Convenience build target: allow building by module name (matches OUTPUT_NAME)
-# in addition to the generated target name (e.g. oxygen-cooker-pakdump).
-add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
-arrange_target_files_for_ide(${META_MODULE_TARGET})
 set_target_properties(
-  ${META_MODULE_TARGET}
+  oxygen-cooker-pakdump-core
   PROPERTIES
     FOLDER
       "Tools"
-    OUTPUT_NAME
-      ${META_MODULE_NAME}
 )
 target_include_directories(
-  ${META_MODULE_TARGET}
-  PRIVATE
+  oxygen-cooker-pakdump-core
+  PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
+  oxygen-cooker-pakdump-core
+  PUBLIC
     oxygen::base
     oxygen::core
     oxygen::data
@@ -81,6 +75,31 @@ target_link_libraries(
     oxygen::clap
     oxygen-cooker-toolkit
 )
+
+add_executable(${META_MODULE_TARGET} "main.cpp")
+target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen-cooker-pakdump-core)
+
+# Convenience build target: allow building by module name (matches OUTPUT_NAME)
+# in addition to the generated target name (e.g. oxygen-cooker-pakdump).
+add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  oxygen-cooker-pakdump-core
+  EXCLUDE_PATTERNS
+    "main\\.cpp"
+)
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS ".*")
+set_target_properties(
+  ${META_MODULE_TARGET}
+  PROPERTIES
+    FOLDER
+      "Tools"
+    OUTPUT_NAME
+      ${META_MODULE_NAME}
+)
+
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  add_subdirectory("test")
+endif()
 
 # ==============================================================================
 # Deployment instructions

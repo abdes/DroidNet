@@ -6,18 +6,16 @@
 
 #pragma once
 
-#include <bit>
 #include <cstddef>
-#include <cstring>
-#include <optional>
-#include <span>
+#include <ranges>
 #include <string>
-#include <vector>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -37,7 +35,6 @@ public:
     (void)asset_loader;
 
     using oxygen::data::pak::render::MaterialAssetDesc;
-    using oxygen::data::pak::render::ShaderReferenceDesc;
 
     ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -50,14 +47,8 @@ public:
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
-    const auto header
-      = serio::CopyAt<oxygen::data::pak::core::AssetHeader>(*data);
-    if (!header
-      || header->version != oxygen::data::pak::render::kMaterialAssetVersion) {
-      ctx.Out()
-        << "    Unsupported material descriptor version; re-cook the asset\n\n";
-      co_return;
-    }
+    // The runtime reads it first; a descriptor it refuses is not printed.
+    const auto material = DecodeAsset(pak, entry, &loaders::LoadMaterialAsset);
     const auto mat_read = serio::CopyAt<MaterialAssetDesc>(*data);
     if (!mat_read) {
       ctx.Out() << "    MaterialAssetDesc: (insufficient data)\n\n";
@@ -193,63 +184,25 @@ public:
       8);
     ctx.Out() << "\n";
 
-    const size_t num_refs = std::popcount(mat.shader_stages);
-    if (num_refs == 0) {
+    // The shader references as the runtime decoded them.
+    const auto shaders = material->GetShaders();
+    if (shaders.empty()) {
       ctx.Out() << "\n";
       co_return;
     }
-
-    const size_t required_bytes
-      = sizeof(MaterialAssetDesc) + (num_refs * sizeof(ShaderReferenceDesc));
-    if (data->size() < required_bytes) {
-      ctx.Out() << "    Shader References (" << num_refs
-                << "): (not present in descriptor: need " << required_bytes
-                << " bytes, have " << data->size() << ")\n\n";
-      co_return;
-    }
-
-    ctx.Out() << "    Shader References (" << num_refs << "):\n";
-
-    size_t offset = sizeof(MaterialAssetDesc);
-    for (size_t i = 0; i < num_refs; ++i) {
-      const auto shader_ref_read = serio::CopyAt<ShaderReferenceDesc>(
-        *data, serio::ByteOffset { offset });
-      if (!shader_ref_read) {
-        ctx.Out() << "      [" << i
-                  << "] ShaderReferenceDesc: (insufficient data)\n";
-        break;
-      }
-      const auto& shader_ref = *shader_ref_read;
-
-      ctx.Out() << "      [" << i << "] ShaderReferenceDesc:\n";
+    ctx.Out() << "    Shader References (" << shaders.size() << "):\n";
+    for (const auto& [index, shader] : std::views::enumerate(shaders)) {
+      ctx.Out() << "      [" << index << "] Shader Reference:\n";
       PrintUtils::Field(ctx.Out(), "Shader Type",
-        toolkit::EnumString(static_cast<ShaderType>(shader_ref.shader_type)),
-        10);
-      PrintUtils::Field(ctx.Out(), "Source Path",
-        asset_dump_helpers::DescriptorString(
-          *data, mat.header, shader_ref.source_path_offset),
-        10);
-      PrintUtils::Field(ctx.Out(), "Entry Point",
-        asset_dump_helpers::DescriptorString(
-          *data, mat.header, shader_ref.entry_point_offset),
-        10);
-      PrintUtils::Field(ctx.Out(), "Defines",
-        asset_dump_helpers::DescriptorString(
-          *data, mat.header, shader_ref.defines_offset),
-        10);
+        toolkit::EnumString(shader.GetShaderType()), 10);
+      PrintUtils::Field(
+        ctx.Out(), "Source Path", std::string(shader.GetSourcePath()), 10);
+      PrintUtils::Field(
+        ctx.Out(), "Entry Point", std::string(shader.GetEntryPoint()), 10);
+      PrintUtils::Field(
+        ctx.Out(), "Defines", std::string(shader.GetDefines()), 10);
       PrintUtils::Field(ctx.Out(), "Shader Hash",
-        asset_dump_helpers::ToHexString(shader_ref.shader_hash), 10);
-
-      if (ctx.show_asset_descriptors) {
-        ctx.Out() << "        Hex Dump (offset " << offset << ", size "
-                  << sizeof(shader_ref) << "):\n";
-        PrintUtils::HexDump(ctx.Out(),
-          std::span<const std::byte> { *data }.subspan(
-            offset, sizeof(shader_ref)),
-          sizeof(shader_ref));
-      }
-
-      offset += sizeof(shader_ref);
+        asset_dump_helpers::ToHexString(shader.GetShaderSourceHash()), 10);
     }
 
     ctx.Out() << "\n";

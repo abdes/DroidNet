@@ -31,6 +31,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedFormatError.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content {
@@ -111,6 +112,9 @@ public:
       try {
         co_await registry_->Get(entry.asset_type)
           .DumpAsync(pak, entry, ctx, i, asset_loader);
+      } catch (const oxygen::data::CookedFormatError& refusal) {
+        // The runtime refuses the descriptor; PakDump prints none of it.
+        ctx.Out() << "    Refused by the runtime: " << refusal.what() << "\n\n";
       } catch (const std::exception& ex) {
         ctx.Err() << "ERROR: failed to dump asset #" << i
                   << " (type=" << toolkit::EnumString(entry.asset_type)

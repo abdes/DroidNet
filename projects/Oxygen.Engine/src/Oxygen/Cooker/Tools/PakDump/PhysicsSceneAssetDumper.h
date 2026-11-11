@@ -7,151 +7,135 @@
 #pragma once
 
 #include <cstdint>
-#include <cstring>
 #include <ostream>
-#include <span>
 #include <utility>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Serio/ByteReader.h>
 
 namespace oxygen::content::pakdump {
 
 //! Dumps physics scene asset descriptors.
 class PhysicsSceneAssetDumper final : public AssetDumper {
-  static auto InRange(
-    const size_t offset, const size_t size, const size_t total) -> bool
+  using RigidBodyBindingRecord
+    = oxygen::data::pak::physics::RigidBodyBindingRecord;
+  using ColliderBindingRecord
+    = oxygen::data::pak::physics::ColliderBindingRecord;
+  using CharacterBindingRecord
+    = oxygen::data::pak::physics::CharacterBindingRecord;
+  using SoftBodyBindingRecord
+    = oxygen::data::pak::physics::SoftBodyBindingRecord;
+  using JointBindingRecord = oxygen::data::pak::physics::JointBindingRecord;
+  using VehicleBindingRecord = oxygen::data::pak::physics::VehicleBindingRecord;
+  using AggregateBindingRecord
+    = oxygen::data::pak::physics::AggregateBindingRecord;
+
+  static auto PrintSampleRecord(
+    std::ostream& out, const RigidBodyBindingRecord& record) -> void
   {
-    return offset <= total && size <= (total - offset);
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Shape Key",
+      oxygen::data::to_string(record.shape_asset_key), 10);
+    PrintUtils::Field(out, "Sample Material Key",
+      oxygen::data::to_string(record.material_asset_key), 10);
   }
 
-  static auto PrintSampleRecord(std::ostream& out,
-    const std::span<const std::byte> blob, const size_t table_offset,
-    const oxygen::data::pak::physics::PhysicsBindingType type) -> void
+  static auto PrintSampleRecord(
+    std::ostream& out, const ColliderBindingRecord& record) -> void
   {
-    using oxygen::data::pak::physics::AggregateBindingRecord;
-    using oxygen::data::pak::physics::CharacterBindingRecord;
-    using oxygen::data::pak::physics::ColliderBindingRecord;
-    using oxygen::data::pak::physics::JointBindingRecord;
-    using oxygen::data::pak::physics::PhysicsBindingType;
-    using oxygen::data::pak::physics::RigidBodyBindingRecord;
-    using oxygen::data::pak::physics::SoftBodyBindingRecord;
-    using oxygen::data::pak::physics::VehicleBindingRecord;
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Shape Key",
+      oxygen::data::to_string(record.shape_asset_key), 10);
+    PrintUtils::Field(out, "Sample Is Sensor", record.is_sensor, 10);
+  }
 
-    switch (type) {
-    case PhysicsBindingType::kRigidBody: {
-      const auto record_read = serio::CopyAt<RigidBodyBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Shape Key",
-        oxygen::data::to_string(record.shape_asset_key), 10);
-      PrintUtils::Field(out, "Sample Material Key",
-        oxygen::data::to_string(record.material_asset_key), 10);
-      break;
+  static auto PrintSampleRecord(
+    std::ostream& out, const CharacterBindingRecord& record) -> void
+  {
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Shape Key",
+      oxygen::data::to_string(record.shape_asset_key), 10);
+  }
+
+  static auto PrintSampleRecord(
+    std::ostream& out, const SoftBodyBindingRecord& record) -> void
+  {
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Topology Asset Key",
+      oxygen::data::to_string(record.topology_asset_key), 10);
+    PrintUtils::Field(out, "Sample Topology Format",
+      toolkit::EnumString(record.topology_format), 10);
+    PrintUtils::Field(
+      out, "Sample Solver Iterations", record.solver_iteration_count, 10);
+    PrintUtils::Field(out, "Sample Global Damping", record.global_damping, 10);
+    PrintUtils::Field(out, "Sample Restitution", record.restitution, 10);
+    PrintUtils::Field(out, "Sample Friction", record.friction, 10);
+  }
+
+  static auto PrintSampleRecord(
+    std::ostream& out, const JointBindingRecord& record) -> void
+  {
+    PrintUtils::Field(out, "Sample Node A", record.node_index_a, 10);
+    PrintUtils::Field(out, "Sample Node B", record.node_index_b, 10);
+  }
+
+  static auto PrintSampleRecord(
+    std::ostream& out, const VehicleBindingRecord& record) -> void
+  {
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Controller Type",
+      toolkit::EnumString(record.controller_type), 10);
+    PrintUtils::Field(
+      out, "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
+    PrintUtils::Field(
+      out, "Sample Wheel Slice Count", record.wheel_slice_count, 10);
+  }
+
+  static auto PrintSampleRecord(
+    std::ostream& out, const AggregateBindingRecord& record) -> void
+  {
+    PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
+    PrintUtils::Field(out, "Sample Max Bodies", record.max_bodies, 10);
+  }
+
+  //! Records without a sample of their own print no sample.
+  template <typename T>
+  static auto PrintSampleRecord(std::ostream& /*out*/, const T& /*record*/)
+    -> void
+  {
+  }
+
+  //! Prints the binding table of type `T` the runtime decoded, if it has one.
+  template <typename T>
+  static auto PrintTable(std::ostream& out,
+    const oxygen::data::PhysicsSceneAsset& scene, const bool verbose,
+    uint32_t& table_index, uint64_t& total_bindings) -> void
+  {
+    const auto bindings = scene.GetBindings<T>();
+    if (bindings.empty()) {
+      return;
     }
-    case PhysicsBindingType::kCollider: {
-      const auto record_read = serio::CopyAt<ColliderBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Shape Key",
-        oxygen::data::to_string(record.shape_asset_key), 10);
-      PrintUtils::Field(out, "Sample Is Sensor", record.is_sensor, 10);
-      break;
-    }
-    case PhysicsBindingType::kCharacter: {
-      const auto record_read = serio::CopyAt<CharacterBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Shape Key",
-        oxygen::data::to_string(record.shape_asset_key), 10);
-      break;
-    }
-    case PhysicsBindingType::kSoftBody: {
-      const auto record_read = serio::CopyAt<SoftBodyBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Topology Asset Key",
-        oxygen::data::to_string(record.topology_asset_key), 10);
-      PrintUtils::Field(out, "Sample Topology Format",
-        toolkit::EnumString(record.topology_format), 10);
-      PrintUtils::Field(
-        out, "Sample Solver Iterations", record.solver_iteration_count, 10);
-      PrintUtils::Field(
-        out, "Sample Global Damping", record.global_damping, 10);
-      PrintUtils::Field(out, "Sample Restitution", record.restitution, 10);
-      PrintUtils::Field(out, "Sample Friction", record.friction, 10);
-      break;
-    }
-    case PhysicsBindingType::kJoint: {
-      const auto record_read = serio::CopyAt<JointBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node A", record.node_index_a, 10);
-      PrintUtils::Field(out, "Sample Node B", record.node_index_b, 10);
-      break;
-    }
-    case PhysicsBindingType::kVehicle: {
-      const auto record_read = serio::CopyAt<VehicleBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Controller Type",
-        toolkit::EnumString(record.controller_type), 10);
-      PrintUtils::Field(
-        out, "Sample Wheel Slice Offset", record.wheel_slice_offset, 10);
-      PrintUtils::Field(
-        out, "Sample Wheel Slice Count", record.wheel_slice_count, 10);
-      break;
-    }
-    case PhysicsBindingType::kAggregate: {
-      const auto record_read = serio::CopyAt<AggregateBindingRecord>(
-        blob, serio::ByteOffset { table_offset });
-      if (!record_read) {
-        PrintUtils::Field(out, "Sample Record", "insufficient data", 10);
-        break;
-      }
-      const auto& record = *record_read;
-      PrintUtils::Field(out, "Sample Node Index", record.node_index, 10);
-      PrintUtils::Field(out, "Sample Max Bodies", record.max_bodies, 10);
-      break;
-    }
-    default:
-      break;
+
+    constexpr auto binding_type = oxygen::data::BindingTraits<T>::kType;
+    // A binding type is a FourCC: its value reads best in hexadecimal.
+    out << fmt::format("          [{}] {}({:#010X}) count={}\n", table_index,
+      nostd::to_string(binding_type), std::to_underlying(binding_type),
+      bindings.size());
+    ++table_index;
+    total_bindings += bindings.size();
+
+    if (verbose) {
+      PrintSampleRecord(out, bindings.front());
     }
   }
 
@@ -164,6 +148,7 @@ public:
     (void)asset_loader;
 
     using oxygen::data::pak::physics::PhysicsSceneAssetDesc;
+    using oxygen::data::pak::physics::VehicleWheelBindingRecord;
 
     ctx.Out() << "Asset #" << idx << " (PhysicsScene):\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -174,6 +159,11 @@ public:
       ctx.Out() << "    Failed to read asset descriptor data\n\n";
       co_return;
     }
+
+    asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
+    // The runtime reads it first; a descriptor it refuses is not printed.
+    const auto physics_scene
+      = DecodeAsset(pak, entry, &loaders::LoadPhysicsSceneAsset);
 
     const auto scene_read = serio::CopyAt<PhysicsSceneAssetDesc>(*data);
     if (!scene_read) {
@@ -206,57 +196,25 @@ public:
       co_return;
     }
 
-    const auto dir_offset
-      = static_cast<size_t>(scene.component_table_directory_offset);
-    const size_t dir_size = static_cast<size_t>(scene.component_table_count)
-      * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc);
-    if (!InRange(dir_offset, dir_size, data->size())) {
-      PrintUtils::Field(
-        ctx.Out(), "Binding Tables", "directory out of bounds", 8);
-      ctx.Out() << "\n";
-      co_return;
-    }
-
     ctx.Out() << "        Binding Tables:\n";
+    uint32_t table_index = 0;
     uint64_t total_bindings = 0;
-    for (uint32_t i = 0; i < scene.component_table_count; ++i) {
-      const size_t entry_offset = dir_offset
-        + (static_cast<size_t>(i)
-          * sizeof(oxygen::data::pak::physics::PhysicsComponentTableDesc));
-      const auto table_desc_read
-        = serio::CopyAt<oxygen::data::pak::physics::PhysicsComponentTableDesc>(
-          *data, serio::ByteOffset { entry_offset });
-      if (!table_desc_read) {
-        PrintUtils::Field(ctx.Out(), "Binding Tables", "truncated", 8);
-        break;
-      }
-      const auto& table_desc = *table_desc_read;
-
-      const auto table_offset = static_cast<size_t>(table_desc.table.offset);
-      const auto count = static_cast<size_t>(table_desc.table.count);
-      const auto entry_size = static_cast<size_t>(table_desc.table.entry_size);
-      const auto table_size = count * entry_size;
-
-      // A binding type is a FourCC: its value reads best in hexadecimal.
-      ctx.Out() << fmt::format(
-        "          [{}] {}({:#010X}) count={} entry_size={} "
-        "offset={}\n",
-        i, nostd::to_string(table_desc.binding_type),
-        std::to_underlying(table_desc.binding_type), table_desc.table.count,
-        table_desc.table.entry_size,
-        asset_dump_helpers::ToHexString(table_desc.table.offset));
-      total_bindings += table_desc.table.count;
-
-      if (!InRange(table_offset, table_size, data->size())) {
-        PrintUtils::Field(ctx.Out(), "Table Status", "out of bounds", 10);
-        continue;
-      }
-
-      if (ctx.verbose && count > 0) {
-        PrintSampleRecord(
-          ctx.Out(), *data, table_offset, table_desc.binding_type);
-      }
-    }
+    PrintTable<RigidBodyBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<ColliderBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<CharacterBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<SoftBodyBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<JointBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<VehicleBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<VehicleWheelBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
+    PrintTable<AggregateBindingRecord>(
+      ctx.Out(), *physics_scene, ctx.verbose, table_index, total_bindings);
     PrintUtils::Field(ctx.Out(), "Total Bindings", total_bindings, 8);
     ctx.Out() << "\n";
 

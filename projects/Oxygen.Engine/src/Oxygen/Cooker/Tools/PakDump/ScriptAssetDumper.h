@@ -14,8 +14,10 @@
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include "PrintUtils.h"
 
+#include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptResource.h>
@@ -44,6 +46,8 @@ public:
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
+    // The runtime reads it first; a descriptor it refuses is not printed.
+    static_cast<void>(DecodeAsset(pak, entry, &loaders::LoadScriptAsset));
     const auto desc_read = serio::CopyAt<ScriptAssetDesc>(*data);
     if (!desc_read) {
       ctx.Out() << "    ScriptAssetDesc: (insufficient data)\n\n";

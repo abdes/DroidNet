@@ -6,19 +6,18 @@
 
 #pragma once
 
-#include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <iomanip>
-#include <string>
+#include <ranges>
 #include <string_view>
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include "PrintUtils.h"
 #include <fmt/format.h>
 
-#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/Loaders/InputMappingContextLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -33,10 +32,7 @@ public:
     -> oxygen::co::Co<> override
   {
     (void)asset_loader;
-    using oxygen::data::pak::input::InputActionMappingRecord;
     using oxygen::data::pak::input::InputMappingContextAssetDesc;
-    using oxygen::data::pak::input::InputTriggerAuxRecord;
-    using oxygen::data::pak::input::InputTriggerRecord;
 
     ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -49,6 +45,9 @@ public:
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
+    // The runtime reads it first; a descriptor it refuses is not printed.
+    const auto context_asset
+      = DecodeAsset(pak, entry, &loaders::LoadInputMappingContextAsset);
     const auto desc_read = serio::CopyAt<InputMappingContextAssetDesc>(*data);
     if (!desc_read) {
       ctx.Out() << "    InputMappingContextAssetDesc: (insufficient data)\n\n";
@@ -69,69 +68,18 @@ public:
     PrintUtils::Field(
       ctx.Out(), "Trigger Aux Count", desc.trigger_aux.count, 8);
 
-    const auto ParseTable
-      = [&](const oxygen::data::pak::input::InputDataTable& table,
-          const size_t expected_size, const char* const table_name) -> bool {
-      const auto offset = static_cast<size_t>(table.offset);
-      const auto count = static_cast<size_t>(table.count);
-      const auto size = static_cast<size_t>(table.entry_size);
-
-      if (count == 0) {
-        return true;
-      }
-      if (size != expected_size) {
-        PrintUtils::Field(ctx.Out(), "Warning",
-          fmt::format("{} entry size mismatch: {} != {}", table_name, size,
-            expected_size),
-          8);
-        return false;
-      }
-      if (offset > data->size()) {
-        PrintUtils::Field(ctx.Out(), "Warning",
-          fmt::format("{} offset out of bounds", table_name), 8);
-        return false;
-      }
-      const auto total_size = count * expected_size;
-      if (total_size > (data->size() - offset)) {
-        PrintUtils::Field(ctx.Out(), "Warning",
-          fmt::format("{} table payload exceeds descriptor size", table_name),
-          8);
-        return false;
-      }
-      return true;
-    };
-
-    const auto mappings_ok
-      = ParseTable(desc.mappings, sizeof(InputActionMappingRecord), "Mappings");
-    const auto triggers_ok
-      = ParseTable(desc.triggers, sizeof(InputTriggerRecord), "Triggers");
-    const auto aux_ok = ParseTable(
-      desc.trigger_aux, sizeof(InputTriggerAuxRecord), "TriggerAux");
-
     if (!ctx.verbose) {
       ctx.Out() << "\n";
       co_return;
     }
 
-    if (mappings_ok && desc.mappings.count > 0) {
+    const auto mappings = context_asset->GetMappings();
+    if (!mappings.empty()) {
       ctx.Out() << "    Mappings:\n";
-      const auto mapping_count = static_cast<size_t>(desc.mappings.count);
-      const auto mapping_limit = ctx.verbose
-        ? mapping_count
-        : (std::min)(mapping_count, size_t { 16 });
-      for (size_t i = 0; i < mapping_limit; ++i) {
-        const auto record_offset = static_cast<size_t>(desc.mappings.offset)
-          + (i * sizeof(InputActionMappingRecord));
-        const auto record_read = serio::CopyAt<InputActionMappingRecord>(
-          *data, serio::ByteOffset { record_offset });
-        if (!record_read) {
-          ctx.Out() << "      [" << i << "] (insufficient data)\n";
-          break;
-        }
-        const auto& record = *record_read;
-
-        const auto slot_name = asset_dump_helpers::DescriptorString(
-          *data, desc.header, record.slot_name_offset);
+      for (const auto& [i, record] : std::views::enumerate(mappings)) {
+        const auto slot_name
+          = context_asset->TryGetString(record.slot_name_offset)
+              .value_or(std::string_view {});
         ctx.Out() << "      [" << i << "] action="
                   << oxygen::data::to_string(record.action_asset_key)
                   << " slot='" << slot_name << "'\n";
@@ -147,29 +95,12 @@ public:
         PrintUtils::Field(ctx.Out(), "Bias",
           fmt::format("[{:.3f}, {:.3f}]", record.bias[0], record.bias[1]), 10);
       }
-      if (mapping_count > mapping_limit) {
-        ctx.Out() << "      ... (" << (mapping_count - mapping_limit)
-                  << " more mappings)\n";
-      }
     }
 
-    if (triggers_ok && desc.triggers.count > 0) {
+    const auto triggers = context_asset->GetTriggers();
+    if (!triggers.empty()) {
       ctx.Out() << "    Triggers:\n";
-      const auto trigger_count = static_cast<size_t>(desc.triggers.count);
-      const auto trigger_limit = ctx.verbose
-        ? trigger_count
-        : (std::min)(trigger_count, size_t { 16 });
-      for (size_t i = 0; i < trigger_limit; ++i) {
-        const auto record_offset = static_cast<size_t>(desc.triggers.offset)
-          + (i * sizeof(InputTriggerRecord));
-        const auto record_read = serio::CopyAt<InputTriggerRecord>(
-          *data, serio::ByteOffset { record_offset });
-        if (!record_read) {
-          ctx.Out() << "      [" << i << "] (insufficient data)\n";
-          break;
-        }
-        const auto& record = *record_read;
-
+      for (const auto& [i, record] : std::views::enumerate(triggers)) {
         ctx.Out() << "      [" << i
                   << "] type=" << toolkit::EnumString(record.type)
                   << " behavior=" << toolkit::EnumString(record.behavior)
@@ -183,36 +114,17 @@ public:
             record.aux_start_index + record.aux_count),
           10);
       }
-      if (trigger_count > trigger_limit) {
-        ctx.Out() << "      ... (" << (trigger_count - trigger_limit)
-                  << " more triggers)\n";
-      }
     }
 
-    if (aux_ok && desc.trigger_aux.count > 0) {
+    const auto aux_records = context_asset->GetTriggerAuxRecords();
+    if (!aux_records.empty()) {
       ctx.Out() << "    Trigger Aux Records:\n";
-      const auto aux_count = static_cast<size_t>(desc.trigger_aux.count);
-      const auto aux_limit
-        = ctx.verbose ? aux_count : (std::min)(aux_count, size_t { 16 });
-      for (size_t i = 0; i < aux_limit; ++i) {
-        const auto record_offset = static_cast<size_t>(desc.trigger_aux.offset)
-          + (i * sizeof(InputTriggerAuxRecord));
-        const auto record_read = serio::CopyAt<InputTriggerAuxRecord>(
-          *data, serio::ByteOffset { record_offset });
-        if (!record_read) {
-          ctx.Out() << "      [" << i << "] (insufficient data)\n";
-          break;
-        }
-        const auto& record = *record_read;
+      for (const auto& [i, record] : std::views::enumerate(aux_records)) {
         ctx.Out() << "      [" << i << "] action="
                   << oxygen::data::to_string(record.action_asset_key)
                   << " completion=0x" << std::hex << record.completion_states
                   << std::dec << " time_ns=" << record.time_to_complete_ns
                   << "\n";
-      }
-      if (aux_count > aux_limit) {
-        ctx.Out() << "      ... (" << (aux_count - aux_limit)
-                  << " more aux records)\n";
       }
     }
 

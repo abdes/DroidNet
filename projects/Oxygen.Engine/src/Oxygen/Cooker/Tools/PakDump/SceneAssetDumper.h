@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstring>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -25,8 +24,6 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
-#include <Oxygen/Serio/MemoryStream.h>
-#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content::pakdump {
 
@@ -40,10 +37,8 @@ public:
   {
     using oxygen::data::ComponentType;
     using oxygen::data::pak::scripting::ScriptingComponentRecord;
-    using oxygen::data::pak::world::BackgroundEnvironmentRecord;
     using oxygen::data::pak::world::DirectionalLightRecord;
     using oxygen::data::pak::world::EnvironmentComponentType;
-    using oxygen::data::pak::world::FogEnvironmentRecord;
     using oxygen::data::pak::world::LocalFogVolumeRecord;
     using oxygen::data::pak::world::NodeRecord;
     using oxygen::data::pak::world::OrthographicCameraRecord;
@@ -53,11 +48,7 @@ public:
     using oxygen::data::pak::world::RenderableRecord;
     using oxygen::data::pak::world::SceneEnvironmentBlockHeader;
     using oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader;
-    using oxygen::data::pak::world::SkyAtmosphereEnvironmentRecord;
-    using oxygen::data::pak::world::SkyLightEnvironmentRecord;
-    using oxygen::data::pak::world::SkySphereEnvironmentRecord;
     using oxygen::data::pak::world::SpotLightRecord;
-    using oxygen::data::pak::world::VolumetricCloudsEnvironmentRecord;
 
     ctx.Out() << "Asset #" << idx << ":\n";
     asset_dump_helpers::PrintAssetKey(entry.asset_key, ctx);
@@ -423,113 +414,9 @@ public:
       ctx.Out() << fmt::format("      [{}] {} (size {})\n", i,
         toolkit::EnumString(type), record.header.record_size);
 
-      const auto TryReadSkyAtmosphere
-        = [&](const std::span<const std::byte> bytes)
-        -> std::optional<SkyAtmosphereEnvironmentRecord> {
-        if (bytes.size() != sizeof(SkyAtmosphereEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        SkyAtmosphereEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
-      const auto TryReadVolumetricClouds
-        = [&](const std::span<const std::byte> bytes)
-        -> std::optional<VolumetricCloudsEnvironmentRecord> {
-        if (bytes.size() != sizeof(VolumetricCloudsEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        VolumetricCloudsEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
-      const auto TryReadFog = [&](const std::span<const std::byte> bytes)
-        -> std::optional<FogEnvironmentRecord> {
-        if (bytes.size() != sizeof(FogEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        FogEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
-      const auto TryReadSkyLight = [&](const std::span<const std::byte> bytes)
-        -> std::optional<SkyLightEnvironmentRecord> {
-        if (bytes.size() != sizeof(SkyLightEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        SkyLightEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
-      const auto TryReadSkySphere = [&](const std::span<const std::byte> bytes)
-        -> std::optional<SkySphereEnvironmentRecord> {
-        if (bytes.size() != sizeof(SkySphereEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        SkySphereEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
-      const auto TryReadBackground = [&](const std::span<const std::byte> bytes)
-        -> std::optional<BackgroundEnvironmentRecord> {
-        if (bytes.size() != sizeof(BackgroundEnvironmentRecord)) {
-          return std::nullopt;
-        }
-        oxygen::serio::ReadOnlyMemoryStream stream { bytes };
-        oxygen::serio::Reader<oxygen::serio::ReadOnlyMemoryStream> reader(
-          stream);
-        auto packed = reader.ScopedAlignment(1);
-        BackgroundEnvironmentRecord decoded {};
-        const auto res = reader.ReadInto(decoded);
-        if (!res) {
-          return std::nullopt;
-        }
-        return decoded;
-      };
-
       switch (type) {
       case EnvironmentComponentType::kSkyAtmosphere: {
-        const auto rec = TryReadSkyAtmosphere(record.bytes);
+        const auto rec = scene->TryGetSkyAtmosphereEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;
@@ -584,7 +471,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kVolumetricClouds: {
-        const auto rec = TryReadVolumetricClouds(record.bytes);
+        const auto rec = scene->TryGetVolumetricCloudsEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;
@@ -610,7 +497,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kFog: {
-        const auto rec = TryReadFog(record.bytes);
+        const auto rec = scene->TryGetFogEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;
@@ -697,7 +584,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kSkyLight: {
-        const auto rec = TryReadSkyLight(record.bytes);
+        const auto rec = scene->TryGetSkyLightEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;
@@ -730,7 +617,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kSkySphere: {
-        const auto rec = TryReadSkySphere(record.bytes);
+        const auto rec = scene->TryGetSkySphereEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;
@@ -750,7 +637,7 @@ public:
         break;
       }
       case EnvironmentComponentType::kBackground: {
-        const auto rec = TryReadBackground(record.bytes);
+        const auto rec = scene->TryGetBackgroundEnvironment();
         if (!rec) {
           ctx.Out() << fmt::format("        (failed to decode)\n");
           break;

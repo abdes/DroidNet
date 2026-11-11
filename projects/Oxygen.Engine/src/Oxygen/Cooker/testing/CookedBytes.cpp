@@ -18,9 +18,11 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedLayout.h>
 #include <Oxygen/Cooker/testing/CookedBytes.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_references.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/ByteReader.h>
 
@@ -479,6 +481,27 @@ auto CookedBytes::CorruptCrc(std::vector<std::byte>& pak) -> void
   EditFooter(pak, [](core::PakFooter& footer) -> void {
     footer.pak_crc32 = ~footer.pak_crc32;
   });
+}
+
+auto CookedBytes::SetMaterialFlags(std::vector<std::byte>& pak,
+  const data::AssetKey& material, const uint32_t flags) -> void
+{
+  const auto footer = ReadFooter(pak);
+  for (size_t index = 0; index < footer.asset_count; ++index) {
+    const auto entry = ReadDirectoryEntry(pak, index);
+    if (entry.asset_key != material) {
+      continue;
+    }
+    const auto at = static_cast<size_t>(entry.desc_offset);
+    EditRecord<data::pak::render::MaterialAssetDesc>(
+      pak, at, [flags](data::pak::render::MaterialAssetDesc& record) -> void {
+        record.flags = flags;
+      });
+    data::StampDescriptorHash(std::span { pak }.subspan(at, entry.desc_size));
+    SetCrc(pak, 0U);
+    return;
+  }
+  throw std::invalid_argument("the pak holds no such material");
 }
 
 auto CookedBytes::CrcFieldOffset(const std::vector<std::byte>& pak) -> size_t

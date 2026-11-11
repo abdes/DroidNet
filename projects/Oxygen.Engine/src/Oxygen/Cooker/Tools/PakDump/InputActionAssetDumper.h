@@ -11,9 +11,11 @@
 
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include "DecodedAsset.h"
 #include "PrintUtils.h"
 
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Content/Loaders/InputActionLoader.h>
 #include <Oxygen/Cooker/Tools/Common/EnumString.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/ByteReader.h>
@@ -41,6 +43,8 @@ public:
     }
 
     asset_dump_helpers::PrintAssetDescriptorHexPreview(*data, ctx);
+    // The runtime reads it first; a descriptor it refuses is not printed.
+    static_cast<void>(DecodeAsset(pak, entry, &loaders::LoadInputActionAsset));
     const auto desc_read = serio::CopyAt<InputActionAssetDesc>(*data);
     if (!desc_read) {
       ctx.Out() << "    InputActionAssetDesc: (insufficient data)\n\n";

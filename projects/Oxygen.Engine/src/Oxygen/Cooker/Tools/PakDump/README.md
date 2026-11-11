@@ -104,13 +104,24 @@ Sections appear only if not suppressed:
    for truncated hex of raw payloads.
 5. `ASSET DIRECTORY` – Each asset: GUID, type (enum + numeric), descriptor &
    entry offsets/sizes. If `--hex-dump-assets` set, prints descriptor bytes
-   (truncated by `--max-data`). Material assets (type=1) additionally dump all
-   structured fields plus shader reference descriptors.
+   (truncated by `--max-data`), then the asset's fields as the runtime reads
+   them.
 6. `ANALYSIS COMPLETE` – Terminator marker.
+
+## Descriptors As The Runtime Reads Them
+
+PakDump prints what the runtime reads, never a layout of its own. Each asset
+descriptor is first checked by the runtime's descriptor validation and read by
+the runtime loader of its type. A descriptor the runtime refuses prints
+`Refused by the runtime:` and the reason, and none of its fields. The lists a
+descriptor holds (a material's shader references, a geometry's LODs, submeshes
+and views, a context's mappings and triggers, a physics scene's binding tables,
+a scene's environment) come from the decoded asset; the fixed fields come from
+the descriptor record the runtime decoded.
 
 ## Material Asset Detailing
 
-Material descriptors receive special handling:
+Material descriptors print:
 
 - All header + material-specific fields printed with labels
 - Base color, normal scale, metalness, roughness, AO values
@@ -118,8 +129,8 @@ Material descriptors receive special handling:
   transmission, thickness)
 - Tier 1/2 scalar parameters (emissive factor, alpha cutoff, IOR, specular
   factor, sheen factor, clearcoat/transmission/volume parameters)
-- Shader stage bitmask drives enumeration of appended shader reference blocks
-- Each shader reference shows its Unique ID & hash; optional hex dump
+- The shader references the runtime decoded: type, source path, entry point,
+  defines and hash
 
 ## Performance / Safety Notes
 

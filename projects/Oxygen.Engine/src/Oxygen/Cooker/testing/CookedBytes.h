@@ -158,6 +158,12 @@ struct CookedBytes final {
   //! Records `crc` as the CRC of the pak; zero records none.
   static auto SetCrc(std::vector<std::byte>& pak, uint32_t crc) -> void;
 
+  //! Records `flags` in the material `material` of `pak`, with the hash of the
+  //! descriptor that results, and no CRC: a well-formed descriptor apart from
+  //! its flags.
+  static auto SetMaterialFlags(std::vector<std::byte>& pak,
+    const data::AssetKey& material, uint32_t flags) -> void;
+
   //! The offset of the CRC field of the footer of `pak`.
   [[nodiscard]] static auto CrcFieldOffset(const std::vector<std::byte>& pak)
     -> size_t;
