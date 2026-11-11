@@ -46,8 +46,9 @@
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -950,14 +951,16 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(PhysicsComplexSceneTest,
-  SidecarDescriptorTargetsCookedSceneByKeyNodeCountAndHash)
+  SidecarDescriptorTargetsCookedSceneByKeyNodeCountAndLayout)
 {
   ASSERT_TRUE(error_.empty()) << error_;
 
   const auto scene_bytes
     = oxygen::cooker::test::ReadBytes(Path("Scenes/ComplexScene.oscene"));
   ASSERT_FALSE(scene_bytes.empty());
-  const auto scene_hash = data::ComputeDescriptorHash(scene_bytes);
+  const auto scene_layout = data::ComputeNodeLayoutHash(data::SceneAsset(
+    data::AssetKey::FromVirtualPath(kSceneVirtualPath), scene_bytes)
+      .GetNodes());
   if (!parsed_sidecar_.has_value()) {
     FAIL() << "Expected the sidecar to be parsed";
   }
@@ -965,8 +968,8 @@ NOLINT_TEST_F(PhysicsComplexSceneTest,
   EXPECT_EQ(parsed_sidecar_->descriptor.target_scene_key,
     data::AssetKey::FromVirtualPath(kSceneVirtualPath));
   EXPECT_EQ(parsed_sidecar_->descriptor.target_node_count, 10U);
-  EXPECT_TRUE(std::equal(scene_hash.begin(), scene_hash.end(),
-    std::begin(parsed_sidecar_->descriptor.target_scene_content_hash)));
+  EXPECT_TRUE(std::ranges::equal(
+    scene_layout, parsed_sidecar_->descriptor.target_scene_layout_hash));
   EXPECT_EQ(parsed_sidecar_->descriptor.component_table_count,
     static_cast<uint32_t>(parsed_sidecar_->directory.size()));
 }

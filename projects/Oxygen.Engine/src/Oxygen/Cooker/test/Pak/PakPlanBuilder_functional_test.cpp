@@ -607,7 +607,7 @@ NOLINT_TEST(PakPlanBuilderTest, PatchRecordsDeletedSidecarAsTombstone)
   EXPECT_FALSE(patch.Pak().FindEntry(sidecar).has_value());
 }
 
-//! A sidecar hashed against another scene's descriptor does not pair.
+//! A sidecar cooked for another scene's nodes does not pair.
 NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherSceneDescriptor)
 {
   // Arrange
@@ -615,11 +615,12 @@ NOLINT_TEST(PakPlanBuilderTest, RejectsSidecarOfAnotherSceneDescriptor)
   auto game = LooseCookedRoot {};
   const auto scene = AddScene(game);
   const auto bindings = fixtures::PhysicsSidecarBuilder {};
+  auto other = SceneBuilder { "Other" };
+  static_cast<void>(other.Node("Stray"));
   game.Add({
     .type = data::AssetType::kPhysicsScene,
     .leaf = "Scene.opscene",
-    .descriptor
-    = bindings.Bytes(scene, SceneBuilder { "Other" }.Bytes(), "PhysicsScene"),
+    .descriptor = bindings.Bytes(scene, other.Bytes(), "PhysicsScene"),
     .references = bindings.References(scene),
   });
   const auto request = workspace.FullRequest({ workspace.Add(game) });

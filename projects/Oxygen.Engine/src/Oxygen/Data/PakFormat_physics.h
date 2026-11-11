@@ -387,7 +387,7 @@ static_assert(offsetof(PhysicsComponentTableDesc, table) == sizeof(PhysicsBindin
  *
  *  @par Hydration contract
  *  `target_scene_key` identifies the Scene asset loaded in the shared content
- *  scope. Hydration rejects mismatched scene keys, content hashes and node
+ *  scope. Hydration rejects mismatched scene keys, node layouts and node
  *  counts. A layer override may supply the matching sidecar from another
  * source. */
 #pragma pack(push, 1)
@@ -398,8 +398,8 @@ struct PhysicsSceneAssetDesc {
   uint32_t component_table_count = 0;
   //!< Offset to PhysicsComponentTableDesc[]
   core::OffsetT component_table_directory_offset = 0;
-  //!< Content hash of the paired scene, as its asset header records it
-  uint8_t target_scene_content_hash[32] = {};
+  //!< Layout hash of the paired scene's nodes (`ComputeNodeLayoutHash`)
+  uint8_t target_scene_layout_hash[32] = {};
   //!< The backend the bindings' backend scalars are for; never `kNone`
   PhysicsBackend backend = PhysicsBackend::kNone;
 };
@@ -408,7 +408,7 @@ struct PhysicsSceneAssetDesc {
 static_assert(sizeof(PhysicsSceneAssetDesc) == 111);
 static_assert(offsetof(PhysicsSceneAssetDesc, backend) == 110);
 static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_key) == sizeof(core::AssetHeader));
-static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_content_hash) == offsetof(PhysicsSceneAssetDesc, component_table_directory_offset) + sizeof(core::OffsetT));
+static_assert(offsetof(PhysicsSceneAssetDesc, target_scene_layout_hash) == offsetof(PhysicsSceneAssetDesc, component_table_directory_offset) + sizeof(core::OffsetT));
 // clang-format on
 
 //! Backend-specific scalar fields for rigid-body bindings.

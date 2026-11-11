@@ -362,6 +362,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsSidecarSourceMeshRefUnresolved = "physics.sidecar.source_mesh_ref_unresolved";
   inline constexpr std::string_view kPhysicsSidecarSourceMissing = "physics.sidecar.source_missing";
   inline constexpr std::string_view kPhysicsSidecarSourceReadFailed = "physics.sidecar.source_read_failed";
+  //! The commit would list a physics sidecar and a scene whose nodes it was
+  //! not cooked for: the import changed the scene's nodes or retired it and
+  //! kept the sidecar, or cooked the sidecar for nodes it did not publish.
+  inline constexpr std::string_view kPhysicsSidecarStale = "physics.sidecar.stale";
   inline constexpr std::string_view kPhysicsSidecarTargetSceneInvalid = "physics.sidecar.target_scene_invalid";
   inline constexpr std::string_view kPhysicsSidecarTargetSceneMissing = "physics.sidecar.target_scene_missing";
   inline constexpr std::string_view kPhysicsSidecarTargetSceneNotScene = "physics.sidecar.target_scene_not_scene";
@@ -385,7 +389,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kSceneDescriptorInstanceInvalid = "scene.descriptor.instance_invalid";
   inline constexpr std::string_view kSceneDescriptorInstanceOverrideDuplicate = "scene.descriptor.instance_override_duplicate";
   inline constexpr std::string_view kSceneDescriptorInstanceOverrideInvalid = "scene.descriptor.instance_override_invalid";
-  inline constexpr std::string_view kSceneDescriptorInstanceOverrideUnresolved = "scene.descriptor.instance_override_unresolved";
+  //! An instance change names a node path the instanced scene does not hold.
+  inline constexpr std::string_view kSceneDescriptorInstanceOverrideNodeMissing = "scene.descriptor.instance_override_node_missing";
+  //! An instance change names a property its node does not have.
+  inline constexpr std::string_view kSceneDescriptorInstanceOverrideTargetMissing = "scene.descriptor.instance_override_target_missing";
   inline constexpr std::string_view kSceneDescriptorInstanceUnreadable = "scene.descriptor.instance_unreadable";
   inline constexpr std::string_view kSceneDescriptorLayoutRevisionInvalid = "scene.descriptor.layout_revision_invalid";
   inline constexpr std::string_view kSceneDescriptorLightNodeIndexOutOfRange = "scene.descriptor.light_node_index_out_of_range";
@@ -399,6 +406,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kSceneDescriptorOverrideUnknown = "scene.descriptor.override_unknown";
   inline constexpr std::string_view kSceneDescriptorOverrideUnsupported = "scene.descriptor.override_unsupported";
   inline constexpr std::string_view kSceneDescriptorPartKindUnknown = "scene.descriptor.part_kind_unknown";
+  //! The physics sidecar of a re-cooked scene cannot be cooked again: its
+  //! recorded source is in no mount the import has, or cannot be read.
+  inline constexpr std::string_view kSceneDescriptorPhysicsSourceReadFailed = "scene.descriptor.physics_source_read_failed";
+  inline constexpr std::string_view kSceneDescriptorPhysicsSourceUnlocated = "scene.descriptor.physics_source_unlocated";
   inline constexpr std::string_view kSceneDescriptorPostProcessInvalid = "scene.descriptor.post_process_invalid";
   inline constexpr std::string_view kSceneDescriptorPropertyOutOfRange = "scene.descriptor.property_out_of_range";
   inline constexpr std::string_view kSceneDescriptorRecookRequired = "scene.descriptor.recook_required";

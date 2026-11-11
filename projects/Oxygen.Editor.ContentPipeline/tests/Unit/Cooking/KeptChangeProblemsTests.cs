@@ -28,10 +28,10 @@ internal sealed class KeptChangeProblemsTests
         using var raised = new SemaphoreSlim(0);
         problems.ProblemsChanged += (_, _) => raised.Release();
 
-        problems.Take(Result([Harbor], Issue(Harbor, KeptChangeDiagnostics.InstanceOverrideUnresolved), Issue(Harbor, "scene.descriptor.reference_missing")));
+        problems.Take(Result([Harbor], Issue(Harbor, KeptChangeDiagnostics.InstanceOverrideNodeMissing), Issue(Harbor, "scene.descriptor.reference_missing")));
 
         var problem = problems.Problems.Should().ContainSingle().Which.Should().BeOfType<CookProblem>().Subject;
-        _ = problem.Code.Should().Be(KeptChangeDiagnostics.InstanceOverrideUnresolved);
+        _ = problem.Code.Should().Be(KeptChangeDiagnostics.InstanceOverrideNodeMissing);
         _ = problem.Issue.AffectedVirtualPath.Should().Be(Harbor.VirtualPath);
 
         problems.Take(Result([Harbor]));

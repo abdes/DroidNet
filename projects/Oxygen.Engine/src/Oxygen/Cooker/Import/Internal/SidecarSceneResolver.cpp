@@ -26,6 +26,7 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 
 namespace oxygen::content::import::detail {
@@ -78,6 +79,7 @@ namespace {
       .references = std::move(references),
       .environment_offset = environment_offset,
       .node_count = static_cast<uint32_t>(scene_asset->GetNodes().size()),
+      .node_layout_hash = data::ComputeNodeLayoutHash(scene_asset->GetNodes()),
       .existing_scripting_components = {},
     };
 
@@ -261,18 +263,6 @@ auto ReadCookedDescriptor(const internal::MountedCookedSource& mount,
   } catch (const std::exception&) {
     return std::nullopt;
   }
-}
-
-auto FindSceneContent(
-  const std::span<const internal::MountedCookedSource> mounts,
-  const data::AssetKey& scene_key) -> const cooked::CookedContent*
-{
-  const auto* const content = internal::FindListingContent(mounts, scene_key);
-  if (content == nullptr) {
-    return nullptr;
-  }
-  const auto* const asset = content->FindAsset(scene_key);
-  return asset->type == data::AssetType::kScene ? content : nullptr;
 }
 
 auto ResolveTargetSceneState(ImportSession& session,

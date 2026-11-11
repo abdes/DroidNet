@@ -253,6 +253,30 @@ The regeneration units in the physics pipeline are:
 | **Cooked constraint asset** | One cooked constraint blob                                                                            | Per-axis parameter arrays internal to the blob                                                                    |
 | **Cooked vehicle asset**    | One cooked vehicle settings blob                                                                      | Torque-curve, gear-ratio, axle parameter arrays internal to the blob                                              |
 
+The scene package comes from two sources, the scene descriptor and the physics
+sidecar file, cooked by two jobs, so the cook keeps it one unit:
+
+- A sidecar cooked from a file records that file as its source in the cooked
+  index. Sidecar bindings given inline have no file and record the scene's
+  source.
+- A sidecar binds to its scene's node layout (`ComputeNodeLayoutHash`): each
+  node's ID and parent index, in node order, the only part of the scene its
+  node indices depend on.
+- A scene re-cooked with other nodes cooks again each sidecar the cooked root
+  lists for it, from that file, in the same commit. A sidecar that no longer
+  cooks against the new scene fails the scene's import, and the root keeps the
+  pair it held.
+- A commit that would list a sidecar and a scene it was not cooked for is
+  refused with `physics.sidecar.stale`: a scene with changed nodes, or removed, whose
+  sidecar cannot follow (bindings given inline), or a sidecar cooked for a
+  scene the commit does not publish.
+- A scene re-cooked with the same nodes keeps its sidecar, whatever else
+  changed: transforms, components, the environment, or the scripts a scripting
+  sidecar adds to it.
+
+The hydrator's identity check still guards a sidecar from another cooked root,
+which no commit of the scene's root sees.
+
 **Contract V-3 — Any reference that crosses a regeneration unit boundary must
 use `AssetKey`, never a positional index.**
 
@@ -1053,8 +1077,8 @@ _Physics sidecar:_ The cooker computes the sidecar relationships and emits the
 compiled artifact as `Scenes/bouncing_sphere.opscene`. At the head of this file
 is a `PhysicsSceneAssetDesc` whose `target_scene_key` is the `AssetKey` of the
 paired scene (xxHash3-128 of its virtual path — stable identity), whose
-`target_scene_content_hash` is the content hash of the scene descriptor built
-in the same cook run, as its asset header records it (version guard), and whose
+`target_scene_layout_hash` is the hash of the scene's node layout, each node's
+ID and parent index in order (`ComputeNodeLayoutHash`, version guard), and whose
 `target_node_count` matches the exact node count of that scene (quick
 early-reject). A single `RigidBodyBindingRecord` is
 written into the `kRigidBody` component table in the file, pointing to the
@@ -1138,14 +1162,14 @@ of the physics backend.
 
 **What Scenario I validates:**
 
-| Concern                      | Where resolved                                                                                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| L1 ↔ L2 fidelity             | Cooker reads every L1 field and emits a deterministic binary equivalent.                                                                              |
-| Backend portability          | L2 format tag (`kJoltShapeBinary` / `kPhysXShapeBinary`) is the only divergence point; L3 hydration code branches on it.                              |
-| Stale-sidecar safety         | Identity check: `target_scene_key` (AssetKey — routing) + `target_scene_content_hash` (SHA-256 — version guard) + `target_node_count` (quick reject). |
-| Cooking-order stability      | `RigidBodyBindingRecord.node_index` is a stable scene node index; the cooker's deterministic ordering makes it reproducible.                          |
-| Per-instance override        | `RigidBodyBindingRecord` carries all instance-specific values; the shape asset is shared across instances via `AssetKey` lookup.                      |
-| Analytic vs. mesh divergence | Analytic shapes (sphere, capsule, box) bypass the binary-blob cooking path entirely; `CollisionShapeAssetDesc` stores parameters inline.              |
+| Concern                      | Where resolved                                                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| L1 ↔ L2 fidelity             | Cooker reads every L1 field and emits a deterministic binary equivalent.                                                                                                |
+| Backend portability          | L2 format tag (`kJoltShapeBinary` / `kPhysXShapeBinary`) is the only divergence point; L3 hydration code branches on it.                                                |
+| Stale-sidecar safety         | Identity check: `target_scene_key` (AssetKey — routing) + `target_scene_layout_hash` (SHA-256 of the node layout — version guard) + `target_node_count` (quick reject). |
+| Cooking-order stability      | `RigidBodyBindingRecord.node_index` is a stable scene node index; the cooker's deterministic ordering makes it reproducible.                                            |
+| Per-instance override        | `RigidBodyBindingRecord` carries all instance-specific values; the shape asset is shared across instances via `AssetKey` lookup.                                        |
+| Analytic vs. mesh divergence | Analytic shapes (sphere, capsule, box) bypass the binary-blob cooking path entirely; `CollisionShapeAssetDesc` stores parameters inline.                                |
 
 ---
 

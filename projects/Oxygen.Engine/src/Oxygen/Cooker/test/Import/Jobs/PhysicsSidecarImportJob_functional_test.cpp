@@ -86,7 +86,8 @@ namespace {
     EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
       cooked_root, "Scenes/DemoScene.opscene"));
 
-    // The sidecar's entries record the scene's source, not the sidecar's.
+    // Bindings given inline have no file: the entries record the scene's
+    // source.
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
       = index.FindAssetKeyByVirtualPath("/Cooked/Scenes/DemoScene.opscene");

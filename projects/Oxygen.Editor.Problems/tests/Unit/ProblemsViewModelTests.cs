@@ -173,7 +173,7 @@ internal sealed partial class ProblemsViewModelTests : IDisposable
             OperationId = Guid.NewGuid(),
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Warning,
-            Code = KeptChangeDiagnostics.InstanceOverrideUnresolved,
+            Code = KeptChangeDiagnostics.InstanceOverrideNodeMissing,
             Message = "Kept change of 'Body/Door_FL' in the instance under 'Car': it has no effect until it resolves",
             AffectedPath = @"C:\Project\Content\Harbor.oscene.json",
             SuggestedAction = new PrimaryAction

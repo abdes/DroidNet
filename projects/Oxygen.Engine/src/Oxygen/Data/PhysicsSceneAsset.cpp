@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetType.h>
@@ -179,10 +181,28 @@ auto PhysicsSceneAsset::CheckTarget(const SceneAsset& scene) const -> void
       "physics sidecar node count differs from its scene's");
   }
   if (!std::ranges::equal(
-        GetTargetSceneContentHash(), scene.GetContentHash())) {
+        GetTargetSceneLayoutHash(), ComputeNodeLayoutHash(scene.GetNodes()))) {
     throw CookedFormatError(CookedDefect::kDigestMismatch,
-      "physics sidecar was cooked against another version of its scene");
+      "physics sidecar was cooked against other nodes of its scene");
   }
+}
+
+auto ComputeNodeLayoutHash(const std::span<const pak::world::NodeRecord> nodes)
+  -> pak::core::ContentHashDigest
+{
+  auto hasher = base::Sha256 {};
+  for (const auto& node : nodes) {
+    hasher.Update(std::as_bytes(std::span(node.node_id.Bytes())));
+    const auto parent = node.parent_index;
+    const auto parent_bytes = std::array {
+      static_cast<std::byte>(parent & 0xFFU),
+      static_cast<std::byte>((parent >> 8U) & 0xFFU),
+      static_cast<std::byte>((parent >> 16U) & 0xFFU),
+      static_cast<std::byte>((parent >> 24U) & 0xFFU),
+    };
+    hasher.Update(parent_bytes);
+  }
+  return hasher.Finalize();
 }
 
 auto PhysicsSceneAsset::GetSoftBodyVertices(const std::size_t binding) const

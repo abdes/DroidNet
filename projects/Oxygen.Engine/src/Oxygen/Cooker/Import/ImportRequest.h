@@ -140,8 +140,9 @@ struct ImportRequest final {
   /*!
    Whoever locates the source sets it from its mount table, as an import
    manifest does for each job (`MountTable::LocateSource`). The loose cooked
-   index records it as the producer of every entry the job writes; a sidecar
-   records its scene's producer instead. A job that writes entries without it
+   index records it as the producer of every entry the job writes; a scripting
+   sidecar, or physics bindings given inline, records its scene's producer
+   instead. A job that writes entries without it
    fails with `import.source_outside_mount`.
   */
   std::string source_mount_path;

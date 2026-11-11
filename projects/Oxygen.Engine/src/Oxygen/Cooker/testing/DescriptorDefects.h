@@ -288,8 +288,9 @@ struct DescriptorDefects final {
   static auto SetSidecarBackend(std::vector<std::byte>& sidecar,
     data::pak::physics::PhysicsBackend backend) -> void;
 
-  //! Changes the content hash of its scene the sidecar records.
-  static auto CorruptSidecarSceneHash(std::vector<std::byte>& sidecar) -> void;
+  //! Changes the node layout hash of its scene the sidecar records.
+  static auto CorruptSidecarSceneLayout(std::vector<std::byte>& sidecar)
+    -> void;
 
   //! Records `size` as the entry size of the sidecar's binding table `type`.
   static auto SetBindingEntrySize(std::vector<std::byte>& sidecar,

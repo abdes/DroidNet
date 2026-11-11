@@ -357,7 +357,7 @@ NOLINT_TEST(PakFormatLayoutPhysicsTest, PhysicsSceneAssetDescWireBytes)
     .backend = physics::PhysicsBackend::kPhysX,
   };
   std::ranges::copy(
-    Digest(0x70U), std::ranges::begin(scene.target_scene_content_hash));
+    Digest(0x70U), std::ranges::begin(scene.target_scene_layout_hash));
 
   auto expected = WireBytes {};
   expected.Append(HeaderBytes())

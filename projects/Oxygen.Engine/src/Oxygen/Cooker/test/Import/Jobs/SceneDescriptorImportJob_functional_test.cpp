@@ -46,6 +46,7 @@
 #include <Oxygen/Cooker/testing/LooseCookedRoot.h>
 #include <Oxygen/Cooker/testing/MaterialBuilder.h>
 #include <Oxygen/Cooker/testing/Materialize.h>
+#include <Oxygen/Cooker/testing/SceneBuilder.h>
 #include <Oxygen/Cooker/testing/Seeds.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
@@ -321,13 +322,20 @@ namespace {
         { "components", std::move(components) },
       };
     };
+    // The eye is no camera, so it has no near plane to change.
+    auto lens = nlohmann::json::object();
+    lens["perspective-camera"]["values"]["/near_plane"] = 0.5;
+    const auto lens_change = nlohmann::json {
+      { "path", nlohmann::json::array({ kEye }) },
+      { "components", std::move(lens) },
+    };
     auto level = SceneDescriptor { "/Cooked/Scenes/Level.oscene" };
     const auto rig_node = level.Node("rig", 0U);
     level
       .Set("/nodes/" + std::to_string(rig_node) + "/instance",
         json { { "scene_ref", level.Spell("/Cooked/Scenes/Rig.oscene") } })
       .Set("/nodes/1/instance/overrides",
-        nlohmann::json::array({ change(kEye), change(kStranger) }))
+        nlohmann::json::array({ change(kEye), change(kStranger), lens_change }))
       .Set("/starting_camera",
         json { { "node", 1 }, { "path", nlohmann::json::array({ kEye }) } });
 
@@ -335,8 +343,22 @@ namespace {
 
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
-    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
-      import_codes::kSceneDescriptorInstanceOverrideUnresolved));
+    // Each names the node path and what it lacks.
+    const auto stranger = std::ranges::find(report->diagnostics,
+      import_codes::kSceneDescriptorInstanceOverrideNodeMissing,
+      &ImportDiagnostic::code);
+    ASSERT_NE(stranger, report->diagnostics.end());
+    EXPECT_THAT(stranger->message,
+      ::testing::HasSubstr("'/" + std::string(kStranger) + "'"));
+    EXPECT_THAT(stranger->json_pointer,
+      ::testing::StartsWith("/nodes/1/instance/overrides/1/"));
+    const auto lens_missing = std::ranges::find(report->diagnostics,
+      import_codes::kSceneDescriptorInstanceOverrideTargetMissing,
+      &ImportDiagnostic::code);
+    ASSERT_NE(lens_missing, report->diagnostics.end());
+    EXPECT_THAT(lens_missing->message,
+      ::testing::AllOf(::testing::HasSubstr("'/" + std::string(kEye) + "'"),
+        ::testing::HasSubstr("perspective-camera/near_plane")));
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, import_codes::kSceneStartingCameraUnresolved));
     const auto scene = data::SceneAsset(
@@ -1481,6 +1503,132 @@ namespace {
       scene.GetComponents<data::pak::world::RenderableRecord>().size(), 1U);
     EXPECT_TRUE(
       scene.GetComponents<data::pak::world::OverrideRecord>().empty());
+  }
+
+  //! The bytes of `record`, which the format compares whole.
+  template <typename Record>
+  auto RecordBytes(const Record& record) -> std::vector<std::byte>
+  {
+    const auto bytes = std::as_bytes(std::span(&record, 1U));
+    return { bytes.begin(), bytes.end() };
+  }
+
+  //! The records of type `Record` of `scene`, each as its bytes.
+  template <typename Record>
+  auto ComponentBytes(const data::SceneAsset& scene)
+    -> std::vector<std::vector<std::byte>>
+  {
+    auto records = std::vector<std::vector<std::byte>> {};
+    for (const auto& record : scene.GetComponents<Record>()) {
+      records.push_back(RecordBytes(record));
+    }
+    return records;
+  }
+
+  /*!
+   Scenario: a scene descriptor and the test kit's `SceneBuilder` describe one
+   scene: nodes with transforms and flags, a camera the scene starts through
+   and a light. The job cooks what the builder builds: the same nodes, names,
+   components and starting camera. The order of the component directory is
+   the writer's choice and is not compared.
+  */
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, CooksWhatTheSceneBuilderBuilds)
+  {
+    namespace world = data::pak::world;
+    using oxygen::cooker::testing::SceneBuilder;
+    auto built = SceneBuilder { "Hall" };
+    const auto root_node = built.Node("Root");
+    const auto eye_node = built.Node("Eye", root_node);
+    built
+      .Place(eye_node,
+        {
+          .translation = { 1.0F, 2.0F, -3.0F },
+          .rotation = { 0.0F, 0.0F, 0.0F, 1.0F },
+          .scale = { 2.0F, 2.0F, 2.0F },
+        })
+      .Flags(root_node,
+        {
+          .values = world::kSceneNodeFlag_Visible
+            | world::kSceneNodeFlag_CastsShadows | world::kSceneNodeFlag_Static,
+          .inherited = 0U,
+        })
+      .Flags(eye_node,
+        {
+          .values = world::kSceneNodeFlag_ReceivesShadows
+            | world::kSceneNodeFlag_RayCastingSelectable,
+          .inherited
+          = world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows,
+        })
+      .PerspectiveCamera(eye_node, SceneBuilder::DefaultPerspectiveCamera())
+      .DirectionalLight(root_node, SceneBuilder::DefaultDirectionalLight())
+      .StartingCamera(eye_node);
+
+    auto authored = SceneDescriptor { "/Cooked/Scenes/Hall.oscene" };
+    const auto eye = authored.Node("Eye", 0U);
+    const auto eye_path = "/nodes/" + std::to_string(eye);
+    authored.Set("/nodes/0/id", data::to_string(built.IdOf(root_node)))
+      .Set("/nodes/0/flags",
+        json {
+          { "visible", "shown" },
+          { "casts_shadows", "on" },
+          { "receives_shadows", "off" },
+          { "static", true },
+          { "ray_cast_selectable", false },
+          { "ignore_parent_transform", false },
+        })
+      .Set(eye_path + "/id", data::to_string(built.IdOf(eye_node)))
+      .Set(eye_path + "/transform",
+        json {
+          { "translation", json::array({ 1.0, 2.0, -3.0 }) },
+          { "rotation", json::array({ 0.0, 0.0, 0.0, 1.0 }) },
+          { "scale", json::array({ 2.0, 2.0, 2.0 }) },
+        })
+      .Set(eye_path + "/flags",
+        json {
+          { "visible", "inherit" },
+          { "casts_shadows", "inherit" },
+          { "receives_shadows", "on" },
+          { "static", false },
+          { "ray_cast_selectable", true },
+          { "ignore_parent_transform", false },
+        })
+      .Set("/cameras/perspective", json::array({ json { { "node", eye } } }))
+      .Set("/lights/directional", json::array({ json { { "node", 0 } } }))
+      .Set("/starting_camera", json { { "node", eye } });
+    const auto root = TempDir() / "builder_parity";
+    std::filesystem::create_directories(root);
+
+    const auto report = Import(MakeRequest(root, authored));
+
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    const auto cooked = data::SceneAsset(
+      data::AssetKey {}, ReadBytes(CookedFile(root, "Scenes/Hall.oscene")));
+    const auto built_scene = built.Build(data::AssetKey {});
+    ASSERT_NE(built_scene, nullptr);
+    const auto& expected = *built_scene;
+    EXPECT_EQ(cooked.GetStrings().Get(cooked.GetHeader().name_offset),
+      expected.GetStrings().Get(expected.GetHeader().name_offset));
+    ASSERT_EQ(cooked.GetNodes().size(), expected.GetNodes().size());
+    for (size_t index = 0; index < expected.GetNodes().size(); ++index) {
+      auto node = cooked.GetNodes()[index];
+      auto want = expected.GetNodes()[index];
+      // Names compare as text: string table offsets are the writer's.
+      EXPECT_EQ(cooked.GetStrings().Get(node.scene_name_offset),
+        expected.GetStrings().Get(want.scene_name_offset));
+      node.scene_name_offset = 0;
+      want.scene_name_offset = 0;
+      EXPECT_EQ(RecordBytes(node), RecordBytes(want)) << "node " << index;
+    }
+    EXPECT_EQ(ComponentBytes<world::PerspectiveCameraRecord>(cooked),
+      ComponentBytes<world::PerspectiveCameraRecord>(expected));
+    EXPECT_EQ(ComponentBytes<world::DirectionalLightRecord>(cooked),
+      ComponentBytes<world::DirectionalLightRecord>(expected));
+    const auto cooked_camera = cooked.GetStartingCamera();
+    const auto expected_camera = expected.GetStartingCamera();
+    ASSERT_HAS_VALUE(cooked_camera);
+    ASSERT_HAS_VALUE(expected_camera);
+    EXPECT_EQ(RecordBytes(*cooked_camera), RecordBytes(*expected_camera));
   }
 
 } // namespace

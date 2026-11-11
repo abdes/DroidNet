@@ -176,12 +176,25 @@ struct ComposedOccurrence {
   std::vector<ReachingChange> changes;
 };
 
+//! Why a change does not resolve.
+enum class UnresolvedReason : std::uint8_t {
+  //! Its path names no node of the scene it reaches.
+  kNodeMissing,
+  //! Its node has no record for the property, or no such script slot.
+  kTargetMissing,
+};
+
+//! The reason's name, such as `node_missing`.
+OXGN_DATA_NDAPI auto to_string(UnresolvedReason reason) noexcept
+  -> std::string_view;
+
 //! A change whose address does not resolve; it has no effect.
 struct UnresolvedChange {
   //! The change as its scene made it, its path below `instance_root`.
   SceneChange change;
   ChangeSupplier supplier = 0;
   pak::world::SceneNodeIndexT instance_root = 0;
+  UnresolvedReason reason = UnresolvedReason::kNodeMissing;
 };
 
 enum class CompositionIssueCode : std::uint8_t {

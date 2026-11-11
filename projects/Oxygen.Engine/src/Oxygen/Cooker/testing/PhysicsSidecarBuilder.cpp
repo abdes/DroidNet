@@ -251,8 +251,8 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
   const std::span<const std::byte> scene_bytes,
   const std::string_view name) const -> std::vector<std::byte>
 {
-  const auto node_count = static_cast<uint32_t>(
-    data::SceneAsset(scene_key, scene_bytes).GetNodes().size());
+  const auto scene = data::SceneAsset(scene_key, scene_bytes);
+  const auto node_count = static_cast<uint32_t>(scene.GetNodes().size());
   if (owner_.has_value() && highest_node_ >= node_count) {
     throw std::invalid_argument("a binding names a node the scene '"
       + to_string(scene_key) + "' does not hold");
@@ -293,8 +293,8 @@ auto PhysicsSidecarBuilder::Bytes(const data::AssetKey& scene_key,
   desc.target_scene_key = scene_key;
   desc.target_node_count = node_count;
   desc.backend = backend_;
-  const auto hash = data::ComputeDescriptorHash(scene_bytes);
-  std::ranges::copy(hash, std::begin(desc.target_scene_content_hash));
+  std::ranges::copy(data::ComputeNodeLayoutHash(scene.GetNodes()),
+    std::begin(desc.target_scene_layout_hash));
   desc.component_table_count = static_cast<uint32_t>(tables.size());
   desc.component_table_directory_offset
     = tables.empty() ? 0U : static_cast<data::pak::core::OffsetT>(sizeof(desc));

@@ -858,7 +858,7 @@ namespace {
     auto sidecar = cooker::testing::PhysicsSidecarBuilder {}.Bytes(
       SceneKey(), scene->GetRawData(), "PhysicsScene");
     if (!target.matches_content) {
-      DescriptorDefects::CorruptSidecarSceneHash(sidecar);
+      DescriptorDefects::CorruptSidecarSceneLayout(sidecar);
     }
     if (target.scene_key != SceneKey()) {
       DescriptorDefects::SetSidecarScene(sidecar, target.scene_key);

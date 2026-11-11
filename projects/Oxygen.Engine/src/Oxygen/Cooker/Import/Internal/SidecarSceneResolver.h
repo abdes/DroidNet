@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 
 namespace oxygen::content::import {
@@ -47,6 +48,8 @@ struct ResolvedSceneState final {
   data::AssetReferences references;
   size_t environment_offset = 0;
   uint32_t node_count = 0;
+  //! The layout hash of its nodes (`data::ComputeNodeLayoutHash`).
+  data::pak::core::ContentHashDigest node_layout_hash {};
   std::vector<data::pak::scripting::ScriptingComponentRecord>
     existing_scripting_components;
 };
@@ -56,12 +59,6 @@ struct ResolvedSceneState final {
 OXGN_COOK_NDAPI auto ReadCookedDescriptor(
   const internal::MountedCookedSource& mount, const data::AssetKey& key)
   -> std::optional<std::vector<std::byte>>;
-
-//! The content of the mounted cooked root of the highest precedence that
-//! lists the scene `scene_key`; null when none does.
-OXGN_COOK_NDAPI auto FindSceneContent(
-  std::span<const internal::MountedCookedSource> mounts,
-  const data::AssetKey& scene_key) -> const cooked::CookedContent*;
 
 //! Resolve the target scene of a sidecar, its identity: a scene the same
 //! batch imports, else the scene a mounted cooked root lists.

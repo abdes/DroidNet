@@ -89,6 +89,22 @@ public:
   using std::runtime_error::runtime_error;
 };
 
+//! A commit refused because it would list a physics sidecar and a scene it
+//! does not match.
+/*!
+ A scene and its physics sidecar are one regeneration unit: the sidecar names
+ the scene's key and the hash of its node layout
+ (`data::ComputeNodeLayoutHash`). A session that re-cooks a scene with other
+ nodes, or retires it, also re-cooks or removes the sidecar the root lists for
+ it; a scene re-cooked with the same nodes keeps its sidecar, whatever else
+ changed, and a sidecar is cooked for the nodes of the scene the commit lists.
+ The import reports it as `physics.sidecar.stale`.
+*/
+class LooseCookedStaleSidecar final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
+};
+
 //! An index entry refused because its identity is in another mount.
 /*!
  A cooked root holds one mount, the one its identities name
@@ -415,6 +431,9 @@ public:
 
    @return Summary of written assets and file records.
 
+   @throw LooseCookedStaleSidecar if the commit would list a physics sidecar
+     and a scene it does not match, where this session wrote either or
+     retired the scene.
    @throw std::runtime_error if required metadata is missing or index emission
      fails.
   */

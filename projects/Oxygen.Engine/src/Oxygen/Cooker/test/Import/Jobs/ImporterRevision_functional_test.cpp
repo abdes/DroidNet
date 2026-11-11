@@ -195,9 +195,9 @@ namespace {
     },
     {
       .importer = Importer::kPhysicsSidecar,
-      .revision = 6,
+      .revision = 7,
       .digest
-      = "f09ba89bf8980775d4a2e4f3a4d3729696afcbc8133c2d5a12d987f540c768ac",
+      = "08754b658d9401d17c2b0976e267aaff6511339594a9e79ccf7966e023b4c0a7",
     },
     {
       .importer = Importer::kInput,

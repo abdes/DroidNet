@@ -29,20 +29,25 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
+#include <Oxygen/Cooker/Import/Internal/ScenePhysicsFollowers.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/SourceMounts.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -55,12 +60,16 @@
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SceneComposition.h>
 #include <Oxygen/Data/SceneIds.h>
 #include <Oxygen/Data/Schema/Generated.SceneComponents.h>
+#include <Oxygen/Data/StableId.h>
 #include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -146,6 +155,83 @@ namespace {
     -> std::chrono::microseconds
   {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+  }
+
+  //! The physics sidecars the job's own cooked root lists for the scene in
+  //! flight `scene` that were cooked for other nodes.
+  auto FindPhysicsFollowers(const ImportSession& session,
+    const std::span<const internal::MountedCookedSource> mounts,
+    const ImportRequest::InflightSceneContext& scene)
+    -> std::vector<internal::ScenePhysicsFollower>
+  {
+    const auto own_root = session.CookedRoot().lexically_normal();
+    for (const auto& mount : mounts) {
+      if (mount.content.has_value()
+        && mount.root.lexically_normal() == own_root) {
+        const auto layout = data::ComputeNodeLayoutHash(
+          data::SceneAsset(scene.scene_key, scene.descriptor_bytes).GetNodes());
+        return internal::FindScenePhysicsFollowers(
+          *mount.content, scene.scene_key, layout);
+      }
+    }
+    return {};
+  }
+
+  auto FinalizeInto(ImportSession& session, ImportReport& report) -> co::Co<>
+  {
+    report = co_await session.Finalize();
+  }
+
+  //! Adds to the scene's `report` what cooking a sidecar that follows it
+  //! reported: its diagnostics, and its outputs when it published.
+  /*!
+   A publication failure reaches every session of the cohort alike, so a
+   diagnostic the scene already reports is not repeated.
+  */
+  auto MergeFollowerReport(ImportReport& report, ImportReport follower) -> void
+  {
+    const auto reported = [&report](const ImportDiagnostic& diagnostic) {
+      return std::ranges::any_of(
+        report.diagnostics, [&diagnostic](const ImportDiagnostic& held) {
+          return held.severity == diagnostic.severity
+            && held.code == diagnostic.code
+            && held.message == diagnostic.message
+            && held.source_path == diagnostic.source_path;
+        });
+    };
+    for (auto& diagnostic : follower.diagnostics) {
+      if (reported(diagnostic)) {
+        continue;
+      }
+      switch (diagnostic.severity) {
+      case ImportSeverity::kInfo:
+        ++report.packaging.diagnostics_info;
+        break;
+      case ImportSeverity::kWarning:
+        ++report.packaging.diagnostics_warning;
+        break;
+      case ImportSeverity::kError:
+        ++report.packaging.diagnostics_error;
+        break;
+      }
+      report.diagnostics.push_back(std::move(diagnostic));
+    }
+    if (follower.success) {
+      for (auto& output : follower.outputs) {
+        const auto listed = std::ranges::any_of(
+          report.outputs, [&output](const ImportOutputRecord& held) -> bool {
+            return held.path == output.path;
+          });
+        if (!listed) {
+          report.outputs.push_back(std::move(output));
+        }
+      }
+      report.packaging.outputs_written
+        = static_cast<uint32_t>(report.outputs.size());
+      report.packaging.index_written
+        = report.packaging.index_written || follower.packaging.index_written;
+    }
+    report.success = report.success && follower.success;
   }
 
   template <typename RecordT>
@@ -570,6 +656,35 @@ namespace {
     return nullptr;
   }
 
+  //! Warns that the change `change` of an instance of `scene` does not
+  //! resolve, for `reason`, naming its node path and property.
+  auto WarnUnresolvedChange(SceneDescriptorExecutionContext& context,
+    const std::string_view scene,
+    const internal::SceneSource::InstanceChange& change,
+    const data::UnresolvedReason reason) -> void
+  {
+    auto path = std::string {};
+    for (const auto& id : change.path) {
+      path += "/" + data::to_string(id);
+    }
+    const auto& property = *change.change.property;
+    const auto property_name
+      = std::string(property.component_kind) + std::string(property.key);
+    const auto node_missing = reason == data::UnresolvedReason::kNodeMissing;
+    AddDiagnostic(context.session, context.request, ImportSeverity::kWarning,
+      std::string(node_missing
+          ? import_codes::kSceneDescriptorInstanceOverrideNodeMissing
+          : import_codes::kSceneDescriptorInstanceOverrideTargetMissing),
+      node_missing
+        ? "The change of '" + property_name + "' names the node path '" + path
+          + "', which the instanced scene '" + std::string(scene)
+          + "' does not hold; it has no effect until the node is back"
+        : "The node '" + path + "' of the instanced scene '"
+          + std::string(scene) + "' has no '" + property_name
+          + "'; the change has no effect until the node has it",
+      change.change.json_pointer);
+  }
+
   //! Composes each instance of the scene with the cooked instanced scenes.
   /*!
    A cycle, or a change whose value its record refuses, fails the cook. A
@@ -645,7 +760,7 @@ namespace {
       auto kept = std::vector<internal::SceneSource::InstanceChange> {};
       for (auto&& [index, change] : std::views::enumerate(instance->changes)) {
         const auto& as_composed = changes.at(static_cast<size_t>(index));
-        const auto unresolved = std::ranges::any_of(composed.unresolved,
+        const auto unresolved = std::ranges::find_if(composed.unresolved,
           [&](const data::UnresolvedChange& entry) -> bool {
             const auto* record = std::get_if<data::pak::world::OverrideRecord>(
               &entry.change.change);
@@ -655,14 +770,9 @@ namespace {
               && record->override_id == own.override_id
               && record->part_id == own.part_id;
           });
-        if (unresolved) {
-          AddDiagnostic(context.session, context.request,
-            ImportSeverity::kWarning,
-            std::string(
-              import_codes::kSceneDescriptorInstanceOverrideUnresolved),
-            "The change names no node of the instanced scene, or a property "
-            "that node does not have; it has no effect until it resolves",
-            change.change.json_pointer);
+        if (unresolved != composed.unresolved.end()) {
+          WarnUnresolvedChange(
+            context, instance->scene, change, unresolved->reason);
           continue;
         }
         if (change.change.property->part_kind
@@ -1130,15 +1240,47 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto emit_start = std::chrono::steady_clock::now();
   auto& cooked = *result.cooked;
+  const auto in_flight = ImportRequest::InflightSceneContext {
+    .scene_key = cooked.scene_key,
+    .virtual_path = cooked.virtual_path,
+    .source_path = Request().source_mount_path,
+    .descriptor_relpath = cooked.descriptor_relpath,
+    .descriptor_bytes = cooked.descriptor_bytes,
+    .references = cooked.references,
+  };
+  const auto physics_followers
+    = FindPhysicsFollowers(session, context.mounts, in_flight);
+  // The mounts keep files of the cooked root open; the commit writes it.
+  context.mounts.clear();
+  const auto followers
+    = co_await CookPhysicsFollowers(session, physics_followers, in_flight);
+
+  const auto emit_start = std::chrono::steady_clock::now();
   session.AssetEmitter().Emit(cooked.scene_key, data::AssetType::kScene,
     cooked.virtual_path, cooked.descriptor_relpath, cooked.descriptor_bytes,
     std::move(cooked.references));
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 
-  auto report = co_await FinalizeWithTelemetry(session);
+  // The scene and the sidecars that follow it end their sessions together:
+  // each commit waits for the whole cohort.
+  auto report = ImportReport {};
+  auto follower_reports = std::vector<ImportReport>(followers.size());
+  auto finalizations = std::vector<co::Co<>> {};
+  finalizations.reserve(followers.size() + 1U);
+  finalizations.push_back([](const auto& finalize, ImportSession& own,
+                            ImportReport& out) -> co::Co<> {
+    out = co_await finalize(own);
+  }(FinalizeWithTelemetry, session, report));
+  for (size_t index = 0; index < followers.size(); ++index) {
+    finalizations.push_back(
+      FinalizeInto(*followers.at(index), follower_reports.at(index)));
+  }
+  co_await co::AllOf(std::move(finalizations));
+  for (auto& follower_report : follower_reports) {
+    MergeFollowerReport(report, std::move(follower_report));
+  }
   ReportPhaseProgress(
     report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
     report.success ? "Import complete" : "Import failed");
@@ -1149,6 +1291,87 @@ auto SceneDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {
   co_return co_await session.Finalize();
+}
+
+auto SceneDescriptorImportJob::CookPhysicsFollowers(ImportSession& session,
+  const std::span<const internal::ScenePhysicsFollower> followers,
+  const ImportRequest::InflightSceneContext& scene)
+  -> co::Co<std::vector<observer_ptr<ImportSession>>>
+{
+  auto companions = std::vector<observer_ptr<ImportSession>> {};
+  struct FollowerCook final {
+    ImportRequest request;
+    serio::ByteBuffer source_bytes;
+  };
+  auto cooks = std::vector<FollowerCook> {};
+  for (const auto& follower : followers) {
+    auto findings = std::vector<ImportDiagnostic> {};
+    auto located = std::optional<MountedSource> {};
+    if (Request().source_mounts != nullptr) {
+      located = Request().source_mounts->LocateSource(
+        CommittedPath {
+          .text = follower.source_mount_path, .json_pointer = {} },
+        findings);
+    }
+    if (!located.has_value()) {
+      AddDiagnostics(session, std::move(findings));
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        std::string(import_codes::kSceneDescriptorPhysicsSourceUnlocated),
+        "The physics sidecar '" + follower.virtual_path
+          + "' of this scene must be cooked again, and its source '"
+          + follower.source_mount_path
+          + "' is in no source mount of this import");
+      continue;
+    }
+    auto bytes = co_await FileReader()->ReadFile(located->file);
+    if (!bytes.has_value()) {
+      AddDiagnostic(session, Request(), ImportSeverity::kError,
+        std::string(import_codes::kSceneDescriptorPhysicsSourceReadFailed),
+        "The physics sidecar '" + follower.virtual_path
+          + "' of this scene must be cooked again, and its source '"
+          + located->file.string()
+          + "' cannot be read: " + bytes.error().message());
+      continue;
+    }
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto request = internal::BuildScenePhysicsFollowerRequest(
+      Request(), follower, located->file, scene, diagnostics);
+    AddDiagnostics(session, std::move(diagnostics));
+    if (request.has_value()) {
+      cooks.push_back({
+        .request = std::move(*request),
+        .source_bytes = std::move(*bytes),
+      });
+    }
+  }
+  if (cooks.empty() || session.HasErrors()) {
+    co_return companions;
+  }
+
+  auto& pipeline = CreatePipeline<PhysicsSidecarImportPipeline>(
+    PhysicsSidecarImportPipeline::Config {
+      .queue_capacity = Concurrency().scene.queue_capacity,
+      .worker_count = Concurrency().scene.workers,
+    });
+  for (auto& cook : cooks) {
+    auto source_id = cook.request.source_path.string();
+    auto& companion = CompanionSession(std::move(cook.request));
+    companions.emplace_back(&companion);
+    co_await pipeline.Submit(PhysicsSidecarImportPipeline::WorkItem {
+      .source_id = std::move(source_id),
+      .source_bytes = std::move(cook.source_bytes),
+      .session = observer_ptr { &companion },
+      .stop_token = StopToken(),
+    });
+    // A sidecar that failed reports on its own session, whose commit then
+    // leaves the scene's refused as stale.
+    const auto cooked = co_await pipeline.Collect();
+    if (cooked.telemetry.cook_duration.has_value()) {
+      session.AddCookDuration(*cooked.telemetry.cook_duration);
+    }
+  }
+  pipeline.Close();
+  co_return companions;
 }
 
 } // namespace oxygen::content::import::detail

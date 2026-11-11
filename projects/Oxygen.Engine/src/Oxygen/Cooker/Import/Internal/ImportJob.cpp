@@ -391,6 +391,20 @@ auto ImportJob::Session() -> ImportSession&
   return *session_;
 }
 
+auto ImportJob::CompanionSession(ImportRequest request) -> ImportSession&
+{
+  DCHECK_F(
+    producer_nursery_ != nullptr, "ImportJob producer nursery is not open");
+  auto companion = std::make_unique<Companion>();
+  companion->request = std::move(request);
+  companion->session = std::make_unique<ImportSession>(companion->request,
+    file_reader_, driver_, observer_ptr { producer_nursery_ }, thread_pool_,
+    table_registry_, index_registry_, cooked_reader_);
+  auto& session = *companion->session;
+  companions_.push_back(std::move(companion));
+  return session;
+}
+
 auto ImportJob::RequestProducerStop() -> void
 {
   stop_source_.request_stop();
@@ -541,6 +555,12 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
     }
   };
   try {
+    // A companion still in its cohort aborts it, as the job's own session
+    // would: neither commits without the other.
+    for (auto& companion : companions_) {
+      co_await companion->session->DrainAndRetire();
+    }
+    companions_.clear();
     if (session_) {
       co_await session_->DrainAndRetire();
       capture_session_timing();

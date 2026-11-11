@@ -90,6 +90,18 @@ namespace detail {
 
 } // namespace detail
 
+//! The hash of the node layout a physics sidecar binds to: each node's ID and
+//! parent index, in node order.
+/*!
+ A sidecar names its scene's nodes by index, so it stays valid across any
+ change that keeps them: transforms, names, flags, components, scripts and the
+ environment. SHA-256 of each node's 16 ID bytes then its parent index as 4
+ little-endian bytes.
+*/
+OXGN_DATA_NDAPI auto ComputeNodeLayoutHash(
+  std::span<const pak::world::NodeRecord> nodes)
+  -> pak::core::ContentHashDigest;
+
 //! Represents a loaded Physics Scene sidecar asset.
 /*!
   PhysicsSceneAsset is the validating reader of a cooked physics sidecar
@@ -159,19 +171,20 @@ public:
     return desc_.backend;
   }
 
-  //! The content hash of the paired scene when this sidecar was cooked.
-  [[nodiscard]] auto GetTargetSceneContentHash() const noexcept
+  //! The layout hash of the paired scene's nodes when this sidecar was cooked
+  //! (`ComputeNodeLayoutHash`).
+  [[nodiscard]] auto GetTargetSceneLayoutHash() const noexcept
     -> std::span<const uint8_t, 32>
   {
-    return std::span<const uint8_t, 32> { desc_.target_scene_content_hash };
+    return std::span<const uint8_t, 32> { desc_.target_scene_layout_hash };
   }
 
   //! Checks that `scene` is the scene this sidecar was cooked against: its
-  //! key, its node count and its content hash.
+  //! key, its node count and its node layout.
   /*!
    @throw CookedFormatError `kInvalidReference` when `scene` has another key,
      `kInconsistent` when it has another node count, and `kDigestMismatch`
-     when it has another content hash.
+     when it has another node layout.
   */
   OXGN_DATA_API auto CheckTarget(const SceneAsset& scene) const -> void;
 

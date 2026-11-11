@@ -540,11 +540,11 @@ auto DescriptorDefects::SetSidecarBackend(std::vector<std::byte>& sidecar,
     sidecar, 0U, [backend](auto& desc) -> void { desc.backend = backend; });
 }
 
-auto DescriptorDefects::CorruptSidecarSceneHash(std::vector<std::byte>& sidecar)
-  -> void
+auto DescriptorDefects::CorruptSidecarSceneLayout(
+  std::vector<std::byte>& sidecar) -> void
 {
   EditRecord<physics::PhysicsSceneAssetDesc>(sidecar, 0U,
-    [](auto& desc) -> void { desc.target_scene_content_hash[0] ^= 0xFFU; });
+    [](auto& desc) -> void { desc.target_scene_layout_hash[0] ^= 0xFFU; });
 }
 
 auto DescriptorDefects::SetBindingEntrySize(std::vector<std::byte>& sidecar,

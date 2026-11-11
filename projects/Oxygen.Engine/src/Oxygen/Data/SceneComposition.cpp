@@ -291,12 +291,14 @@ namespace {
     }
 
   private:
-    auto Unresolved(const ReachingChange& reaching) -> void
+    auto Unresolved(
+      const ReachingChange& reaching, const UnresolvedReason reason) -> void
     {
       result_.unresolved.push_back({
         .change = reaching.change,
         .supplier = reaching.supplier,
         .instance_root = reaching.supplier_root,
+        .reason = reason,
       });
     }
 
@@ -397,13 +399,13 @@ namespace {
           ? by_id.find(path.at(change.consumed))
           : by_id.end();
         if (found == by_id.end()) {
-          Unresolved(change);
+          Unresolved(change, UnresolvedReason::kNodeMissing);
           continue;
         }
         const auto index = found->second;
         if (path.size() > change.consumed + 1U) {
           if (!is_root(index)) {
-            Unresolved(change);
+            Unresolved(change, UnresolvedReason::kNodeMissing);
             continue;
           }
           ++change.consumed;
@@ -420,7 +422,7 @@ namespace {
           },
           change.change.change);
         if (outcome == ChangeOutcome::kUnresolved) {
-          Unresolved(change);
+          Unresolved(change, UnresolvedReason::kTargetMissing);
         } else if (outcome == ChangeOutcome::kInvalid) {
           Issue(CompositionIssueCode::kChangeInvalid, self, index);
         }
@@ -478,6 +480,17 @@ namespace {
   };
 
 } // namespace
+
+auto to_string(const UnresolvedReason reason) noexcept -> std::string_view
+{
+  switch (reason) {
+  case UnresolvedReason::kNodeMissing:
+    return "node_missing";
+  case UnresolvedReason::kTargetMissing:
+    return "target_missing";
+  }
+  return "__NotSupported__";
+}
 
 auto to_string(const CompositionIssueCode code) noexcept -> std::string_view
 {

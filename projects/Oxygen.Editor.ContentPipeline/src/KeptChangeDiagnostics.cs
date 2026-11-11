@@ -17,8 +17,11 @@ public static class KeptChangeDiagnostics
     /// <summary>The property path Go To Property focuses: the caution box of the Scene Instance section.</summary>
     public const string PropertyPath = "SceneInstance.KeptChanges";
 
-    /// <summary>An instance's change names no node of its source, or a property that node does not have.</summary>
-    public const string InstanceOverrideUnresolved = "scene.descriptor.instance_override_unresolved";
+    /// <summary>An instance's change names a node path its source does not hold.</summary>
+    public const string InstanceOverrideNodeMissing = "scene.descriptor.instance_override_node_missing";
+
+    /// <summary>An instance's change names a property its node does not have.</summary>
+    public const string InstanceOverrideTargetMissing = "scene.descriptor.instance_override_target_missing";
 
     /// <summary>An override or change targets a surface the geometry does not declare.</summary>
     public const string SurfaceInvalid = "scene.descriptor.surface_invalid";
@@ -28,9 +31,10 @@ public static class KeptChangeDiagnostics
 
     /// <summary>Gets whether a cooker code is a warning about a kept change.</summary>
     /// <param name="code">The code.</param>
-    /// <returns><see langword="true"/> for the three kept-change codes.</returns>
+    /// <returns><see langword="true"/> for the four kept-change codes.</returns>
     public static bool IsKeptChange(string? code)
-        => string.Equals(code, InstanceOverrideUnresolved, StringComparison.Ordinal)
+        => string.Equals(code, InstanceOverrideNodeMissing, StringComparison.Ordinal)
+            || string.Equals(code, InstanceOverrideTargetMissing, StringComparison.Ordinal)
             || string.Equals(code, SurfaceInvalid, StringComparison.Ordinal)
             || string.Equals(code, ScriptInstanceOverrideUnresolved, StringComparison.Ordinal);
 

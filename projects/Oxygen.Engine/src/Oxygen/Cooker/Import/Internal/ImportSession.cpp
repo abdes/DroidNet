@@ -564,18 +564,25 @@ auto ImportSession::HasErrors() const noexcept -> bool
   return has_errors_;
 }
 
-// A sidecar completes its target scene, so the scene's source produces what it
-// emits: the cooked root's own record of the scene, or else the scene in flight
-// or in a context root, last root first as the sidecar resolves it. Every other
-// job's source produces its outputs.
+// A physics sidecar cooked from a file records that file, so a re-cook of its
+// scene finds the sidecar's source and cooks it again (`physics.md`). A
+// scripting sidecar, or physics bindings given inline, completes its target
+// scene, so the scene's source produces what it emits: the cooked root's own
+// record of the scene, or else the scene in flight or in a context root, last
+// root first as the sidecar resolves it. Every other job's source produces its
+// outputs.
 auto ImportSession::Producer() const -> LooseCookedProducer
 {
+  const auto* const inline_physics = request_.physics.has_value()
+      && !request_.physics->inline_bindings_json.empty()
+    ? &*request_.physics
+    : nullptr;
   auto target = std::string {};
   if (request_.options.scripting.import_kind
     == ScriptingImportKind::kScriptingSidecar) {
     target = request_.options.scripting.target_scene_virtual_path;
-  } else if (request_.physics.has_value()) {
-    target = request_.physics->target_scene_virtual_path;
+  } else if (inline_physics != nullptr) {
+    target = inline_physics->target_scene_virtual_path;
   } else {
     return { .source = request_.source_mount_path, .completes = {} };
   }
@@ -796,6 +803,8 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       add_failure(import_codes::kOutputMountMixed, ex.what());
     } catch (const LooseCookedIdentityCollision& ex) {
       add_failure(import_codes::kIdentityCollision, ex.what());
+    } catch (const LooseCookedStaleSidecar& ex) {
+      add_failure(import_codes::kPhysicsSidecarStale, ex.what());
     } catch (const std::exception& ex) {
       add_failure(import_codes::kIndexWriteFailed, ex.what());
     }

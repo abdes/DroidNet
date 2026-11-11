@@ -44,7 +44,11 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/LooseCookedResources.h>
+#include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/FileLock.h>
 #include <Oxygen/Serio/Types.h>
 #include <Oxygen/Serio/Writer.h>
@@ -526,7 +530,9 @@ struct LooseCookedWriter::Impl final {
     }
 
     const auto session_files = files_;
+    const auto listed_scenes = SceneKeys_();
     ApplyRemovals_(session_files);
+    RequireCurrentSidecars_(listed_scenes);
 
     const auto cooked_root_str = cooked_root_.string();
     LOG_SCOPE_F(INFO, "Finish {}", cooked_root_str);
@@ -635,6 +641,105 @@ private:
       add(relpath);
     }
     return paths;
+  }
+
+  //! The keys of the scenes the index lists.
+  [[nodiscard]] auto SceneKeys_() const -> std::unordered_set<data::AssetKey>
+  {
+    auto keys = std::unordered_set<data::AssetKey> {};
+    for (const auto& [key, asset] : assets_) {
+      if (asset.asset_type == data::AssetType::kScene) {
+        keys.insert(key);
+      }
+    }
+    return keys;
+  }
+
+  //! The descriptor of `asset`, as the root holds it.
+  [[nodiscard]] auto ReadDescriptor_(const StoredAsset& asset) const
+    -> std::vector<std::byte>
+  {
+    const auto path
+      = cooked_root_ / std::filesystem::path(asset.descriptor_relpath);
+    auto bytes
+      = cooked::ReadWholeFile(*storage_, path, cooked::kMaxMetadataBytes);
+    if (!bytes) {
+      throw std::system_error(bytes.error(),
+        "cannot read the descriptor of '" + asset.virtual_path + "'");
+    }
+    return std::move(*bytes);
+  }
+
+  //! The record at the start of the descriptor of `asset`.
+  template <typename Record>
+  [[nodiscard]] auto ReadDescriptorRecord_(const StoredAsset& asset) const
+    -> Record
+  {
+    const auto record = serio::CopyAt<Record>(ReadDescriptor_(asset));
+    if (!record) {
+      throw std::runtime_error(
+        "the descriptor of '" + asset.virtual_path + "' is truncated");
+    }
+    return *record;
+  }
+
+  //! Refuses a commit that would list a physics sidecar and a scene it does
+  //! not match.
+  /*!
+   Checks each sidecar this session wrote, or whose scene it wrote or retired:
+   the scene the index lists under the sidecar's target key must have the
+   content the sidecar was cooked for. `listed_scenes` are the scenes the
+   index listed before this session's removals and retirements. A sidecar
+   whose scene another cooked root holds is that root's concern.
+
+   @throw LooseCookedStaleSidecar Naming every such sidecar and its scene.
+  */
+  auto RequireCurrentSidecars_(
+    const std::unordered_set<data::AssetKey>& listed_scenes) const -> void
+  {
+    auto stale = std::vector<std::string> {};
+    for (const auto& [key, sidecar] : assets_) {
+      static_cast<void>(key);
+      if (sidecar.asset_type != data::AssetType::kPhysicsScene) {
+        continue;
+      }
+      const auto sidecar_written
+        = written_virtual_paths_.contains(sidecar.virtual_path);
+      const auto binding
+        = ReadDescriptorRecord_<data::pak::physics::PhysicsSceneAssetDesc>(
+          sidecar);
+      const auto scene = assets_.find(binding.target_scene_key);
+      if (scene == assets_.end()) {
+        if (listed_scenes.contains(binding.target_scene_key)) {
+          stale.push_back("'" + sidecar.virtual_path + "' targets the scene "
+            + data::to_string(binding.target_scene_key)
+            + ", which this import retired");
+        }
+        continue;
+      }
+      const auto scene_written
+        = written_virtual_paths_.contains(scene->second.virtual_path);
+      if (!sidecar_written && !scene_written) {
+        continue;
+      }
+      const auto scene_asset
+        = data::SceneAsset(scene->first, ReadDescriptor_(scene->second));
+      if (!std::ranges::equal(binding.target_scene_layout_hash,
+            data::ComputeNodeLayoutHash(scene_asset.GetNodes()))) {
+        stale.push_back("'" + sidecar.virtual_path + "' was cooked for "
+          + "other nodes of '" + scene->second.virtual_path + "'");
+      }
+    }
+    if (stale.empty()) {
+      return;
+    }
+    std::ranges::sort(stale);
+    auto message = std::string("Physics sidecars no longer match their scene "
+                               "(re-cook or remove each in the same import):");
+    for (const auto& entry : stale) {
+      message += "\n  " + entry;
+    }
+    throw LooseCookedStaleSidecar(message);
   }
 
   //! Requires the writer lease.

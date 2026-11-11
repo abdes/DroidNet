@@ -2,7 +2,7 @@
 
 Status: **design for owner review** (ED-M09 item 14, #77 slice 77.8).
 
-Last Updated: 2026-10-29
+Last Updated: 2026-11-12
 
 Summary: a node of a scene can **instance** an imported model (`Car.glb`) or
 another authored scene (`Watchtower.oscene`). The instanced hierarchy appears
@@ -982,8 +982,10 @@ it instances changes (ED9), which is when its kept changes are checked again.
   and encodes it with `EncodeChange`. An unknown component, key or part kind, a
   malformed UUID or a value of the wrong type is an error: malformed data.
 - It composes the scene with the cooked instanced scenes (NGN6), which are cooked
-  first, and reports each unresolved change as
-  `scene.descriptor.instance_override_unresolved`, a warning, leaving it out.
+  first, and reports each unresolved change, a warning, leaving it out:
+  `scene.descriptor.instance_override_node_missing` for a node path the
+  instanced scene does not hold, `scene.descriptor.instance_override_target_missing`
+  for a property its node does not have; each names the node path.
   `scene.descriptor.surface_invalid` becomes a warning, for owned geometry and
   changes alike, and leaves the override out instead of failing the link.
 - The scripting sidecar gains instance rows (the instance root's `node_index`,
@@ -1902,7 +1904,8 @@ presentation and repair, not removal of a gate.
   already continues another is disabled with the reason, and choosing a node
   whose own changes become kept says how many. It says where the repair
   happens: in the model, for every scene, or in this instance only.
-- The cook's warnings (`scene.descriptor.instance_override_unresolved`,
+- The cook's warnings (`scene.descriptor.instance_override_node_missing`,
+  `scene.descriptor.instance_override_target_missing`,
   `scene.descriptor.surface_invalid`, `script.sidecar.instance_override_unresolved`)
   name their node: `KeptChangeDiagnostics` maps a descriptor location to the
   instance root and the change's names, or, for a lost surface, the node whose

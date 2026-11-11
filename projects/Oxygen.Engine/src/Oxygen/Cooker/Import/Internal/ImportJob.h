@@ -116,6 +116,17 @@ protected:
   //! One session owned through producer shutdown and registry retirement.
   OXGN_COOK_NDAPI auto Session() -> ImportSession&;
 
+  //! A further session of this job, cooking `request` into the same cooked
+  //! root, owned and retired as `Session()` is.
+  /*!
+   It records its own request's source as the producer of what it emits, and
+   it joins the cohort of `Session()`: started before that session finalizes,
+   both commit in one index or neither does. Its inputs are read through this
+   job's reader, so `Session()` verifies them before the commit.
+  */
+  OXGN_COOK_NDAPI auto CompanionSession(ImportRequest request)
+    -> ImportSession&;
+
   //! Execute the job-specific import work.
   /*!
    Concrete jobs must implement this method and return a complete report.
@@ -285,6 +296,12 @@ private:
   std::unique_ptr<NamingService> naming_service_;
 
   std::unique_ptr<ImportSession> session_;
+  //! A companion session and the request it holds a reference to.
+  struct Companion final {
+    ImportRequest request;
+    std::unique_ptr<ImportSession> session;
+  };
+  std::vector<std::unique_ptr<Companion>> companions_;
   std::vector<std::unique_ptr<Object>> pipelines_;
   co::Nursery* producer_nursery_ = nullptr;
   co::Nursery* nursery_ = nullptr;

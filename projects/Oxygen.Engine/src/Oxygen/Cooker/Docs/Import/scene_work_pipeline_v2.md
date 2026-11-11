@@ -6,7 +6,8 @@
 | ------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CK-IMPORT-01 | planned | Honor `ImportOptions.import_content` in model planning; current glTF/FBX plans run all content stages. Qualify geometry without authored materials using engine defaults, texture/material dependency selection, and the scene-without-geometry reference policy. Slot provenance reports actual processed geometry, not requested flags. |
 
-**Status:** Complete Design (Phase 5) **Date:** 2026-01-26 **Parent:**
+**Status:** Complete Design (Phase 5) **Date:** 2026-01-26 **Last updated:**
+2026-11-12 **Parent:**
 [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
@@ -38,7 +39,7 @@ Core properties:
 
 The pipeline-agnostic concurrency and lifetime model is defined in the parent
 document
-[design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md) under
+[async_import_pipeline_v2.md](async_import_pipeline_v2.md) under
 **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
@@ -412,6 +413,47 @@ Notes:
 - The scene's identity: a scene descriptor job places the scene at its request's
   `asset_virtual_path`.
 - Environment system extraction (SkyAtmosphere, Fog, PostProcess, etc.).
+
+### Scene Descriptor Jobs
+
+A scene descriptor job (`SceneDescriptorImportJob`) cooks a `*.scene.json`
+through this pipeline and adds two duties of its own.
+
+**Instance changes that do not resolve.** An instanced scene is a prefab: its
+source may lose a node or a property after an instancing scene changed it. Such
+a change is a warning, left out of the cooked scene and kept in the source, so
+it applies again once it resolves. The warning names the node path and the
+property, with one code per reason:
+
+| Code                                                | The change names                                    |
+| --------------------------------------------------- | --------------------------------------------------- |
+| `scene.descriptor.instance_override_node_missing`   | a node path the instanced scene does not hold       |
+| `scene.descriptor.instance_override_target_missing` | a property its node does not have                   |
+| `scene.descriptor.surface_invalid`                  | a surface its node's geometry does not declare      |
+| `scene.starting_camera.unresolved`                  | a starting camera the instanced scene does not have |
+
+**Physics that follows its scene.** A scene and its physics sidecar are one
+regeneration unit (`Data/Docs/physics.md`, Contract V-2). When the job cooks a
+scene with other nodes than the cooked root holds, it cooks again each
+physics sidecar the root lists for that scene, from the file the sidecar
+records as its source, against the scene in flight. Each sidecar cooks in a
+companion session of the job (`ImportJob::CompanionSession`) that joins the
+scene's commit, so the root publishes both or neither:
+
+- A sidecar that no longer cooks, for example because a body's node is gone,
+  fails the import with its own diagnostics, and the root keeps the pair it
+  held.
+- A sidecar whose source is in no mount of the import, or cannot be read,
+  fails it with `scene.descriptor.physics_source_unlocated` or
+  `scene.descriptor.physics_source_read_failed`.
+- A sidecar with no file of its own (bindings given inline) records its
+  scene's source and cannot follow; the commit refuses the changed scene with
+  `physics.sidecar.stale` until both are cooked together.
+
+A sidecar binds to its scene's node layout: each node's ID and parent, in
+order. A scene cooked with the same nodes keeps its sidecar as it is, whatever
+else changed: transforms, components, the environment, or the scripts a
+scripting sidecar adds.
 
 ---
 

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 // Covers: the pairing of a physics sidecar with the scene it was cooked
-// against: its key, its node count and its content hash.
+// against: its key, its node count and its node layout.
 
 #include <cstddef>
 #include <optional>
@@ -84,7 +84,7 @@ NOLINT_TEST(PhysicsSidecarTargetTest, RefusesASceneOtherThanItsTarget)
   auto counted = paired.sidecar_bytes;
   DescriptorDefects::SetSidecarNodeCount(counted, 2U);
   auto hashed = paired.sidecar_bytes;
-  DescriptorDefects::CorruptSidecarSceneHash(hashed);
+  DescriptorDefects::CorruptSidecarSceneLayout(hashed);
   auto recooked = SceneBuilder { "Main" };
   recooked.Node("Renamed");
   const auto recooked_bytes = recooked.Bytes();
@@ -96,6 +96,21 @@ NOLINT_TEST(PhysicsSidecarTargetTest, RefusesASceneOtherThanItsTarget)
   EXPECT_EQ(TargetDefect(scene, hashed), CookedDefect::kDigestMismatch);
   EXPECT_EQ(TargetDefect(SceneOf(recooked_bytes), paired.sidecar_bytes),
     CookedDefect::kDigestMismatch);
+}
+
+//! A sidecar binds to its scene's nodes: the same nodes with other content,
+//! such as a camera or the scripts a scripting sidecar adds, still match.
+NOLINT_TEST(PhysicsSidecarTargetTest, AcceptsItsSceneWithOtherContent)
+{
+  auto paired = PairedScene {};
+  auto edited = SceneBuilder { "Main" };
+  const auto root = edited.Node("Root");
+  edited.PerspectiveCamera(root, SceneBuilder::DefaultPerspectiveCamera());
+  const auto edited_bytes = edited.Bytes();
+
+  EXPECT_NE(edited_bytes, paired.scene_bytes);
+  EXPECT_EQ(
+    TargetDefect(SceneOf(edited_bytes), paired.sidecar_bytes), std::nullopt);
 }
 
 } // namespace

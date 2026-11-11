@@ -591,8 +591,10 @@ namespace {
           issue_codes::kChangeUnresolved,
           supplier != nullptr ? std::optional { unresolved.instance_root }
                               : std::nullopt,
-          "the change names no node of the instanced scene, or a property "
-          "that node does not have",
+          unresolved.reason == data::UnresolvedReason::kNodeMissing
+            ? "the change names no node of the instanced scene"
+            : "the change names a property or script slot its node does not "
+              "have",
           unresolved.change.path);
       }
     }

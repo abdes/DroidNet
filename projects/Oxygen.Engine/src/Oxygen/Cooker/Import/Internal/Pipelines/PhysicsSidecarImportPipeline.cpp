@@ -90,7 +90,6 @@
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -1835,10 +1834,8 @@ namespace {
     // Every binding was resolved for this backend, so its arm of each
     // backend-scalar union is the one written.
     desc.backend = PakBackendOf(backend);
-    const auto scene_hash
-      = data::ComputeDescriptorHash(scene_state.source_scene_descriptor);
-    std::copy_n(scene_hash.begin(), std::size(desc.target_scene_content_hash),
-      std::begin(desc.target_scene_content_hash));
+    std::ranges::copy(
+      scene_state.node_layout_hash, std::begin(desc.target_scene_layout_hash));
     desc.component_table_count = static_cast<uint32_t>(tables.size());
     desc.component_table_directory_offset = tables.empty()
       ? 0U
@@ -2346,15 +2343,8 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   auto resolved_scene_state
     = detail::ResolveTargetSceneState(*session, request, mounts,
       physics.target_scene_virtual_path, kPhysicsSidecarResolverDiagnostics);
+  // The scene is the one in flight, or one a mounted cooked root lists.
   if (!resolved_scene_state.has_value()) {
-    co_return false;
-  }
-
-  if (detail::FindSceneContent(mounts, resolved_scene_state->scene_key)
-    == nullptr) {
-    AddDiagnostic(*session, request, ImportSeverity::kError,
-      std::string(import_codes::kPhysicsSidecarTargetSceneMissing),
-      "Resolved target scene key is not present in cooked scene context");
     co_return false;
   }
   if (!ResolveAndValidateBindings(

@@ -25,7 +25,7 @@ OXDAT_ASSET_VERSION(
   kPhysicsMaterialAssetVersion, kPhysicsMaterial, physics_material, 3)
 OXDAT_ASSET_VERSION(
   kCollisionShapeAssetVersion, kCollisionShape, collision_shape, 3)
-OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 4)
+OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 5)
 OXDAT_FORMAT_VERSION(kBrowseIndexVersion, browse_index, uint32_t, 2)
 OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 2)
 
@@ -47,5 +47,5 @@ OXDAT_IMPORTER_REVISION(kGeometryDescriptor, geometry_descriptor, 8)
 OXDAT_IMPORTER_REVISION(kSceneDescriptor, scene_descriptor, 3)
 OXDAT_IMPORTER_REVISION(kScriptAsset, script, 4)
 OXDAT_IMPORTER_REVISION(kScriptingSidecar, script_sidecar, 3)
-OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 6)
+OXDAT_IMPORTER_REVISION(kPhysicsSidecar, physics_sidecar, 7)
 OXDAT_IMPORTER_REVISION(kInput, input, 3)

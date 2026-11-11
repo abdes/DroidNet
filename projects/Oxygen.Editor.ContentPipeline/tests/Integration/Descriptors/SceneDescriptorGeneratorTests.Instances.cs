@@ -132,7 +132,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
             OperationId = Guid.NewGuid(),
             Domain = FailureDomain.AssetImport,
             Severity = DiagnosticSeverity.Warning,
-            Code = KeptChangeDiagnostics.InstanceOverrideUnresolved,
+            Code = KeptChangeDiagnostics.InstanceOverrideNodeMissing,
             Message = "The change names no node of the instanced scene",
             TechnicalMessage = string.Create(CultureInfo.InvariantCulture, $"/nodes/{index}/instance/overrides/0/components/transform"),
             AffectedPath = result.DescriptorPath,

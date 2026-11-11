@@ -25,6 +25,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/Testing/TestBytes.h>
@@ -149,8 +150,9 @@ NOLINT_TEST_F(LooseCookedRootTest, PhysicsSidecarMatchesItsScene)
   EXPECT_EQ(descriptor.target_scene_key, scene);
   EXPECT_EQ(descriptor.target_node_count,
     data::SceneAsset(scene, scene_bytes).GetNodes().size());
-  EXPECT_TRUE(std::ranges::equal(descriptor.target_scene_content_hash,
-    data::SceneAsset(scene, scene_bytes).GetContentHash()));
+  EXPECT_TRUE(std::ranges::equal(descriptor.target_scene_layout_hash,
+    data::ComputeNodeLayoutHash(
+      data::SceneAsset(scene, scene_bytes).GetNodes())));
   EXPECT_THROW(
     static_cast<void>(game.PhysicsSidecar("Other.opscene", game.KeyOf("None"))),
     std::invalid_argument);
