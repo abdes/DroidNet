@@ -736,7 +736,7 @@ base correctly.
 
 **Critical points.**
 
-- `PakPlanBuilder.cpp` (3 000 lines): the plan states every offset and size;
+- `PakPlanBuilder.cpp` (3 100 lines): the plan states every offset and size;
   `PakValidation` checks alignment, overlap, table sizes and the CRC field,
   and `PakWriter` refuses a plan that contradicts itself
   (`pak.write.*` codes).
