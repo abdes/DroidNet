@@ -686,7 +686,7 @@ when it must.
 
 **Critical points.**
 
-- `PhysicsSidecarImportPipeline.cpp` is 3 900 lines: review its structure
+- `PhysicsSidecarImportPipeline.cpp` is 2 800 lines: review its structure
   first and flag functions that mix parsing, validation and emission.
 - Sidecar binding: a sidecar names its scene's key, node count and SHA-256
   and the cook's logical scene reference; a scene recook that changes the
