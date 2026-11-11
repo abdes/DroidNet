@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -29,6 +30,11 @@ struct RigidBodyBindingSource final {
   data::pak::physics::RigidBodyBindingRecord record {};
   std::string shape_ref;
   std::string material_ref;
+  //! The `backend.target` authored, `kNone` without a backend block; the
+  //! record's backend scalars hold that target's arm.
+  core::meta::physics::PhysicsBackend authored_backend {
+    core::meta::physics::PhysicsBackend::kNone,
+  };
 };
 
 //! A collider binding: the record and the references its cook resolves.
@@ -43,6 +49,10 @@ struct CharacterBindingSource final {
   data::pak::physics::CharacterBindingRecord record {};
   std::string shape_ref;
   std::optional<std::string> inner_shape_ref;
+  //! The `backend.target` authored, `kNone` without a backend block.
+  core::meta::physics::PhysicsBackend authored_backend {
+    core::meta::physics::PhysicsBackend::kNone,
+  };
 };
 
 //! A soft body binding: the record, its references and the authored vertices.
@@ -54,8 +64,10 @@ struct SoftBodyBindingSource final {
   std::optional<std::string> collision_mesh_ref;
   std::vector<uint32_t> pinned_vertices;
   std::vector<uint32_t> kinematic_vertices;
-  bool backend_explicit { false };
-  nlohmann::json authored_binding;
+  //! The `backend.target` authored, `kNone` without a backend block.
+  core::meta::physics::PhysicsBackend authored_backend {
+    core::meta::physics::PhysicsBackend::kNone,
+  };
 };
 
 //! A wheel of a vehicle binding.
@@ -71,13 +83,81 @@ struct VehicleWheelSource final {
   };
 };
 
-//! A joint binding: the record and the authored backend choice.
+//! The constraint type of a joint binding.
+enum class JointConstraintType : uint8_t {
+  kFixed,
+  kPoint,
+  kHinge,
+  kSlider,
+  kDistance,
+  kCone,
+  kSixDof,
+};
+
+//! The space a joint's frames are authored in.
+enum class JointConstraintSpace : uint8_t {
+  //! Frames in world space.
+  kWorld,
+  //! Each frame in its body's centre-of-mass space.
+  kLocal,
+};
+
+//! One frame of a joint: +X is the primary axis (hinge, slide, twist), +Y the
+//! normal axis.
+struct JointFrameSource final {
+  std::array<float, 3> position { 0.0F, 0.0F, 0.0F };
+  //! Unit quaternion [x, y, z, w].
+  std::array<float, 4> rotation { 0.0F, 0.0F, 0.0F, 1.0F };
+};
+
+//! A value per joint-frame axis: [tx, ty, tz, rx, ry, rz].
+using JointAxisValues = std::array<float, 6>;
+
+//! The motion of one six-DOF axis.
+enum class JointAxisMode : uint8_t {
+  kFree,
+  kLimited,
+  kLocked,
+};
+
+//! A motion per joint-frame axis: [tx, ty, tz, rx, ry, rz].
+using JointAxisModes = std::array<JointAxisMode, 6>;
+
+//! The joint settings preparation proved valid for the constraint type: every
+//! authored value has a backend setting, and every value the type does not
+//! use is absent or zero.
+struct JointSettingsSource final {
+  JointConstraintType type { JointConstraintType::kFixed };
+  JointConstraintSpace space { JointConstraintSpace::kWorld };
+  JointFrameSource frame_a;
+  JointFrameSource frame_b;
+  //! Six-DOF only; absent means every axis limited when limits are authored,
+  //! free otherwise.
+  std::optional<JointAxisModes> axis_modes;
+  //! Limits, both or neither.
+  std::optional<JointAxisValues> limits_lower;
+  std::optional<JointAxisValues> limits_upper;
+  //! Limit springs, both or neither.
+  std::optional<JointAxisValues> spring_stiffnesses;
+  std::optional<JointAxisValues> spring_dampings;
+  std::optional<JointAxisValues> motor_max_forces;
+  std::optional<JointAxisValues> motor_max_torques;
+  //! Position-motor drive, both or neither.
+  std::optional<JointAxisValues> motor_drive_frequencies;
+  std::optional<JointAxisValues> motor_damping_ratios;
+  uint32_t priority { 0 };
+};
+
+//! A joint binding: the record, the authored backend choice and its settings.
 struct JointBindingSource final {
   data::pak::physics::JointBindingRecord record {};
   data::pak::physics::PhysicsResourceFormat constraint_format
     = data::pak::physics::PhysicsResourceFormat::kJoltConstraintBinary;
-  bool backend_explicit { false };
-  nlohmann::json authored_binding;
+  //! The `backend.target` authored, `kNone` without a backend block.
+  core::meta::physics::PhysicsBackend authored_backend {
+    core::meta::physics::PhysicsBackend::kNone,
+  };
+  JointSettingsSource settings;
 };
 
 //! A vehicle binding: the record, its wheels and the authored backend choice.

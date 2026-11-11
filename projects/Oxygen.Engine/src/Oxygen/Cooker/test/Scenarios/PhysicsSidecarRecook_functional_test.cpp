@@ -425,8 +425,6 @@ namespace {
           {
             { "target", "jolt" },
             { "velocity_iteration_count", 8U },
-            { "lra_stiffness_fraction", 0.9F },
-            { "skinned_constraint_enable", true },
           },
         },
       });
@@ -448,30 +446,18 @@ namespace {
         },
         {
           "limits_lower",
-          json::array({ -0.1F, -0.1F, -0.1F, -0.1F, -0.1F, -0.1F }),
+          json::array({ 0.0F, 0.0F, 0.0F, -0.1F, 0.0F, 0.0F }),
         },
         {
           "limits_upper",
-          json::array({ 0.1F, 0.1F, 0.1F, 0.1F, 0.1F, 0.1F }),
+          json::array({ 0.0F, 0.0F, 0.0F, 0.1F, 0.0F, 0.0F }),
         },
         {
           "spring_stiffnesses",
           json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
         },
         {
-          "spring_damping_ratios",
-          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-        },
-        {
-          "motor_modes",
-          json::array({ "off", "off", "off", "off", "off", "off" }),
-        },
-        {
-          "motor_target_velocities",
-          json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
-        },
-        {
-          "motor_target_positions",
+          "spring_dampings",
           json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
         },
         {
@@ -490,9 +476,6 @@ namespace {
           "motor_damping_ratios",
           json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F }),
         },
-        { "break_force", 1250.0F },
-        { "break_torque", 2500.0F },
-        { "collide_connected", false },
         { "priority", 7U },
         {
           "backend",
@@ -1345,8 +1328,7 @@ NOLINT_TEST_F(PhysicsRepeatRecookTest,
     after.geometry_asset->descriptor_sha256);
 }
 
-NOLINT_TEST(PhysicsPhase3ClosureTest,
-  SidecarCookFailsWhenBindingBackendDoesNotMatchRequestedImportBackend)
+NOLINT_TEST(PhysicsPhase3ClosureTest, SidecarCookFailsForAPhysxImport)
 {
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -1354,7 +1336,7 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   [[maybe_unused]] auto stop_service
     = oxygen::Finally([&service] -> void { service.Stop(); });
   const oxygen::testing::ScopedTempDir temp;
-  const auto cooked_root = temp.Path() / "backend_mismatch_hard_fail";
+  const auto cooked_root = temp.Path() / "physx_import_refused";
   std::filesystem::create_directories(cooked_root);
 
   RegisterStubGeometryAsset(cooked_root);
@@ -1379,11 +1361,12 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   ASSERT_HAS_VALUE(report);
   EXPECT_FALSE(report->success);
 
-  const auto has_backend_mismatch = std::ranges::any_of(
+  // Only Jolt has a runtime backend (abdes/DroidNet#133).
+  const auto has_backend_unsupported = std::ranges::any_of(
     report->diagnostics, [](const auto& diagnostic) -> auto {
-      return diagnostic.code == import_codes::kPhysicsSidecarBackendMismatch;
+      return diagnostic.code == import_codes::kPhysicsSidecarBackendUnsupported;
     });
-  EXPECT_TRUE(has_backend_mismatch);
+  EXPECT_TRUE(has_backend_unsupported);
 
   service.Stop();
 }
@@ -1426,6 +1409,16 @@ namespace {
       for (const auto& diagnostic : report->diagnostics) {
         codes.push_back(diagnostic.code);
       }
+    }
+    // A binding that fails to cook leaves the sidecar and every backend
+    // resource of the other bindings unpublished.
+    if (report.has_value() && !report->success) {
+      EXPECT_FALSE(oxygen::cooker::test::HasCookedFile(
+        cooked_root, "Scenes/ComplexScene.opscene"));
+      EXPECT_EQ(OpenCooked(cooked_root)
+                  .ResourceTable(cooked::TableKind::kPhysics)
+                  .RowCount(),
+        0U);
     }
     service.Stop();
     return codes;

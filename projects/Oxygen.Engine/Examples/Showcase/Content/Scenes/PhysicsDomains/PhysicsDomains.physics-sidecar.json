@@ -244,9 +244,7 @@
         "vertex_radius": 0.04,
         "backend": {
           "target": "jolt",
-          "velocity_iteration_count": 16,
-          "lra_stiffness_fraction": 1.0,
-          "skinned_constraint_enable": false
+          "velocity_iteration_count": 16
         }
       },
       {
@@ -271,9 +269,7 @@
         "vertex_radius": 0.11,
         "backend": {
           "target": "jolt",
-          "velocity_iteration_count": 32,
-          "lra_stiffness_fraction": 0.35,
-          "skinned_constraint_enable": false
+          "velocity_iteration_count": 32
         }
       }
     ],

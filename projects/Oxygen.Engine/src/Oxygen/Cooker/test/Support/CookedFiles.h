@@ -6,11 +6,17 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 
 //! Finding cooked files by the layout path a cook gives them.
 /*!
@@ -42,5 +48,17 @@ namespace oxygen::cooker::test {
   std::string_view layout_relpath,
   const content::cooked::CookerStorageReader& storage
   = content::cooked::RealCookerStorage()) -> bool;
+
+//! A cooked physics resource: its format and its payload.
+struct CookedPhysicsResource final {
+  data::pak::physics::PhysicsResourceFormat format {};
+  std::vector<std::byte> payload;
+};
+
+//! The physics resource `key` of `content`, read through its physics
+//! resource table; none when no row has that key.
+[[nodiscard]] auto FindPhysicsResource(
+  const content::cooked::CookedContent& content, const data::AssetKey& key)
+  -> std::optional<CookedPhysicsResource>;
 
 } // namespace oxygen::cooker::test

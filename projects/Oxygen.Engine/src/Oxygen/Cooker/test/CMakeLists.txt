@@ -224,6 +224,7 @@ oxygen_cooker_test(
   FUNCTIONAL
   DEPS
     oxygen::content
+    oxygen::physics
     oxygen::scene
     oxygen::serio
     nlohmann_json::nlohmann_json
@@ -238,6 +239,7 @@ oxygen_cooker_test(
     "Import/Jobs/ImporterRevision_functional_test.cpp"
     "Import/Jobs/MaterialDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/PhysicsMaterialDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/PhysicsSidecarBindings_functional_test.cpp"
     "Import/Jobs/PhysicsSidecarImportJob_functional_test.cpp"
     "Import/Jobs/SceneDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/ScriptAssetImportJob_functional_test.cpp"

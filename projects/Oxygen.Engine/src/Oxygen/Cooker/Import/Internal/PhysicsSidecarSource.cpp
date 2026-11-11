@@ -12,8 +12,10 @@
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <numbers>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -448,18 +450,33 @@ namespace {
     return ParseBackendTargetString(target, out);
   }
 
-  auto ParseRigidBodyBackend(const nlohmann::json& obj,
-    phys::RigidBodyBindingRecord& out, std::string& error) -> bool
+  //! Reads the `backend.target` of `obj` into `target`, `kNone` when `obj`
+  //! has no backend block.
+  [[nodiscard]] auto ParseAuthoredBackend(const nlohmann::json& obj,
+    PhysicsBackend& target, std::string& error) -> bool
   {
+    target = PhysicsBackend::kNone;
     if (!obj.contains("backend")) {
       return true;
     }
-    const auto& backend = obj.at("backend");
-    auto target = PhysicsBackend::kNone;
-    if (!ParseBackendTargetField(backend, target)) {
+    if (!ParseBackendTargetField(obj.at("backend"), target)) {
       error = "Field 'backend.target' has unsupported value";
       return false;
     }
+    return true;
+  }
+
+  auto ParseRigidBodyBackend(const nlohmann::json& obj,
+    phys::RigidBodyBindingRecord& out, PhysicsBackend& target,
+    std::string& error) -> bool
+  {
+    if (!ParseAuthoredBackend(obj, target, error)) {
+      return false;
+    }
+    if (target == PhysicsBackend::kNone) {
+      return true;
+    }
+    const auto& backend = obj.at("backend");
     if (target == PhysicsBackend::kJolt) {
       return ReadOptionalUInt8(backend, "num_velocity_steps_override",
                out.backend_scalars.jolt.num_velocity_steps_override, error)
@@ -480,17 +497,16 @@ namespace {
   }
 
   auto ParseCharacterBackend(const nlohmann::json& obj,
-    phys::CharacterBindingRecord& out, std::string& error) -> bool
+    phys::CharacterBindingRecord& out, PhysicsBackend& target,
+    std::string& error) -> bool
   {
-    if (!obj.contains("backend")) {
+    if (!ParseAuthoredBackend(obj, target, error)) {
+      return false;
+    }
+    if (target == PhysicsBackend::kNone) {
       return true;
     }
     const auto& backend = obj.at("backend");
-    auto target = PhysicsBackend::kNone;
-    if (!ParseBackendTargetField(backend, target)) {
-      error = "Field 'backend.target' has unsupported value";
-      return false;
-    }
     if (target == PhysicsBackend::kJolt) {
       return ReadOptionalFloat(backend, "penetration_recovery_speed",
                out.backend_scalars.jolt.penetration_recovery_speed, error)
@@ -507,20 +523,17 @@ namespace {
   }
 
   auto ParseSoftBodyBackend(const nlohmann::json& obj,
-    phys::SoftBodyBindingRecord& out, std::string& error) -> bool
+    phys::SoftBodyBindingRecord& out, PhysicsBackend& target,
+    std::string& error) -> bool
   {
-    if (!obj.contains("backend")) {
+    if (!ParseAuthoredBackend(obj, target, error)) {
+      return false;
+    }
+    if (target == PhysicsBackend::kNone) {
       return true;
     }
     const auto& backend = obj.at("backend");
-    auto target = PhysicsBackend::kNone;
-    if (!ParseBackendTargetField(backend, target)) {
-      error = "Field 'backend.target' has unsupported value";
-      return false;
-    }
     if (target == PhysicsBackend::kJolt) {
-      out.topology_format
-        = phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary;
       if (!ReadOptionalUInt32(backend, "velocity_iteration_count",
             out.backend_scalars.jolt.num_velocity_steps, error)) {
         return false;
@@ -530,8 +543,6 @@ namespace {
       return true;
     }
     if (target == PhysicsBackend::kPhysX) {
-      out.topology_format
-        = phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
       return ReadOptionalFloat(backend, "youngs_modulus",
                out.backend_scalars.physx.youngs_modulus, error)
         && ReadOptionalFloat(
@@ -543,17 +554,16 @@ namespace {
   }
 
   auto ParseJointBackend(const nlohmann::json& obj,
-    phys::JointBindingRecord& out, std::string& error) -> bool
+    phys::JointBindingRecord& out, PhysicsBackend& target, std::string& error)
+    -> bool
   {
-    if (!obj.contains("backend")) {
+    if (!ParseAuthoredBackend(obj, target, error)) {
+      return false;
+    }
+    if (target == PhysicsBackend::kNone) {
       return true;
     }
     const auto& backend = obj.at("backend");
-    auto target = PhysicsBackend::kNone;
-    if (!ParseBackendTargetField(backend, target)) {
-      error = "Field 'backend.target' has unsupported value";
-      return false;
-    }
     if (target == PhysicsBackend::kJolt) {
       return ReadOptionalUInt8(backend, "num_velocity_steps_override",
                out.backend_scalars.jolt.num_velocity_steps_override, error)
@@ -633,7 +643,8 @@ namespace {
       || !ReadOptionalFloat(
         binding, "max_angular_velocity", out.record.max_angular_velocity, error)
       || !ParseAllowedDofFlags(binding, out.record.allowed_dof_flags, error)
-      || !ParseRigidBodyBackend(binding, out.record, error)) {
+      || !ParseRigidBodyBackend(
+        binding, out.record, out.authored_backend, error)) {
       return false;
     }
 
@@ -706,7 +717,8 @@ namespace {
         binding, "collision_mask", out.record.collision_mask, error)
       && ReadOptionalString(
         binding, "inner_shape_ref", out.inner_shape_ref, error)
-      && ParseCharacterBackend(binding, out.record, error);
+      && ParseCharacterBackend(
+        binding, out.record, out.authored_backend, error);
   }
 
   auto ParseSoftBodyBinding(const nlohmann::json& binding,
@@ -720,13 +732,11 @@ namespace {
       return false;
     }
     out.record.node_index = node_index;
-    out.backend_explicit = binding.contains("backend");
     auto self_collision = false;
     if (!ReadOptionalBool(binding, "self_collision", self_collision, error)) {
       return false;
     }
     out.record.self_collision = self_collision ? 1U : 0U;
-    out.authored_binding = binding;
 
     return ReadOptionalString(
              binding, "collision_mesh_ref", out.collision_mesh_ref, error)
@@ -760,7 +770,81 @@ namespace {
         binding, "pinned_vertices", out.pinned_vertices, error)
       && ReadRequiredUInt32Array(
         binding, "kinematic_vertices", out.kinematic_vertices, error)
-      && ParseSoftBodyBackend(binding, out.record, error);
+      && ParseSoftBodyBackend(binding, out.record, out.authored_backend, error);
+  }
+
+  [[nodiscard]] auto ParseJointConstraintType(const nlohmann::json& binding)
+    -> JointConstraintType
+  {
+    static constexpr auto kTypes
+      = std::array<std::pair<std::string_view, JointConstraintType>, 7> {
+          {
+            { "fixed", JointConstraintType::kFixed },
+            { "point", JointConstraintType::kPoint },
+            { "hinge", JointConstraintType::kHinge },
+            { "slider", JointConstraintType::kSlider },
+            { "distance", JointConstraintType::kDistance },
+            { "cone", JointConstraintType::kCone },
+            { "six_dof", JointConstraintType::kSixDof },
+          },
+        };
+    if (!binding.contains("constraint_type")) {
+      return JointConstraintType::kFixed;
+    }
+    const auto value = binding.at("constraint_type").get<std::string>();
+    const auto found = std::ranges::find_if(
+      kTypes, [&](const auto& entry) -> bool { return entry.first == value; });
+    if (found == kTypes.end()) {
+      throw std::invalid_argument("unsupported constraint_type: " + value);
+    }
+    return found->second;
+  }
+
+  [[nodiscard]] auto ReadJointFrame(const nlohmann::json& binding,
+    const char* position_field, const char* rotation_field) -> JointFrameSource
+  {
+    auto frame = JointFrameSource {};
+    if (binding.contains(position_field)) {
+      frame.position = binding.at(position_field).get<std::array<float, 3>>();
+    }
+    if (binding.contains(rotation_field)) {
+      frame.rotation = binding.at(rotation_field).get<std::array<float, 4>>();
+    }
+    return frame;
+  }
+
+  [[nodiscard]] auto ReadOptionalAxes(const nlohmann::json& binding,
+    const char* field) -> std::optional<JointAxisValues>
+  {
+    if (!binding.contains(field)) {
+      return std::nullopt;
+    }
+    return binding.at(field).get<JointAxisValues>();
+  }
+
+  [[nodiscard]] auto ReadAxisModes(const nlohmann::json& binding)
+    -> std::optional<JointAxisModes>
+  {
+    if (!binding.contains("axis_modes")) {
+      return std::nullopt;
+    }
+    const auto names
+      = binding.at("axis_modes").get<std::array<std::string, 6>>();
+    auto modes = JointAxisModes {};
+    std::ranges::transform(
+      names, modes.begin(), [](const std::string& name) -> JointAxisMode {
+        if (name == "free") {
+          return JointAxisMode::kFree;
+        }
+        if (name == "limited") {
+          return JointAxisMode::kLimited;
+        }
+        if (name == "locked") {
+          return JointAxisMode::kLocked;
+        }
+        throw std::invalid_argument("unsupported axis mode: " + name);
+      });
+    return modes;
   }
 
   auto ParseJointBinding(const nlohmann::json& binding, JointBindingSource& out,
@@ -774,24 +858,33 @@ namespace {
     }
     out.record.node_index_a = node_index_a;
     out.record.node_index_b = node_index_b;
-    if (!ParseJointBackend(binding, out.record, error)) {
+    if (!ParseJointBackend(binding, out.record, out.authored_backend, error)) {
       return false;
     }
-    out.backend_explicit = binding.contains("backend");
-    out.constraint_format = phys::PhysicsResourceFormat::kJoltConstraintBinary;
-    if (binding.contains("backend")) {
-      auto target = PhysicsBackend::kNone;
-      if (!ParseBackendTargetField(binding.at("backend"), target)) {
-        error = "Field 'backend.target' has unsupported value";
-        return false;
-      }
-      if (target == PhysicsBackend::kPhysX) {
-        out.constraint_format
-          = phys::PhysicsResourceFormat::kPhysXConstraintBinary;
-      }
-    }
-    out.authored_binding = binding;
-    return true;
+
+    auto& settings = out.settings;
+    settings.type = ParseJointConstraintType(binding);
+    settings.space
+      = binding.value("constraint_space", std::string("world")) == "local"
+      ? JointConstraintSpace::kLocal
+      : JointConstraintSpace::kWorld;
+    settings.frame_a = ReadJointFrame(
+      binding, "local_frame_a_position", "local_frame_a_rotation");
+    settings.frame_b = ReadJointFrame(
+      binding, "local_frame_b_position", "local_frame_b_rotation");
+    settings.axis_modes = ReadAxisModes(binding);
+    settings.limits_lower = ReadOptionalAxes(binding, "limits_lower");
+    settings.limits_upper = ReadOptionalAxes(binding, "limits_upper");
+    settings.spring_stiffnesses
+      = ReadOptionalAxes(binding, "spring_stiffnesses");
+    settings.spring_dampings = ReadOptionalAxes(binding, "spring_dampings");
+    settings.motor_max_forces = ReadOptionalAxes(binding, "motor_max_forces");
+    settings.motor_max_torques = ReadOptionalAxes(binding, "motor_max_torques");
+    settings.motor_drive_frequencies
+      = ReadOptionalAxes(binding, "motor_drive_frequencies");
+    settings.motor_damping_ratios
+      = ReadOptionalAxes(binding, "motor_damping_ratios");
+    return ReadOptionalUInt32(binding, "priority", settings.priority, error);
   }
 
   auto ParseVehicleBinding(const nlohmann::json& binding,
@@ -887,10 +980,10 @@ namespace {
         = seen.emplace(oxygen::base::CheckedAt(node_indices, i), i);
       if (!inserted) {
         reporter.ErrorAt(
-          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
-          "Duplicate singleton binding for node "
-            + std::to_string(oxygen::base::CheckedAt(node_indices, i)) + " in "
-            + std::string(category),
+          std::string(import_codes::kPhysicsSidecarBindingDuplicate),
+          "Node " + std::to_string(oxygen::base::CheckedAt(node_indices, i))
+            + " already has a binding in " + std::string(category) + " at "
+            + std::to_string(it->second),
           nlohmann::json::json_pointer {} / "bindings" / std::string(category)
             / i);
       }
@@ -982,29 +1075,33 @@ namespace {
         = std::isfinite(value) && (rule.allow_negative || value >= 0.0F);
       if (!valid) {
         reporter.ErrorAt(
-          std::string(import_codes::kPhysicsSidecarPayloadInvalid),
-          "soft_bodies." + std::string(rule.field) + " must be finite"
+          std::string(import_codes::kPhysicsSidecarValueOutOfRange),
+          "soft_bodies." + std::string(rule.field) + " is "
+            + std::to_string(value) + "; it must be finite"
             + (rule.allow_negative ? "" : " and >= 0"),
           base_path / std::string(rule.field));
         return false;
       }
     }
     if (source.record.solver_iteration_count == 0U) {
-      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
-        "soft_bodies.solver_iteration_count must be greater than zero",
+      reporter.ErrorAt(
+        std::string(import_codes::kPhysicsSidecarValueOutOfRange),
+        "soft_bodies.solver_iteration_count is 0; it must be at least 1",
         base_path / "solver_iteration_count");
       return false;
     }
     constexpr auto kMaxVertices
       = static_cast<size_t>(std::numeric_limits<uint32_t>::max());
     if (source.pinned_vertices.size() > kMaxVertices) {
-      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
+      reporter.ErrorAt(
+        std::string(import_codes::kPhysicsSidecarValueOutOfRange),
         "soft_bodies.pinned_vertices exceeds uint32 range",
         base_path / "pinned_vertices");
       return false;
     }
     if (source.kinematic_vertices.size() > kMaxVertices) {
-      reporter.ErrorAt(std::string(import_codes::kPhysicsSidecarPayloadInvalid),
+      reporter.ErrorAt(
+        std::string(import_codes::kPhysicsSidecarValueOutOfRange),
         "soft_bodies.kinematic_vertices exceeds uint32 range",
         base_path / "kinematic_vertices");
       return false;
@@ -1026,6 +1123,417 @@ namespace {
         = static_cast<uint32_t>(source.pinned_vertices.size());
       source.record.kinematic_vertex_count
         = static_cast<uint32_t>(source.kinematic_vertices.size());
+    }
+  }
+
+  //! A member the schema admits that the engine does not implement yet.
+  struct UnsupportedMember final {
+    //! The member's pointer below its binding.
+    std::string_view pointer;
+    //! The abdes/DroidNet issue that implements it.
+    std::string_view issue;
+  };
+
+  constexpr auto kUnsupportedJointMembers = std::array {
+    UnsupportedMember { .pointer = "/break_force", .issue = "#132" },
+    UnsupportedMember { .pointer = "/break_torque", .issue = "#132" },
+    UnsupportedMember { .pointer = "/motor_modes", .issue = "#134" },
+    UnsupportedMember {
+      .pointer = "/motor_target_velocities",
+      .issue = "#134",
+    },
+    UnsupportedMember { .pointer = "/motor_target_positions", .issue = "#134" },
+    UnsupportedMember { .pointer = "/collide_connected", .issue = "#135" },
+  };
+
+  constexpr auto kUnsupportedSoftBodyMembers = std::array {
+    UnsupportedMember {
+      .pointer = "/backend/lra_stiffness_fraction",
+      .issue = "#137",
+    },
+    UnsupportedMember {
+      .pointer = "/backend/skinned_constraint_enable",
+      .issue = "#137",
+    },
+  };
+
+  //! Refuses each binding of `kind` that authors one of `members`.
+  auto RefuseUnsupportedMembers(const nlohmann::json& bindings,
+    const std::string_view kind,
+    const std::span<const UnsupportedMember> members, const Reporter& reporter)
+    -> void
+  {
+    const auto rows = bindings.find(std::string(kind));
+    if (rows == bindings.end()) {
+      return;
+    }
+    for (size_t i = 0; i < rows->size(); ++i) {
+      const auto& row = rows->at(i);
+      const auto base_path
+        = nlohmann::json::json_pointer {} / "bindings" / std::string(kind) / i;
+      for (const auto& member : members) {
+        const auto pointer
+          = nlohmann::json::json_pointer { std::string(member.pointer) };
+        if (row.contains(pointer)) {
+          reporter.ErrorAt(
+            std::string(import_codes::kPhysicsSidecarCapabilityUnsupported),
+            std::string(kind) + " member '" + std::string(member.pointer)
+              + "' is not implemented yet (abdes/DroidNet"
+              + std::string(member.issue) + ")",
+            base_path / pointer);
+        }
+      }
+    }
+  }
+
+  //! The joint-frame axes a value applies to, one bit per [tx..rz].
+  using AxisMask = uint8_t;
+  constexpr auto kAxisTx = AxisMask { 1U << 0U };
+  constexpr auto kAxisRx = AxisMask { 1U << 3U };
+  constexpr auto kAxisRy = AxisMask { 1U << 4U };
+  constexpr auto kAxisRz = AxisMask { 1U << 5U };
+  constexpr auto kTranslationAxes = AxisMask { 0b000111U };
+  constexpr auto kRotationAxes = AxisMask { 0b111000U };
+  constexpr auto kAllAxes = AxisMask { 0b111111U };
+
+  //! What a constraint type gives a meaning to.
+  struct JointTypeUse final {
+    std::string_view name;
+    AxisMask limits = 0;
+    AxisMask springs = 0;
+    AxisMask motors = 0;
+    //! Whether the frame rotations orient the constraint.
+    bool rotations = true;
+  };
+
+  [[nodiscard]] constexpr auto UseOf(const JointConstraintType type)
+    -> JointTypeUse
+  {
+    switch (type) {
+    case JointConstraintType::kFixed:
+      return { .name = "fixed" };
+    case JointConstraintType::kPoint:
+      return { .name = "point", .rotations = false };
+    case JointConstraintType::kHinge:
+      return {
+        .name = "hinge",
+        .limits = kAxisRx,
+        .springs = kAxisRx,
+        .motors = kAxisRx,
+      };
+    case JointConstraintType::kSlider:
+      return {
+        .name = "slider",
+        .limits = kAxisTx,
+        .springs = kAxisTx,
+        .motors = kAxisTx,
+      };
+    case JointConstraintType::kDistance:
+      return {
+        .name = "distance",
+        .limits = kAxisTx,
+        .springs = kAxisTx,
+        .rotations = false,
+      };
+    case JointConstraintType::kCone:
+      return { .name = "cone", .limits = kAxisRy | kAxisRz };
+    case JointConstraintType::kSixDof:
+      return {
+        .name = "six_dof",
+        .limits = kAllAxes,
+        .springs = kTranslationAxes,
+        .motors = kAllAxes,
+      };
+    }
+    return {};
+  }
+
+  [[nodiscard]] constexpr auto AxisUsed(
+    const AxisMask mask, const size_t axis) noexcept -> bool
+  {
+    return (mask & (1U << axis)) != 0U;
+  }
+
+  //! Checks one joint; reports every rule it breaks.
+  class JointValidator final {
+  public:
+    JointValidator(const JointSettingsSource& settings,
+      nlohmann::json::json_pointer base_path, const Reporter& reporter)
+      : settings_(make_observer(&settings))
+      , use_(UseOf(settings.type))
+      , base_path_(std::move(base_path))
+      , reporter_(make_observer(&reporter))
+    {
+    }
+
+    auto Validate() const -> void
+    {
+      const auto& s = *settings_;
+      CheckPair(s.limits_lower, "limits_lower", s.limits_upper, "limits_upper");
+      CheckPair(s.spring_stiffnesses, "spring_stiffnesses", s.spring_dampings,
+        "spring_dampings");
+      CheckPair(s.motor_drive_frequencies, "motor_drive_frequencies",
+        s.motor_damping_ratios, "motor_damping_ratios");
+      CheckFrame(s.frame_a, "local_frame_a");
+      CheckFrame(s.frame_b, "local_frame_b");
+      CheckAxisModes();
+      const auto limit_axes = LimitAxes();
+      CheckAxes(s.limits_lower, "limits_lower", limit_axes, false);
+      CheckAxes(s.limits_upper, "limits_upper", limit_axes, false);
+      CheckAxes(s.spring_stiffnesses, "spring_stiffnesses", use_.springs, true);
+      CheckAxes(s.spring_dampings, "spring_dampings", use_.springs, true);
+      CheckAxes(s.motor_drive_frequencies, "motor_drive_frequencies",
+        use_.motors, true);
+      CheckAxes(
+        s.motor_damping_ratios, "motor_damping_ratios", use_.motors, true);
+      CheckAxes(s.motor_max_forces, "motor_max_forces",
+        static_cast<AxisMask>(use_.motors & kTranslationAxes), true);
+      CheckAxes(s.motor_max_torques, "motor_max_torques",
+        static_cast<AxisMask>(use_.motors & kRotationAxes), true);
+      if (s.limits_lower.has_value() && s.limits_upper.has_value()) {
+        CheckLimits(*s.limits_lower, *s.limits_upper, limit_axes);
+      }
+    }
+
+  private:
+    //! The axes the limits apply to: a six-DOF joint's limited axes, or the
+    //! axes its type limits.
+    [[nodiscard]] auto LimitAxes() const -> AxisMask
+    {
+      const auto& modes = settings_->axis_modes;
+      if (settings_->type != JointConstraintType::kSixDof
+        || !modes.has_value()) {
+        return use_.limits;
+      }
+      auto mask = AxisMask { 0 };
+      for (size_t axis = 0; axis < modes->size(); ++axis) {
+        if (modes->at(axis) == JointAxisMode::kLimited) {
+          mask = static_cast<AxisMask>(mask | (1U << axis));
+        }
+      }
+      return mask;
+    }
+
+    auto CheckAxisModes() const -> void
+    {
+      const auto& modes = settings_->axis_modes;
+      if (!modes.has_value()) {
+        return;
+      }
+      if (settings_->type != JointConstraintType::kSixDof) {
+        Report(import_codes::kPhysicsSidecarJointMemberNotApplicable,
+          "joints.axis_modes applies to six_dof joints only, not "
+            + std::string(use_.name),
+          base_path_ / "axis_modes");
+        return;
+      }
+      const auto has_limited_axis
+        = std::ranges::contains(*modes, JointAxisMode::kLimited);
+      if (has_limited_axis && !settings_->limits_lower.has_value()
+        && !settings_->limits_upper.has_value()) {
+        Report(import_codes::kPhysicsSidecarJointMembersUnpaired,
+          "joints.axis_modes limits an axis and needs limits_lower and "
+          "limits_upper",
+          base_path_ / "axis_modes");
+      }
+    }
+    auto Report(const std::string_view code, std::string message,
+      const nlohmann::json::json_pointer& location) const -> void
+    {
+      reporter_->ErrorAt(std::string(code), std::move(message), location);
+    }
+
+    auto CheckPair(const std::optional<JointAxisValues>& first,
+      const std::string_view first_name,
+      const std::optional<JointAxisValues>& second,
+      const std::string_view second_name) const -> void
+    {
+      if (first.has_value() == second.has_value()) {
+        return;
+      }
+      const auto present = first.has_value() ? first_name : second_name;
+      const auto missing = first.has_value() ? second_name : first_name;
+      Report(import_codes::kPhysicsSidecarJointMembersUnpaired,
+        "joints." + std::string(present) + " needs " + std::string(missing),
+        base_path_ / std::string(present));
+    }
+
+    auto CheckFrame(const JointFrameSource& frame,
+      const std::string_view prefix) const -> void
+    {
+      const auto position_name = std::string(prefix) + "_position";
+      const auto rotation_name = std::string(prefix) + "_rotation";
+      for (size_t i = 0; i < frame.position.size(); ++i) {
+        if (!std::isfinite(frame.position.at(i))) {
+          Report(import_codes::kPhysicsSidecarValueOutOfRange,
+            "joints." + position_name + " must be finite",
+            base_path_ / position_name / i);
+        }
+      }
+      const auto& q = frame.rotation;
+      const auto length_squared
+        = (q[0] * q[0]) + (q[1] * q[1]) + (q[2] * q[2]) + (q[3] * q[3]);
+      constexpr auto kUnitTolerance = 1.0e-3F;
+      const auto is_unit = std::isfinite(length_squared)
+        && std::abs(length_squared - 1.0F) <= kUnitTolerance;
+      if (!is_unit) {
+        Report(import_codes::kPhysicsSidecarValueOutOfRange,
+          "joints." + rotation_name + " has squared length "
+            + std::to_string(length_squared) + "; it must be a unit quaternion",
+          base_path_ / rotation_name);
+        return;
+      }
+      const auto is_identity = std::abs(q[3]) >= 1.0F - kUnitTolerance;
+      if (!use_.rotations && !is_identity) {
+        Report(import_codes::kPhysicsSidecarJointMemberNotApplicable,
+          "joints." + rotation_name + " orients nothing on a "
+            + std::string(use_.name) + " joint; it must be identity",
+          base_path_ / rotation_name);
+      }
+    }
+
+    //! Every value finite, zero on the axes `used` leaves out, and not
+    //! negative when `non_negative`.
+    auto CheckAxes(const std::optional<JointAxisValues>& values,
+      const std::string_view name, const AxisMask used,
+      const bool non_negative) const -> void
+    {
+      if (!values.has_value()) {
+        return;
+      }
+      for (size_t axis = 0; axis < values->size(); ++axis) {
+        const auto value = values->at(axis);
+        const auto location = base_path_ / std::string(name) / axis;
+        if (!std::isfinite(value)) {
+          Report(import_codes::kPhysicsSidecarValueOutOfRange,
+            "joints." + std::string(name) + " must be finite", location);
+          continue;
+        }
+        const auto axis_used = AxisUsed(used, axis);
+        if (!axis_used && value != 0.0F) {
+          Report(import_codes::kPhysicsSidecarJointMemberNotApplicable,
+            "joints." + std::string(name) + "[" + std::to_string(axis) + "] is "
+              + std::to_string(value) + "; a " + std::string(use_.name)
+              + " joint uses no value there",
+            location);
+          continue;
+        }
+        if (axis_used && non_negative && value < 0.0F) {
+          Report(import_codes::kPhysicsSidecarValueOutOfRange,
+            "joints." + std::string(name) + "[" + std::to_string(axis) + "] is "
+              + std::to_string(value) + "; it must be >= 0",
+            location);
+        }
+      }
+    }
+
+    auto ReportLimit(const std::string_view member, const size_t axis,
+      const float value, const std::string_view allowed) const -> void
+    {
+      Report(import_codes::kPhysicsSidecarValueOutOfRange,
+        "joints." + std::string(member) + "[" + std::to_string(axis) + "] is "
+          + std::to_string(value) + "; a " + std::string(use_.name)
+          + " joint allows " + std::string(allowed),
+        base_path_ / std::string(member) / axis);
+    }
+
+    //! A rotation limit pair: lower in [-pi, 0], upper in [0, pi].
+    auto CheckAngleLimit(const JointAxisValues& lower,
+      const JointAxisValues& upper, const size_t axis) const -> void
+    {
+      constexpr auto kPi = std::numbers::pi_v<float>;
+      const auto lower_in_range
+        = lower.at(axis) >= -kPi && lower.at(axis) <= 0.0F;
+      const auto upper_in_range
+        = upper.at(axis) >= 0.0F && upper.at(axis) <= kPi;
+      if (!lower_in_range) {
+        ReportLimit("limits_lower", axis, lower.at(axis), "[-pi, 0]");
+      }
+      if (!upper_in_range) {
+        ReportLimit("limits_upper", axis, upper.at(axis), "[0, pi]");
+      }
+    }
+
+    auto CheckLimits(const JointAxisValues& lower, const JointAxisValues& upper,
+      const AxisMask limit_axes) const -> void
+    {
+      constexpr auto kTx = size_t { 0 };
+      constexpr auto kRx = size_t { 3 };
+      constexpr auto kRy = size_t { 4 };
+      constexpr auto kRz = size_t { 5 };
+      switch (settings_->type) {
+      case JointConstraintType::kHinge:
+        CheckAngleLimit(lower, upper, kRx);
+        break;
+      case JointConstraintType::kSlider: {
+        if (lower.at(kTx) > 0.0F) {
+          ReportLimit("limits_lower", kTx, lower.at(kTx), "<= 0");
+        }
+        if (upper.at(kTx) < 0.0F) {
+          ReportLimit("limits_upper", kTx, upper.at(kTx), ">= 0");
+        }
+        break;
+      }
+      case JointConstraintType::kDistance: {
+        if (lower.at(kTx) < 0.0F) {
+          ReportLimit("limits_lower", kTx, lower.at(kTx), ">= 0");
+        }
+        if (upper.at(kTx) < lower.at(kTx)) {
+          ReportLimit("limits_upper", kTx, upper.at(kTx), ">= limits_lower[0]");
+        }
+        break;
+      }
+      case JointConstraintType::kCone: {
+        // One symmetric cone: the same half angle about Y and Z.
+        const auto half_angle = upper.at(kRy);
+        constexpr auto kPi = std::numbers::pi_v<float>;
+        const auto half_angle_in_range
+          = half_angle >= 0.0F && half_angle <= kPi;
+        const auto symmetric = upper.at(kRz) == half_angle
+          && lower.at(kRy) == -half_angle && lower.at(kRz) == -half_angle;
+        if (!half_angle_in_range) {
+          ReportLimit("limits_upper", kRy, half_angle, "[0, pi]");
+        } else if (!symmetric) {
+          Report(import_codes::kPhysicsSidecarValueOutOfRange,
+            "joints.limits of a cone joint must be -a and a about both Y and "
+            "Z, with a = limits_upper[4] = "
+              + std::to_string(half_angle),
+            base_path_ / "limits_upper");
+        }
+        break;
+      }
+      case JointConstraintType::kSixDof:
+        for (size_t axis = 0; axis < lower.size(); ++axis) {
+          if (!AxisUsed(limit_axes, axis)) {
+            continue;
+          }
+          if (AxisUsed(kRotationAxes, axis)) {
+            CheckAngleLimit(lower, upper, axis);
+          } else if (upper.at(axis) < lower.at(axis)) {
+            ReportLimit("limits_upper", axis, upper.at(axis),
+              ">= limits_lower[" + std::to_string(axis) + "]");
+          }
+        }
+        break;
+      case JointConstraintType::kFixed:
+      case JointConstraintType::kPoint:
+        break;
+      }
+    }
+
+    observer_ptr<const JointSettingsSource> settings_;
+    JointTypeUse use_;
+    nlohmann::json::json_pointer base_path_;
+    observer_ptr<const Reporter> reporter_;
+  };
+
+  auto ValidateJoints(const std::vector<JointBindingSource>& records,
+    const Reporter& reporter) -> void
+  {
+    for (size_t i = 0; i < records.size(); ++i) {
+      JointValidator(records.at(i).settings,
+        nlohmann::json::json_pointer {} / "bindings" / "joints" / i, reporter)
+        .Validate();
     }
   }
 
@@ -1131,7 +1639,12 @@ namespace {
       parsed.aggregates, "aggregates",
       [](const auto& record) -> auto { return record.node_index; }, reporter);
 
+    RefuseUnsupportedMembers(
+      bindings, "soft_bodies", kUnsupportedSoftBodyMembers, reporter);
+    RefuseUnsupportedMembers(
+      bindings, "joints", kUnsupportedJointMembers, reporter);
     ValidateSoftBodies(parsed.soft_bodies, reporter);
+    ValidateJoints(parsed.joints, reporter);
     ValidateVehicles(parsed.vehicles, reporter);
   }
 

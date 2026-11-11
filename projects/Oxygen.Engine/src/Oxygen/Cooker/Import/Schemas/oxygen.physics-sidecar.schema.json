@@ -681,25 +681,40 @@
           "$ref": "#/definitions/vec3"
         },
         "local_frame_a_rotation": {
-          "$ref": "#/definitions/vec4"
+          "$ref": "#/definitions/vec4",
+          "description": "Unit quaternion [x, y, z, w] of joint frame A. The frame's +X is the joint's primary axis (hinge, slide, twist) and +Y its normal axis."
         },
         "local_frame_b_position": {
           "$ref": "#/definitions/vec3"
         },
         "local_frame_b_rotation": {
-          "$ref": "#/definitions/vec4"
+          "$ref": "#/definitions/vec4",
+          "description": "Unit quaternion [x, y, z, w] of joint frame B; same axes as frame A."
+        },
+        "axis_modes": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "enum": ["free", "limited", "locked"]
+          },
+          "description": "six_dof only: the motion of each joint-frame axis [tx, ty, tz, rx, ry, rz]. Without it, every axis is limited when limits are authored and free otherwise."
         },
         "limits_lower": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Per joint-frame axis [tx, ty, tz, rx, ry, rz]: metres or radians. Authored with limits_upper."
         },
         "limits_upper": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Per joint-frame axis [tx, ty, tz, rx, ry, rz]: metres or radians. Authored with limits_lower."
         },
         "spring_stiffnesses": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Limit spring stiffness per axis (N/m or N m/rad); with a zero damping, zero keeps the limit hard. Authored with spring_dampings."
         },
-        "spring_damping_ratios": {
-          "$ref": "#/definitions/vec6"
+        "spring_dampings": {
+          "$ref": "#/definitions/vec6",
+          "description": "Limit spring damping coefficient per axis (N s/m or N m s/rad). Authored with spring_stiffnesses."
         },
         "motor_modes": {
           "type": "array",
@@ -716,16 +731,20 @@
           "$ref": "#/definitions/vec6"
         },
         "motor_max_forces": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Motor force limit (N) on the translation axes [tx, ty, tz]; 0 leaves the force unlimited, and the rotation entries stay 0."
         },
         "motor_max_torques": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Motor torque limit (N m) on the rotation axes [rx, ry, rz]; 0 leaves the torque unlimited, and the translation entries stay 0."
         },
         "motor_drive_frequencies": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Position-motor drive frequency (Hz) per axis; with a zero damping ratio, zero keeps the backend default drive. Authored with motor_damping_ratios."
         },
         "motor_damping_ratios": {
-          "$ref": "#/definitions/vec6"
+          "$ref": "#/definitions/vec6",
+          "description": "Position-motor damping ratio per axis. Authored with motor_drive_frequencies."
         },
         "break_force": {
           "type": "number",

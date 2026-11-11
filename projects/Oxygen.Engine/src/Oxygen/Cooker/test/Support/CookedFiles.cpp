@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -13,10 +15,14 @@
 #include <vector>
 
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Cooker/test/Support/CookedFiles.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 
 namespace oxygen::cooker::test {
 
@@ -115,6 +121,25 @@ auto HasCookedFile(const std::filesystem::path& cooked_root,
   const content::cooked::CookerStorageReader& storage) -> bool
 {
   return !CookedFiles(cooked_root, layout_relpath, storage).empty();
+}
+
+auto FindPhysicsResource(const content::cooked::CookedContent& content,
+  const data::AssetKey& key) -> std::optional<CookedPhysicsResource>
+{
+  const auto& table
+    = content.ResourceTable(content::cooked::TableKind::kPhysics);
+  // Row zero is the reserved empty row.
+  for (auto index = uint32_t { 1U }; index < table.RowCount(); ++index) {
+    const auto row = ResourceIndexT { index };
+    const auto desc = table.Row<data::pak::physics::PhysicsResourceDesc>(row);
+    if (desc.resource_asset_key == key) {
+      return CookedPhysicsResource {
+        .format = desc.format,
+        .payload = table.Payload(row),
+      };
+    }
+  }
+  return std::nullopt;
 }
 
 } // namespace oxygen::cooker::test

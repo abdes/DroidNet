@@ -152,7 +152,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, import_codes::kPhysicsSidecarPayloadInvalid));
+      report->diagnostics, import_codes::kPhysicsSidecarBindingDuplicate));
   }
 
 } // namespace

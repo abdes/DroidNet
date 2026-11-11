@@ -40,15 +40,20 @@
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Math/Float3.h>
+#include <Jolt/Math/Quat.h>
+#include <Jolt/Math/Real.h>
 #include <Jolt/Math/Vec3.h>
 #include <Jolt/Physics/Constraints/ConeConstraint.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
+#include <Jolt/Physics/Constraints/ConstraintPart/SwingTwistConstraintPart.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/MotorSettings.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/Constraints/SixDOFConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/SpringSettings.h>
 #include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
 #include <Jolt/Physics/Vehicle/TrackedVehicleController.h>
 #include <Jolt/Physics/Vehicle/VehicleAntiRollBar.h>
@@ -223,32 +228,6 @@ namespace {
     return "unknown";
   }
 
-  [[nodiscard]] auto BackendForSoftBodyFormat(
-    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
-  {
-    switch (format) {
-    case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
-      return PhysicsBackend::kJolt;
-    case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
-      return PhysicsBackend::kPhysX;
-    default:
-      return std::nullopt;
-    }
-  }
-
-  [[nodiscard]] auto BackendForJointFormat(
-    const phys::PhysicsResourceFormat format) -> std::optional<PhysicsBackend>
-  {
-    switch (format) {
-    case phys::PhysicsResourceFormat::kJoltConstraintBinary:
-      return PhysicsBackend::kJolt;
-    case phys::PhysicsResourceFormat::kPhysXConstraintBinary:
-      return PhysicsBackend::kPhysX;
-    default:
-      return std::nullopt;
-    }
-  }
-
   using AssetRecordMap
     = std::unordered_map<data::AssetKey, const cooked::CookedAsset*>;
 
@@ -340,8 +319,42 @@ namespace {
     }
     AddDiagnosticAtPath(session, request, ImportSeverity::kError,
       std::string(import_codes::kPhysicsSidecarNodeRefOutOfBounds),
-      "Node index is out of bounds for target scene", location);
+      "Node index " + std::to_string(node_index)
+        + " is out of bounds: the target scene has "
+        + std::to_string(node_count) + " nodes",
+      location);
     return false;
+  }
+
+  //! Refuses a binding whose authored `backend.target` is not `requested`:
+  //! its backend scalars hold another backend's arm.
+  auto CheckAuthoredBackend(const PhysicsBackend authored,
+    const PhysicsBackend requested,
+    const nlohmann::json::json_pointer& binding_path,
+    BindingValidationContext& ctx) -> bool
+  {
+    if (authored == PhysicsBackend::kNone || authored == requested) {
+      return true;
+    }
+    AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
+      std::string(import_codes::kPhysicsSidecarBackendMismatch),
+      "backend.target is " + std::string(BackendName(authored))
+        + " but the import cooks for " + std::string(BackendName(requested)),
+      binding_path / "backend" / "target");
+    return false;
+  }
+
+  template <typename BindingSourceT>
+  auto CheckAuthoredBackends(const std::vector<BindingSourceT>& bindings,
+    const std::string_view category, const PhysicsBackend requested,
+    BindingValidationContext& ctx) -> void
+  {
+    for (size_t i = 0; i < bindings.size(); ++i) {
+      (void)CheckAuthoredBackend(bindings.at(i).authored_backend, requested,
+        nlohmann::json::json_pointer {} / "bindings" / std::string(category)
+          / i,
+        ctx);
+    }
   }
 
   template <typename BindingSourceT>
@@ -503,24 +516,9 @@ namespace {
         if (requested_backend == PhysicsBackend::kJolt) {
           AddDiagnosticAtPath(*ctx.session, *ctx.request,
             ImportSeverity::kError,
-            std::string(import_codes::kPhysicsSidecarPayloadInvalid),
-            "soft_bodies.collision_mesh_ref is not supported for jolt backend",
+            std::string(import_codes::kPhysicsSidecarCapabilityUnsupported),
+            "soft_bodies.collision_mesh_ref has no jolt soft-body setting",
             base_path / "collision_mesh_ref");
-          continue;
-        }
-      }
-
-      if (records.at(i).backend_explicit) {
-        const auto authored_backend
-          = BackendForSoftBodyFormat(records.at(i).record.topology_format);
-        if (!authored_backend.has_value()
-          || *authored_backend != requested_backend) {
-          AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError,
-            std::string(import_codes::kPhysicsSidecarBackendMismatch),
-            "soft-body backend.target must match requested import backend "
-              + std::string(BackendName(requested_backend)),
-            base_path / "backend" / "target");
           continue;
         }
       }
@@ -554,21 +552,6 @@ namespace {
           *ctx.session, *ctx.request, base_path / "node_index_b");
       if (!(node_a_ok && node_b_ok)) {
         continue;
-      }
-
-      if (records.at(i).backend_explicit) {
-        const auto authored_backend
-          = BackendForJointFormat(records.at(i).constraint_format);
-        if (!authored_backend.has_value()
-          || *authored_backend != requested_backend) {
-          AddDiagnosticAtPath(*ctx.session, *ctx.request,
-            ImportSeverity::kError,
-            std::string(import_codes::kPhysicsSidecarBackendMismatch),
-            "joint backend.target must match requested import backend "
-              + std::string(BackendName(requested_backend)),
-            base_path / "backend" / "target");
-          continue;
-        }
       }
       records.at(i).constraint_format = *expected_format_opt;
     }
@@ -676,16 +659,6 @@ namespace {
     return obj.at(key).get<float>();
   }
 
-  [[nodiscard]] auto JsonVec3Or(const nlohmann::json& obj, const char* key,
-    const JPH::Vec3& fallback) -> JPH::Vec3
-  {
-    if (!obj.contains(key)) {
-      return fallback;
-    }
-    const auto values = obj.at(key).get<std::array<float, 3>>();
-    return { values.at(0), values.at(1), values.at(2) };
-  }
-
   auto ApplyCurve2DToLinearCurve(
     const nlohmann::json& points, JPH::LinearCurve& out_curve) -> bool
   {
@@ -755,147 +728,291 @@ namespace {
     return true;
   }
 
-  [[nodiscard]] auto ToJoltConstraintSpace(
-    const nlohmann::json& authored_binding) -> JPH::EConstraintSpace
+  [[nodiscard]] auto ToJoltVec3(const std::array<float, 3>& value) -> JPH::Vec3
   {
-    if (authored_binding.contains("constraint_space")
-      && authored_binding.at("constraint_space").get<std::string>()
-        == "local") {
-      return JPH::EConstraintSpace::LocalToBodyCOM;
+    return { value[0], value[1], value[2] };
+  }
+
+  //! A joint frame in Jolt terms: its point and its primary and normal axes.
+  struct JoltJointFrame final {
+    JPH::RVec3 point;
+    JPH::Vec3 axis_x;
+    JPH::Vec3 axis_y;
+  };
+
+  [[nodiscard]] auto ToJoltJointFrame(const JointFrameSource& frame)
+    -> JoltJointFrame
+  {
+    const auto& r = frame.rotation;
+    const auto rotation = JPH::Quat(r[0], r[1], r[2], r[3]).Normalized();
+    return {
+      .point = JPH::RVec3(ToJoltVec3(frame.position)),
+      .axis_x = rotation * JPH::Vec3::sAxisX(),
+      .axis_y = rotation * JPH::Vec3::sAxisY(),
+    };
+  }
+
+  [[nodiscard]] auto ToJoltConstraintSpace(const JointConstraintSpace space)
+    -> JPH::EConstraintSpace
+  {
+    return space == JointConstraintSpace::kLocal
+      ? JPH::EConstraintSpace::LocalToBodyCOM
+      : JPH::EConstraintSpace::WorldSpace;
+  }
+
+  constexpr auto kJointAxisTx = size_t { 0 };
+  constexpr auto kJointAxisRx = size_t { 3 };
+  constexpr auto kJointAxisRy = size_t { 4 };
+  constexpr auto kJointTranslationAxes = size_t { 3 };
+
+  //! The value of `axis` in `values`, or zero when they are not authored. A
+  //! zero keeps the backend's default.
+  [[nodiscard]] auto AxisValue(
+    const std::optional<JointAxisValues>& values, const size_t axis) -> float
+  {
+    return values.has_value() ? values->at(axis) : 0.0F;
+  }
+
+  //! The limit spring of `axis`; none (hard limits) without a stiffness or a
+  //! damping.
+  auto ApplyLimitSpring(const JointSettingsSource& settings, const size_t axis,
+    JPH::SpringSettings& out) -> void
+  {
+    const auto stiffness = AxisValue(settings.spring_stiffnesses, axis);
+    const auto damping = AxisValue(settings.spring_dampings, axis);
+    const auto has_spring = stiffness > 0.0F || damping > 0.0F;
+    if (has_spring) {
+      out = JPH::SpringSettings(
+        JPH::ESpringMode::StiffnessAndDamping, stiffness, damping);
     }
-    return JPH::EConstraintSpace::WorldSpace;
   }
 
-  auto ParseJoltJointType(
-    const nlohmann::json& authored_binding, std::string& out_type) -> void
+  //! The motor of `axis`: its drive spring and its force or torque limit,
+  //! each left at the backend's default when zero.
+  auto ApplyMotor(const JointSettingsSource& settings, const size_t axis,
+    JPH::MotorSettings& out) -> void
   {
-    out_type = authored_binding.contains("constraint_type")
-      ? authored_binding.at("constraint_type").get<std::string>()
-      : std::string("fixed");
+    const auto frequency = AxisValue(settings.motor_drive_frequencies, axis);
+    const auto damping = AxisValue(settings.motor_damping_ratios, axis);
+    const auto has_drive = frequency > 0.0F || damping > 0.0F;
+    if (has_drive) {
+      out.mSpringSettings = JPH::SpringSettings(
+        JPH::ESpringMode::FrequencyAndDamping, frequency, damping);
+    }
+    const auto force = AxisValue(settings.motor_max_forces, axis);
+    const auto torque = AxisValue(settings.motor_max_torques, axis);
+    const auto translation = axis < kJointTranslationAxes;
+    if (translation && force > 0.0F) {
+      out.SetForceLimit(force);
+    }
+    if (!translation && torque > 0.0F) {
+      out.SetTorqueLimit(torque);
+    }
   }
 
+  //! The settings every constraint type shares.
+  auto ApplyCommonJointSettings(
+    const JointBindingSource& source, JPH::ConstraintSettings& out) -> void
+  {
+    out.mConstraintPriority = source.settings.priority;
+    out.mNumVelocityStepsOverride
+      = source.record.backend_scalars.jolt.num_velocity_steps_override;
+    out.mNumPositionStepsOverride
+      = source.record.backend_scalars.jolt.num_position_steps_override;
+  }
+
+  auto ConfigureJoltFixed(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::FixedConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mAutoDetectPoint = false;
+    out.mPoint1 = a.point;
+    out.mAxisX1 = a.axis_x;
+    out.mAxisY1 = a.axis_y;
+    out.mPoint2 = b.point;
+    out.mAxisX2 = b.axis_x;
+    out.mAxisY2 = b.axis_y;
+  }
+
+  auto ConfigureJoltPoint(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::PointConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mPoint1 = a.point;
+    out.mPoint2 = b.point;
+  }
+
+  auto ConfigureJoltHinge(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::HingeConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mPoint1 = a.point;
+    out.mHingeAxis1 = a.axis_x;
+    out.mNormalAxis1 = a.axis_y;
+    out.mPoint2 = b.point;
+    out.mHingeAxis2 = b.axis_x;
+    out.mNormalAxis2 = b.axis_y;
+    if (settings.limits_lower.has_value()
+      && settings.limits_upper.has_value()) {
+      out.mLimitsMin = settings.limits_lower->at(kJointAxisRx);
+      out.mLimitsMax = settings.limits_upper->at(kJointAxisRx);
+    }
+    ApplyLimitSpring(settings, kJointAxisRx, out.mLimitsSpringSettings);
+    ApplyMotor(settings, kJointAxisRx, out.mMotorSettings);
+  }
+
+  auto ConfigureJoltSlider(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::SliderConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mAutoDetectPoint = false;
+    out.mPoint1 = a.point;
+    out.mSliderAxis1 = a.axis_x;
+    out.mNormalAxis1 = a.axis_y;
+    out.mPoint2 = b.point;
+    out.mSliderAxis2 = b.axis_x;
+    out.mNormalAxis2 = b.axis_y;
+    if (settings.limits_lower.has_value()
+      && settings.limits_upper.has_value()) {
+      out.mLimitsMin = settings.limits_lower->at(kJointAxisTx);
+      out.mLimitsMax = settings.limits_upper->at(kJointAxisTx);
+    }
+    ApplyLimitSpring(settings, kJointAxisTx, out.mLimitsSpringSettings);
+    ApplyMotor(settings, kJointAxisTx, out.mMotorSettings);
+  }
+
+  auto ConfigureJoltDistance(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::DistanceConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mPoint1 = a.point;
+    out.mPoint2 = b.point;
+    if (settings.limits_lower.has_value()
+      && settings.limits_upper.has_value()) {
+      out.mMinDistance = settings.limits_lower->at(kJointAxisTx);
+      out.mMaxDistance = settings.limits_upper->at(kJointAxisTx);
+    }
+    ApplyLimitSpring(settings, kJointAxisTx, out.mLimitsSpringSettings);
+  }
+
+  auto ConfigureJoltCone(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::ConeConstraintSettings& out) -> void
+  {
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mPoint1 = a.point;
+    out.mTwistAxis1 = a.axis_x;
+    out.mPoint2 = b.point;
+    out.mTwistAxis2 = b.axis_x;
+    if (settings.limits_upper.has_value()) {
+      out.mHalfConeAngle = settings.limits_upper->at(kJointAxisRy);
+    }
+  }
+
+  auto ConfigureJoltSixDof(const JointSettingsSource& settings,
+    const JoltJointFrame& a, const JoltJointFrame& b,
+    JPH::SixDOFConstraintSettings& out) -> void
+  {
+    using EAxis = JPH::SixDOFConstraintSettings::EAxis;
+    out.mSpace = ToJoltConstraintSpace(settings.space);
+    out.mPosition1 = a.point;
+    out.mAxisX1 = a.axis_x;
+    out.mAxisY1 = a.axis_y;
+    out.mPosition2 = b.point;
+    out.mAxisX2 = b.axis_x;
+    out.mAxisY2 = b.axis_y;
+
+    const auto has_limits
+      = settings.limits_lower.has_value() && settings.limits_upper.has_value();
+    for (size_t axis = 0; axis < JPH::SixDOFConstraintSettings::EAxis::Num;
+      ++axis) {
+      const auto jolt_axis = static_cast<EAxis>(axis);
+      const auto default_mode
+        = has_limits ? JointAxisMode::kLimited : JointAxisMode::kFree;
+      const auto mode = settings.axis_modes.has_value()
+        ? settings.axis_modes->at(axis)
+        : default_mode;
+      switch (mode) {
+      case JointAxisMode::kFree:
+        out.MakeFreeAxis(jolt_axis);
+        break;
+      case JointAxisMode::kLocked:
+        out.MakeFixedAxis(jolt_axis);
+        break;
+      case JointAxisMode::kLimited:
+        // The preparation proved a limited axis has both limits.
+        out.SetLimitedAxis(jolt_axis, AxisValue(settings.limits_lower, axis),
+          AxisValue(settings.limits_upper, axis));
+        break;
+      }
+      if (axis < kJointTranslationAxes) {
+        ApplyLimitSpring(settings, axis,
+          base::CheckedAt(std::span { out.mLimitsSpringSettings }, axis));
+      }
+      ApplyMotor(settings, axis,
+        base::CheckedAt(std::span { out.mMotorSettings }, axis));
+    }
+
+    // A cone swing is symmetric about each axis; an asymmetric one is a
+    // pyramid.
+    const auto symmetric_swing = !has_limits
+      || std::ranges::all_of(std::array { EAxis::RotationY, EAxis::RotationZ },
+        [&](const EAxis axis) -> bool {
+          return base::CheckedAt(std::span { out.mLimitMin }, axis)
+            == -base::CheckedAt(std::span { out.mLimitMax }, axis);
+        });
+    out.mSwingType
+      = symmetric_swing ? JPH::ESwingType::Cone : JPH::ESwingType::Pyramid;
+  }
+
+  //! Serializes the `SettingsT` constraint `configure` sets up, with the
+  //! settings every joint shares.
+  template <typename SettingsT, typename ConfigureFn>
+  auto SerializeJoltJoint(const JointBindingSource& source,
+    const ConfigureFn& configure, std::vector<std::byte>& out_blob) -> bool
+  {
+    const auto a = ToJoltJointFrame(source.settings.frame_a);
+    const auto b = ToJoltJointFrame(source.settings.frame_b);
+    auto settings = SettingsT {};
+    configure(source.settings, a, b, settings);
+    ApplyCommonJointSettings(source, settings);
+    return SerializeJoltConstraintSettings(settings, out_blob);
+  }
+
+  //! Cooks the Jolt constraint of a joint the preparation validated.
   auto CookJoltJointBlob(const JointBindingSource& source,
     std::vector<std::byte>& out_blob, std::string& error) -> bool
   {
     EnsureJoltAllocatorReady();
-    const auto& authored = source.authored_binding;
-    const auto space = ToJoltConstraintSpace(authored);
-    const auto point_a
-      = JsonVec3Or(authored, "local_frame_a_position", JPH::Vec3::sZero());
-    const auto point_b
-      = JsonVec3Or(authored, "local_frame_b_position", JPH::Vec3::sZero());
-
-    auto type = std::string {};
-    ParseJoltJointType(authored, type);
-    if (type == "fixed") {
-      auto settings = JPH::FixedConstraintSettings {};
-      settings.mSpace = space;
-      settings.mAutoDetectPoint = false;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      return SerializeJoltConstraintSettings(settings, out_blob);
+    switch (source.settings.type) {
+    case JointConstraintType::kFixed:
+      return SerializeJoltJoint<JPH::FixedConstraintSettings>(
+        source, ConfigureJoltFixed, out_blob);
+    case JointConstraintType::kPoint:
+      return SerializeJoltJoint<JPH::PointConstraintSettings>(
+        source, ConfigureJoltPoint, out_blob);
+    case JointConstraintType::kHinge:
+      return SerializeJoltJoint<JPH::HingeConstraintSettings>(
+        source, ConfigureJoltHinge, out_blob);
+    case JointConstraintType::kSlider:
+      return SerializeJoltJoint<JPH::SliderConstraintSettings>(
+        source, ConfigureJoltSlider, out_blob);
+    case JointConstraintType::kDistance:
+      return SerializeJoltJoint<JPH::DistanceConstraintSettings>(
+        source, ConfigureJoltDistance, out_blob);
+    case JointConstraintType::kCone:
+      return SerializeJoltJoint<JPH::ConeConstraintSettings>(
+        source, ConfigureJoltCone, out_blob);
+    case JointConstraintType::kSixDof:
+      return SerializeJoltJoint<JPH::SixDOFConstraintSettings>(
+        source, ConfigureJoltSixDof, out_blob);
     }
-    if (type == "point") {
-      auto settings = JPH::PointConstraintSettings {};
-      settings.mSpace = space;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-    if (type == "distance") {
-      auto settings = JPH::DistanceConstraintSettings {};
-      settings.mSpace = space;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      if (authored.contains("limits_lower")) {
-        const auto limits
-          = authored.at("limits_lower").get<std::array<float, 6>>();
-        settings.mMinDistance = limits.at(0);
-      }
-      if (authored.contains("limits_upper")) {
-        const auto limits
-          = authored.at("limits_upper").get<std::array<float, 6>>();
-        settings.mMaxDistance = limits.at(0);
-      }
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-    if (type == "hinge") {
-      auto settings = JPH::HingeConstraintSettings {};
-      settings.mSpace = space;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-    if (type == "slider") {
-      auto settings = JPH::SliderConstraintSettings {};
-      settings.mSpace = space;
-      settings.mAutoDetectPoint = false;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-    if (type == "cone") {
-      auto settings = JPH::ConeConstraintSettings {};
-      settings.mSpace = space;
-      settings.mPoint1 = JPH::RVec3(point_a);
-      settings.mPoint2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      if (authored.contains("limits_upper")) {
-        const auto limits
-          = authored.at("limits_upper").get<std::array<float, 6>>();
-        settings.mHalfConeAngle = std::max(0.0F, limits.at(3));
-      }
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-    if (type == "six_dof") {
-      auto settings = JPH::SixDOFConstraintSettings {};
-      settings.mSpace = space;
-      settings.mPosition1 = JPH::RVec3(point_a);
-      settings.mPosition2 = JPH::RVec3(point_b);
-      settings.mNumVelocityStepsOverride
-        = source.record.backend_scalars.jolt.num_velocity_steps_override;
-      settings.mNumPositionStepsOverride
-        = source.record.backend_scalars.jolt.num_position_steps_override;
-      if (authored.contains("limits_lower")
-        && authored.contains("limits_upper")) {
-        const auto lower
-          = authored.at("limits_lower").get<std::array<float, 6>>();
-        const auto upper
-          = authored.at("limits_upper").get<std::array<float, 6>>();
-        for (int axis = 0; axis < JPH::SixDOFConstraintSettings::EAxis::Num;
-          ++axis) {
-          settings.SetLimitedAxis(
-            static_cast<JPH::SixDOFConstraintSettings::EAxis>(axis),
-            lower.at(axis), upper.at(axis));
-        }
-      }
-      return SerializeJoltConstraintSettings(settings, out_blob);
-    }
-
-    error = "unsupported joint constraint_type '" + type + "'";
+    error = "joint constraint_type has no jolt constraint";
     return false;
   }
 
@@ -1970,91 +2087,92 @@ namespace {
     }
   }
 
-  auto EmitSoftBodyTopologyResources(
-    std::vector<SoftBodyBindingSource>& records, ImportSession& session,
-    const ImportRequest& request, const cooked::CookedContent& target_content)
-    -> bool
+  //! The backend blobs of a document's bindings, in binding order.
+  struct CookedBindingBlobs final {
+    std::vector<std::vector<std::byte>> soft_bodies;
+    std::vector<std::vector<std::byte>> joints;
+    std::vector<std::vector<std::byte>> vehicles;
+  };
+
+  //! Cooks the backend blob of every soft body, joint and vehicle without
+  //! emitting any; reports each failure.
+  auto CookBindingBlobs(const PhysicsSidecarDocument& parsed,
+    ImportSession& session, const ImportRequest& request,
+    const cooked::CookedContent& target_content)
+    -> std::optional<CookedBindingBlobs>
   {
-    for (size_t i = 0; i < records.size(); ++i) {
-      auto blob_bytes = std::vector<std::byte> {};
+    auto blobs = CookedBindingBlobs {};
+    for (size_t i = 0; i < parsed.soft_bodies.size(); ++i) {
+      const auto& source = parsed.soft_bodies.at(i);
+      auto blob = std::vector<std::byte> {};
       auto cook_error = SoftBodyCookError {};
-      if (!CookSoftBodyTopologyBlob(
-            records.at(i), target_content, blob_bytes, cook_error)) {
+      if (!CookSoftBodyTopologyBlob(source, target_content, blob, cook_error)) {
         LOG_F(ERROR,
           "PhysicsSidecarImportPipeline: soft-body topology cooking failed "
           "(source_mesh_ref='{}' code='{}' reason='{}')",
-          records.at(i).source_mesh_ref, cook_error.code, cook_error.reason);
+          source.source_mesh_ref, cook_error.code, cook_error.reason);
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           std::string(cook_error.code),
           "Failed to cook soft-body topology resource: " + cook_error.reason,
           nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i);
-        continue;
       }
-      if (!EmitBindingBlob(session, request,
-            nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i,
-            blob_bytes, records.at(i).record.topology_format,
-            records.at(i).record.topology_asset_key)) {
-        continue;
-      }
+      blobs.soft_bodies.push_back(std::move(blob));
     }
-    return !session.HasErrors();
-  }
-
-  auto EmitJointConstraintResources(std::vector<JointBindingSource>& records,
-    ImportSession& session, const ImportRequest& request) -> bool
-  {
-    for (size_t i = 0; i < records.size(); ++i) {
-      auto blob_bytes = std::vector<std::byte> {};
+    for (size_t i = 0; i < parsed.joints.size(); ++i) {
+      auto blob = std::vector<std::byte> {};
       auto cook_error = std::string {};
-      if (!CookJointConstraintBlob(records.at(i), blob_bytes, cook_error)) {
+      if (!CookJointConstraintBlob(parsed.joints.at(i), blob, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           std::string(import_codes::kPhysicsSidecarResourceSerializeFailed),
           "Failed to cook joint constraint resource: " + cook_error,
           nlohmann::json::json_pointer {} / "bindings" / "joints" / i);
-        continue;
       }
-      if (!EmitBindingBlob(session, request,
-            nlohmann::json::json_pointer {} / "bindings" / "joints" / i,
-            blob_bytes, records.at(i).constraint_format,
-            records.at(i).record.constraint_asset_key)) {
-        continue;
-      }
+      blobs.joints.push_back(std::move(blob));
     }
-    return !session.HasErrors();
-  }
-
-  auto EmitVehicleConstraintResources(
-    std::vector<VehicleBindingSource>& records, ImportSession& session,
-    const ImportRequest& request) -> bool
-  {
-    for (size_t i = 0; i < records.size(); ++i) {
-      auto blob_bytes = std::vector<std::byte> {};
+    for (size_t i = 0; i < parsed.vehicles.size(); ++i) {
+      auto blob = std::vector<std::byte> {};
       auto cook_error = std::string {};
-      if (!CookVehicleConstraintBlob(records.at(i), blob_bytes, cook_error)) {
+      if (!CookVehicleConstraintBlob(parsed.vehicles.at(i), blob, cook_error)) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           std::string(import_codes::kPhysicsSidecarResourceSerializeFailed),
           "Failed to cook vehicle constraint resource: " + cook_error,
           nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i);
-        continue;
       }
-      if (!EmitBindingBlob(session, request,
-            nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i,
-            blob_bytes, records.at(i).constraint_format,
-            records.at(i).record.constraint_asset_key)) {
-        continue;
-      }
+      blobs.vehicles.push_back(std::move(blob));
     }
-    return !session.HasErrors();
+    if (session.HasErrors()) {
+      return std::nullopt;
+    }
+    return blobs;
   }
 
-  auto EmitBackendCookedBindingResources(PhysicsSidecarDocument& parsed,
-    ImportSession& session, const ImportRequest& request,
-    const cooked::CookedContent& target_content) -> bool
+  //! Emits the cooked blobs and records each resource key in its binding.
+  auto EmitBindingBlobs(PhysicsSidecarDocument& parsed,
+    const CookedBindingBlobs& blobs, ImportSession& session,
+    const ImportRequest& request) -> bool
   {
-    return EmitSoftBodyTopologyResources(
-             parsed.soft_bodies, session, request, target_content)
-      && EmitJointConstraintResources(parsed.joints, session, request)
-      && EmitVehicleConstraintResources(parsed.vehicles, session, request);
+    for (size_t i = 0; i < parsed.soft_bodies.size(); ++i) {
+      auto& record = parsed.soft_bodies.at(i).record;
+      (void)EmitBindingBlob(session, request,
+        nlohmann::json::json_pointer {} / "bindings" / "soft_bodies" / i,
+        blobs.soft_bodies.at(i), record.topology_format,
+        record.topology_asset_key);
+    }
+    for (size_t i = 0; i < parsed.joints.size(); ++i) {
+      auto& source = parsed.joints.at(i);
+      (void)EmitBindingBlob(session, request,
+        nlohmann::json::json_pointer {} / "bindings" / "joints" / i,
+        blobs.joints.at(i), source.constraint_format,
+        source.record.constraint_asset_key);
+    }
+    for (size_t i = 0; i < parsed.vehicles.size(); ++i) {
+      auto& source = parsed.vehicles.at(i);
+      (void)EmitBindingBlob(session, request,
+        nlohmann::json::json_pointer {} / "bindings" / "vehicles" / i,
+        blobs.vehicles.at(i), source.constraint_format,
+        source.record.constraint_asset_key);
+    }
+    return !session.HasErrors();
   }
 
   template <typename SourceT, typename RecordT>
@@ -2319,31 +2437,27 @@ namespace {
         "Target scene virtual path must be canonical");
       return false;
     }
+    // Only Jolt has a runtime; PhysX cooking waits for its backend
+    // (abdes/DroidNet#133).
+    const auto backend = ResolveRequestedPhysicsBackend(request);
+    if (backend != PhysicsBackend::kJolt) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
+        "Physics sidecars cook for jolt only; the request asks for "
+          + std::string(BackendName(backend)));
+      return false;
+    }
     return true;
   }
 
   auto ResolveAndValidateBindings(PhysicsSidecarDocument& parsed,
+    const cooked::CookedContent& target_content,
     const SidecarResolvedSceneState& resolved_scene_state,
     std::span<const internal::MountedCookedSource> mounts,
     ImportSession& session, const ImportRequest& request) -> bool
   {
-    const auto* target_content
-      = detail::FindSceneContent(mounts, resolved_scene_state.scene_key);
-    if (target_content == nullptr) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsSidecarTargetSceneMissing),
-        "Resolved target scene key is not present in cooked scene context");
-      return false;
-    }
-
-    const auto target_assets = BuildAssetRecordMap(*target_content);
+    const auto target_assets = BuildAssetRecordMap(target_content);
     const auto requested_backend = ResolveRequestedPhysicsBackend(request);
-    if (requested_backend == PhysicsBackend::kNone) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsSidecarBackendUnsupported),
-        "Requested physics backend 'none' is not valid for sidecar cooking");
-      return false;
-    }
     auto validation_ctx = BindingValidationContext {
       .session = observer_ptr { &session },
       .request = observer_ptr { &request },
@@ -2366,11 +2480,15 @@ namespace {
       parsed.aggregates, "aggregates",
       [](const auto& record) -> auto { return record.node_index; },
       validation_ctx);
-    if (session.HasErrors()) {
-      return false;
-    }
-    return EmitBackendCookedBindingResources(
-      parsed, session, request, *target_content);
+    CheckAuthoredBackends(
+      parsed.rigid_bodies, "rigid_bodies", requested_backend, validation_ctx);
+    CheckAuthoredBackends(
+      parsed.characters, "characters", requested_backend, validation_ctx);
+    CheckAuthoredBackends(
+      parsed.soft_bodies, "soft_bodies", requested_backend, validation_ctx);
+    CheckAuthoredBackends(
+      parsed.joints, "joints", requested_backend, validation_ctx);
+    return !session.HasErrors();
   }
 
   auto BuildPhysicsSidecarTables(const PhysicsSidecarDocument& parsed,
@@ -2736,8 +2854,24 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  if (!ResolveAndValidateBindings(
-        *parsed, *resolved_scene_state, mounts, *session, request)) {
+  const auto* target_content
+    = detail::FindSceneContent(mounts, resolved_scene_state->scene_key);
+  if (target_content == nullptr) {
+    AddDiagnostic(*session, request, ImportSeverity::kError,
+      std::string(import_codes::kPhysicsSidecarTargetSceneMissing),
+      "Resolved target scene key is not present in cooked scene context");
+    co_return false;
+  }
+  if (!ResolveAndValidateBindings(*parsed, *target_content,
+        *resolved_scene_state, mounts, *session, request)) {
+    co_return false;
+  }
+
+  // Every blob cooks before any is emitted, so a failing binding emits none.
+  const auto blobs
+    = CookBindingBlobs(*parsed, *session, request, *target_content);
+  if (!blobs.has_value()
+    || !EmitBindingBlobs(*parsed, *blobs, *session, request)) {
     co_return false;
   }
 

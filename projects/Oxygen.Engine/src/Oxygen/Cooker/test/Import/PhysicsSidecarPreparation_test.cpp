@@ -6,9 +6,11 @@
 
 // Covers: Import/Internal/PhysicsSidecarSource.cpp
 
+#include <array>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -20,6 +22,7 @@
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -244,7 +247,7 @@ namespace {
                         .AppendBinding("colliders", Collider(0))
                         .Text();
 
-    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarBindingDuplicate,
       "/bindings/colliders/1");
   }
 
@@ -255,7 +258,7 @@ namespace {
     soft_body["edge_compliance"] = 1.0e39;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarValueOutOfRange,
       "/bindings/soft_bodies/0/edge_compliance");
   }
 
@@ -265,7 +268,7 @@ namespace {
     soft_body["pressure_coefficient"] = -1.0e39;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarValueOutOfRange,
       "/bindings/soft_bodies/0/pressure_coefficient");
   }
 
@@ -275,7 +278,7 @@ namespace {
     soft_body["solver_iteration_count"] = 0;
     const auto text = Sidecar().AppendBinding("soft_bodies", soft_body).Text();
 
-    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarValueOutOfRange,
       "/bindings/soft_bodies/0/solver_iteration_count");
   }
 
@@ -329,6 +332,189 @@ namespace {
     ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarPayloadInvalid,
       "/bindings/vehicles/0/wheels/1");
   }
+
+  auto Joint(const std::string_view type) -> json
+  {
+    return json {
+      { "node_index_a", 0 },
+      { "node_index_b", 1 },
+      { "constraint_type", type },
+    };
+  }
+
+  auto Axes(const float tx, const float rx) -> json
+  {
+    return json::array({ tx, 0.0F, 0.0F, rx, 0.0F, 0.0F });
+  }
+
+  NOLINT_TEST(PhysicsSidecarPreparationTest, ReadsJointSettings)
+  {
+    auto hinge = Joint("hinge");
+    hinge["constraint_space"] = "local";
+    hinge["local_frame_a_position"] = { 1.0F, 2.0F, 3.0F };
+    hinge["local_frame_a_rotation"] = { 0.0F, 0.0F, 1.0F, 0.0F };
+    hinge["limits_lower"] = Axes(0.0F, -0.5F);
+    hinge["limits_upper"] = Axes(0.0F, 0.5F);
+    hinge["priority"] = 4;
+    hinge["backend"] = { { "target", "jolt" } };
+    const auto text = Sidecar().AppendBinding("joints", hinge).Text();
+
+    const auto prepared = Prepare(text);
+
+    ASSERT_HAS_VALUE(prepared.document)
+      << DiagnosticSummary(prepared.diagnostics);
+    ASSERT_EQ(prepared.document->joints.size(), 1U);
+    const auto& joint = prepared.document->joints.front();
+    EXPECT_EQ(
+      joint.authored_backend, core::meta::physics::PhysicsBackend::kJolt);
+    const auto& settings = joint.settings;
+    EXPECT_EQ(settings.type, JointConstraintType::kHinge);
+    EXPECT_EQ(settings.space, JointConstraintSpace::kLocal);
+    EXPECT_EQ(settings.frame_a.position, (std::array { 1.0F, 2.0F, 3.0F }));
+    EXPECT_EQ(
+      settings.frame_a.rotation, (std::array { 0.0F, 0.0F, 1.0F, 0.0F }));
+    ASSERT_HAS_VALUE(settings.limits_upper);
+    EXPECT_EQ(settings.limits_upper->at(3), 0.5F);
+    EXPECT_EQ(settings.priority, 4U);
+  }
+
+  //! Each binding records the backend.target it authors, `kNone` without one.
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RecordsTheAuthoredBackend)
+  {
+    auto rigid_body = Collider(0);
+    rigid_body["backend"] = { { "target", "physx" } };
+    const auto text = Sidecar()
+                        .AppendBinding("rigid_bodies", rigid_body)
+                        .AppendBinding("joints", Joint("fixed"))
+                        .Text();
+
+    const auto prepared = Prepare(text);
+
+    ASSERT_HAS_VALUE(prepared.document)
+      << DiagnosticSummary(prepared.diagnostics);
+    EXPECT_EQ(prepared.document->rigid_bodies.front().authored_backend,
+      core::meta::physics::PhysicsBackend::kPhysX);
+    EXPECT_EQ(prepared.document->joints.front().authored_backend,
+      core::meta::physics::PhysicsBackend::kNone);
+  }
+
+  //! Members the engine does not implement yet are refused, never dropped.
+  class UnsupportedMemberTest
+    : public ::testing::TestWithParam<std::pair<std::string, json>> { };
+
+  NOLINT_TEST_P(UnsupportedMemberTest, IsRefusedWhereAuthored)
+  {
+    const auto& [pointer, value] = GetParam();
+    const auto is_soft_body = pointer.starts_with("/backend");
+    auto binding = is_soft_body ? SoftBody(0) : Joint("hinge");
+    binding[json::json_pointer(pointer)] = value;
+    const auto* const kind = is_soft_body ? "soft_bodies" : "joints";
+    const auto text = Sidecar().AppendBinding(kind, binding).Text();
+
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarCapabilityUnsupported,
+      "/bindings/" + std::string(kind) + "/0" + pointer);
+  }
+
+  INSTANTIATE_TEST_SUITE_P(PhysicsSidecarPreparationTest, UnsupportedMemberTest,
+    ::testing::Values(std::pair { std::string("/break_force"), json(10.0) },
+      std::pair { std::string("/break_torque"), json(10.0) },
+      std::pair { std::string("/collide_connected"), json(true) },
+      std::pair { std::string("/motor_modes"),
+        json::array({ "off", "off", "off", "velocity", "off", "off" }) },
+      std::pair { std::string("/motor_target_velocities"), Axes(0.0F, 1.0F) },
+      std::pair { std::string("/motor_target_positions"), Axes(0.0F, 1.0F) },
+      std::pair { std::string("/backend/lra_stiffness_fraction"), json(0.5) },
+      std::pair {
+        std::string("/backend/skinned_constraint_enable"), json(true) }));
+
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesAnUnpairedJointMember)
+  {
+    auto hinge = Joint("hinge");
+    hinge["spring_stiffnesses"] = Axes(0.0F, 10.0F);
+    const auto text = Sidecar().AppendBinding("joints", hinge).Text();
+
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarJointMembersUnpaired,
+      "/bindings/joints/0/spring_stiffnesses");
+  }
+
+  //! A hinge turns about rx only; a value on another axis has no meaning.
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesAValueOnAnUnusedAxis)
+  {
+    auto hinge = Joint("hinge");
+    hinge["limits_lower"] = Axes(-0.1F, -0.5F);
+    hinge["limits_upper"] = Axes(0.0F, 0.5F);
+    const auto text = Sidecar().AppendBinding("joints", hinge).Text();
+
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarJointMemberNotApplicable,
+      "/bindings/joints/0/limits_lower/0");
+  }
+
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesARotatedPointFrame)
+  {
+    auto point = Joint("point");
+    point["local_frame_b_rotation"] = { 0.0F, 0.0F, 1.0F, 0.0F };
+    const auto text = Sidecar().AppendBinding("joints", point).Text();
+
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarJointMemberNotApplicable,
+      "/bindings/joints/0/local_frame_b_rotation");
+  }
+
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesAxisModesOffSixDof)
+  {
+    auto hinge = Joint("hinge");
+    hinge["axis_modes"]
+      = json::array({ "free", "free", "free", "free", "free", "free" });
+    const auto text = Sidecar().AppendBinding("joints", hinge).Text();
+
+    ExpectRefusal(Prepare(text),
+      import_codes::kPhysicsSidecarJointMemberNotApplicable,
+      "/bindings/joints/0/axis_modes");
+  }
+
+  NOLINT_TEST(PhysicsSidecarPreparationTest, RefusesANonUnitFrameRotation)
+  {
+    auto hinge = Joint("hinge");
+    hinge["local_frame_a_rotation"] = { 0.0F, 0.0F, 0.0F, 2.0F };
+    const auto text = Sidecar().AppendBinding("joints", hinge).Text();
+
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarValueOutOfRange,
+      "/bindings/joints/0/local_frame_a_rotation");
+  }
+
+  //! Each joint type's limit domain: a hinge angle lies in [-pi, 0] and
+  //! [0, pi], a slider straddles 0, a distance is not negative, and a cone is
+  //! symmetric.
+  class JointLimitTest : public ::testing::TestWithParam<
+                           std::tuple<std::string, json, json, std::string>> {
+  };
+
+  NOLINT_TEST_P(JointLimitTest, IsRefusedOutsideItsDomain)
+  {
+    const auto& [type, lower, upper, pointer] = GetParam();
+    auto joint = Joint(type);
+    joint["limits_lower"] = lower;
+    joint["limits_upper"] = upper;
+    const auto text = Sidecar().AppendBinding("joints", joint).Text();
+
+    ExpectRefusal(Prepare(text), import_codes::kPhysicsSidecarValueOutOfRange,
+      "/bindings/joints/0" + pointer);
+  }
+
+  INSTANTIATE_TEST_SUITE_P(PhysicsSidecarPreparationTest, JointLimitTest,
+    ::testing::Values(std::tuple { std::string("hinge"), Axes(0.0F, -0.5F),
+                        Axes(0.0F, 4.0F), std::string("/limits_upper/3") },
+      std::tuple { std::string("slider"), Axes(0.2F, 0.0F), Axes(1.0F, 0.0F),
+        std::string("/limits_lower/0") },
+      std::tuple { std::string("distance"), Axes(-1.0F, 0.0F), Axes(1.0F, 0.0F),
+        std::string("/limits_lower/0") },
+      std::tuple { std::string("cone"),
+        json::array({ 0.0F, 0.0F, 0.0F, 0.0F, -0.5F, -0.3F }),
+        json::array({ 0.0F, 0.0F, 0.0F, 0.0F, 0.5F, 0.3F }),
+        std::string("/limits_upper") }));
 
 } // namespace
 } // namespace oxygen::content::import::test

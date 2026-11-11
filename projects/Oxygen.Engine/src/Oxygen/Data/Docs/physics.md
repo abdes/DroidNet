@@ -497,15 +497,29 @@ is used internally:
       on body A, in A's local space.
     - _Local frame B_ — same for body B.
     - _Limits_ — per constrained axis: lower bound, upper bound.
-    - _Spring properties_ — stiffness (N/m or N·m/rad) and damping ratio for
-      spring-backed limits and position motors.
-    - _Motor settings_ — per-axis motor mode (Off, Velocity, Position), target
-      velocity or target angle/position, max force or max torque, drive
-      frequency and damping ratio for position mode.
+    - _Spring properties_ — stiffness (N/m or N·m/rad) and damping coefficient
+      (N·s/m or N·m·s/rad) for spring-backed limits.
+    - _Motor settings_ — per-axis max force or max torque, drive frequency and
+      damping ratio for position mode. The motor mode and target velocity or
+      position are runtime state; the cooker refuses them until the runtime
+      applies an initial motor state (abdes/DroidNet#134).
+    - _Authored form._ Each frame's +X is the primary axis (hinge, slide,
+      twist) and +Y the normal axis; rotations are `[x, y, z, w]`. Per-axis
+      values follow the joint frame `[tx, ty, tz, rx, ry, rz]`. A type reads
+      only its own axes and every other entry must be zero: hinge `rx`;
+      slider `tx`; distance `tx` (range and spring); cone the swing half angle,
+      `limits_upper` on `ry` and `rz` with `limits_lower` their negation;
+      six-DOF every axis, with `axis_modes` (free, limited, locked), springs on
+      the translation axes only, and a pyramid swing when the `ry`/`rz` limits
+      are asymmetric. Point and distance joints take no frame rotation. Limits,
+      spring pairs and drive pairs come together; a zero spring, drive, force
+      or torque keeps the backend default.
     - _Break threshold_ — linear force and angular torque magnitude above which
-      the constraint is permanently disabled (one-shot breakable joint).
+      the constraint is permanently disabled (one-shot breakable joint). Not
+      implemented yet: the cooker refuses it (abdes/DroidNet#132).
     - _Collision between connected bodies_ — flag to enable or suppress
-      collision detection between the two joined bodies.
+      collision detection between the two joined bodies. Not implemented yet:
+      the cooker refuses it (abdes/DroidNet#135).
     - _Priority_ (for constraint ordering in the solver).
     - _Backend-specific scalar fields:_
       - Jolt: `mNumVelocityStepsOverride`, `mNumPositionStepsOverride` — per-
@@ -632,9 +646,13 @@ is used internally:
           iterations (separate from the position iteration count above; Jolt
           exposes both independently; other backends do not).
         - _LRA stiffness fraction_ — long-range attachment stiffness as a
-          fraction of edge stiffness, used when tether mode is Geodesic.
+          fraction of edge stiffness, used when tether mode is Geodesic. Jolt
+          LRA constraints are hard, so the cooker refuses it
+          (abdes/DroidNet#137).
         - _Skinned constraint enable flag_ — whether Jolt's skinned rigging
-          constraints (bone-driven vertex targets) are active.
+          constraints (bone-driven vertex targets) are active. Needs authored
+          skinning data the sidecar does not carry yet; the cooker refuses it
+          (abdes/DroidNet#137).
       - **PhysX FEM only** (`PxFEMSoftBodyMaterial` properties):
         - _Young's modulus_ (Pa) — elastic stiffness of the FEM material;
           replaces the XPBD compliance model with a physically-based continuum

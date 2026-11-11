@@ -309,6 +309,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsShapeWorldBoundaryLimitsInvalid = "physics.shape.world_boundary_limits_invalid";
   inline constexpr std::string_view kPhysicsSidecarBackendMismatch = "physics.sidecar.backend_mismatch";
   inline constexpr std::string_view kPhysicsSidecarBackendUnsupported = "physics.sidecar.backend_unsupported";
+  //! Two bindings of one kind name the same node.
+  inline constexpr std::string_view kPhysicsSidecarBindingDuplicate = "physics.sidecar.binding_duplicate";
+  //! The member is valid authoring the engine does not implement yet.
+  inline constexpr std::string_view kPhysicsSidecarCapabilityUnsupported = "physics.sidecar.capability_unsupported";
   inline constexpr std::string_view kPhysicsSidecarCollisionMeshRefNotGeometry = "physics.sidecar.collision_mesh_ref_not_geometry";
   inline constexpr std::string_view kPhysicsSidecarCollisionMeshRefUnresolved = "physics.sidecar.collision_mesh_ref_unresolved";
   inline constexpr std::string_view kPhysicsSidecarDescriptorEmitFailed = "physics.sidecar.descriptor_emit_failed";
@@ -316,6 +320,10 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsSidecarInflightTargetSceneAmbiguous = "physics.sidecar.inflight_target_scene_ambiguous";
   inline constexpr std::string_view kPhysicsSidecarInnerShapeRefNotCollisionShape = "physics.sidecar.inner_shape_ref_not_collision_shape";
   inline constexpr std::string_view kPhysicsSidecarInnerShapeRefUnresolved = "physics.sidecar.inner_shape_ref_unresolved";
+  //! A joint value on an axis or frame its constraint type does not use.
+  inline constexpr std::string_view kPhysicsSidecarJointMemberNotApplicable = "physics.sidecar.joint_member_not_applicable";
+  //! One member of a joint's member pair without the other.
+  inline constexpr std::string_view kPhysicsSidecarJointMembersUnpaired = "physics.sidecar.joint_members_unpaired";
   inline constexpr std::string_view kPhysicsSidecarMaterialRefNotPhysicsMaterial = "physics.sidecar.material_ref_not_physics_material";
   inline constexpr std::string_view kPhysicsSidecarMaterialRefUnresolved = "physics.sidecar.material_ref_unresolved";
   inline constexpr std::string_view kPhysicsSidecarNodeRefOutOfBounds = "physics.sidecar.node_ref_out_of_bounds";
@@ -344,6 +352,8 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsSidecarTargetSceneNotScene = "physics.sidecar.target_scene_not_scene";
   inline constexpr std::string_view kPhysicsSidecarTargetSceneReadFailed = "physics.sidecar.target_scene_read_failed";
   inline constexpr std::string_view kPhysicsSidecarTargetSceneVirtualPathInvalid = "physics.sidecar.target_scene_virtual_path_invalid";
+  //! A number outside the domain its member allows.
+  inline constexpr std::string_view kPhysicsSidecarValueOutOfRange = "physics.sidecar.value_out_of_range";
   //! What scene imports found.
   inline constexpr std::string_view kSceneAdapterMissing = "scene.adapter_missing";
   inline constexpr std::string_view kSceneCameraInvalidOwnership = "scene.camera.invalid_ownership";
