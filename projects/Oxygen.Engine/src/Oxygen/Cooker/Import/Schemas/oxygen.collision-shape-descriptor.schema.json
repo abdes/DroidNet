@@ -16,42 +16,52 @@
     },
     "material_ref": {
       "allOf": [
-        { "$ref": "oxygen.reference.schema.json#/definitions/reference" },
-        { "pattern": "\\.opmat$" }
+        {
+          "$ref": "oxygen.reference.schema.json#/definitions/reference"
+        },
+        {
+          "pattern": "\\.opmat$"
+        }
       ]
     },
     "local_position": {
       "$ref": "#/definitions/vec3"
     },
     "local_rotation": {
-      "$ref": "#/definitions/quat"
+      "$ref": "#/definitions/quat",
+      "description": "Unit quaternion [x, y, z, w]."
     },
     "local_scale": {
-      "$ref": "#/definitions/vec3_positive"
+      "$ref": "#/definitions/vec3_positive",
+      "description": "Uniform for a sphere, capsule, cylinder, cone or convex hull."
     },
     "is_sensor": {
       "type": "boolean"
     },
     "collision_own_layer": {
-      "$ref": "#/definitions/u64"
+      "type": "integer",
+      "description": "The shape's one layer: a single bit, 1 << index, below 2^64. The cook checks the range: the schema validator compares integers as signed 64-bit values."
     },
     "collision_target_layers": {
-      "$ref": "#/definitions/u64"
+      "type": "integer",
+      "description": "Bit mask of the layers the shape collides with, below 2^64. The cook checks the range."
     },
     "radius": {
       "type": "number",
-      "exclusiveMinimum": 0.0
+      "exclusiveMinimum": 0.0,
+      "description": "Radius in meters of a sphere, capsule, cylinder or cone."
     },
     "half_height": {
       "type": "number",
       "minimum": 0.0,
-      "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
+      "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere. Cylinder and cone take a positive value; the cone apex is at +Z."
     },
     "half_extents": {
       "$ref": "#/definitions/vec3_positive"
     },
     "normal": {
-      "$ref": "#/definitions/vec3"
+      "$ref": "#/definitions/vec3",
+      "description": "Plane normal; any nonzero length."
     },
     "distance": {
       "type": "number"
@@ -63,7 +73,65 @@
       "$ref": "#/definitions/vec3"
     },
     "limits_max": {
-      "$ref": "#/definitions/vec3"
+      "$ref": "#/definitions/vec3",
+      "description": "Each axis strictly greater than limits_min."
+    },
+    "geometry_ref": {
+      "allOf": [
+        {
+          "$ref": "oxygen.reference.schema.json#/definitions/reference"
+        },
+        {
+          "pattern": "\\.ogeo$"
+        }
+      ],
+      "description": "Cooked geometry whose first level of detail gives the triangles of a triangle mesh or the points of a convex hull."
+    },
+    "convex_radius": {
+      "type": "number",
+      "minimum": 0.0,
+      "description": "Convex hull edge rounding in meters; default 0.05. The backend may lower it to fit the hull."
+    },
+    "hull_tolerance": {
+      "type": "number",
+      "exclusiveMinimum": 0.0,
+      "description": "How far in meters a point may stay outside the convex hull; default 0.001. Larger values give fewer hull vertices."
+    },
+    "sample_count": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 65536,
+      "description": "Height field samples per side."
+    },
+    "heights": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": ["number", "null"]
+      },
+      "description": "sample_count * sample_count heights in meters, row-major: sample (row, column) is at local (column * sample_spacing[0], row * sample_spacing[1], height). null is a hole without collision."
+    },
+    "sample_spacing": {
+      "type": "array",
+      "items": {
+        "type": "number",
+        "exclusiveMinimum": 0.0
+      },
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Distance in meters between columns (X) and rows (Y); default [1, 1]."
+    },
+    "block_size": {
+      "type": "integer",
+      "minimum": 2,
+      "maximum": 8,
+      "description": "Height field samples per culling block side; default 2."
+    },
+    "bits_per_sample": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 8,
+      "description": "Bits that store one height field sample; default 8."
     },
     "children": {
       "$ref": "#/definitions/compound_children"
@@ -92,15 +160,15 @@
         "box",
         "cylinder",
         "cone",
+        "convex_hull",
+        "triangle_mesh",
+        "height_field",
         "plane",
         "world_boundary"
       ]
     },
     "world_boundary_mode": {
       "enum": ["aabb_clamp", "plane_set"]
-    },
-    "u64": {
-      "type": "integer"
     },
     "vec3": {
       "type": "array",
@@ -149,18 +217,20 @@
         },
         "radius": {
           "type": "number",
-          "exclusiveMinimum": 0.0
+          "exclusiveMinimum": 0.0,
+          "description": "Radius in meters of a sphere, capsule, cylinder or cone."
         },
         "half_height": {
           "type": "number",
           "minimum": 0.0,
-          "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere."
+          "description": "Half-length along the local Z axis. Capsule excludes the hemispheres: total height is 2 * (half_height + radius), and zero gives a sphere. Cylinder and cone take a positive value; the cone apex is at +Z."
         },
         "half_extents": {
           "$ref": "#/definitions/vec3_positive"
         },
         "normal": {
-          "$ref": "#/definitions/vec3"
+          "$ref": "#/definitions/vec3",
+          "description": "Plane normal; any nonzero length."
         },
         "distance": {
           "type": "number"
@@ -172,16 +242,76 @@
           "$ref": "#/definitions/vec3"
         },
         "limits_max": {
-          "$ref": "#/definitions/vec3"
+          "$ref": "#/definitions/vec3",
+          "description": "Each axis strictly greater than limits_min."
+        },
+        "geometry_ref": {
+          "allOf": [
+            {
+              "$ref": "oxygen.reference.schema.json#/definitions/reference"
+            },
+            {
+              "pattern": "\\.ogeo$"
+            }
+          ],
+          "description": "Cooked geometry whose first level of detail gives the triangles of a triangle mesh or the points of a convex hull."
+        },
+        "convex_radius": {
+          "type": "number",
+          "minimum": 0.0,
+          "description": "Convex hull edge rounding in meters; default 0.05. The backend may lower it to fit the hull."
+        },
+        "hull_tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "description": "How far in meters a point may stay outside the convex hull; default 0.001. Larger values give fewer hull vertices."
+        },
+        "sample_count": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 65536,
+          "description": "Height field samples per side."
+        },
+        "heights": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": ["number", "null"]
+          },
+          "description": "sample_count * sample_count heights in meters, row-major: sample (row, column) is at local (column * sample_spacing[0], row * sample_spacing[1], height). null is a hole without collision."
+        },
+        "sample_spacing": {
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0.0
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Distance in meters between columns (X) and rows (Y); default [1, 1]."
+        },
+        "block_size": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 8,
+          "description": "Height field samples per culling block side; default 2."
+        },
+        "bits_per_sample": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "description": "Bits that store one height field sample; default 8."
         },
         "local_position": {
           "$ref": "#/definitions/vec3"
         },
         "local_rotation": {
-          "$ref": "#/definitions/quat"
+          "$ref": "#/definitions/quat",
+          "description": "Unit quaternion [x, y, z, w]."
         },
         "local_scale": {
-          "$ref": "#/definitions/vec3_positive"
+          "$ref": "#/definitions/vec3_positive",
+          "description": "Uniform for a sphere, capsule, cylinder, cone or convex hull."
         }
       },
       "allOf": [
@@ -248,6 +378,45 @@
           },
           "then": {
             "required": ["radius", "half_height"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "convex_hull"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["geometry_ref"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "triangle_mesh"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["geometry_ref"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "shape_type": {
+                "const": "height_field"
+              }
+            },
+            "required": ["shape_type"]
+          },
+          "then": {
+            "required": ["sample_count", "heights"]
           }
         },
         {
@@ -343,6 +512,45 @@
       },
       "then": {
         "required": ["radius", "half_height"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "convex_hull"
+          }
+        },
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["geometry_ref"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "triangle_mesh"
+          }
+        },
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["geometry_ref"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "shape_type": {
+            "const": "height_field"
+          }
+        },
+        "required": ["shape_type"]
+      },
+      "then": {
+        "required": ["sample_count", "heights"]
       }
     },
     {

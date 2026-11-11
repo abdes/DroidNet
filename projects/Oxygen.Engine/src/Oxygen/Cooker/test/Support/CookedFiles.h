@@ -13,6 +13,7 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -60,5 +61,15 @@ struct CookedPhysicsResource final {
 [[nodiscard]] auto FindPhysicsResource(
   const content::cooked::CookedContent& content, const data::AssetKey& key)
   -> std::optional<CookedPhysicsResource>;
+
+//! The collision shape `key` of `content`, read by the runtime's loader with
+//! the references the index records for it.
+/*!
+ @throw std::logic_error When `content` does not list the shape, or the loader
+   refuses it.
+*/
+[[nodiscard]] auto ReadCollisionShape(
+  const content::cooked::CookedContent& content, const data::AssetKey& key)
+  -> content::CollisionShapeData;
 
 } // namespace oxygen::cooker::test

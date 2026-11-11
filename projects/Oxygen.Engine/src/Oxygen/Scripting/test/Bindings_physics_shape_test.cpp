@@ -38,14 +38,30 @@ namespace {
   using oxygen::physics::WorldBoundaryShape;
   using oxygen::scripting::bindings::ParseCollisionShape;
 
-  auto PushPayload(lua_State* state, const char* payload_type, const char* data)
-    -> void
+  //! A `cooked_payload` table: its payload type and its bytes.
+  struct Payload final {
+    const char* type = "";
+    const char* data = "";
+  };
+
+  auto PushPayload(lua_State* state, const Payload& payload) -> void
   {
     lua_newtable(state);
-    lua_pushstring(state, payload_type);
+    lua_pushstring(state, payload.type);
     lua_setfield(state, -2, "payload_type");
-    lua_pushlstring(state, data, std::strlen(data));
+    lua_pushlstring(state, payload.data, std::strlen(payload.data));
     lua_setfield(state, -2, "data");
+  }
+
+  //! Pushes a compound child table whose shape is a `type` with its
+  //! defaults; a compound child shape has no children.
+  auto PushChild(lua_State* state, const char* type) -> void
+  {
+    lua_newtable(state);
+    lua_newtable(state);
+    lua_pushstring(state, type);
+    lua_setfield(state, -2, "type");
+    lua_setfield(state, -2, "shape");
   }
 
   auto LuaParseShapeForPCall(lua_State* state) -> int
@@ -125,23 +141,19 @@ NOLINT_TEST_F(
   lua_setfield(state, -2, "radius");
   lua_pushnumber(state, 0.9);
   lua_setfield(state, -2, "half_height");
-  PushPayload(state, "convex", "cone_payload");
-  lua_setfield(state, -2, "cooked_payload");
   {
     const CollisionShape shape = ParseCollisionShape(state, -1);
     ASSERT_TRUE(std::holds_alternative<ConeShape>(shape));
     const auto& cone = std::get<ConeShape>(shape);
     EXPECT_FLOAT_EQ(cone.radius, 0.3F);
     EXPECT_FLOAT_EQ(cone.half_height, 0.9F);
-    EXPECT_EQ(cone.cooked_payload.payload_type, ShapePayloadType::kConvex);
-    EXPECT_FALSE(cone.cooked_payload.data.empty());
   }
   lua_pop(state, 1);
 
   lua_newtable(state);
   lua_pushstring(state, "convex_hull");
   lua_setfield(state, -2, "type");
-  PushPayload(state, "convex", "hull_payload");
+  PushPayload(state, { .type = "convex", .data = "hull_payload" });
   lua_setfield(state, -2, "cooked_payload");
   {
     const CollisionShape shape = ParseCollisionShape(state, -1);
@@ -155,7 +167,7 @@ NOLINT_TEST_F(
   lua_newtable(state);
   lua_pushstring(state, "triangle_mesh");
   lua_setfield(state, -2, "type");
-  PushPayload(state, "mesh", "mesh_payload");
+  PushPayload(state, { .type = "mesh", .data = "mesh_payload" });
   lua_setfield(state, -2, "cooked_payload");
   {
     const CollisionShape shape = ParseCollisionShape(state, -1);
@@ -169,7 +181,7 @@ NOLINT_TEST_F(
   lua_newtable(state);
   lua_pushstring(state, "height_field");
   lua_setfield(state, -2, "type");
-  PushPayload(state, "height_field", "hf_payload");
+  PushPayload(state, { .type = "height_field", .data = "hf_payload" });
   lua_setfield(state, -2, "cooked_payload");
   {
     const CollisionShape shape = ParseCollisionShape(state, -1);
@@ -214,15 +226,22 @@ NOLINT_TEST_F(
   lua_newtable(state);
   lua_pushstring(state, "compound");
   lua_setfield(state, -2, "type");
-  PushPayload(state, "compound", "compound_payload");
-  lua_setfield(state, -2, "cooked_payload");
+  lua_newtable(state);
+  PushChild(state, "sphere");
+  lua_rawseti(state, -2, 1);
+  PushChild(state, "cone");
+  lua_rawseti(state, -2, 2);
+  lua_setfield(state, -2, "children");
   {
     const CollisionShape shape = ParseCollisionShape(state, -1);
     ASSERT_TRUE(std::holds_alternative<CompoundShape>(shape));
     const auto& compound = std::get<CompoundShape>(shape);
-    EXPECT_EQ(
-      compound.cooked_payload.payload_type, ShapePayloadType::kCompound);
-    EXPECT_FALSE(compound.cooked_payload.data.empty());
+    ASSERT_EQ(compound.children.size(), 2U);
+    EXPECT_TRUE(
+      std::holds_alternative<SphereShape>(compound.children.at(0).shape));
+    EXPECT_TRUE(
+      std::holds_alternative<ConeShape>(compound.children.at(1).shape));
+    EXPECT_EQ(compound.children.at(1).local_scale, (oxygen::Vec3 { 1, 1, 1 }));
   }
   lua_pop(state, 1);
 
@@ -249,27 +268,65 @@ NOLINT_TEST_F(
   };
 
   ExpectParseError(
-    [state]() {
+    [state] {
       lua_newtable(state);
       lua_pushstring(state, "triangle_mesh");
       lua_setfield(state, -2, "type");
-      PushPayload(state, "convex", "wrong_payload");
+      PushPayload(state, { .type = "convex", .data = "wrong_payload" });
       lua_setfield(state, -2, "cooked_payload");
     },
     "payload_type does not match");
 
   ExpectParseError(
-    [state]() {
+    [state] {
       lua_newtable(state);
-      lua_pushstring(state, "compound");
+      lua_pushstring(state, "convex_hull");
       lua_setfield(state, -2, "type");
-      PushPayload(state, "compound", "");
+      PushPayload(state, { .type = "convex", .data = "" });
       lua_setfield(state, -2, "cooked_payload");
     },
     "data must be non-empty");
 
   ExpectParseError(
-    [state]() {
+    [state] {
+      lua_newtable(state);
+      lua_pushstring(state, "compound");
+      lua_setfield(state, -2, "type");
+    },
+    "requires a 'children' array");
+
+  ExpectParseError(
+    [state] {
+      lua_newtable(state);
+      lua_pushstring(state, "compound");
+      lua_setfield(state, -2, "type");
+      lua_newtable(state);
+      lua_newtable(state); // the nested compound child
+      lua_newtable(state);
+      lua_pushstring(state, "compound");
+      lua_setfield(state, -2, "type");
+      lua_newtable(state);
+      PushChild(state, "sphere");
+      lua_rawseti(state, -2, 1);
+      lua_setfield(state, -2, "children");
+      lua_setfield(state, -2, "shape");
+      lua_rawseti(state, -2, 1);
+      lua_setfield(state, -2, "children");
+    },
+    "cannot be a compound");
+
+  ExpectParseError(
+    [state] {
+      lua_newtable(state);
+      lua_pushstring(state, "convex_hull");
+      lua_setfield(state, -2, "type");
+      PushPayload(state, { .type = "compound", .data = "payload" });
+      lua_setfield(state, -2, "cooked_payload");
+    },
+    "must be one of 'convex', 'mesh' or 'height_field'");
+
+  ExpectParseError(
+    [state] {
       lua_newtable(state);
       lua_pushstring(state, "not_a_shape");
       lua_setfield(state, -2, "type");

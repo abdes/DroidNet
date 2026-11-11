@@ -11,10 +11,8 @@
 #include <limits>
 #include <mutex>
 #include <span>
-#include <type_traits>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <Jolt/Math/Quat.h>
@@ -42,7 +40,6 @@
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
 #include <Oxygen/Physics/PhysicsError.h>
-#include <Oxygen/Physics/Shape.h>
 
 oxygen::physics::jolt::JoltBodies::JoltBodies(
   JoltWorld& world, JoltShapes& shapes)
@@ -63,16 +60,7 @@ auto oxygen::physics::jolt::JoltBodies::CreateBody(
   if (body_interface == nullptr) {
     return Err(PhysicsError::kWorldNotFound);
   }
-  if (desc.type == body::BodyType::kDynamic
-    && std::visit(
-      [](const auto& value) -> bool {
-        using T = std::decay_t<decltype(value)>;
-        return std::is_same_v<T, TriangleMeshShape>
-          || std::is_same_v<T, HeightFieldShape>
-          || std::is_same_v<T, PlaneShape>
-          || std::is_same_v<T, WorldBoundaryShape>;
-      },
-      desc.shape)) {
+  if (desc.type == body::BodyType::kDynamic && MustBeStatic(desc.shape)) {
     return Err(PhysicsError::kInvalidArgument);
   }
   if (!IsFiniteTranslation(desc.initial_position)
@@ -206,8 +194,8 @@ auto oxygen::physics::jolt::JoltBodies::DestroyBody(
     bool references_target = false;
     if (constraint->GetType() == JPH::EConstraintType::TwoBodyConstraint) {
       auto* two_body = static_cast<JPH::TwoBodyConstraint*>(constraint);
-      const auto body1 = two_body->GetBody1();
-      const auto body2 = two_body->GetBody2();
+      auto* const body1 = two_body->GetBody1();
+      auto* const body2 = two_body->GetBody2();
       const bool matches_body_1
         = body1 != nullptr && body1->GetID() == target_jolt_body_id;
       const bool matches_body_2

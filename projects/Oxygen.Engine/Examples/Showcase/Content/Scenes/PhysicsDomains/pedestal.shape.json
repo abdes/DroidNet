@@ -1,0 +1,6 @@
+{
+  "name": "pedestal_shape",
+  "shape_type": "triangle_mesh",
+  "material_ref": "ground.opmat",
+  "geometry_ref": "pedestal.ogeo"
+}

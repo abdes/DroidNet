@@ -560,12 +560,11 @@ Done when:
 Problem:
 
 - Existing tests are mostly API/contract-level and do not catch current scene-hydration failures.
-- `CollisionShapeDescriptorImportJob` emits an OPSB header plus JSON for authored
-  convex hull, triangle mesh and height field recipes, but labels it as Jolt binary.
-  The emitter/loader preserve those bytes; the Jolt converter expects native shape
-  serialization. Compound children and cone geometry also lack a complete path
-  from authored descriptors to the payload consumed by DemoShell. The maintained
-  box/sphere/cylinder/capsule examples do not exercise these gaps.
+- Resolved: convex hulls and triangle meshes now cook from a cooked geometry,
+  and height fields from authored samples, into native Jolt shape state that
+  the runtime restores. The runtime builds cones from their parameters and
+  assembles compounds from their child records. The PhysicsDomains example
+  exercises every shape type.
 
 Files:
 

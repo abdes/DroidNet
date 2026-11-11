@@ -5,28 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <exception>
+#include <expected>
 #include <filesystem>
 #include <iterator>
-#include <limits>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
-
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Import/HashedBytes.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -39,7 +34,9 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/CollisionShapeDescriptorImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/JoltShapeCook.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/CollisionShapeImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/CookedMeshSurface.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -52,20 +49,31 @@ namespace oxygen::content::import::detail {
 
 namespace {
 
-  using nlohmann::json;
   namespace phys = data::pak::physics;
+  using internal::ShapePart;
 
   struct DescriptorTarget final {
     std::string relpath;
     std::string virtual_path;
   };
 
-  using AssetTypeMap = std::unordered_map<data::AssetKey, data::AssetType>;
-
-  struct PayloadResolution final {
-    data::AssetKey payload_asset_key;
-    phys::ShapePayloadType payload_type = phys::ShapePayloadType::kInvalid;
+  //! The diagnostic codes of a reference that fails to resolve.
+  struct ReferenceCodes final {
+    std::string_view unresolved;
+    std::string_view wrong_type;
   };
+
+  //! The cooked backend payload of one part, before it is emitted.
+  struct PartPayload final {
+    phys::ShapePayloadType type = phys::ShapePayloadType::kInvalid;
+    std::vector<std::byte> bytes;
+  };
+
+  //! A part whose payload failed to cook; the session holds the diagnostic.
+  struct PartCookFailed final { };
+
+  //! A part's payload; nothing for an analytic part.
+  using PartCook = std::expected<std::optional<PartPayload>, PartCookFailed>;
 
   [[nodiscard]] auto MakeDuration(
     const std::chrono::steady_clock::time_point start,
@@ -76,93 +84,16 @@ namespace {
   }
 
   auto AddDiagnostic(ImportSession& session, const ImportRequest& request,
-    const ImportSeverity severity, std::string code, std::string message,
+    const std::string_view code, std::string message,
     std::string json_pointer = {}) -> void
   {
     session.AddDiagnostic({
-      .severity = severity,
-      .code = std::move(code),
+      .severity = ImportSeverity::kError,
+      .code = std::string(code),
       .message = std::move(message),
       .source_path = request.source_path.string(),
       .json_pointer = std::move(json_pointer),
     });
-  }
-
-  [[nodiscard]] auto ParseShapeType(const std::string_view value)
-    -> phys::ShapeType
-  {
-    if (value == "sphere") {
-      return phys::ShapeType::kSphere;
-    }
-    if (value == "capsule") {
-      return phys::ShapeType::kCapsule;
-    }
-    if (value == "box") {
-      return phys::ShapeType::kBox;
-    }
-    if (value == "cylinder") {
-      return phys::ShapeType::kCylinder;
-    }
-    if (value == "cone") {
-      return phys::ShapeType::kCone;
-    }
-    if (value == "convex_hull") {
-      return phys::ShapeType::kConvexHull;
-    }
-    if (value == "triangle_mesh") {
-      return phys::ShapeType::kTriangleMesh;
-    }
-    if (value == "height_field") {
-      return phys::ShapeType::kHeightField;
-    }
-    if (value == "plane") {
-      return phys::ShapeType::kPlane;
-    }
-    if (value == "world_boundary") {
-      return phys::ShapeType::kWorldBoundary;
-    }
-    if (value == "compound") {
-      return phys::ShapeType::kCompound;
-    }
-    DCHECK_F(false, "Unsupported shape_type after schema validation");
-    return phys::ShapeType::kInvalid;
-  }
-
-  [[nodiscard]] auto ParseWorldBoundaryMode(const std::string_view value)
-    -> phys::WorldBoundaryMode
-  {
-    if (value == "aabb_clamp") {
-      return phys::WorldBoundaryMode::kAabbClamp;
-    }
-    if (value == "plane_set") {
-      return phys::WorldBoundaryMode::kPlaneSet;
-    }
-    DCHECK_F(false, "Unsupported boundary_mode after schema validation");
-    return phys::WorldBoundaryMode::kInvalid;
-  }
-
-  [[nodiscard]] auto PayloadTypeForShapeType(const phys::ShapeType shape_type)
-    -> std::optional<phys::ShapePayloadType>
-  {
-    switch (shape_type) {
-    case phys::ShapeType::kConvexHull:
-      return phys::ShapePayloadType::kConvex;
-    case phys::ShapeType::kTriangleMesh:
-      return phys::ShapePayloadType::kMesh;
-    case phys::ShapeType::kHeightField:
-      return phys::ShapePayloadType::kHeightField;
-    case phys::ShapeType::kInvalid:
-    case phys::ShapeType::kSphere:
-    case phys::ShapeType::kCapsule:
-    case phys::ShapeType::kBox:
-    case phys::ShapeType::kCylinder:
-    case phys::ShapeType::kCone:
-    case phys::ShapeType::kPlane:
-    case phys::ShapeType::kWorldBoundary:
-    case phys::ShapeType::kCompound:
-      return std::nullopt;
-    }
-    return std::nullopt;
   }
 
   //! Places the descriptor at the job's identity.
@@ -181,337 +112,245 @@ namespace {
     };
   }
 
-  [[nodiscard]] auto ResolveAssetKey(const ImportRequest& request,
-    std::string_view virtual_path) -> data::AssetKey
-  {
-    static_cast<void>(request);
-    return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
-  }
-
-  auto BuildProjectedAssetTypeMap(const AssetTypeMap& assets,
-    const std::optional<std::pair<data::AssetKey, data::AssetType>>& pending)
-    -> AssetTypeMap
-  {
-    auto out = assets;
-    if (pending.has_value()) {
-      out.insert_or_assign(pending->first, pending->second);
-    }
-    return out;
-  }
-
-  //! The types of the assets the job's own cooked root lists; empty when
-  //! nothing was cooked into it yet. Null when the job reads no such root.
-  [[nodiscard]] auto PrimaryAssets(
-    const std::span<const internal::MountedCookedSource> mounts,
-    const std::filesystem::path& primary_root) -> std::optional<AssetTypeMap>
-  {
-    const auto primary = std::ranges::find_if(
-      mounts, [&](const internal::MountedCookedSource& mount) -> bool {
-        return mount.root.lexically_normal() == primary_root.lexically_normal();
-      });
-    if (primary == mounts.end()) {
-      return std::nullopt;
-    }
-    auto assets = AssetTypeMap {};
-    if (primary->content.has_value()) {
-      for (const auto& asset : primary->content->Assets()) {
-        assets.insert_or_assign(asset.key, asset.type);
-      }
-    }
-    return assets;
-  }
-
-  //! Looks up `material_ref`, which names a physics material of the job's own
-  //! cooked root.
-  auto ResolvePhysicsMaterialKey(ImportSession& session,
+  //! Looks up the asset `text` names in any mounted cooked root; the session
+  //! records what it requires of another mount when it finalizes.
+  [[nodiscard]] auto LookupAsset(ImportSession& session,
     const ImportRequest& request,
     const std::span<const internal::MountedCookedSource> mounts,
-    const AssetTypeMap& primary_assets, const std::string_view material_ref,
-    data::AssetKey& out_material_key) -> bool
+    const std::string_view text, const std::string& json_pointer,
+    const data::AssetType expected_type, const ReferenceCodes& codes)
+    -> std::optional<data::AssetKey>
   {
-    const auto reference = internal::ResolveJobReference(request, material_ref);
+    const auto reference = internal::ResolveJobReference(request, text);
     if (!reference.has_value()) {
       session.AddDiagnostic(internal::RefuseReference(
-        request, material_ref, reference.error(), "/material_ref"));
-      return false;
-    }
-    const auto named
-      = "'" + reference->written + "' resolves to " + reference->resolved;
-
-    const auto found
-      = internal::LookupReference(mounts, request, *reference, std::nullopt);
-    if (!found.has_value()) {
-      if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
-        session.AddDiagnostic(internal::RefuseUnmountedReference(
-          request, *reference, "/material_ref"));
-      } else {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(import_codes::kPhysicsShapeMaterialRefUnresolved),
-          "Reference was not found: "
-            + internal::DescribeLookup(*reference, found.error()),
-          "/material_ref");
-      }
-      return false;
-    }
-
-    const auto primary_it = primary_assets.find(found->key);
-    if (primary_it == primary_assets.end()) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsShapeReferenceSourceMismatch),
-        "Resolved material_ref is not in the target source domain: " + named,
-        "/material_ref");
-      return false;
-    }
-
-    if (primary_it->second != data::AssetType::kPhysicsMaterial) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsShapeMaterialRefNotPhysicsMaterial),
-        "Resolved material_ref has unexpected asset type: " + named,
-        "/material_ref");
-      return false;
-    }
-
-    out_material_key = found->key;
-    return true;
-  }
-
-#pragma pack(push, 1)
-  struct AuthoredShapeBlobHeader final {
-    std::array<char, 4> magic = { 'O', 'P', 'S', 'B' };
-    uint8_t version = 1U;
-    uint8_t shape_type = 0U;
-    uint8_t payload_type = 0U;
-    uint8_t reserved = 0U;
-    uint32_t payload_size = 0U;
-  };
-#pragma pack(pop)
-  static_assert(sizeof(AuthoredShapeBlobHeader) == 12);
-
-  auto SerializeAuthoredShapeBlob(const json& descriptor_doc,
-    const phys::ShapeType shape_type, const phys::ShapePayloadType payload_type,
-    std::vector<std::byte>& out_bytes) -> bool
-  {
-    const auto payload = descriptor_doc.dump();
-    if (payload.size() > std::numeric_limits<uint32_t>::max()) {
-      return false;
-    }
-
-    auto header = AuthoredShapeBlobHeader {};
-    header.shape_type = static_cast<uint8_t>(shape_type);
-    header.payload_type = static_cast<uint8_t>(payload_type);
-    header.payload_size = static_cast<uint32_t>(payload.size());
-
-    out_bytes.clear();
-    out_bytes.resize(sizeof(header) + payload.size());
-    std::memcpy(out_bytes.data(), &header, sizeof(header));
-    if (!payload.empty()) {
-      std::ranges::copy(std::as_bytes(std::span(payload)),
-        std::next(out_bytes.begin(), sizeof(header)));
-    }
-    return true;
-  }
-
-  auto EmitAuthoredShapePayload(ImportSession& session,
-    const ImportRequest& request, const json& descriptor_doc,
-    const phys::ShapeType shape_type, const phys::ShapePayloadType payload_type)
-    -> std::optional<PayloadResolution>
-  {
-    auto blob_bytes = std::vector<std::byte> {};
-    if (!SerializeAuthoredShapeBlob(
-          descriptor_doc, shape_type, payload_type, blob_bytes)) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsShapePayloadEmitFailed),
-        "Authored non-analytic shape payload exceeds supported blob size");
+        request, text, reference.error(), json_pointer));
       return std::nullopt;
     }
+    const auto found
+      = internal::LookupReference(mounts, request, *reference, expected_type);
+    if (found.has_value()) {
+      return found->key;
+    }
+    const auto& refused = found.error();
+    switch (refused.reason) {
+    case internal::AssetReferenceRefusal::kUnmounted:
+      session.AddDiagnostic(
+        internal::RefuseUnmountedReference(request, *reference, json_pointer));
+      break;
+    case internal::AssetReferenceRefusal::kMissing:
+      AddDiagnostic(session, request, codes.unresolved,
+        "Reference was not found: "
+          + internal::DescribeLookup(*reference, refused),
+        json_pointer);
+      break;
+    case internal::AssetReferenceRefusal::kTypeMismatch:
+      AddDiagnostic(session, request, codes.wrong_type,
+        "Reference names a "
+          + std::string(data::to_string(
+            refused.found_type.value_or(data::AssetType::kUnknown)))
+          + " asset, expected a " + std::string(data::to_string(expected_type))
+          + ": " + internal::DescribeLookup(*reference, refused),
+        json_pointer);
+      break;
+    }
+    return std::nullopt;
+  }
 
+  //! Reads the triangle surface of the geometry a part references.
+  [[nodiscard]] auto ReadPartSurface(ImportSession& session,
+    const ImportRequest& request,
+    const std::span<const internal::MountedCookedSource> mounts,
+    const std::string& geometry_ref, const std::string& json_pointer)
+    -> std::optional<internal::CookedMeshSurface>
+  {
+    const auto key = LookupAsset(session, request, mounts, geometry_ref,
+      json_pointer, data::AssetType::kGeometry,
+      ReferenceCodes {
+        .unresolved = import_codes::kPhysicsShapeGeometryRefUnresolved,
+        .wrong_type = import_codes::kPhysicsShapeGeometryRefNotGeometry,
+      });
+    if (!key.has_value()) {
+      return std::nullopt;
+    }
+    const auto* const content = internal::FindListingContent(mounts, *key);
+    CHECK_NOTNULL_F(content, "a found geometry is listed by a mounted root");
+    auto surface = internal::ReadCookedMeshSurface(*content, *key);
+    if (!surface.has_value()) {
+      AddDiagnostic(session, request,
+        import_codes::kPhysicsShapeGeometryUnreadable,
+        "'" + geometry_ref + "' gives no triangle surface: " + surface.error(),
+        json_pointer);
+      return std::nullopt;
+    }
+    return std::move(*surface);
+  }
+
+  //! Cooks the backend payload of a part that has one: a convex hull, a
+  //! triangle mesh or a height field. Nothing for an analytic part.
+  [[nodiscard]] auto CookPartPayload(ImportSession& session,
+    const ImportRequest& request,
+    const std::span<const internal::MountedCookedSource> mounts,
+    const ShapePart& part) -> PartCook
+  {
+    using Cooked = std::expected<std::vector<std::byte>, std::string>;
+    auto type = phys::ShapePayloadType::kInvalid;
+    auto cooked = std::optional<Cooked> {};
+    auto unreadable = false;
+    std::visit(
+      [&](const auto& params) -> void {
+        using T = std::decay_t<decltype(params)>;
+        if constexpr (std::is_same_v<T, internal::ConvexHullParams>
+          || std::is_same_v<T, internal::TriangleMeshParams>) {
+          const auto surface = ReadPartSurface(session, request, mounts,
+            params.geometry_ref, part.json_pointer + "/geometry_ref");
+          if (!surface.has_value()) {
+            unreadable = true;
+            return;
+          }
+          if constexpr (std::is_same_v<T, internal::ConvexHullParams>) {
+            type = phys::ShapePayloadType::kConvex;
+            cooked = internal::CookJoltConvexHull(params, *surface);
+          } else {
+            type = phys::ShapePayloadType::kMesh;
+            cooked = internal::CookJoltTriangleMesh(*surface);
+          }
+        } else if constexpr (std::is_same_v<T, internal::HeightFieldParams>) {
+          type = phys::ShapePayloadType::kHeightField;
+          cooked = internal::CookJoltHeightField(params);
+        }
+      },
+      part.params);
+    if (unreadable) {
+      return std::unexpected(PartCookFailed {});
+    }
+    if (!cooked.has_value()) {
+      return std::optional<PartPayload> {};
+    }
+    if (!cooked->has_value()) {
+      AddDiagnostic(session, request, import_codes::kPhysicsShapeCookFailed,
+        "Jolt refused the shape: " + cooked->error(), part.json_pointer);
+      return std::unexpected(PartCookFailed {});
+    }
+    return std::optional<PartPayload> {
+      PartPayload { .type = type, .bytes = std::move(**cooked) },
+    };
+  }
+
+  //! Emits a cooked part payload; its resource key, or nothing on failure.
+  [[nodiscard]] auto EmitPartPayload(ImportSession& session,
+    const ImportRequest& request, PartPayload payload,
+    const std::string& json_pointer) -> std::optional<data::AssetKey>
+  {
     auto cooked = CookedPhysicsResourcePayload {};
-    cooked.data = HashedBytes(
-      std::vector<std::byte>(blob_bytes.begin(), blob_bytes.end()));
+    cooked.data = HashedBytes(std::move(payload.bytes));
     cooked.format = phys::PhysicsResourceFormat::kJoltShapeBinary;
     cooked.alignment = 16;
-
     try {
-      const auto emitted
-        = session.PhysicsResourceEmitter().Emit(std::move(cooked));
-      return PayloadResolution {
-        .payload_asset_key = emitted.resource_asset_key,
-        .payload_type = payload_type,
-      };
+      return session.PhysicsResourceEmitter()
+        .Emit(std::move(cooked))
+        .resource_asset_key;
     } catch (const std::exception& ex) {
-      AddDiagnostic(session, request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsShapePayloadEmitFailed),
-        "Failed emitting non-analytic shape payload: "
-          + std::string(ex.what()));
+      AddDiagnostic(session, request,
+        import_codes::kPhysicsShapePayloadEmitFailed,
+        "Failed emitting the shape payload: " + std::string(ex.what()),
+        json_pointer);
       return std::nullopt;
     }
   }
 
-  auto CopyVec3(const json& doc, const std::string_view field,
-    const std::span<float, 3> out) -> void
+  //! Writes the analytic parameters of `params` into the cooked arm `out`.
+  auto WriteShapeParams(const internal::ShapeParams& params,
+    const phys::ShapeType type, phys::ShapeParams& out) -> void
   {
-    if (!doc.contains(field)) {
-      return;
-    }
-    const auto values = doc.at(field).get<std::array<float, 3>>();
-    std::ranges::copy(values, out.begin());
+    std::visit(
+      [&](const auto& p) -> void {
+        using T = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<T, internal::SphereParams>) {
+          out.sphere.radius = p.radius;
+        } else if constexpr (std::is_same_v<T, internal::AxialParams>) {
+          if (type == phys::ShapeType::kCapsule) {
+            out.capsule.radius = p.radius;
+            out.capsule.half_height = p.half_height;
+          } else if (type == phys::ShapeType::kCylinder) {
+            out.cylinder.radius = p.radius;
+            out.cylinder.half_height = p.half_height;
+          } else {
+            out.cone.radius = p.radius;
+            out.cone.half_height = p.half_height;
+          }
+        } else if constexpr (std::is_same_v<T, internal::BoxParams>) {
+          std::ranges::copy(p.half_extents, std::begin(out.box.half_extents));
+        } else if constexpr (std::is_same_v<T, internal::PlaneParams>) {
+          std::ranges::copy(p.normal, std::begin(out.plane.normal));
+          out.plane.distance = p.distance;
+        } else if constexpr (std::is_same_v<T, internal::WorldBoundaryParams>) {
+          out.world_boundary.boundary_mode = p.mode;
+          std::ranges::copy(
+            p.limits_min, std::begin(out.world_boundary.limits_min));
+          std::ranges::copy(
+            p.limits_max, std::begin(out.world_boundary.limits_max));
+        }
+      },
+      params);
   }
 
-  auto CopyQuat(const json& doc, const std::string_view field,
-    const std::span<float, 4> out) -> void
+  //! The cooked child record of a compound part; `payload_key` is its cooked
+  //! payload, nil for an analytic part.
+  [[nodiscard]] auto MakeChildDesc(const ShapePart& part,
+    const data::AssetKey& payload_key) -> phys::CompoundShapeChildDesc
   {
-    if (!doc.contains(field)) {
-      return;
-    }
-    const auto values = doc.at(field).get<std::array<float, 4>>();
-    std::ranges::copy(values, out.begin());
+    auto child = phys::CompoundShapeChildDesc {};
+    child.shape_type = static_cast<uint32_t>(part.type);
+    std::ranges::copy(part.local_position, std::begin(child.local_position));
+    std::ranges::copy(part.local_rotation, std::begin(child.local_rotation));
+    std::ranges::copy(part.local_scale, std::begin(child.local_scale));
+    child.payload_asset_key = payload_key;
+    std::visit(
+      [&](const auto& p) -> void {
+        using T = std::decay_t<decltype(p)>;
+        if constexpr (std::is_same_v<T, internal::SphereParams>) {
+          child.radius = p.radius;
+        } else if constexpr (std::is_same_v<T, internal::AxialParams>) {
+          child.radius = p.radius;
+          child.half_height = p.half_height;
+        } else if constexpr (std::is_same_v<T, internal::BoxParams>) {
+          std::ranges::copy(p.half_extents, std::begin(child.half_extents));
+        } else if constexpr (std::is_same_v<T, internal::PlaneParams>) {
+          std::ranges::copy(p.normal, std::begin(child.normal));
+          child.distance = p.distance;
+        } else if constexpr (std::is_same_v<T, internal::WorldBoundaryParams>) {
+          child.boundary_mode = p.mode;
+          std::ranges::copy(p.limits_min, std::begin(child.limits_min));
+          std::ranges::copy(p.limits_max, std::begin(child.limits_max));
+        }
+      },
+      part.params);
+    return child;
   }
 
-  //! Reads the parameters of the shape; the preparation proved they exist and
-  //! that world boundary limits are ordered.
-  auto ApplyShapeSpecificParameters(const json& descriptor_doc,
-    const phys::ShapeType shape_type, phys::CollisionShapeAssetDesc& descriptor)
-    -> void
+  //! The cooked descriptor of `source` without its payload and material.
+  [[nodiscard]] auto MakeDescriptor(
+    const internal::CollisionShapeSource& source)
+    -> phys::CollisionShapeAssetDesc
   {
-    switch (shape_type) {
-    case phys::ShapeType::kSphere:
-      descriptor.shape_params.sphere.radius
-        = descriptor_doc.at("radius").get<float>();
-      break;
-    case phys::ShapeType::kCapsule:
-      descriptor.shape_params.capsule.radius
-        = descriptor_doc.at("radius").get<float>();
-      descriptor.shape_params.capsule.half_height
-        = descriptor_doc.at("half_height").get<float>();
-      break;
-    case phys::ShapeType::kBox: {
-      const auto half_extents
-        = descriptor_doc.at("half_extents").get<std::array<float, 3>>();
-      std::ranges::copy(half_extents,
-        std::ranges::begin(descriptor.shape_params.box.half_extents));
-      break;
-    }
-    case phys::ShapeType::kCylinder:
-      descriptor.shape_params.cylinder.radius
-        = descriptor_doc.at("radius").get<float>();
-      descriptor.shape_params.cylinder.half_height
-        = descriptor_doc.at("half_height").get<float>();
-      break;
-    case phys::ShapeType::kCone:
-      descriptor.shape_params.cone.radius
-        = descriptor_doc.at("radius").get<float>();
-      descriptor.shape_params.cone.half_height
-        = descriptor_doc.at("half_height").get<float>();
-      break;
-    case phys::ShapeType::kPlane: {
-      const auto normal
-        = descriptor_doc.at("normal").get<std::array<float, 3>>();
-      std::ranges::copy(
-        normal, std::ranges::begin(descriptor.shape_params.plane.normal));
-      descriptor.shape_params.plane.distance
-        = descriptor_doc.at("distance").get<float>();
-      break;
-    }
-    case phys::ShapeType::kWorldBoundary: {
-      descriptor.shape_params.world_boundary.boundary_mode
-        = ParseWorldBoundaryMode(
-          descriptor_doc.at("boundary_mode").get<std::string>());
-      const auto limits_min
-        = descriptor_doc.at("limits_min").get<std::array<float, 3>>();
-      const auto limits_max
-        = descriptor_doc.at("limits_max").get<std::array<float, 3>>();
-      std::ranges::copy(limits_min,
-        std::ranges::begin(descriptor.shape_params.world_boundary.limits_min));
-      std::ranges::copy(limits_max,
-        std::ranges::begin(descriptor.shape_params.world_boundary.limits_max));
-      break;
-    }
-    case phys::ShapeType::kConvexHull:
-    case phys::ShapeType::kTriangleMesh:
-    case phys::ShapeType::kHeightField:
-    case phys::ShapeType::kCompound:
-    case phys::ShapeType::kInvalid:
-      break;
-    }
-  }
-
-  //! Reads one compound child; the preparation proved it is an analytic shape
-  //! with every field it needs.
-  [[nodiscard]] auto ParseCompoundChild(const json& child_doc)
-    -> phys::CompoundShapeChildDesc
-  {
-    auto out_child = phys::CompoundShapeChildDesc {};
-    const auto child_type
-      = ParseShapeType(child_doc.at("shape_type").get<std::string>());
-    out_child.shape_type = static_cast<uint32_t>(child_type);
-    const auto position
-      = child_doc.at("local_position").get<std::array<float, 3>>();
-    std::ranges::copy(position, std::ranges::begin(out_child.local_position));
-    const auto rotation
-      = child_doc.at("local_rotation").get<std::array<float, 4>>();
-    std::ranges::copy(rotation, std::ranges::begin(out_child.local_rotation));
-    const auto scale = child_doc.at("local_scale").get<std::array<float, 3>>();
-    std::ranges::copy(scale, std::ranges::begin(out_child.local_scale));
-
-    switch (child_type) {
-    case phys::ShapeType::kSphere:
-      out_child.radius = child_doc.at("radius").get<float>();
-      break;
-    case phys::ShapeType::kCapsule:
-    case phys::ShapeType::kCylinder:
-    case phys::ShapeType::kCone:
-      out_child.radius = child_doc.at("radius").get<float>();
-      out_child.half_height = child_doc.at("half_height").get<float>();
-      break;
-    case phys::ShapeType::kBox: {
-      const auto half_extents
-        = child_doc.at("half_extents").get<std::array<float, 3>>();
-      std::ranges::copy(
-        half_extents, std::ranges::begin(out_child.half_extents));
-      break;
-    }
-    case phys::ShapeType::kPlane: {
-      const auto normal = child_doc.at("normal").get<std::array<float, 3>>();
-      std::ranges::copy(normal, std::ranges::begin(out_child.normal));
-      out_child.distance = child_doc.at("distance").get<float>();
-      break;
-    }
-    case phys::ShapeType::kWorldBoundary: {
-      out_child.boundary_mode = ParseWorldBoundaryMode(
-        child_doc.at("boundary_mode").get<std::string>());
-      const auto limits_min
-        = child_doc.at("limits_min").get<std::array<float, 3>>();
-      const auto limits_max
-        = child_doc.at("limits_max").get<std::array<float, 3>>();
-      std::ranges::copy(limits_min, std::ranges::begin(out_child.limits_min));
-      std::ranges::copy(limits_max, std::ranges::begin(out_child.limits_max));
-      break;
-    }
-    case phys::ShapeType::kInvalid:
-    case phys::ShapeType::kConvexHull:
-    case phys::ShapeType::kTriangleMesh:
-    case phys::ShapeType::kHeightField:
-    case phys::ShapeType::kCompound:
-      DCHECK_F(false, "Compound child is not analytic after preparation");
-      break;
-    }
-    return out_child;
-  }
-
-  [[nodiscard]] auto ParseCompoundChildren(const json& descriptor_doc)
-    -> std::vector<phys::CompoundShapeChildDesc>
-  {
-    auto children = std::vector<phys::CompoundShapeChildDesc> {};
-    if (!descriptor_doc.contains("children")) {
-      return children;
-    }
-    const auto& child_docs = descriptor_doc.at("children");
-    children.reserve(child_docs.size());
-    std::ranges::transform(child_docs, std::back_inserter(children),
-      [](const json& child_doc) -> phys::CompoundShapeChildDesc {
-        return ParseCompoundChild(child_doc);
-      });
-    return children;
+    auto descriptor = phys::CollisionShapeAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kCollisionShape);
+    descriptor.header.version = phys::kCollisionShapeAssetVersion;
+    const auto& shape = source.shape;
+    descriptor.shape_type = shape.type;
+    std::ranges::copy(
+      shape.local_position, std::begin(descriptor.local_position));
+    std::ranges::copy(
+      shape.local_rotation, std::begin(descriptor.local_rotation));
+    std::ranges::copy(shape.local_scale, std::begin(descriptor.local_scale));
+    descriptor.is_sensor
+      = source.is_sensor ? phys::kShapeIsSensorTrue : phys::kShapeIsSensorFalse;
+    descriptor.collision_own_layer = source.collision_own_layer;
+    descriptor.collision_target_layers = source.collision_target_layers;
+    WriteShapeParams(shape.params, shape.type, descriptor.shape_params);
+    return descriptor;
   }
 
 } // namespace
@@ -540,19 +379,22 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     report.telemetry = telemetry;
     co_return report;
   };
+  const auto Fail = [&](ImportSession& session,
+                      const std::string_view what) -> co::Co<ImportReport> {
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, std::string(what));
+    co_return co_await FinalizeWithTelemetry(session);
+  };
 
   EnsureCookedRoot();
   auto& session = Session();
 
   const auto& request_payload = Request().collision_shape_descriptor;
   if (!request_payload.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      std::string(import_codes::kPhysicsShapeRequestInvalid),
+    AddDiagnostic(session, Request(), import_codes::kPhysicsShapeRequestInvalid,
       "CollisionShapeDescriptorImportJob requires request "
       "collision_shape_descriptor payload");
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid collision shape descriptor request");
-    co_return co_await FinalizeWithTelemetry(session);
+    co_return co_await Fail(
+      session, "Invalid collision shape descriptor request");
   }
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
@@ -562,104 +404,85 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     session.AddDiagnostic(std::move(diagnostic));
   }
   if (!prepared.has_value()) {
-    ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Invalid collision shape descriptor payload");
-    co_return co_await FinalizeWithTelemetry(session);
+    co_return co_await Fail(
+      session, "Invalid collision shape descriptor payload");
   }
-  const auto& descriptor_doc = *prepared;
+  const auto& source = *prepared;
 
   auto mounts = internal::LoadMountedCookedSources(
     session, Request(), import_codes::kPhysicsShapeIndexLoadFailed);
   if (session.HasErrors()) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor context loading failed");
-    co_return co_await FinalizeWithTelemetry(session);
+    co_return co_await Fail(
+      session, "Collision shape descriptor context loading failed");
   }
 
   const auto target = ResolveDescriptorTarget(Request(), session);
   if (!target.has_value()) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor target resolution failed");
-    co_return co_await FinalizeWithTelemetry(session);
+    co_return co_await Fail(
+      session, "Collision shape descriptor target resolution failed");
   }
 
-  const auto primary_source_assets
-    = PrimaryAssets(mounts, session.CookedRoot());
-  if (!primary_source_assets.has_value()) {
-    AddDiagnostic(session, Request(), ImportSeverity::kError,
-      std::string(import_codes::kPhysicsShapePrimarySourceMissing),
-      "Primary source asset index is not available");
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor context loading failed");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-
-  const auto shape_key = ResolveAssetKey(Request(), target->virtual_path);
-  const auto primary_assets = BuildProjectedAssetTypeMap(*primary_source_assets,
-    std::pair<data::AssetKey, data::AssetType> {
-      shape_key,
-      data::AssetType::kCollisionShape,
+  const auto cook_start = std::chrono::steady_clock::now();
+  const auto material_key = LookupAsset(session, Request(), mounts,
+    source.material_ref, "/material_ref", data::AssetType::kPhysicsMaterial,
+    ReferenceCodes {
+      .unresolved = import_codes::kPhysicsShapeMaterialRefUnresolved,
+      .wrong_type = import_codes::kPhysicsShapeMaterialRefNotPhysicsMaterial,
     });
 
-  // The preparation proved every field read below.
-  auto descriptor = phys::CollisionShapeAssetDesc {};
-  descriptor.header.asset_type
-    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
-  descriptor.header.version = phys::kCollisionShapeAssetVersion;
-
-  const auto shape_type
-    = ParseShapeType(descriptor_doc.at("shape_type").get<std::string>());
-  descriptor.shape_type = shape_type;
-
-  CopyVec3(descriptor_doc, "local_position", descriptor.local_position);
-  CopyQuat(descriptor_doc, "local_rotation", descriptor.local_rotation);
-  CopyVec3(descriptor_doc, "local_scale", descriptor.local_scale);
-
-  if (descriptor_doc.contains("is_sensor")) {
-    descriptor.is_sensor = descriptor_doc.at("is_sensor").get<bool>()
-      ? phys::kShapeIsSensorTrue
-      : phys::kShapeIsSensorFalse;
+  // Every payload cooks before any is emitted, so a failing part emits none.
+  auto shape_payload
+    = CookPartPayload(session, Request(), mounts, source.shape);
+  auto child_payloads = std::vector<std::optional<PartPayload>> {};
+  child_payloads.reserve(source.children.size());
+  auto children_cooked = true;
+  for (const auto& child : source.children) {
+    auto payload = CookPartPayload(session, Request(), mounts, child);
+    children_cooked &= payload.has_value();
+    child_payloads.push_back(
+      payload.has_value() ? std::move(*payload) : std::nullopt);
   }
-  if (descriptor_doc.contains("collision_own_layer")) {
-    descriptor.collision_own_layer
-      = descriptor_doc.at("collision_own_layer").get<uint64_t>();
-  }
-  if (descriptor_doc.contains("collision_target_layers")) {
-    descriptor.collision_target_layers
-      = descriptor_doc.at("collision_target_layers").get<uint64_t>();
-  }
-  ApplyShapeSpecificParameters(descriptor_doc, shape_type, descriptor);
-
-  auto compound_children = std::vector<phys::CompoundShapeChildDesc> {};
-  if (shape_type == phys::ShapeType::kCompound) {
-    compound_children = ParseCompoundChildren(descriptor_doc);
-  }
-
-  auto material_key = data::AssetKey {};
-  const auto material_ref
-    = descriptor_doc.at("material_ref").get<std::string>();
-  if (!ResolvePhysicsMaterialKey(session, Request(), mounts, primary_assets,
-        material_ref, material_key)) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape material_ref resolution failed");
-    co_return co_await FinalizeWithTelemetry(session);
-  }
-  descriptor.material_asset_key = material_key;
+  session.AddCookDuration(
+    MakeDuration(cook_start, std::chrono::steady_clock::now()));
   // The mounts keep files of the cooked root open; the job writes into it.
   mounts.clear();
+  if (!material_key.has_value() || !shape_payload.has_value()
+    || !children_cooked) {
+    co_return co_await Fail(session, "Collision shape cooking failed");
+  }
 
-  if (const auto payload_type = PayloadTypeForShapeType(shape_type);
-    payload_type.has_value()) {
-    const auto payload = EmitAuthoredShapePayload(
-      session, Request(), descriptor_doc, shape_type, *payload_type);
-    if (!payload.has_value()) {
-      ReportPhaseProgress(
-        ImportPhase::kFailed, 1.0F, "Collision shape payload emission failed");
-      co_return co_await FinalizeWithTelemetry(session);
+  auto descriptor = MakeDescriptor(source);
+  descriptor.material_asset_key = *material_key;
+  AssetReferenceBuilder references;
+  references.AddAsset(*material_key, data::AssetType::kPhysicsMaterial);
+  if (shape_payload->has_value()) {
+    const auto key = EmitPartPayload(session, Request(),
+      std::move(**shape_payload), source.shape.json_pointer);
+    if (!key.has_value()) {
+      co_return co_await Fail(
+        session, "Collision shape payload emission failed");
     }
+    descriptor.cooked_shape_ref.payload_asset_key = *key;
+    descriptor.cooked_shape_ref.payload_type = (*shape_payload)->type;
+    references.AddPhysicsResource(*key);
+  }
 
-    descriptor.cooked_shape_ref.payload_asset_key = payload->payload_asset_key;
-    descriptor.cooked_shape_ref.payload_type = payload->payload_type;
+  auto compound_children = std::vector<phys::CompoundShapeChildDesc> {};
+  compound_children.reserve(source.children.size());
+  for (size_t i = 0; i < source.children.size(); ++i) {
+    const auto& child = source.children.at(i);
+    auto payload_key = data::AssetKey {};
+    if (auto& payload = child_payloads.at(i); payload.has_value()) {
+      const auto key = EmitPartPayload(
+        session, Request(), std::move(*payload), child.json_pointer);
+      if (!key.has_value()) {
+        co_return co_await Fail(
+          session, "Collision shape payload emission failed");
+      }
+      payload_key = *key;
+      references.AddPhysicsResource(*key);
+    }
+    compound_children.push_back(MakeChildDesc(child, payload_key));
   }
 
   auto& pipeline = CreatePipeline<CollisionShapeImportPipeline>(
@@ -667,14 +490,6 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       .queue_capacity = Concurrency().material.queue_capacity,
       .worker_count = Concurrency().material.workers,
     });
-
-  AssetReferenceBuilder references;
-  references.AddAsset(
-    descriptor.material_asset_key, data::AssetType::kPhysicsMaterial);
-  references.AddPhysicsResource(descriptor.cooked_shape_ref.payload_asset_key);
-  for (const auto& child : compound_children) {
-    references.AddPhysicsResource(child.payload_asset_key);
-  }
   auto item = CollisionShapeImportPipeline::WorkItem {
     .source_id = target->virtual_path,
     .name = std::filesystem::path(target->relpath).stem().string(),
@@ -694,17 +509,16 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   for (auto& diagnostic : result.diagnostics) {
     session.AddDiagnostic(std::move(diagnostic));
   }
-
   if (!result.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
-      "Collision shape descriptor processing failed");
-    co_return co_await FinalizeWithTelemetry(session);
+    co_return co_await Fail(
+      session, "Collision shape descriptor processing failed");
   }
 
   const auto emit_start = std::chrono::steady_clock::now();
-  session.AssetEmitter().Emit(shape_key, data::AssetType::kCollisionShape,
-    target->virtual_path, target->relpath, result.descriptor_bytes,
-    std::move(references).Build());
+  session.AssetEmitter().Emit(
+    data::AssetKey::FromVirtualPath(target->virtual_path),
+    data::AssetType::kCollisionShape, target->virtual_path, target->relpath,
+    result.descriptor_bytes, std::move(references).Build());
   session.AddEmitDuration(
     MakeDuration(emit_start, std::chrono::steady_clock::now()));
 

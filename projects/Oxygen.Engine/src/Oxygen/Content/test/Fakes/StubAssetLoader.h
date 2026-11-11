@@ -322,10 +322,10 @@ public:
   {
     return {};
   }
-  [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
+  [[nodiscard]] auto ReadCollisionShapeForAsset(
     const data::Asset& /*context_asset*/,
     const data::AssetKey& /*shape_asset_key*/) const
-    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
+    -> std::optional<CollisionShapeData> override
   {
     return {};
   }

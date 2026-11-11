@@ -130,6 +130,17 @@ auto LookupReference(const std::span<const MountedCookedSource> mounts,
                            : AssetReferenceRefusal::kUnmounted);
 }
 
+auto FindListingContent(const std::span<const MountedCookedSource> mounts,
+  const data::AssetKey& key) -> const cooked::CookedContent*
+{
+  for (const auto& mount : std::views::reverse(mounts)) {
+    if (mount.content.has_value() && mount.content->FindAsset(key) != nullptr) {
+      return &*mount.content;
+    }
+  }
+  return nullptr;
+}
+
 auto RequirementsOf(const std::span<const MountedCookedSource> mounts,
   const std::string_view own_mount, const data::AssetReferences& references)
   -> std::vector<data::loose_cooked::IndexedRequirement>

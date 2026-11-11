@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,6 +40,19 @@ namespace oxygen::cooker::testing {
 */
 [[nodiscard]] auto CollisionShapeDescriptor(std::string_view name,
   data::pak::physics::CollisionShapeAssetDesc record) -> DescriptorFixture;
+
+//! The compound collision shape `name` with the values of `record` and the
+//! child records `children`, as the collision shape cook writes it: the
+//! children follow the record, and it references its material and the cooked
+//! payload of each child that has one.
+/*!
+ @throw std::logic_error When the product loader refuses it, such as a
+   compound without children or a child whose payload is not its kind's.
+*/
+[[nodiscard]] auto CompoundShapeDescriptor(std::string_view name,
+  data::pak::physics::CollisionShapeAssetDesc record,
+  std::span<const data::pak::physics::CompoundShapeChildDesc> children)
+  -> DescriptorFixture;
 
 //! The input action `name` with the values of `record`, as the input cook
 //! writes it; it references nothing.

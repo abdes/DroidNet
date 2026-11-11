@@ -31,6 +31,7 @@
 #include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentId.h>
 #include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/Internal/AssetTypes.h>
@@ -131,7 +132,7 @@ namespace {
   //! A physics descriptor dependency, read and validated off the loop.
   struct ParsedPhysicsDescriptor final {
     data::AssetReferences references;
-    std::variant<data::pak::physics::CollisionShapeAssetDesc,
+    std::variant<CollisionShapeData,
       data::pak::physics::PhysicsMaterialAssetDesc>
       descriptor;
   };
@@ -157,8 +158,11 @@ namespace {
     };
     switch (reference.expected_type) {
     case data::AssetType::kCollisionShape: {
-      auto descriptor = loaders::LoadCollisionShapeDescriptor(context);
-      return { .references = std::move(references), .descriptor = descriptor };
+      auto shape = loaders::LoadCollisionShapeDescriptor(context);
+      return {
+        .references = std::move(references),
+        .descriptor = std::move(shape),
+      };
     }
     case data::AssetType::kPhysicsMaterial: {
       auto descriptor = loaders::LoadPhysicsMaterialDescriptor(context);
@@ -846,10 +850,9 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       ParsePhysicsDescriptorAsync(*thread_pool_, source, reference, *source_id),
       dependency);
     bindings.RequireOpen();
-    if (const auto* shape
-      = std::get_if<data::pak::physics::CollisionShapeAssetDesc>(
-        &parsed.descriptor)) {
-      frozen->shapes.push_back({ .key = reference.key, .descriptor = *shape });
+    if (auto* shape = std::get_if<CollisionShapeData>(&parsed.descriptor)) {
+      frozen->shapes.push_back(
+        { .key = reference.key, .shape = std::move(*shape) });
     } else {
       frozen->materials.push_back({
         .key = reference.key,

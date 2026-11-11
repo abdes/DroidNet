@@ -9,6 +9,8 @@
 #include <array>
 #include <limits>
 #include <mutex>
+#include <optional>
+#include <utility>
 #include <variant>
 
 #include <Jolt/Core/Memory.h>
@@ -24,6 +26,7 @@
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
+#include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
@@ -43,7 +46,7 @@ namespace {
       // from the allocator initialized inside the Physics shared library.
       static std::once_flag allocator_once;
       std::call_once(
-        allocator_once, []() -> void { JPH::RegisterDefaultAllocator(); });
+        allocator_once, [] -> void { JPH::RegisterDefaultAllocator(); });
       JoltTestFixture::SetUp();
     }
   };
@@ -139,6 +142,162 @@ NOLINT_TEST_F(JoltShapeAxisTest, CylinderUsesOxygenZAxis)
   }
 }
 
+namespace {
+  //! The bounds of `shape` in its own space: Jolt reports them around the
+  //! center of mass.
+  auto ShapeSpaceBounds(const JPH::Shape& shape) -> std::pair<Vec3, Vec3>
+  {
+    const auto bounds = shape.GetLocalBounds();
+    const auto com = shape.GetCenterOfMass();
+    return {
+      backend::ToOxygenVec3(bounds.mMin + com),
+      backend::ToOxygenVec3(bounds.mMax + com),
+    };
+  }
+
+  //! Where a ray from `origin` along `direction`, both in the shape's own
+  //! space, first hits `shape`; nothing when it misses.
+  auto FirstHit(const JPH::Shape& shape, const Vec3& origin,
+    const Vec3& direction) -> std::optional<Vec3>
+  {
+    const auto com = backend::ToOxygenVec3(shape.GetCenterOfMass());
+    JPH::RayCastResult hit;
+    if (!shape.CastRay(JPH::RayCast { backend::ToJoltVec3(origin - com),
+                         backend::ToJoltVec3(direction) },
+          JPH::SubShapeIDCreator {}, hit)) {
+      return std::nullopt;
+    }
+    return origin + (hit.mFraction * direction);
+  }
+} // namespace
+
+//! A cone's base is at -half_height and its apex at +half_height, along
+//! Oxygen +Z.
+NOLINT_TEST_F(JoltShapeAxisTest, ConeUsesOxygenZAxisWithApexUp)
+{
+  AssertBackendAvailabilityContract();
+  constexpr auto radius = 0.5F;
+  constexpr auto half_height = 1.5F;
+  const auto shape = backend::MakeShape(
+    ConeShape { .radius = radius, .half_height = half_height });
+  ASSERT_HAS_VALUE(shape);
+
+  const auto [low, high] = ShapeSpaceBounds(*shape.value());
+  ExpectNear(low, Vec3 { -radius, -radius, -half_height });
+  ExpectNear(high, Vec3 { radius, radius, half_height });
+  const auto apex = FirstHit(
+    *shape.value(), Vec3 { 0.0F, 0.0F, 5.0F }, Vec3 { 0.0F, 0.0F, -10.0F });
+  ASSERT_HAS_VALUE(apex);
+  ExpectNear(*apex, Vec3 { 0.0F, 0.0F, half_height });
+  // Halfway up, the cone is half as wide as its base.
+  const auto side = FirstHit(
+    *shape.value(), Vec3 { 2.0F, 0.0F, 0.0F }, Vec3 { -2.0F, 0.0F, 0.0F });
+  ASSERT_HAS_VALUE(side);
+  ExpectNear(*side, Vec3 { radius / 2.0F, 0.0F, 0.0F });
+}
+
+//! Shapes smaller than Jolt's default convex radius still build.
+NOLINT_TEST_F(JoltShapeAxisTest, SmallBoxAndCylinderBuild)
+{
+  AssertBackendAvailabilityContract();
+  const auto box
+    = backend::MakeShape(BoxShape { .extents = Vec3 { 0.01F, 1.0F, 1.0F } });
+  ASSERT_HAS_VALUE(box);
+  ExpectNear(ShapeSpaceBounds(*box.value()).second, Vec3 { 0.01F, 1.0F, 1.0F });
+  const auto cylinder = backend::MakeShape(
+    CylinderShape { .radius = 0.01F, .half_height = 0.02F });
+  ASSERT_HAS_VALUE(cylinder);
+  ExpectNear(
+    ShapeSpaceBounds(*cylinder.value()).second, Vec3 { 0.01F, 0.01F, 0.02F });
+}
+
+//! A compound places each child at its local transform.
+NOLINT_TEST_F(JoltShapeAxisTest, CompoundPlacesEachChild)
+{
+  AssertBackendAvailabilityContract();
+  const auto compound = CompoundShape {
+    .children = {
+      CompoundShapeChild {
+        .shape = SphereShape { .radius = 0.5F },
+        .local_position = Vec3 { 2.0F, 0.0F, 0.0F },
+      },
+      CompoundShapeChild {
+        .shape = BoxShape { .extents = Vec3 { 0.5F, 0.5F, 0.5F } },
+        .local_position = Vec3 { -2.0F, 0.0F, 0.0F },
+        .local_scale = Vec3 { 1.0F, 2.0F, 1.0F },
+      },
+    },
+  };
+
+  const auto shape = backend::MakeShape(compound);
+
+  ASSERT_HAS_VALUE(shape);
+  EXPECT_EQ(shape.value()->GetType(), JPH::EShapeType::Compound);
+  const auto [low, high] = ShapeSpaceBounds(*shape.value());
+  ExpectNear(low, Vec3 { -2.5F, -1.0F, -0.5F });
+  ExpectNear(high, Vec3 { 2.5F, 1.0F, 0.5F });
+  const auto sphere_top = FirstHit(
+    *shape.value(), Vec3 { 2.0F, 0.0F, 5.0F }, Vec3 { 0.0F, 0.0F, -10.0F });
+  ASSERT_HAS_VALUE(sphere_top);
+  ExpectNear(*sphere_top, Vec3 { 2.0F, 0.0F, 0.5F });
+  EXPECT_FALSE(FirstHit(
+    *shape.value(), Vec3 { 0.0F, 0.0F, 5.0F }, Vec3 { 0.0F, 0.0F, -10.0F })
+      .has_value());
+}
+
+//! A compound of one child is that child at its transform; one of none, or
+//! with a child the runtime cannot scale, is refused.
+NOLINT_TEST_F(JoltShapeAxisTest, CompoundOfOneChildIsThatChildPlaced)
+{
+  AssertBackendAvailabilityContract();
+  const auto single = backend::MakeShape(CompoundShape {
+    .children = {
+      CompoundShapeChild {
+        .shape = SphereShape { .radius = 0.5F },
+        .local_position = Vec3 { 0.0F, 0.0F, 3.0F },
+      },
+    },
+  });
+  ASSERT_HAS_VALUE(single);
+  ExpectNear(
+    ShapeSpaceBounds(*single.value()).first, Vec3 { -0.5F, -0.5F, 2.5F });
+
+  const auto empty = backend::MakeShape(CompoundShape {});
+  ASSERT_TRUE(empty.has_error());
+  EXPECT_EQ(empty.error(), PhysicsError::kShapeCompoundZeroChildren);
+
+  const auto non_uniform_sphere = backend::MakeShape(CompoundShape {
+    .children = {
+      CompoundShapeChild {
+        .shape = SphereShape { .radius = 0.5F },
+        .local_scale = Vec3 { 1.0F, 2.0F, 1.0F },
+      },
+      CompoundShapeChild { .shape = SphereShape { .radius = 0.5F } },
+    },
+  });
+  EXPECT_TRUE(non_uniform_sphere.has_error());
+}
+
+//! Only a static body takes a compound that holds a static-only shape.
+NOLINT_TEST_F(JoltShapeAxisTest, CompoundWithAPlaneMustBeStatic)
+{
+  AssertBackendAvailabilityContract();
+  EXPECT_TRUE(backend::MustBeStatic(CompoundShape {
+    .children = {
+      CompoundShapeChild { .shape = PlaneShape {} },
+      CompoundShapeChild { .shape = SphereShape {} },
+    },
+  }));
+  EXPECT_FALSE(backend::MustBeStatic(CompoundShape {
+    .children = {
+      CompoundShapeChild { .shape = BoxShape {} },
+      CompoundShapeChild { .shape = SphereShape {} },
+    },
+  }));
+  EXPECT_TRUE(backend::MustBeStatic(PlaneShape {}));
+  EXPECT_FALSE(backend::MustBeStatic(ConeShape {}));
+}
+
 NOLINT_TEST_F(JoltShapeAxisTest, AxialPrimitiveDimensionsRejectInvalidValues)
 {
   AssertBackendAvailabilityContract();
@@ -220,12 +379,13 @@ NOLINT_TEST_F(
           ray.direction = -world_normal;
           ray.max_distance = kRayLength;
           const auto hit = System().Queries().Raycast(world.value(), ray);
-          ASSERT_TRUE(hit.has_value());
-          ASSERT_TRUE(hit.value().has_value());
-          EXPECT_EQ(hit.value()->body_id, body.value());
-          EXPECT_NEAR(hit.value()->distance, 1.0F, kTolerance);
-          ExpectNear(hit.value()->position, world_position);
-          ExpectNear(hit.value()->normal, world_normal);
+          ASSERT_HAS_VALUE(hit);
+          const auto& found = hit.value();
+          ASSERT_HAS_VALUE(found);
+          EXPECT_EQ(found->body_id, body.value());
+          EXPECT_NEAR(found->distance, 1.0F, kTolerance);
+          ExpectNear(found->position, world_position);
+          ExpectNear(found->normal, world_normal);
         }
       }
       const auto rotation

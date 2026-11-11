@@ -1,0 +1,6 @@
+{
+  "name": "terrain_ball_shape",
+  "shape_type": "sphere",
+  "material_ref": "dynamic.opmat",
+  "radius": 0.5
+}

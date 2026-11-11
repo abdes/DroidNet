@@ -326,6 +326,126 @@
         "translation": [1.25, 8.0, 4.0],
         "rotation": [0.2588, 0.0, 0.0, 0.9659]
       }
+    },
+    {
+      "id": "d59e930e-a332-57e4-ac7a-6f81d1af603d",
+      "name": "ConeSpire",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [5.6, 4.5, 10.0],
+        "rotation": [0.573576, 0.0, 0.0, 0.819152]
+      }
+    },
+    {
+      "id": "9f157a76-83e0-578c-8b07-afd0def22e77",
+      "name": "HullRock",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [4.6, 4.0, 14.0],
+        "rotation": [0.241845, 0.241845, 0.0, 0.939693]
+      }
+    },
+    {
+      "id": "65abf6d9-5928-55d6-8c7c-902ec2b1aa33",
+      "name": "MeshPedestal",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [5.0, 4.5, 0.3]
+      }
+    },
+    {
+      "id": "aa0ec0e9-1b5c-5045-85f1-80aae1dd5830",
+      "name": "Dumbbell",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [2.6, -9.6, 12.0],
+        "rotation": [0.0, 0.34202, 0.0, 0.939693]
+      }
+    },
+    {
+      "id": "ea68eebe-c95b-561d-bbb7-8eb6c96c5070",
+      "name": "DumbbellRock",
+      "parent": 26,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [-0.6, 0.0, 0.0],
+        "scale": [0.5, 0.5, 0.5]
+      }
+    },
+    {
+      "id": "d06ea73c-5668-5415-9aba-cf5fb596526c",
+      "name": "DumbbellCone",
+      "parent": 26,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [0.6, 0.0, 0.0]
+      }
+    },
+    {
+      "id": "2444a2d3-57b1-5299-8940-51f95e0fa759",
+      "name": "Terrain",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [1.0, -13.0, 0.01]
+      }
+    },
+    {
+      "id": "ca907098-123a-5a93-82b3-197f8c5af3d0",
+      "name": "TerrainBall",
+      "parent": 0,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": {
+        "translation": [1.8, -8.0, 16.0],
+        "scale": [1.0, 1.0, 1.0]
+      }
+    },
+    {
+      "id": "102752a3-46cb-5233-9951-891869b94f3d",
+      "name": "DumbbellBar",
+      "parent": 26,
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      },
+      "transform": { "scale": [1.2, 0.12, 0.12] }
     }
   ],
   "renderables": [
@@ -396,7 +516,33 @@
     {
       "node": 22,
       "geometry_ref": "softbody_cube.ogeo"
-    }
+    },
+    {
+      "node": 23,
+      "geometry_ref": "cone_spire.ogeo"
+    },
+    {
+      "node": 24,
+      "geometry_ref": "hull_rock.ogeo"
+    },
+    {
+      "node": 25,
+      "geometry_ref": "pedestal.ogeo"
+    },
+    {
+      "node": 27,
+      "geometry_ref": "hull_rock.ogeo"
+    },
+    {
+      "node": 28,
+      "geometry_ref": "cone_spire.ogeo"
+    },
+    {
+      "node": 30,
+      "geometry_ref": "../../Geometry/sphere.ogeo"
+    },
+    { "node": 29, "geometry_ref": "terrain.ogeo" },
+    { "node": 31, "geometry_ref": "stack_cube.ogeo" }
   ],
   "cameras": {
     "perspective": [

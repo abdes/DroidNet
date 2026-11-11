@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTable.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -186,19 +187,23 @@ private:
   //! Resolve and decode cooked collision shape descriptor by asset key.
   auto ResolveCollisionShapeAsset(const data::AssetKey& shape_asset_key,
     std::string_view binding_kind, uint32_t node_index)
-    -> data::pak::physics::CollisionShapeAssetDesc;
+    -> content::CollisionShapeData;
   //! Resolve and decode cooked physics material descriptor by asset key.
   auto ResolvePhysicsMaterialAsset(const data::AssetKey& material_asset_key,
     std::string_view binding_kind, uint32_t node_index)
     -> data::pak::physics::PhysicsMaterialAssetDesc;
   //! Convert cooked collision-shape descriptor to runtime physics shape.
   auto BuildCollisionShapeFromDescriptor(
-    const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
+    const content::CollisionShapeData& shape, std::string_view binding_kind,
+    uint32_t node_index) -> physics::CollisionShape;
+  //! Convert one cooked compound child to the runtime shape it holds.
+  auto BuildCompoundChildShape(
+    const data::pak::physics::CompoundShapeChildDesc& child,
     std::string_view binding_kind, uint32_t node_index)
-    -> physics::CollisionShape;
+    -> physics::CompoundChildShape;
   //! Resolve cooked shape payload bytes from physics resource table/region.
   auto ResolveCookedShapePayload(
-    const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
+    const data::pak::physics::CookedShapePayloadRef& cooked_ref,
     data::pak::physics::ShapePayloadType expected_payload_type,
     std::string_view binding_kind, uint32_t node_index) const
     -> physics::CookedShapePayload;

@@ -15,11 +15,14 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/CookedNumbers.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 
 namespace oxygen::content::import::internal {
 
@@ -72,11 +75,91 @@ namespace {
       });
   }
 
+  [[nodiscard]] auto ToCombineMode(const std::string_view value)
+    -> std::optional<data::pak::physics::PhysicsCombineMode>
+  {
+    using data::pak::physics::PhysicsCombineMode;
+    if (value == "average") {
+      return PhysicsCombineMode::kAverage;
+    }
+    if (value == "min") {
+      return PhysicsCombineMode::kMin;
+    }
+    if (value == "max") {
+      return PhysicsCombineMode::kMax;
+    }
+    if (value == "multiply") {
+      return PhysicsCombineMode::kMultiply;
+    }
+    return std::nullopt;
+  }
+
+  //! Reads the schema-valid `document`, reporting each value a float cannot
+  //! hold and a density that is not positive once narrowed.
+  [[nodiscard]] auto ReadMaterial(const json& document,
+    std::vector<ImportDiagnostic>& diagnostics,
+    const std::filesystem::path& source_path)
+    -> std::optional<PhysicsMaterialSource>
+  {
+    auto out = PhysicsMaterialSource {
+      .name = document.value("name", std::string {}),
+    };
+    auto valid = true;
+    const auto read_float = [&](const std::string_view member,
+                              std::optional<float>& target) -> void {
+      const auto found = document.find(member);
+      if (found == document.end()) {
+        return;
+      }
+      const auto pointer = "/" + std::string(member);
+      const auto cooked = ToCookedFloat(found->get<double>());
+      if (!cooked.has_value()) {
+        AddError(diagnostics, source_path,
+          std::string(import_codes::kPhysicsMaterialValueOutOfRange),
+          std::string(member) + " = " + found->dump()
+            + " does not fit a 32-bit float",
+          pointer);
+        valid = false;
+        return;
+      }
+      target = cooked;
+    };
+    read_float("static_friction", out.static_friction);
+    read_float("dynamic_friction", out.dynamic_friction);
+    read_float("restitution", out.restitution);
+    read_float("density", out.density);
+    if (out.density.has_value() && !(*out.density > 0.0F)) {
+      AddError(diagnostics, source_path,
+        std::string(import_codes::kPhysicsMaterialValueOutOfRange),
+        "density = " + document.at("density").dump()
+          + " is not positive as a 32-bit float",
+        "/density");
+      valid = false;
+    }
+    const auto read_mode =
+      [&](const std::string_view member,
+        std::optional<data::pak::physics::PhysicsCombineMode>& target) -> void {
+      const auto found = document.find(member);
+      if (found == document.end()) {
+        return;
+      }
+      target = ToCombineMode(found->get<std::string>());
+      DCHECK_F(target.has_value(), "the schema lists every combine mode");
+    };
+    read_mode("combine_mode_friction", out.combine_mode_friction);
+    read_mode("combine_mode_restitution", out.combine_mode_restitution);
+    if (!valid) {
+      return std::nullopt;
+    }
+    return out;
+  }
+
 } // namespace
 
 auto PreparePhysicsMaterialDescriptor(const std::string_view bytes,
   const std::filesystem::path& source_path,
-  std::vector<ImportDiagnostic>& diagnostics) -> std::optional<json>
+  std::vector<ImportDiagnostic>& diagnostics)
+  -> std::optional<PhysicsMaterialSource>
 {
   auto document = json {};
   try {
@@ -96,7 +179,7 @@ auto PreparePhysicsMaterialDescriptor(const std::string_view bytes,
   if (!ValidateDescriptorSchema(diagnostics, source_path, document)) {
     return std::nullopt;
   }
-  return document;
+  return ReadMaterial(document, diagnostics, source_path);
 }
 
 } // namespace oxygen::content::import::internal

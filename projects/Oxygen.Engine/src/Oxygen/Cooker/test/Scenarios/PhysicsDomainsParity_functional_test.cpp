@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <limits>
 #include <map>
 #include <optional>
 #include <sstream>
@@ -140,14 +141,27 @@ constexpr auto kSceneIdentity = std::string_view {
 }
 
 //! The bounds of the mesh a geometry descriptor's first LOD generates.
-[[nodiscard]] auto GeneratedBounds(const std::filesystem::path& descriptor)
-  -> std::optional<Box>
+//! `identity` is the geometry's virtual path: a buffer mesh resolves its
+//! buffers relative to it.
+[[nodiscard]] auto GeneratedBounds(const std::filesystem::path& descriptor,
+  const std::string& identity) -> std::optional<Box>
 {
+  // A buffer mesh states the bounds its buffers hold: the cook checks its
+  // buffers lie inside them.
+  const auto document = ReadJson(descriptor);
+  const auto& first_lod = document.at("lods").at(0);
+  if (first_lod.value("mesh_type", std::string {}) == "standard") {
+    const auto& bounds = first_lod.at("bounds");
+    const auto min = Vec3Or(bounds, "min", glm::vec3 { 0.0F });
+    const auto max = Vec3Or(bounds, "max", glm::vec3 { 0.0F });
+    return Box { .center = (min + max) * 0.5F, .half = (max - min) * 0.5F };
+  }
+
   auto diagnostics = std::vector<ImportDiagnostic> {};
   const auto mounts
     = oxygen::cooker::test::SourceMountTable("Showcase", MountDir());
-  const auto source = GeometrySource::FromDescriptor(ReadText(descriptor),
-    descriptor, "/Showcase/Geometry/Generated.ogeo", *mounts, diagnostics);
+  const auto source = GeometrySource::FromDescriptor(
+    ReadText(descriptor), descriptor, identity, *mounts, diagnostics);
   if (!source.has_value() || source->lods.empty()) {
     return std::nullopt;
   }
@@ -170,35 +184,91 @@ constexpr auto kSceneIdentity = std::string_view {
   return Box { .center = (min + max) * 0.5F, .half = (max - min) * 0.5F };
 }
 
-//! A collider's bounds in its node's unscaled frame.
-[[nodiscard]] auto ColliderBounds(const json& shape) -> std::optional<Box>
+//! The smallest box holding `a` and `b`.
+[[nodiscard]] auto Union(const Box& a, const Box& b) -> Box
 {
-  if (shape.contains("local_rotation")) {
+  const auto min = glm::min(a.center - a.half, b.center - b.half);
+  const auto max = glm::max(a.center + a.half, b.center + b.half);
+  return Box { .center = (min + max) * 0.5F, .half = (max - min) * 0.5F };
+}
+
+//! The bounds of a shape part (a whole shape or a compound child) in its
+//! parent's frame: its own bounds scaled by `local_scale`, placed at
+//! `local_position`. A rotated part has no axis-aligned answer here.
+[[nodiscard]] auto PartBounds(
+  const json& part, const std::map<std::string, std::filesystem::path>& sources)
+  -> std::optional<Box>
+{
+  const auto& rotation = part.value("local_rotation", json::array());
+  const auto rotated = !rotation.empty()
+    && (rotation.at(0).get<float>() != 0.0F
+      || rotation.at(1).get<float>() != 0.0F
+      || rotation.at(2).get<float>() != 0.0F);
+  if (rotated) {
     return std::nullopt;
   }
-  const auto center = Vec3Or(shape, "local_position", glm::vec3 { 0.0F });
-  const auto type = shape.at("shape_type").get<std::string>();
+  const auto type = part.at("shape_type").get<std::string>();
+  auto own = std::optional<Box> {};
+  const auto radius = part.value("radius", 0.0F);
+  const auto half_height = part.value("half_height", 0.0F);
   if (type == "box") {
-    return Box {
-      .center = center,
-      .half = Vec3Or(shape, "half_extents", glm::vec3 { 0.0F }),
-    };
+    own = Box { .half = Vec3Or(part, "half_extents", glm::vec3 { 0.0F }) };
+  } else if (type == "sphere") {
+    own = Box { .half = glm::vec3 { radius } };
+  } else if (type == "capsule") {
+    own = Box { .half = { radius, radius, half_height + radius } };
+  } else if (type == "cylinder" || type == "cone") {
+    own = Box { .half = { radius, radius, half_height } };
+  } else if (type == "convex_hull" || type == "triangle_mesh") {
+    // The collider is cooked from this geometry's first LOD.
+    const auto geometry = sources.find(
+      ResolveSceneReference(part.at("geometry_ref").get<std::string>()));
+    if (geometry != sources.end()) {
+      own = GeneratedBounds(geometry->second, geometry->first);
+    }
+  } else if (type == "height_field") {
+    // Columns run along +X and rows along +Y from the origin; a hole holds
+    // no height.
+    const auto count = part.at("sample_count").get<float>();
+    const auto& spacing = part.value("sample_spacing", json::array({ 1, 1 }));
+    auto low = std::numeric_limits<float>::max();
+    auto high = std::numeric_limits<float>::lowest();
+    for (const auto& height : part.at("heights")) {
+      if (!height.is_null()) {
+        low = std::min(low, height.get<float>());
+        high = std::max(high, height.get<float>());
+      }
+    }
+    const auto max = glm::vec3 { (count - 1.0F) * spacing.at(0).get<float>(),
+      (count - 1.0F) * spacing.at(1).get<float>(), high };
+    const auto min = glm::vec3 { 0.0F, 0.0F, low };
+    own = Box { .center = (min + max) * 0.5F, .half = (max - min) * 0.5F };
+  } else if (type == "compound") {
+    for (const auto& child : part.at("children")) {
+      const auto bounds = PartBounds(child, sources);
+      if (!bounds.has_value()) {
+        return std::nullopt;
+      }
+      own = own.has_value() ? Union(*own, *bounds) : *bounds;
+    }
   }
-  const auto radius = shape.value("radius", 0.0F);
-  const auto half_height = shape.value("half_height", 0.0F);
-  if (type == "sphere") {
-    return Box { .center = center, .half = glm::vec3 { radius } };
+  if (!own.has_value()) {
+    return std::nullopt;
   }
-  if (type == "capsule") {
-    return Box {
-      .center = center,
-      .half = { radius, radius, half_height + radius },
-    };
-  }
-  if (type == "cylinder") {
-    return Box { .center = center, .half = { radius, radius, half_height } };
-  }
-  return std::nullopt;
+  const auto scale = Vec3Or(part, "local_scale", glm::vec3 { 1.0F });
+  return Box {
+    .center = (own->center * scale)
+      + Vec3Or(part, "local_position", glm::vec3 { 0.0F }),
+    .half = own->half * scale,
+  };
+}
+
+//! A collider's bounds in its node's unscaled frame.
+[[nodiscard]] auto ColliderBounds(const json& shape,
+  const std::map<std::string, std::filesystem::path>& sources)
+  -> std::optional<Box>
+{
+  return PartBounds(shape, sources);
 }
 
 //! Every rigid body, collider and character binding: node and shape.
@@ -236,9 +306,9 @@ NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
     const auto node_name = nodes.at(node_index).at("name").get<std::string>();
     SCOPED_TRACE(node_name);
 
-    // The mesh is drawn on the body's node (scaled by it) or on one child
-    // that is no body of its own (placed and scaled by the child's own
-    // transform).
+    // The mesh is drawn on the body's node (scaled by it), or on children
+    // that are no bodies of their own (placed and scaled by each child's own
+    // transform); several drawn meshes compare by their union.
     auto drawn = std::optional<Box> {};
     for (const auto& renderable : scene.at("renderables")) {
       const auto drawn_index = renderable.at("node").get<size_t>();
@@ -253,7 +323,7 @@ NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
       const auto source = sources.find(ResolveSceneReference(
         renderable.at("geometry_ref").get<std::string>()));
       ASSERT_NE(source, sources.end());
-      const auto mesh = GeneratedBounds(source->second);
+      const auto mesh = GeneratedBounds(source->second, source->first);
       ASSERT_HAS_VALUE(mesh);
       const auto transform = drawn_node.value("transform", json::object());
       const auto scale = Vec3Or(transform, "scale", glm::vec3 { 1.0F });
@@ -263,8 +333,7 @@ NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
         ASSERT_TRUE(IsIdentityRotation(transform));
         box.center += Vec3Or(transform, "translation", glm::vec3 { 0.0F });
       }
-      ASSERT_FALSE(drawn.has_value()) << "more than one drawn mesh";
-      drawn = box;
+      drawn = drawn.has_value() ? Union(*drawn, box) : box;
     }
     if (!drawn.has_value()) {
       continue; // A trigger volume has nothing drawn to match.
@@ -272,7 +341,8 @@ NOLINT_TEST(PhysicsDomainsParityTest, EveryDrawnBodyMatchesItsCollider)
 
     const auto shape_source = sources.find(shape_ref);
     ASSERT_NE(shape_source, sources.end());
-    const auto collider = ColliderBounds(ReadJson(shape_source->second));
+    const auto collider
+      = ColliderBounds(ReadJson(shape_source->second), sources);
     ASSERT_HAS_VALUE(collider);
 
     for (auto axis = 0; axis < 3; ++axis) {

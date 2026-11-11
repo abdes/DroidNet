@@ -8,6 +8,7 @@
 
 #include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <algorithm>
 #include <cmath>
 #include <sstream>
 #include <string>
@@ -29,8 +30,11 @@
 #include <Jolt/Physics/Collision/Shape/ScaledShape.h>
 #include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Collision/Shape/TaperedCylinderShape.h>
 #include <Jolt/Physics/EActivation.h>
 
+#include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/PhysicsError.h>
@@ -106,8 +110,7 @@ inline auto RestoreCookedJoltShape(const CookedShapePayload& payload)
   if (payload.data.empty()) {
     return Err(PhysicsError::kInvalidArgument);
   }
-  const std::string blob(
-    reinterpret_cast<const char*>(payload.data.data()), payload.data.size());
+  const auto blob = std::string(payload.data.begin(), payload.data.end());
   std::istringstream stream(blob, std::ios::binary);
   JPH::StreamInWrapper wrapped(stream);
   auto restored = JPH::Shape::sRestoreFromBinaryState(wrapped);
@@ -195,8 +198,8 @@ inline auto IsFiniteRotation(const Quat& value) noexcept -> bool
 
 inline auto RotationNormSquared(const Quat& value) noexcept -> float
 {
-  return value.w * value.w + value.x * value.x + value.y * value.y
-    + value.z * value.z;
+  return (value.w * value.w) + (value.x * value.x) + (value.y * value.y)
+    + (value.z * value.z);
 }
 
 inline auto IsValidRotation(const Quat& value) noexcept -> bool
@@ -240,9 +243,10 @@ inline auto IsIdentityScale(const Vec3& value) noexcept -> bool
     && IsNearlyEqual(value.z, 1.0F);
 }
 
+//! The engine's uniform scale rule, which the cooker applies too.
 inline auto IsUniformScale(const Vec3& value) noexcept -> bool
 {
-  return IsNearlyEqual(value.x, value.y) && IsNearlyEqual(value.y, value.z);
+  return transforms::IsUniformScale(value);
 }
 
 inline auto IsFinitePositiveScale(const Vec3& value) noexcept -> bool
@@ -252,30 +256,39 @@ inline auto IsFinitePositiveScale(const Vec3& value) noexcept -> bool
     && value.z > 0.0F;
 }
 
-inline auto AllowsNonUniformScale(const CollisionShape& shape) noexcept -> bool
+//! Whether `T` is one of `Ts`.
+template <typename T, typename... Ts>
+inline constexpr bool kIsAnyOf = (std::is_same_v<T, Ts> || ...);
+
+//! Whether `value` holds one of the types `Wanted`; a type the variant does
+//! not have is never held.
+template <typename... Wanted, typename... Alternatives>
+constexpr auto HoldsAnyOf(const std::variant<Alternatives...>& value) noexcept
+  -> bool
 {
-  return std::visit(
-    [](const auto& value) -> bool {
-      using T = std::decay_t<decltype(value)>;
-      return std::is_same_v<T, BoxShape> || std::is_same_v<T, TriangleMeshShape>
-        || std::is_same_v<T, HeightFieldShape>
-        || std::is_same_v<T, CompoundShape>;
-    },
-    shape);
+  return (...
+    || (kIsAnyOf<Alternatives, Wanted...>
+      && std::holds_alternative<Alternatives>(value)));
 }
 
-inline auto IgnoresScale(const CollisionShape& shape) noexcept -> bool
+//! Whether the shape `shape` holds takes a per-axis scale.
+template <typename ShapeVariant>
+inline auto AllowsNonUniformScale(const ShapeVariant& shape) noexcept -> bool
 {
-  return std::visit(
-    [](const auto& value) -> bool {
-      using T = std::decay_t<decltype(value)>;
-      return std::is_same_v<T, PlaneShape>
-        || std::is_same_v<T, WorldBoundaryShape>;
-    },
-    shape);
+  return HoldsAnyOf<BoxShape, TriangleMeshShape, HeightFieldShape,
+    CompoundShape>(shape);
 }
 
-inline auto ApplyShapeLocalTransform(const CollisionShape& source_shape,
+//! Whether the shape `shape` holds is built without its scale.
+template <typename ShapeVariant>
+inline auto IgnoresScale(const ShapeVariant& shape) noexcept -> bool
+{
+  return HoldsAnyOf<PlaneShape, WorldBoundaryShape>(shape);
+}
+
+//! Places `base_shape`, built from `source_shape`, at its local transform.
+template <typename ShapeVariant>
+inline auto ApplyShapeLocalTransform(const ShapeVariant& source_shape,
   JPH::RefConst<JPH::Shape> base_shape, const Vec3& local_position,
   const Quat& local_rotation, const Vec3& local_scale)
   -> PhysicsResult<JPH::RefConst<JPH::Shape>>
@@ -315,7 +328,7 @@ inline auto ApplyShapeLocalTransform(const CollisionShape& source_shape,
 }
 
 //! Adapts Jolt's Y-axis primitive basis to Oxygen before authored transforms.
-inline auto OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> shape)
+inline auto OrientAxialShapeToOxygen(const JPH::RefConst<JPH::Shape>& shape)
   -> JPH::RefConst<JPH::Shape>
 {
   const auto rotation = JPH::Quat::sFromTo(
@@ -324,139 +337,181 @@ inline auto OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> shape)
     JPH::Vec3::sZero(), rotation, shape.GetPtr()) };
 }
 
+//! Restores a cooked shape and checks it has the Jolt type `expected`.
+inline auto RestoreCookedShapeOfType(const CookedShapePayload& payload,
+  const ShapePayloadType payload_type, const JPH::EShapeType expected)
+  -> PhysicsResult<JPH::RefConst<JPH::Shape>>
+{
+  if (payload.payload_type != payload_type) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  const auto restored = RestoreCookedJoltShape(payload);
+  if (restored.has_error()) {
+    return Err(restored.error());
+  }
+  if (restored.value()->GetType() != expected) {
+    return Err(PhysicsError::kInvalidArgument);
+  }
+  return Ok(restored.value());
+}
+
+//! Builds the Jolt shape of one shape alternative, in the shape's space.
+struct ShapeBuilder final {
+  template <typename T>
+  auto operator()(const T& value) const
+    -> PhysicsResult<JPH::RefConst<JPH::Shape>>
+  {
+    if constexpr (std::is_same_v<T, SphereShape>) {
+      if (value.radius <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      return Ok(
+        JPH::RefConst<JPH::Shape> { new JPH::SphereShape(value.radius) });
+    } else if constexpr (std::is_same_v<T, BoxShape>) {
+      if (value.extents.x <= 0.0F || value.extents.y <= 0.0F
+        || value.extents.z <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      // Jolt's convex radius must fit inside the box.
+      const auto convex_radius = std::min({
+        JPH::cDefaultConvexRadius,
+        value.extents.x,
+        value.extents.y,
+        value.extents.z,
+      });
+      return Ok(JPH::RefConst<JPH::Shape> {
+        new JPH::BoxShape(ToJoltVec3(value.extents), convex_radius),
+      });
+    } else if constexpr (std::is_same_v<T, CapsuleShape>) {
+      if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
+        || value.radius <= 0.0F || value.half_height < 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      // A zero-length cylinder is the exact sphere limit. Jolt's capsule
+      // constructor requires positive length; its settings API uses the
+      // same sphere representation for this limit.
+      if (value.half_height == 0.0F) {
+        return Ok(
+          JPH::RefConst<JPH::Shape> { new JPH::SphereShape(value.radius) });
+      }
+      return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
+        new JPH::CapsuleShape(value.half_height, value.radius),
+      }));
+    } else if constexpr (std::is_same_v<T, CylinderShape>) {
+      if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
+        || value.radius <= 0.0F || value.half_height <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      // Jolt's convex radius must fit inside the cylinder.
+      const auto convex_radius = std::min(
+        { JPH::cDefaultConvexRadius, value.half_height, value.radius });
+      return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
+        new JPH::CylinderShape(value.half_height, value.radius, convex_radius),
+      }));
+    } else if constexpr (std::is_same_v<T, PlaneShape>) {
+      const auto normal_len2 = glm::dot(value.normal, value.normal);
+      if (!(normal_len2 > 0.0F)) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      const auto normal = glm::normalize(value.normal);
+      const auto plane = JPH::Plane(ToJoltVec3(normal), value.distance);
+      return Ok(JPH::RefConst<JPH::Shape> { new JPH::PlaneShape(plane) });
+    } else if constexpr (std::is_same_v<T, WorldBoundaryShape>) {
+      return MakeWorldBoundaryShape(value);
+    } else if constexpr (std::is_same_v<T, ConeShape>) {
+      if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
+        || value.radius <= 0.0F || value.half_height <= 0.0F) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      // A cylinder whose top radius is zero: the apex at +half_height. Its
+      // sharp apex leaves no room for a convex radius.
+      const auto settings = JPH::TaperedCylinderShapeSettings(
+        value.half_height, 0.0F, value.radius, 0.0F);
+      const auto created = settings.Create();
+      if (created.HasError()) {
+        return Err(PhysicsError::kInvalidArgument);
+      }
+      return Ok(OrientAxialShapeToOxygen(created.Get()));
+    } else if constexpr (std::is_same_v<T, ConvexHullShape>) {
+      return RestoreCookedShapeOfType(value.cooked_payload,
+        ShapePayloadType::kConvex, JPH::EShapeType::Convex);
+    } else if constexpr (std::is_same_v<T, TriangleMeshShape>) {
+      return RestoreCookedShapeOfType(
+        value.cooked_payload, ShapePayloadType::kMesh, JPH::EShapeType::Mesh);
+    } else if constexpr (std::is_same_v<T, HeightFieldShape>) {
+      // The cooked grid's heights run along Jolt +Y, like an axial shape.
+      auto restored = RestoreCookedShapeOfType(value.cooked_payload,
+        ShapePayloadType::kHeightField, JPH::EShapeType::HeightField);
+      if (restored.has_error()) {
+        return restored;
+      }
+      return Ok(OrientAxialShapeToOxygen(restored.value()));
+    } else if constexpr (std::is_same_v<T, CompoundShape>) {
+      return MakeCompound(value);
+    } else {
+      static_assert(sizeof(T) == 0, "unhandled collision shape alternative");
+    }
+  }
+
+  //! Assembles the children, each at its local transform. A compound of one
+  //! child is that child at its transform, the form Jolt asks for.
+  [[nodiscard]] auto MakeCompound(const CompoundShape& compound) const
+    -> PhysicsResult<JPH::RefConst<JPH::Shape>>
+  {
+    if (compound.children.empty()) {
+      return Err(PhysicsError::kShapeCompoundZeroChildren);
+    }
+    auto settings = JPH::StaticCompoundShapeSettings {};
+    auto only_child = JPH::RefConst<JPH::Shape> {};
+    for (const auto& child : compound.children) {
+      auto built = std::visit(*this, child.shape);
+      if (built.has_error()) {
+        return built;
+      }
+      auto placed = ApplyShapeLocalTransform(child.shape, built.value(),
+        child.local_position, child.local_rotation, child.local_scale);
+      if (placed.has_error()) {
+        return placed;
+      }
+      if (!ValidateCompoundChildScaleContract(*placed.value())) {
+        return Err(PhysicsError::kShapeCompoundChildScaleContractViolation);
+      }
+      only_child = placed.value();
+      settings.AddShape(
+        JPH::Vec3::sZero(), JPH::Quat::sIdentity(), placed.value().GetPtr());
+    }
+    if (compound.children.size() == 1U) {
+      return Ok(only_child);
+    }
+    const auto created = settings.Create();
+    if (created.HasError()) {
+      return Err(PhysicsError::kInvalidArgument);
+    }
+    return Ok(created.Get());
+  }
+};
+
 inline auto MakeShape(const CollisionShape& shape)
   -> PhysicsResult<JPH::RefConst<JPH::Shape>>
 {
-  return std::visit(
-    [](const auto& value) -> PhysicsResult<JPH::RefConst<JPH::Shape>> {
-      using T = std::decay_t<decltype(value)>;
-      if constexpr (std::is_same_v<T, SphereShape>) {
-        if (value.radius <= 0.0F) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(
-          JPH::RefConst<JPH::Shape> { new JPH::SphereShape(value.radius) });
-      } else if constexpr (std::is_same_v<T, BoxShape>) {
-        if (value.extents.x <= 0.0F || value.extents.y <= 0.0F
-          || value.extents.z <= 0.0F) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(JPH::RefConst<JPH::Shape> {
-          new JPH::BoxShape(ToJoltVec3(value.extents)),
-        });
-      } else if constexpr (std::is_same_v<T, CapsuleShape>) {
-        if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
-          || value.radius <= 0.0F || value.half_height < 0.0F) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        // A zero-length cylinder is the exact sphere limit. Jolt's capsule
-        // constructor requires positive length; its settings API uses the
-        // same sphere representation for this limit.
-        if (value.half_height == 0.0F) {
-          return Ok(
-            JPH::RefConst<JPH::Shape> { new JPH::SphereShape(value.radius) });
-        }
-        return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
-          new JPH::CapsuleShape(value.half_height, value.radius),
-        }));
-      } else if constexpr (std::is_same_v<T, CylinderShape>) {
-        if (!std::isfinite(value.radius) || !std::isfinite(value.half_height)
-          || value.radius <= 0.0F || value.half_height <= 0.0F) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(OrientAxialShapeToOxygen(JPH::RefConst<JPH::Shape> {
-          new JPH::CylinderShape(value.half_height, value.radius),
-        }));
-      } else if constexpr (std::is_same_v<T, PlaneShape>) {
-        const auto normal_len2 = glm::dot(value.normal, value.normal);
-        if (!(normal_len2 > 0.0F)) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto normal = glm::normalize(value.normal);
-        const auto plane = JPH::Plane(ToJoltVec3(normal), value.distance);
-        return Ok(JPH::RefConst<JPH::Shape> { new JPH::PlaneShape(plane) });
-      } else if constexpr (std::is_same_v<T, WorldBoundaryShape>) {
-        return MakeWorldBoundaryShape(value);
-      } else if constexpr (std::is_same_v<T, ConeShape>) {
-        if (value.radius <= 0.0F || value.half_height <= 0.0F) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        if (value.cooked_payload.payload_type != ShapePayloadType::kConvex) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto restored = RestoreCookedJoltShape(value.cooked_payload);
-        if (restored.has_error()) {
-          return Err(restored.error());
-        }
-        if (restored.value()->GetType() != JPH::EShapeType::Convex) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(restored.value());
-      } else if constexpr (std::is_same_v<T, ConvexHullShape>) {
-        if (value.cooked_payload.payload_type != ShapePayloadType::kConvex) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto restored = RestoreCookedJoltShape(value.cooked_payload);
-        if (restored.has_error()) {
-          return Err(restored.error());
-        }
-        if (restored.value()->GetType() != JPH::EShapeType::Convex) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(restored.value());
-      } else if constexpr (std::is_same_v<T, TriangleMeshShape>) {
-        if (value.cooked_payload.payload_type != ShapePayloadType::kMesh) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto restored = RestoreCookedJoltShape(value.cooked_payload);
-        if (restored.has_error()) {
-          return Err(restored.error());
-        }
-        if (restored.value()->GetType() != JPH::EShapeType::Mesh) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(restored.value());
-      } else if constexpr (std::is_same_v<T, HeightFieldShape>) {
-        if (value.cooked_payload.payload_type
-          != ShapePayloadType::kHeightField) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto restored = RestoreCookedJoltShape(value.cooked_payload);
-        if (restored.has_error()) {
-          return Err(restored.error());
-        }
-        if (restored.value()->GetType() != JPH::EShapeType::HeightField) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        return Ok(restored.value());
-      } else if constexpr (std::is_same_v<T, CompoundShape>) {
-        if (value.cooked_payload.payload_type != ShapePayloadType::kCompound) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        if (value.cooked_payload.data.empty()) {
-          return Err(PhysicsError::kShapeCompoundZeroChildren);
-        }
-        const auto restored = RestoreCookedJoltShape(value.cooked_payload);
-        if (restored.has_error()) {
-          return Err(restored.error());
-        }
-        if (restored.value()->GetType() != JPH::EShapeType::Compound) {
-          return Err(PhysicsError::kInvalidArgument);
-        }
-        const auto& compound
-          = static_cast<const JPH::CompoundShape&>(*restored.value());
-        if (compound.GetNumSubShapes() == 0) {
-          return Err(PhysicsError::kShapeCompoundZeroChildren);
-        }
-        if (!ValidateCompoundChildScaleContract(compound)) {
-          return Err(PhysicsError::kShapeCompoundChildScaleContractViolation);
-        }
-        return Ok(restored.value());
-      } else {
-        return Err(PhysicsError::kNotImplemented);
-      }
-    },
-    shape);
+  return std::visit(ShapeBuilder {}, shape);
+}
+
+//! Whether only a static body takes `shape`: a triangle mesh, height field,
+//! plane or world boundary, or a compound holding one.
+inline auto MustBeStatic(const CollisionShape& shape) noexcept -> bool
+{
+  const auto static_only = [](const auto& value) -> bool {
+    return HoldsAnyOf<TriangleMeshShape, HeightFieldShape, PlaneShape,
+      WorldBoundaryShape>(value);
+  };
+  if (const auto* compound = std::get_if<CompoundShape>(&shape)) {
+    return std::ranges::any_of(
+      compound->children, [&](const CompoundShapeChild& child) -> bool {
+        return static_only(child.shape);
+      });
+  }
+  return static_only(shape);
 }
 
 } // namespace oxygen::physics::jolt

@@ -59,13 +59,15 @@ struct CylinderShape final {
 
 struct CookedShapePayload final {
   ShapePayloadType payload_type { ShapePayloadType::kInvalid };
-  std::vector<uint8_t> data {};
+  std::vector<uint8_t> data;
 };
 
+//! Cone centred at the origin with its longitudinal axis along Oxygen +Z: the
+//! base circle at z = -half_height, the apex at z = +half_height.
 struct ConeShape final {
   float radius { 0.5F };
+  //! Half the total height.
   float half_height { 0.5F };
-  CookedShapePayload cooked_payload {};
 };
 
 struct ConvexHullShape final {
@@ -76,6 +78,8 @@ struct TriangleMeshShape final {
   CookedShapePayload cooked_payload {};
 };
 
+//! A height field whose heights run along Oxygen +Z; the cooked payload holds
+//! the backend's grid.
 struct HeightFieldShape final {
   CookedShapePayload cooked_payload {};
 };
@@ -91,8 +95,22 @@ struct WorldBoundaryShape final {
   Vec3 limits_max { 0.0F, 0.0F, 0.0F };
 };
 
+//! A shape a compound shape holds: any shape but a compound.
+using CompoundChildShape = std::variant<SphereShape, BoxShape, CapsuleShape,
+  CylinderShape, ConeShape, ConvexHullShape, TriangleMeshShape,
+  HeightFieldShape, PlaneShape, WorldBoundaryShape>;
+
+//! One part of a compound shape, placed in the compound's space.
+struct CompoundShapeChild final {
+  CompoundChildShape shape { SphereShape {} };
+  Vec3 local_position { 0.0F, 0.0F, 0.0F };
+  Quat local_rotation { 1.0F, 0.0F, 0.0F, 0.0F };
+  Vec3 local_scale { 1.0F, 1.0F, 1.0F };
+};
+
+//! Shapes moving as one; each child has its own transform.
 struct CompoundShape final {
-  CookedShapePayload cooked_payload {};
+  std::vector<CompoundShapeChild> children;
 };
 
 using CollisionShape = std::variant<SphereShape, BoxShape, CapsuleShape,

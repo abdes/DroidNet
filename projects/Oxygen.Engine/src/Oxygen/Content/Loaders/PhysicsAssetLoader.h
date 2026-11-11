@@ -8,9 +8,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <vector>
 
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
@@ -52,8 +54,36 @@ inline auto LoadPhysicsMaterialDescriptor(const LoaderContext& context)
   return descriptor;
 }
 
+//! The payload a shape or compound child of `type` carries; `kInvalid` for an
+//! analytic shape, nothing for a type no shape or child has.
+inline auto RequiredShapePayload(const data::pak::physics::ShapeType type)
+  -> std::optional<data::pak::physics::ShapePayloadType>
+{
+  namespace physics = data::pak::physics;
+  switch (type) {
+  case physics::ShapeType::kConvexHull:
+    return physics::ShapePayloadType::kConvex;
+  case physics::ShapeType::kTriangleMesh:
+    return physics::ShapePayloadType::kMesh;
+  case physics::ShapeType::kHeightField:
+    return physics::ShapePayloadType::kHeightField;
+  case physics::ShapeType::kSphere:
+  case physics::ShapeType::kCapsule:
+  case physics::ShapeType::kBox:
+  case physics::ShapeType::kCylinder:
+  case physics::ShapeType::kCone:
+  case physics::ShapeType::kPlane:
+  case physics::ShapeType::kWorldBoundary:
+  case physics::ShapeType::kCompound:
+    return physics::ShapePayloadType::kInvalid;
+  case physics::ShapeType::kInvalid:
+  default:
+    return std::nullopt;
+  }
+}
+
 inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
-  -> data::pak::physics::CollisionShapeAssetDesc
+  -> CollisionShapeData
 {
   namespace physics = data::pak::physics;
   auto& reader = *context.desc_reader;
@@ -81,28 +111,8 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
     throw ContentLoadError(ContentLoadFailure::kContentInvalid,
       "Collision shape requires a physics material key");
   }
-  auto required_payload = physics::ShapePayloadType::kInvalid;
-  switch (descriptor.shape_type) {
-  case physics::ShapeType::kConvexHull:
-    required_payload = physics::ShapePayloadType::kConvex;
-    break;
-  case physics::ShapeType::kTriangleMesh:
-    required_payload = physics::ShapePayloadType::kMesh;
-    break;
-  case physics::ShapeType::kHeightField:
-    required_payload = physics::ShapePayloadType::kHeightField;
-    break;
-  case physics::ShapeType::kSphere:
-  case physics::ShapeType::kCapsule:
-  case physics::ShapeType::kBox:
-  case physics::ShapeType::kCylinder:
-  case physics::ShapeType::kCone:
-  case physics::ShapeType::kPlane:
-  case physics::ShapeType::kWorldBoundary:
-  case physics::ShapeType::kCompound:
-    break;
-  case physics::ShapeType::kInvalid:
-  default:
+  const auto required_payload = RequiredShapePayload(descriptor.shape_type);
+  if (!required_payload.has_value()) {
     throw data::CookedFormatError(
       data::CookedDefect::kInvalidValue, "Collision shape kind is invalid");
   }
@@ -111,11 +121,12 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
     throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
       "Collision shape reserved bytes are not zero");
   }
-  if (descriptor.cooked_shape_ref.payload_type != required_payload
-    || (required_payload != physics::ShapePayloadType::kInvalid
-      && descriptor.cooked_shape_ref.payload_asset_key.IsNil())
-    || (required_payload == physics::ShapePayloadType::kInvalid
-      && !descriptor.cooked_shape_ref.payload_asset_key.IsNil())) {
+  const auto carries_payload
+    = *required_payload != physics::ShapePayloadType::kInvalid;
+  const auto payload_matches_kind
+    = descriptor.cooked_shape_ref.payload_type == *required_payload
+    && carries_payload != descriptor.cooked_shape_ref.payload_asset_key.IsNil();
+  if (!payload_matches_kind) {
     throw data::CookedFormatError(data::CookedDefect::kInconsistent,
       "Collision shape payload does not match its kind");
   }
@@ -131,44 +142,62 @@ inline auto LoadCollisionShapeDescriptor(const LoaderContext& context)
       .expected_type = data::AssetType::kUnknown,
     },
   };
+  auto out = CollisionShapeData { .descriptor = descriptor };
   if (descriptor.shape_type == physics::ShapeType::kCompound) {
     const auto& compound = descriptor.shape_params.compound;
     if (compound.child_count == 0U) {
-      if (compound.child_byte_offset != 0U) {
-        throw data::CookedFormatError(data::CookedDefect::kNotCanonical,
-          "Empty compound child range is not canonical");
+      throw data::CookedFormatError(
+        data::CookedDefect::kInconsistent, "Compound shape has no children");
+    }
+    if (compound.child_byte_offset < sizeof(descriptor)) {
+      throw data::CookedFormatError(data::CookedDefect::kOverlap,
+        "Compound children overlap the shape descriptor");
+    }
+    CheckLoaderResult(
+      reader.Forward(compound.child_byte_offset - sizeof(descriptor)),
+      "collision shape", "compound child offset");
+    // Each child is read before the next is allocated: a count no
+    // descriptor holds fails on the first missing record.
+    for (uint32_t index = 0U; index < compound.child_count; ++index) {
+      const auto child_bytes
+        = reader.ReadBlob(sizeof(physics::CompoundShapeChildDesc));
+      CheckLoaderResult(child_bytes, "collision shape", "compound child");
+      const auto child
+        = serio::CopyAt<physics::CompoundShapeChildDesc>(*child_bytes);
+      CheckLoaderResult(child, "collision shape", "compound child");
+      if (!physics::HasZeroReserves(*child)) {
+        throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
+          "Compound child reserved bytes are not zero");
       }
-    } else {
-      if (compound.child_byte_offset < sizeof(descriptor)) {
-        throw data::CookedFormatError(data::CookedDefect::kOverlap,
-          "Compound children overlap the shape descriptor");
+      const auto child_type
+        = static_cast<physics::ShapeType>(child->shape_type);
+      const auto child_payload = RequiredShapePayload(child_type);
+      if (!child_payload.has_value()
+        || child_type == physics::ShapeType::kCompound) {
+        throw data::CookedFormatError(
+          data::CookedDefect::kInvalidValue, "Compound child kind is invalid");
       }
-      CheckLoaderResult(
-        reader.Forward(compound.child_byte_offset - sizeof(descriptor)),
-        "collision shape", "compound child offset");
-      for (uint32_t index = 0U; index < compound.child_count; ++index) {
-        const auto child_bytes
-          = reader.ReadBlob(sizeof(physics::CompoundShapeChildDesc));
-        CheckLoaderResult(child_bytes, "collision shape", "compound child");
-        const auto child
-          = serio::CopyAt<physics::CompoundShapeChildDesc>(*child_bytes);
-        CheckLoaderResult(child, "collision shape", "compound child");
-        const auto child_reserves_zero = physics::HasZeroReserves(*child);
-        if (!child_reserves_zero) {
-          throw data::CookedFormatError(data::CookedDefect::kReservedNotZero,
-            "Compound child reserved bytes are not zero");
-        }
+      const auto child_carries_payload
+        = *child_payload != physics::ShapePayloadType::kInvalid;
+      const auto child_payload_matches_kind
+        = child_carries_payload != child->payload_asset_key.IsNil();
+      if (!child_payload_matches_kind) {
+        throw data::CookedFormatError(data::CookedDefect::kInconsistent,
+          "Compound child payload does not match its kind");
+      }
+      if (child_carries_payload) {
         keys.push_back({
           .key = child->payload_asset_key,
           .kind = data::KeyReferenceKind::kPhysicsResource,
           .expected_type = data::AssetType::kUnknown,
         });
       }
+      out.children.push_back(*child);
     }
   }
   SkipDescriptorStrings(reader, *base_pos, descriptor.header);
   context.ValidateReferences({}, keys);
-  return descriptor;
+  return out;
 }
 
 } // namespace oxygen::content::loaders

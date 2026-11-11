@@ -46,6 +46,7 @@
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentLoadError.h>
 #include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/ContentMounts.h>
@@ -3131,9 +3132,9 @@ auto AssetLoader::MakePhysicsResourceKeyForAsset(
   return found->key;
 }
 
-auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
+auto AssetLoader::ReadCollisionShapeForAsset(
   const data::Asset& context_asset, const data::AssetKey& shape_asset_key) const
-  -> std::optional<data::pak::physics::CollisionShapeAssetDesc>
+  -> std::optional<CollisionShapeData>
 {
   const auto* bindings = GetPhysicsBindings(context_asset);
   if (!bindings) {
@@ -3142,7 +3143,7 @@ auto AssetLoader::ReadCollisionShapeAssetDescForAsset(
   const auto found = std::ranges::lower_bound(
     bindings->shapes, shape_asset_key, {}, &internal::BoundPhysicsShape::key);
   return found != bindings->shapes.end() && found->key == shape_asset_key
-    ? std::optional(found->descriptor)
+    ? std::optional(found->shape)
     : std::nullopt;
 }
 

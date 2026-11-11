@@ -111,7 +111,6 @@ auto RegisterPhysicsConstantsBindings(
       { "convex", "convex" },
       { "mesh", "mesh" },
       { "height_field", "height_field" },
-      { "compound", "compound" },
     }));
   lua_setfield(state, constants_index, "shape_payload_type");
 

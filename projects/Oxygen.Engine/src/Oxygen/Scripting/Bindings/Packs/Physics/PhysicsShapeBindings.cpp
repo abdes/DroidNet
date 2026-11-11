@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <variant>
+#include <vector>
 
 #include <lua.h>
 #include <lualib.h>
@@ -114,9 +116,6 @@ namespace {
     case physics::ShapePayloadType::kHeightField:
       lua_pushstring(state, "height_field");
       return;
-    case physics::ShapePayloadType::kCompound:
-      lua_pushstring(state, "compound");
-      return;
     default:
       lua_pushstring(state, "invalid");
       return;
@@ -136,8 +135,14 @@ namespace {
     lua_setfield(state, -2, "data");
   }
 
-  auto PushShapeGeometryTable(
-    lua_State* state, const physics::CollisionShape& shape) -> void
+  auto PushCompoundChildren(lua_State* state,
+    const std::vector<physics::CompoundShapeChild>& children) -> void;
+
+  //! Pushes the table of the shape `shape` holds, in the form
+  //! `ParseCollisionShape` reads.
+  template <typename ShapeVariant>
+  auto PushShapeGeometryTable(lua_State* state, const ShapeVariant& shape)
+    -> void
   {
     lua_createtable(state, 0, 6);
     std::visit(
@@ -174,8 +179,6 @@ namespace {
           lua_setfield(state, -2, "radius");
           lua_pushnumber(state, geometry.half_height);
           lua_setfield(state, -2, "half_height");
-          PushCookedPayload(state, geometry.cooked_payload);
-          lua_setfield(state, -2, "cooked_payload");
         } else if constexpr (std::is_same_v<T, physics::ConvexHullShape>) {
           lua_pushstring(state, "convex_hull");
           lua_setfield(state, -2, "type");
@@ -216,11 +219,31 @@ namespace {
         } else if constexpr (std::is_same_v<T, physics::CompoundShape>) {
           lua_pushstring(state, "compound");
           lua_setfield(state, -2, "type");
-          PushCookedPayload(state, geometry.cooked_payload);
-          lua_setfield(state, -2, "cooked_payload");
+          PushCompoundChildren(state, geometry.children);
+          lua_setfield(state, -2, "children");
         }
       },
       shape);
+  }
+
+  //! Pushes the `children` array of a compound shape table.
+  auto PushCompoundChildren(lua_State* state,
+    const std::vector<physics::CompoundShapeChild>& children) -> void
+  {
+    lua_createtable(state, static_cast<int>(children.size()), 0);
+    for (size_t i = 0; i < children.size(); ++i) {
+      const auto& child = children.at(i);
+      lua_createtable(state, 0, 4);
+      PushShapeGeometryTable(state, child.shape);
+      lua_setfield(state, -2, "shape");
+      PushVec3(state, child.local_position);
+      lua_setfield(state, -2, "local_position");
+      PushQuat(state, child.local_rotation);
+      lua_setfield(state, -2, "local_rotation");
+      PushVec3(state, child.local_scale);
+      lua_setfield(state, -2, "local_scale");
+      lua_rawseti(state, -2, static_cast<int>(i + 1U));
+    }
   }
 
   auto PushShapeDescTable(

@@ -399,6 +399,39 @@ is used internally:
       without generating contact impulses.
     - _Material reference_ — asset key of the physics material that governs
       surface response for this shape.
+    - _Authored form._ A shape states only the members its type uses; any
+      other member is refused (`physics.shape.member_not_applicable`).
+      - Sphere `radius`; capsule, cylinder and cone `radius` and
+        `half_height`, along local +Z. A capsule's half height excludes its
+        hemispheres and may be zero; a cylinder's and a cone's is positive. A
+        cone's base is at -`half_height` and its apex at +`half_height`.
+      - Box `half_extents`; plane `normal` (any nonzero length) and
+        `distance`; world boundary `boundary_mode`, `limits_min` and
+        `limits_max`, each axis of the maximum strictly greater.
+      - Convex hull and triangle mesh `geometry_ref`, a cooked geometry: the
+        triangles of its first level of detail, degenerate ones dropped. The
+        hull takes the points those triangles use, with an optional
+        `convex_radius` (default 0.05 m) and `hull_tolerance` (default
+        0.001 m).
+      - Height field `sample_count` per side and `sample_count`² `heights`,
+        row-major: sample (row, column) is at local (column × spacing.x,
+        row × spacing.y, height). `null` is a hole without collision; at least
+        one sample is solid. Optional `sample_spacing` (default [1, 1]),
+        `block_size` (2–8, default 2) and `bits_per_sample` (1–8, default 8).
+      - Compound `children`, at least one: each any type but a compound, with
+        its own `local_position`, `local_rotation` and `local_scale`.
+    - _Values._ Every number is narrowed to a 32-bit float and refused when
+      the float cannot hold it, or when a dimension that must be positive is
+      not once narrowed (`physics.shape.value_out_of_range`). Rotations are
+      unit quaternions. A sphere, capsule, cylinder, cone or convex hull takes
+      a uniform `local_scale` only (`physics.shape.scale_not_uniform`, the
+      engine's uniform scale rule). `collision_own_layer` is a single bit
+      (`physics.shape.own_layer_invalid`); `collision_target_layers` is any
+      64-bit mask.
+    - _References._ `material_ref` and `geometry_ref` resolve like every
+      reference, in any mounted cooked root, loose or packed: one of another
+      mount becomes a requirement of the shape on that mount. A reference that
+      names an asset of another type is refused, with no fallback.
   - **Physics materials.** Each material carries:
     - _Static friction_ — resistance to initiating slide (coefficient, 0–1+).
     - _Dynamic friction_ — resistance while sliding (coefficient, 0–1+).
@@ -810,10 +843,15 @@ is used internally:
   **Backend-cooked binary artifacts** (one blob per asset, tagged by format):
 
   - **Non-analytic shape binary** — cooked collision geometry for a single
-    Convex Hull, Triangle Mesh, Height Field, or Compound shape, including the
-    embedded BVH/acceleration structure. No standalone BVH artifact exists; it
-    is integral to the binary.
-    - Jolt: `Shape::SaveBinaryState()` → self-contained byte stream.
+    Convex Hull, Triangle Mesh or Height Field shape, or for one such child of
+    a compound, including the embedded BVH/acceleration structure. No
+    standalone BVH artifact exists; it is integral to the binary. A compound
+    has no binary of its own: the runtime assembles it from its child records,
+    and builds a cone from its descriptor parameters.
+    - Jolt: `Shape::SaveBinaryState()` → self-contained byte stream, restored
+      by `Shape::sRestoreFromBinaryState()`. A height field's grid lies in
+      Jolt's XZ plane with heights along +Y; the runtime turns it to Oxygen +Z
+      as it turns every axial shape, so the cook stores its rows last first.
     - PhysX:
       `PxCooking::{cookConvexMesh | cookTriangleMesh | cookHeightField}()` →
       `PxDefaultMemoryOutputStream`.

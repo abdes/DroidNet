@@ -70,6 +70,7 @@ set(
   "ResourceTable.h"
   "ResourceTypeList.h"
   "InputContextHydration.h"
+  "CollisionShapeData.h"
   "IAssetLoader.h"
   "LooseCookedIndex.h"
 )

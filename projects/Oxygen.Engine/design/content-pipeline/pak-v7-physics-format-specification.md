@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-05
 **Status:** Design / Specification
+**Last updated:** 2026-11-11
 
 **Target Files:** `src/Oxygen/Data/PakFormat_core.h`, `src/Oxygen/Data/PakFormat_physics.h`
 
@@ -485,7 +486,7 @@ Import/cook examples:
 - `physics.sidecar.target_scene_missing`
 - `physics.sidecar.target_scene_virtual_path_invalid`
 - `physics.sidecar.node_ref_out_of_bounds`
-- `physics.sidecar.reference_source_mismatch`
+- `physics.sidecar.backend_mismatch`
 - `physics.sidecar.constraint_resource_index_invalid`
 - `manifest.schema_validation_failed`
 

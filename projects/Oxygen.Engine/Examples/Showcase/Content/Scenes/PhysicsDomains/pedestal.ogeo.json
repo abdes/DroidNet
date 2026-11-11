@@ -1,0 +1,30 @@
+{
+  "name": "pedestal",
+  "lods": [
+    {
+      "name": "pedestal_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "Cylinder",
+        "mesh_name": "Pedestal",
+        "params": {
+          "segments": 12,
+          "height": 0.6,
+          "radius": 1.0
+        }
+      },
+      "submeshes": [
+        {
+          "name": "pedestal_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "chassis_green.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

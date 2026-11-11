@@ -44,12 +44,23 @@ auto Shape(const std::string& name, const std::string& material)
     .Set("/name", name);
 }
 
-//! A payload-backed shape: it has no extents of its own.
+//! A payload-backed shape: the hull of a cooked geometry.
 auto HullShape() -> CollisionShapeDescriptor
 {
   return Shape("hull_shape", "steel")
     .Set("/shape_type", "convex_hull")
-    .Remove("/half_extents");
+    .Remove("/half_extents")
+    .Set("/geometry_ref", "../../Meshes/rock.ogeo");
+}
+
+//! A 2 x 2 height field.
+auto HeightFieldShape() -> CollisionShapeDescriptor
+{
+  return Shape("terrain", "ground")
+    .Set("/shape_type", "height_field")
+    .Remove("/half_extents")
+    .Set("/sample_count", 2)
+    .Set("/heights", json::array({ 0.0, 1.0, nullptr, 2.0 }));
 }
 
 auto CompoundShape() -> CollisionShapeDescriptor
@@ -158,6 +169,64 @@ INSTANTIATE_TEST_SUITE_P(Cases, CollisionShapeDescriptorSchemaCaseTest,
       CompoundShape().Text(),
       false,
       "'children'",
+    },
+    SchemaCase {
+      "RejectsConvexHullWithoutGeometry",
+      HullShape().Remove("/geometry_ref").Text(),
+      false,
+      "'geometry_ref'",
+    },
+    SchemaCase {
+      "RejectsGeometryReferenceOfAnotherType",
+      HullShape().Set("/geometry_ref", "../../Meshes/rock.opmat").Text(),
+      false,
+      "/geometry_ref: ",
+    },
+    SchemaCase {
+      "AcceptsCompoundConvexHullChild",
+      CompoundShape()
+        .Append("/children", json::parse(R"({
+            "shape_type": "convex_hull",
+            "geometry_ref": "../../Meshes/rock.ogeo",
+            "local_position": [0.0, 0.0, 0.0],
+            "local_rotation": [0.0, 0.0, 0.0, 1.0],
+            "local_scale": [1.0, 1.0, 1.0]
+          })"))
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsHeightFieldWithHoles",
+      HeightFieldShape().Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsHeightFieldBlockSizeOutOfRange",
+      HeightFieldShape().Set("/block_size", 9).Text(),
+      false,
+      "/block_size: ",
+    },
+    SchemaCase {
+      "RejectsHeightFieldOfOneSample",
+      HeightFieldShape().Set("/sample_count", 1).Text(),
+      false,
+      "/sample_count: ",
+    },
+    SchemaCase {
+      "AcceptsTheHighestOwnLayer",
+      Shape("floor_box", "ground")
+        .Set("/collision_own_layer", 9223372036854775808ULL)
+        .Text(),
+      true,
+      "",
+    },
+    SchemaCase {
+      "RejectsAFractionalLayer",
+      Shape("floor_box", "ground").Set("/collision_own_layer", 1.5).Text(),
+      false,
+      "/collision_own_layer: ",
     }),
   oxygen::cooker::test::SchemaCaseName);
 

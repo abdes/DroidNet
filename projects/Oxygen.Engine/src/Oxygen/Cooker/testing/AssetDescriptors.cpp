@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -81,6 +82,46 @@ auto CollisionShapeDescriptor(const std::string_view name,
     .references = std::move(references).Build(),
   };
   detail::CheckWithLoader("collision shape '" + std::string(name) + "'",
+    fixture.bytes, fixture.references,
+    content::loaders::LoadCollisionShapeDescriptor);
+  return fixture;
+}
+
+auto CompoundShapeDescriptor(const std::string_view name,
+  physics::CollisionShapeAssetDesc record,
+  const std::span<const physics::CompoundShapeChildDesc> children)
+  -> DescriptorFixture
+{
+  record.shape_type = physics::ShapeType::kCompound;
+  record.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kCollisionShape);
+  record.header.version = physics::kCollisionShapeAssetVersion;
+  record.shape_params.compound = physics::ShapeParams::CompoundParams {
+    .child_count = static_cast<uint32_t>(children.size()),
+    .child_byte_offset
+    = children.empty() ? 0U : static_cast<uint32_t>(sizeof(record)),
+  };
+  auto strings = data::DescriptorStringsBuilder {};
+  record.header.name_offset = strings.Add(name);
+  auto references = content::import::AssetReferenceBuilder {};
+  references.AddAsset(
+    record.material_asset_key, data::AssetType::kPhysicsMaterial);
+  for (const auto& child : children) {
+    if (!child.payload_asset_key.IsNil()) {
+      references.AddPhysicsResource(child.payload_asset_key);
+    }
+  }
+  const auto record_bytes = std::as_bytes(std::span { &record, 1U });
+  auto bytes = std::vector<std::byte>(record_bytes.begin(), record_bytes.end());
+  const auto child_bytes = std::as_bytes(children);
+  bytes.insert(bytes.end(), child_bytes.begin(), child_bytes.end());
+  data::AppendDescriptorStrings(bytes, strings);
+  data::StampDescriptorHash(bytes);
+  auto fixture = DescriptorFixture {
+    .bytes = std::move(bytes),
+    .references = std::move(references).Build(),
+  };
+  detail::CheckWithLoader("compound shape '" + std::string(name) + "'",
     fixture.bytes, fixture.references,
     content::loaders::LoadCollisionShapeDescriptor);
   return fixture;

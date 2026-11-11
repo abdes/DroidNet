@@ -13,9 +13,6 @@
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
@@ -37,8 +34,6 @@
 namespace oxygen::content::import::detail {
 
 namespace {
-
-  using nlohmann::json;
 
   struct DescriptorTarget final {
     std::string relpath;
@@ -64,26 +59,6 @@ namespace {
       .source_path = request.source_path.string(),
       .json_pointer = std::move(json_pointer),
     });
-  }
-
-  [[nodiscard]] auto ParseCombineMode(const std::string_view value)
-    -> data::pak::physics::PhysicsCombineMode
-  {
-    using data::pak::physics::PhysicsCombineMode;
-    if (value == "average") {
-      return PhysicsCombineMode::kAverage;
-    }
-    if (value == "min") {
-      return PhysicsCombineMode::kMin;
-    }
-    if (value == "max") {
-      return PhysicsCombineMode::kMax;
-    }
-    if (value == "multiply") {
-      return PhysicsCombineMode::kMultiply;
-    }
-    DCHECK_F(false, "Unsupported physics combine mode after schema validation");
-    return PhysicsCombineMode::kAverage;
   }
 
   //! Places the descriptor at the job's identity.
@@ -151,12 +126,12 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto diagnostics = std::vector<ImportDiagnostic> {};
-  const auto descriptor_doc = internal::PreparePhysicsMaterialDescriptor(
+  const auto material = internal::PreparePhysicsMaterialDescriptor(
     payload->descriptor_json, Request().source_path, diagnostics);
   for (auto& diagnostic : diagnostics) {
     session.AddDiagnostic(std::move(diagnostic));
   }
-  if (!descriptor_doc.has_value()) {
+  if (!material.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Invalid physics material descriptor payload");
     co_return co_await FinalizeWithTelemetry(session);
@@ -176,28 +151,19 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto material_name
     = std::filesystem::path(target->relpath).stem().string();
 
-  if (descriptor_doc->contains("static_friction")) {
-    descriptor.static_friction
-      = descriptor_doc->at("static_friction").get<float>();
-  }
-  if (descriptor_doc->contains("dynamic_friction")) {
-    descriptor.dynamic_friction
-      = descriptor_doc->at("dynamic_friction").get<float>();
-  }
-  if (descriptor_doc->contains("restitution")) {
-    descriptor.restitution = descriptor_doc->at("restitution").get<float>();
-  }
-  if (descriptor_doc->contains("density")) {
-    descriptor.density = descriptor_doc->at("density").get<float>();
-  }
-  if (descriptor_doc->contains("combine_mode_friction")) {
-    descriptor.combine_mode_friction = ParseCombineMode(
-      descriptor_doc->at("combine_mode_friction").get<std::string>());
-  }
-  if (descriptor_doc->contains("combine_mode_restitution")) {
-    descriptor.combine_mode_restitution = ParseCombineMode(
-      descriptor_doc->at("combine_mode_restitution").get<std::string>());
-  }
+  // A value the descriptor does not author keeps the cooked default.
+  descriptor.static_friction
+    = material->static_friction.value_or(descriptor.static_friction);
+  descriptor.dynamic_friction
+    = material->dynamic_friction.value_or(descriptor.dynamic_friction);
+  descriptor.restitution
+    = material->restitution.value_or(descriptor.restitution);
+  descriptor.density = material->density.value_or(descriptor.density);
+  descriptor.combine_mode_friction = material->combine_mode_friction.value_or(
+    descriptor.combine_mode_friction);
+  descriptor.combine_mode_restitution
+    = material->combine_mode_restitution.value_or(
+      descriptor.combine_mode_restitution);
 
   auto& pipeline = CreatePipeline<PhysicsMaterialImportPipeline>(
     PhysicsMaterialImportPipeline::Config {

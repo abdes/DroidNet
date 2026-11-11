@@ -575,21 +575,24 @@ namespace {
   }
 
   //! Analyzes a collision shape descriptor: it references its physics
-  //! material.
+  //! material and the geometries its convex hulls and triangle meshes cook
+  //! from.
   auto PrepareCollisionShapeJob(
     const ImportManifestJob& job, AnalysisContext& context) -> co::Co<bool>
   {
     const auto text = co_await ReadSourceText(
       context, job.collision_shape_descriptor.descriptor_path, {});
     auto& report = *context.report;
-    const auto document = internal::PrepareCollisionShapeDescriptor(
+    const auto shape = internal::PrepareCollisionShapeDescriptor(
       text, report.source_path, report.diagnostics);
-    if (!document.has_value()) {
+    if (!shape.has_value()) {
       co_return false;
     }
     context.Output(job.virtual_path, Kind::kAsset);
-    if (const auto material = JsonString(*document, "material_ref")) {
-      context.Reference(*material, Kind::kAsset, "/material_ref");
+    context.Reference(shape->material_ref, Kind::kAsset, "/material_ref");
+    for (const auto& geometry : internal::GeometryReferencesOf(*shape)) {
+      context.Reference(
+        geometry.reference, Kind::kAsset, geometry.json_pointer);
     }
     co_return true;
   }

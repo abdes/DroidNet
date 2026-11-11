@@ -1,0 +1,7 @@
+{
+  "name": "cone_spire_shape",
+  "shape_type": "cone",
+  "material_ref": "dynamic.opmat",
+  "radius": 0.4,
+  "half_height": 0.6
+}

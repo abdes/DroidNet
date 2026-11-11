@@ -57,7 +57,7 @@ if c.shape_type.compound ~= "compound" then error("shape_type enum mismatch") en
 if c.shape_payload_type.convex ~= "convex" then error("shape_payload_type.convex enum mismatch") end
 if c.shape_payload_type.mesh ~= "mesh" then error("shape_payload_type enum mismatch") end
 if c.shape_payload_type.height_field ~= "height_field" then error("shape_payload_type.height_field enum mismatch") end
-if c.shape_payload_type.compound ~= "compound" then error("shape_payload_type.compound enum mismatch") end
+if c.shape_payload_type.compound ~= nil then error("shape_payload_type.compound is no payload type") end
 if c.world_boundary_mode.aabb_clamp ~= "aabb_clamp" then error("world_boundary_mode.aabb_clamp enum mismatch") end
 if c.world_boundary_mode.plane_set ~= "plane_set" then error("world_boundary_mode enum mismatch") end
 

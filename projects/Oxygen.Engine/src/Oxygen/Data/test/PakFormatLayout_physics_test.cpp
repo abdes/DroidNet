@@ -129,7 +129,7 @@ auto MakeShape(const physics::ShapeType type)
     .shape_params = {},
     .cooked_shape_ref = {
       .payload_asset_key = Key(0x50U),
-      .payload_type = physics::ShapePayloadType::kCompound,
+      .payload_type = physics::ShapePayloadType::kHeightField,
     },
   };
 }
@@ -151,7 +151,7 @@ auto ShapeBytes(const uint8_t type, const WireBytes& params) -> WireBytes
     .Run(0x40U, 16)
     .Append(params)
     .Run(0x50U, 16)
-    .U8(4U);
+    .U8(3U);
   return bytes;
 }
 

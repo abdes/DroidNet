@@ -231,6 +231,7 @@ oxygen_cooker_test(
     nlohmann_json_schema_validator
   SOURCES
     "Import/Jobs/BufferContainerImportJob_functional_test.cpp"
+    "Import/Jobs/CollisionShapeCooking_functional_test.cpp"
     "Import/Jobs/CollisionShapeDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/GeometryDescriptorImportJob_buffers_functional_test.cpp"
     "Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp"

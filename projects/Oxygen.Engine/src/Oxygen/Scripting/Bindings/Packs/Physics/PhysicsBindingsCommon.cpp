@@ -8,9 +8,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <lua.h>
@@ -24,6 +27,7 @@
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 
@@ -120,9 +124,6 @@ namespace {
       } else if (raw
         == static_cast<lua_Integer>(physics::ShapePayloadType::kHeightField)) {
         payload_type = physics::ShapePayloadType::kHeightField;
-      } else if (raw
-        == static_cast<lua_Integer>(physics::ShapePayloadType::kCompound)) {
-        payload_type = physics::ShapePayloadType::kCompound;
       }
     } else {
       const auto* payload_type_text = luaL_checkstring(state, -1);
@@ -134,15 +135,13 @@ namespace {
         payload_type = physics::ShapePayloadType::kMesh;
       } else if (payload_type_view == "height_field") {
         payload_type = physics::ShapePayloadType::kHeightField;
-      } else if (payload_type_view == "compound") {
-        payload_type = physics::ShapePayloadType::kCompound;
       }
     }
     lua_pop(state, 1);
     if (payload_type == physics::ShapePayloadType::kInvalid) {
       luaL_error(state,
-        "shape.cooked_payload.payload_type must be one of 'convex', 'mesh', "
-        "'height_field', or 'compound'");
+        "shape.cooked_payload.payload_type must be one of 'convex', 'mesh' "
+        "or 'height_field'");
     }
     return payload_type;
   }
@@ -175,7 +174,8 @@ namespace {
     for (size_t i = 0; i < hex_text.size(); i += 2U) {
       const auto hi = ParseHexNybble(state, hex_text.at(i), field_name);
       const auto lo = ParseHexNybble(state, hex_text.at(i + 1U), field_name);
-      bytes.push_back(static_cast<uint8_t>((hi << 4U) | lo));
+      constexpr auto kNybbleBase = 16U;
+      bytes.push_back(static_cast<uint8_t>((hi * kNybbleBase) + lo));
     }
     return bytes;
   }
@@ -201,7 +201,8 @@ namespace {
     if (lua_isnil(state, -1) == 0) {
       size_t payload_len = 0;
       const auto* payload_ptr = luaL_checklstring(state, -1, &payload_len);
-      payload_data.assign(payload_ptr, payload_ptr + payload_len);
+      const auto payload_chars = std::span(payload_ptr, payload_len);
+      payload_data.assign(payload_chars.begin(), payload_chars.end());
       lua_pop(state, 1);
     } else {
       lua_pop(state, 1);
@@ -524,6 +525,81 @@ namespace {
     lua_pushvalue(state, -1);
     lua_setfield(state, -2, "__index");
     lua_pop(state, 1);
+  }
+
+  //! Reads one compound child table: `shape` (any shape but a compound) and
+  //! the optional `local_position`, `local_rotation` and `local_scale`.
+  auto ParseCompoundChild(lua_State* state, const int child_index)
+    -> physics::CompoundShapeChild
+  {
+    const auto abs_index = lua_absindex(state, child_index);
+    if (lua_istable(state, abs_index) == 0) {
+      luaL_error(state, "shape.children entries must be tables");
+    }
+    auto child = physics::CompoundShapeChild {};
+    lua_getfield(state, abs_index, "shape");
+    if (lua_istable(state, -1) == 0) {
+      luaL_error(state, "shape.children entries require a 'shape' table");
+    }
+    const auto shape = ParseCollisionShape(state, -1);
+    lua_pop(state, 1);
+    std::visit(
+      [&](const auto& value) -> void {
+        using T = std::decay_t<decltype(value)>;
+        if constexpr (std::is_same_v<T, physics::CompoundShape>) {
+          luaL_error(state, "a compound shape child cannot be a compound");
+        } else {
+          child.shape = value;
+        }
+      },
+      shape);
+
+    lua_getfield(state, abs_index, "local_position");
+    if (lua_isnil(state, -1) == 0
+      && !TryCheckVec3(state, -1, child.local_position)) {
+      luaL_error(state, "shape.children local_position must be a vector");
+    }
+    lua_pop(state, 1);
+    lua_getfield(state, abs_index, "local_rotation");
+    if (lua_isnil(state, -1) == 0) {
+      const auto* q = TryCheckQuat(state, -1);
+      if (q == nullptr) {
+        luaL_error(state, "shape.children local_rotation must be a quaternion");
+      }
+      child.local_rotation = Quat { q->w, q->x, q->y, q->z };
+    }
+    lua_pop(state, 1);
+    lua_getfield(state, abs_index, "local_scale");
+    if (lua_isnil(state, -1) == 0
+      && !TryCheckVec3(state, -1, child.local_scale)) {
+      luaL_error(state, "shape.children local_scale must be a vector");
+    }
+    lua_pop(state, 1);
+    return child;
+  }
+
+  //! Reads a compound shape table: its `children` array.
+  auto ParseCompoundShape(lua_State* state, const int abs_index)
+    -> physics::CompoundShape
+  {
+    lua_getfield(state, abs_index, "children");
+    if (lua_istable(state, -1) == 0) {
+      luaL_error(state, "a compound shape requires a 'children' array");
+    }
+    const auto children_index = lua_absindex(state, -1);
+    const auto count = lua_objlen(state, children_index);
+    if (count == 0) {
+      luaL_error(state, "a compound shape requires at least one child");
+    }
+    auto compound = physics::CompoundShape {};
+    compound.children.reserve(static_cast<std::size_t>(count));
+    for (int i = 1; i <= count; ++i) {
+      lua_rawgeti(state, children_index, i);
+      compound.children.push_back(ParseCompoundChild(state, -1));
+      lua_pop(state, 1);
+    }
+    lua_pop(state, 1);
+    return compound;
   }
 
 } // namespace
@@ -896,8 +972,6 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
     return physics::ConeShape {
       .radius = radius,
       .half_height = half_height,
-      .cooked_payload = ParseCookedPayload(
-        state, abs_index, physics::ShapePayloadType::kConvex),
     };
   }
   if (shape_type_view == "convex_hull") {
@@ -959,10 +1033,7 @@ auto ParseCollisionShape(lua_State* state, const int table_index)
     };
   }
   if (shape_type_view == "compound") {
-    return physics::CompoundShape {
-      .cooked_payload = ParseCookedPayload(
-        state, abs_index, physics::ShapePayloadType::kCompound),
-    };
+    return ParseCompoundShape(state, abs_index);
   }
 
   luaL_error(state, "unsupported shape.type '%s'", shape_type);
@@ -990,7 +1061,7 @@ auto ParseBodyIdOrHandle(lua_State* state, const int index) -> physics::BodyId
 {
   const auto abs_index = lua_absindex(state, index);
 
-  const auto raise_type_error = [&]() -> physics::BodyId {
+  const auto raise_type_error = [&] -> physics::BodyId {
     if (index > 0) {
       luaL_argerror(state, index, "expected BodyId or BodyHandle userdata");
     }

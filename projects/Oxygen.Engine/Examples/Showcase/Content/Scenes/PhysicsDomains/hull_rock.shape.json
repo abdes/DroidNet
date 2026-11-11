@@ -1,0 +1,7 @@
+{
+  "name": "hull_rock_shape",
+  "shape_type": "convex_hull",
+  "material_ref": "bouncy.opmat",
+  "geometry_ref": "hull_rock.ogeo",
+  "convex_radius": 0.02
+}

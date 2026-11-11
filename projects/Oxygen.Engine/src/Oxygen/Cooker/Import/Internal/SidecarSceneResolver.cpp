@@ -267,16 +267,12 @@ auto FindSceneContent(
   const std::span<const internal::MountedCookedSource> mounts,
   const data::AssetKey& scene_key) -> const cooked::CookedContent*
 {
-  for (const auto& mount : std::views::reverse(mounts)) {
-    if (!mount.content.has_value()) {
-      continue;
-    }
-    const auto* asset = mount.content->FindAsset(scene_key);
-    if (asset != nullptr && asset->type == data::AssetType::kScene) {
-      return &*mount.content;
-    }
+  const auto* const content = internal::FindListingContent(mounts, scene_key);
+  if (content == nullptr) {
+    return nullptr;
   }
-  return nullptr;
+  const auto* const asset = content->FindAsset(scene_key);
+  return asset->type == data::AssetType::kScene ? content : nullptr;
 }
 
 auto ResolveTargetSceneState(ImportSession& session,

@@ -82,6 +82,13 @@
       "name": "stack_yellow"
     },
     {
+      "id": "/Showcase/Scenes/PhysicsDomains/terrain_moss.omat",
+      "type": "material-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/terrain_moss.omat.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/terrain_moss.omat",
+      "name": "terrain_moss"
+    },
+    {
       "id": "/Showcase/Geometry/floor.ogeo",
       "type": "geometry-descriptor",
       "source": "/Showcase/Geometry/floor.ogeo.json",
@@ -162,6 +169,47 @@
       "depends_on": ["/Showcase/Scenes/PhysicsDomains/stack_yellow.omat"]
     },
     {
+      "id": "/Showcase/Scenes/PhysicsDomains/cone_spire.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/cone_spire.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/cone_spire.ogeo",
+      "name": "cone_spire",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/ramp_orange.omat"]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo",
+      "name": "hull_rock",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/stack_yellow.omat"]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/pedestal.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/pedestal.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/pedestal.ogeo",
+      "name": "pedestal",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/chassis_green.omat"]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/terrain.buffers#buffer-container",
+      "type": "buffer-container",
+      "source": "/Showcase/Scenes/PhysicsDomains/terrain.buffers.json",
+      "name": "terrain_buffers"
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/terrain.ogeo",
+      "type": "geometry-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/terrain.ogeo.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/terrain.ogeo",
+      "name": "terrain",
+      "depends_on": [
+        "/Showcase/Scenes/PhysicsDomains/terrain.buffers#buffer-container",
+        "/Showcase/Scenes/PhysicsDomains/terrain_moss.omat"
+      ]
+    },
+    {
       "id": "/Showcase/Scenes/PhysicsDomains/PhysicsDomains.oscene",
       "type": "scene-descriptor",
       "source": "/Showcase/Scenes/PhysicsDomains/PhysicsDomains.scene.json",
@@ -178,7 +226,11 @@
         "/Showcase/Scenes/PhysicsDomains/softbody_sphere.ogeo",
         "/Showcase/Scenes/PhysicsDomains/softbody_cube.ogeo",
         "/Showcase/Scenes/PhysicsDomains/stack_cube.ogeo",
-        "/Showcase/Scenes/PhysicsDomains/physics_domains.input"
+        "/Showcase/Scenes/PhysicsDomains/physics_domains.input",
+        "/Showcase/Scenes/PhysicsDomains/cone_spire.ogeo",
+        "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo",
+        "/Showcase/Scenes/PhysicsDomains/pedestal.ogeo",
+        "/Showcase/Scenes/PhysicsDomains/terrain.ogeo"
       ]
     },
     {
@@ -341,6 +393,63 @@
       "depends_on": ["/Showcase/Scenes/PhysicsDomains/dynamic.opmat"]
     },
     {
+      "id": "/Showcase/Scenes/PhysicsDomains/cone_spire.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/cone_spire.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/cone_spire.ocshape",
+      "name": "cone_spire_shape",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/dynamic.opmat"]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/hull_rock.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/hull_rock.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/hull_rock.ocshape",
+      "name": "hull_rock_shape",
+      "depends_on": [
+        "/Showcase/Scenes/PhysicsDomains/bouncy.opmat",
+        "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo"
+      ]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/pedestal.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/pedestal.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/pedestal.ocshape",
+      "name": "pedestal_shape",
+      "depends_on": [
+        "/Showcase/Scenes/PhysicsDomains/ground.opmat",
+        "/Showcase/Scenes/PhysicsDomains/pedestal.ogeo"
+      ]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/dumbbell.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/dumbbell.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/dumbbell.ocshape",
+      "name": "dumbbell_shape",
+      "depends_on": [
+        "/Showcase/Scenes/PhysicsDomains/dynamic.opmat",
+        "/Showcase/Scenes/PhysicsDomains/hull_rock.ogeo"
+      ]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/terrain.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/terrain.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/terrain.ocshape",
+      "name": "terrain_shape",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/ground.opmat"]
+    },
+    {
+      "id": "/Showcase/Scenes/PhysicsDomains/terrain_ball.ocshape",
+      "type": "collision-shape-descriptor",
+      "source": "/Showcase/Scenes/PhysicsDomains/terrain_ball.shape.json",
+      "virtual_path": "/Showcase/Scenes/PhysicsDomains/terrain_ball.ocshape",
+      "name": "terrain_ball_shape",
+      "depends_on": ["/Showcase/Scenes/PhysicsDomains/dynamic.opmat"]
+    },
+    {
       "id": "/Showcase/Scenes/PhysicsDomains/PhysicsDomains.oscene#physics-sidecar",
       "type": "physics-sidecar",
       "source": "/Showcase/Scenes/PhysicsDomains/PhysicsDomains.physics-sidecar.json",
@@ -357,6 +466,12 @@
         "/Showcase/Scenes/PhysicsDomains/trigger_zone.ocshape",
         "/Showcase/Scenes/PhysicsDomains/sphere_bouncy.ocshape",
         "/Showcase/Scenes/PhysicsDomains/cube_unit_dynamic.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/cone_spire.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/hull_rock.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/pedestal.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/dumbbell.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/terrain.ocshape",
+        "/Showcase/Scenes/PhysicsDomains/terrain_ball.ocshape",
         "/Showcase/Scenes/PhysicsDomains/ground.opmat",
         "/Showcase/Scenes/PhysicsDomains/dynamic.opmat",
         "/Showcase/Scenes/PhysicsDomains/bouncy.opmat"

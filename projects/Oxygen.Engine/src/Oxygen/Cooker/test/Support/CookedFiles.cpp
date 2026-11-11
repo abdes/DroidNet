@@ -8,12 +8,17 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/CollisionShapeData.h>
+#include <Oxygen/Content/LoaderContext.h>
+#include <Oxygen/Content/Loaders/PhysicsAssetLoader.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
@@ -23,6 +28,8 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/LooseCookedPaths.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::cooker::test {
 
@@ -140,6 +147,31 @@ auto FindPhysicsResource(const content::cooked::CookedContent& content,
     }
   }
   return std::nullopt;
+}
+
+auto ReadCollisionShape(const content::cooked::CookedContent& content,
+  const data::AssetKey& key) -> content::CollisionShapeData
+{
+  const auto* const asset = content.FindAsset(key);
+  if (asset == nullptr) {
+    throw std::logic_error("the cooked root lists no such collision shape");
+  }
+  const auto bytes = content.Descriptor(key);
+  auto stream = serio::ReadOnlyMemoryStream { std::span(bytes) };
+  auto reader = serio::Reader<serio::ReadOnlyMemoryStream> { stream };
+  try {
+    return content::loaders::LoadCollisionShapeDescriptor(
+      content::LoaderContext {
+        .current_asset_key = key,
+        .desc_reader = &reader,
+        .asset_references = observer_ptr { &asset->references },
+        .work_offline = true,
+        .parse_only = true,
+      });
+  } catch (const std::exception& refused) {
+    throw std::logic_error(
+      std::string("the loader refuses the collision shape: ") + refused.what());
+  }
 }
 
 } // namespace oxygen::cooker::test

@@ -26,6 +26,7 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/IAssetLoader.h>
@@ -658,10 +659,10 @@ namespace {
     {
       return std::nullopt;
     }
-    [[nodiscard]] auto ReadCollisionShapeAssetDescForAsset(
+    [[nodiscard]] auto ReadCollisionShapeForAsset(
       const data::Asset& /*context_asset*/,
       const data::AssetKey& /*shape_asset_key*/) const
-      -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override
+      -> std::optional<content::CollisionShapeData> override
     {
       return std::nullopt;
     }

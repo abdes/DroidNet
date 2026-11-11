@@ -1025,6 +1025,38 @@ namespace {
     EXPECT_EQ(result.references.front().json_pointer, "/material_ref");
   }
 
+  //! A convex hull also references the geometry it cooks from, so the
+  //! geometry cooks first.
+  NOLINT_TEST_F(ImportSourceAnalysisTest, ConvexHullReferencesItsGeometry)
+  {
+    auto shape = cooker::test::CollisionShapeDescriptor {
+      "/Content/Physics/Rock.ocshape",
+      "/Content/Physics/Wood.opmat",
+    };
+    shape.Remove("/half_extents")
+      .Set("/shape_type", "convex_hull")
+      .Set("/geometry_ref", "../Meshes/Rock.ogeo");
+    const auto path = Write("Rock.shape.json", shape.Text());
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.job_type = "collision-shape-descriptor";
+    job.collision_shape_descriptor.descriptor_path = path.string();
+    job.virtual_path = shape.Identity();
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    EXPECT_EQ(Referenced(result),
+      (std::vector<std::string> {
+        "/Content/Physics/Wood.opmat",
+        "/Content/Meshes/Rock.ogeo",
+      }));
+    ASSERT_EQ(result.references.size(), 2U);
+    EXPECT_EQ(result.references.back().json_pointer, "/geometry_ref");
+  }
+
   //! Each diagnostic as its code and the JSON location it names.
   auto Located(const std::vector<ImportDiagnostic>& diagnostics)
     -> std::vector<std::pair<std::string, std::string>>

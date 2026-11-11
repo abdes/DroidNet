@@ -60,7 +60,6 @@ struct SoftBodyBindingSource final {
   data::pak::physics::SoftBodyBindingRecord record {};
   std::string source_mesh_ref;
   data::AssetKey source_mesh_asset_key;
-  data::AssetReferences source_mesh_references;
   std::optional<std::string> collision_mesh_ref;
   std::vector<uint32_t> pinned_vertices;
   std::vector<uint32_t> kinematic_vertices;

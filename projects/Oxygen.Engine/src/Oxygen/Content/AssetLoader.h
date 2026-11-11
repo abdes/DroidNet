@@ -951,10 +951,10 @@ public:
   OXGN_CNTT_NDAPI auto MakePhysicsResourceKeyForAsset(
     const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
     -> std::optional<ResourceKey> override;
-  OXGN_CNTT_NDAPI auto ReadCollisionShapeAssetDescForAsset(
+  OXGN_CNTT_NDAPI auto ReadCollisionShapeForAsset(
     const data::Asset& context_asset,
     const data::AssetKey& shape_asset_key) const
-    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> override;
+    -> std::optional<CollisionShapeData> override;
   OXGN_CNTT_NDAPI auto ReadPhysicsMaterialAssetDescForAsset(
     const data::Asset& context_asset,
     const data::AssetKey& material_asset_key) const

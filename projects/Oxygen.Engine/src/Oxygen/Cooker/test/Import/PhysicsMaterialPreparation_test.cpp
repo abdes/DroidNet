@@ -6,6 +6,7 @@
 
 // Covers: Import/Internal/PhysicsMaterialSource.cpp
 
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include <Oxygen/Cooker/Import/Internal/PhysicsMaterialSource.h>
 #include <Oxygen/Cooker/test/Support/AuthoredFiles.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -42,7 +44,53 @@ namespace {
 
     ASSERT_HAS_VALUE(prepared);
     EXPECT_TRUE(diagnostics.empty());
-    EXPECT_EQ(prepared->at("combine_mode_friction"), "min");
+    EXPECT_EQ(prepared->static_friction, 0.6F);
+    EXPECT_EQ(prepared->combine_mode_friction,
+      data::pak::physics::PhysicsCombineMode::kMin);
+    EXPECT_FALSE(prepared->density.has_value());
+  }
+
+  NOLINT_TEST(PhysicsMaterialPreparationTest, RefusesAValueAFloatCannotHold)
+  {
+    auto document = PhysicsMaterialDescriptor { kIdentity };
+    document.Set("/static_friction", 1.0e100);
+    std::vector<ImportDiagnostic> diagnostics;
+
+    const auto prepared = Prepare(document.Text(), diagnostics);
+
+    EXPECT_FALSE(prepared.has_value());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsMaterialValueOutOfRange);
+    EXPECT_EQ(diagnostics[0].json_pointer, "/static_friction");
+  }
+
+  NOLINT_TEST(PhysicsMaterialPreparationTest, RefusesADensityThatUnderflows)
+  {
+    auto document = PhysicsMaterialDescriptor { kIdentity };
+    document.Set("/density", 1.0e-60);
+    std::vector<ImportDiagnostic> diagnostics;
+
+    const auto prepared = Prepare(document.Text(), diagnostics);
+
+    EXPECT_FALSE(prepared.has_value());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(
+      diagnostics[0].code, import_codes::kPhysicsMaterialValueOutOfRange);
+    EXPECT_EQ(diagnostics[0].json_pointer, "/density");
+  }
+
+  NOLINT_TEST(PhysicsMaterialPreparationTest, AcceptsTheLargestFloat)
+  {
+    auto document = PhysicsMaterialDescriptor { kIdentity };
+    document.Set(
+      "/density", static_cast<double>(std::numeric_limits<float>::max()));
+    std::vector<ImportDiagnostic> diagnostics;
+
+    const auto prepared = Prepare(document.Text(), diagnostics);
+
+    ASSERT_HAS_VALUE(prepared);
+    EXPECT_EQ(prepared->density, std::numeric_limits<float>::max());
   }
 
   NOLINT_TEST(PhysicsMaterialPreparationTest, RefusesInvalidJson)

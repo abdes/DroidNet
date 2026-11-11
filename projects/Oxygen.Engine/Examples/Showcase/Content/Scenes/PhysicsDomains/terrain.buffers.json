@@ -1,0 +1,20 @@
+{
+  "$schema": "oxygen.buffer-container.schema.json",
+  "name": "terrain_buffers",
+  "buffers": [
+    {
+      "source": "../../SourceMedia/DCC/PhysicsDomains/terrain_vb.bin",
+      "virtual_path": "terrain_vb.obuf",
+      "usage_flags": 1,
+      "element_stride": 80,
+      "alignment": 16
+    },
+    {
+      "source": "../../SourceMedia/DCC/PhysicsDomains/terrain_ib.bin",
+      "virtual_path": "terrain_ib.obuf",
+      "usage_flags": 2,
+      "element_stride": 4,
+      "alignment": 4
+    }
+  ]
+}

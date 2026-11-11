@@ -33,6 +33,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/CookedNumbers.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -1371,19 +1372,16 @@ namespace {
         }
       }
       const auto& q = frame.rotation;
-      const auto length_squared
-        = (q[0] * q[0]) + (q[1] * q[1]) + (q[2] * q[2]) + (q[3] * q[3]);
-      constexpr auto kUnitTolerance = 1.0e-3F;
-      const auto is_unit = std::isfinite(length_squared)
-        && std::abs(length_squared - 1.0F) <= kUnitTolerance;
-      if (!is_unit) {
+      if (!internal::IsUnitQuaternion(q)) {
         Report(import_codes::kPhysicsSidecarValueOutOfRange,
           "joints." + rotation_name + " has squared length "
-            + std::to_string(length_squared) + "; it must be a unit quaternion",
+            + std::to_string(internal::LengthSquared(q))
+            + "; it must be a unit quaternion",
           base_path_ / rotation_name);
         return;
       }
-      const auto is_identity = std::abs(q[3]) >= 1.0F - kUnitTolerance;
+      const auto is_identity
+        = std::abs(q[3]) >= 1.0F - internal::kUnitQuaternionTolerance;
       if (!use_.rotations && !is_identity) {
         Report(import_codes::kPhysicsSidecarJointMemberNotApplicable,
           "joints." + rotation_name + " orients nothing on a "

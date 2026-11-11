@@ -2,6 +2,7 @@
 
 **Date:** 2026-03-05
 **Status:** Design / Specification
+**Last updated:** 2026-11-11
 
 ## 0. Purpose
 
@@ -580,11 +581,12 @@ Target scene checks:
 2. `target_scene_key` must be read and embedded,
 3. node indices in sidecar bindings must be in-range for target node count.
 
-Source-domain consistency:
+Cross-mount references:
 
-1. resolved referenced assets/resources must belong to resolvable source context for current import session.
-2. mismatch errors are emitted explicitly.
-3. this source-domain lock is intentional design (`physics.sidecar.reference_source_mismatch`) to prevent accidental cross-source binding mismatch and non-deterministic packaging.
+1. a referenced asset resolves in any mounted cooked root, loose or packed, from the highest precedence down, like every other reference.
+2. an asset of another mount becomes a requirement of the sidecar or shape on that mount, recorded when the session finalizes.
+3. a reference that names an asset of another type than the binding expects is refused with its binding's `*_not_*` code; no other asset is tried.
+4. the scene and sidecar pairing is a separate rule: the sidecar names its target scene's key, node count and hash.
 
 ## 8. Manifest and DAG Contract
 

@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <ranges>
@@ -17,8 +18,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "DemoShell/Services/SceneLoaderService.h"
@@ -34,10 +37,12 @@
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Transforms/Decompose.h>
 #include <Oxygen/Core/Transforms/NodeFrame.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -77,20 +82,8 @@ namespace {
 
   constexpr std::string_view kSceneName = "RenderScene";
 
-  //! Tolerance of IsNearlyEqual.
-  constexpr float kNearlyEqualTolerance = 1e-5F;
   //! Smallest dynamic body mass derived from a material density, in kg.
   constexpr float kMinDynamicMassKg = 0.001F;
-
-  auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
-  {
-    return std::abs(lhs - rhs) <= kNearlyEqualTolerance;
-  }
-
-  auto IsUniformScale(const Vec3& scale) noexcept -> bool
-  {
-    return IsNearlyEqual(scale.x, scale.y) && IsNearlyEqual(scale.y, scale.z);
-  }
 
   auto IsValidFiniteScale(const Vec3& scale) noexcept -> bool
   {
@@ -161,7 +154,6 @@ namespace {
       case data::pak::physics::ShapePayloadType::kHeightField:
         return data::pak::physics::PhysicsResourceFormat::
           kPhysXHeightFieldBinary;
-      case data::pak::physics::ShapePayloadType::kCompound:
       case data::pak::physics::ShapePayloadType::kInvalid:
       default:
         return std::nullopt;
@@ -527,7 +519,7 @@ auto SceneLoaderService::ResolvePhysicsModule()
 
 auto SceneLoaderService::ResolveCollisionShapeAsset(
   const data::AssetKey& shape_asset_key, const std::string_view binding_kind,
-  const uint32_t node_index) -> data::pak::physics::CollisionShapeAssetDesc
+  const uint32_t node_index) -> content::CollisionShapeData
 {
   if (shape_asset_key.IsNil()) {
     throw std::runtime_error(std::string(binding_kind)
@@ -540,7 +532,7 @@ auto SceneLoaderService::ResolveCollisionShapeAsset(
       + std::to_string(node_index)
       + " shape_asset_key=" + data::to_string(shape_asset_key) + ")");
   }
-  const auto shape_desc_opt = loader_->ReadCollisionShapeAssetDescForAsset(
+  const auto shape_desc_opt = loader_->ReadCollisionShapeForAsset(
     *current_physics_context_, shape_asset_key);
   if (!shape_desc_opt.has_value()) {
     throw std::runtime_error(std::string(binding_kind)
@@ -581,10 +573,10 @@ auto SceneLoaderService::ResolvePhysicsMaterialAsset(
 }
 
 auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
-  const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
-  const std::string_view binding_kind, const uint32_t node_index)
-  -> physics::CollisionShape
+  const content::CollisionShapeData& shape, const std::string_view binding_kind,
+  const uint32_t node_index) -> physics::CollisionShape
 {
+  const auto& shape_desc = shape.descriptor;
   const auto ensure_no_cooked_ref = [&] -> void {
     if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()
       || shape_desc.cooked_shape_ref.payload_type
@@ -628,11 +620,12 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       + std::string(binding_kind)
       + " binding (node_index=" + std::to_string(node_index) + ")");
   }
-  if (!ignore_local_scale && !IsUniformScale(local_scale)
+  if (!ignore_local_scale && !transforms::IsUniformScale(local_scale)
     && (shape_desc.shape_type == data::pak::physics::ShapeType::kSphere
       || shape_desc.shape_type == data::pak::physics::ShapeType::kCapsule
       || shape_desc.shape_type == data::pak::physics::ShapeType::kCylinder
-      || shape_desc.shape_type == data::pak::physics::ShapeType::kCone)) {
+      || shape_desc.shape_type == data::pak::physics::ShapeType::kCone
+      || shape_desc.shape_type == data::pak::physics::ShapeType::kConvexHull)) {
     throw std::runtime_error(
       std::string("OXY-SHAPE-008: non-uniform local_scale "
                   "is not valid for shape_type in ")
@@ -707,28 +700,26 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
         + std::string(binding_kind)
         + " binding (node_index=" + std::to_string(node_index) + ")");
     }
+    ensure_no_cooked_ref();
     return physics::ConeShape {
       .radius = radius,
       .half_height = half_height,
-      .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::physics::ShapePayloadType::kConvex, binding_kind,
-        node_index),
     };
   }
   case data::pak::physics::ShapeType::kConvexHull:
     return physics::ConvexHullShape {
-      .cooked_payload = ResolveCookedShapePayload(shape_desc,
+      .cooked_payload = ResolveCookedShapePayload(shape_desc.cooked_shape_ref,
         data::pak::physics::ShapePayloadType::kConvex, binding_kind,
         node_index),
     };
   case data::pak::physics::ShapeType::kTriangleMesh:
     return physics::TriangleMeshShape {
-      .cooked_payload = ResolveCookedShapePayload(shape_desc,
+      .cooked_payload = ResolveCookedShapePayload(shape_desc.cooked_shape_ref,
         data::pak::physics::ShapePayloadType::kMesh, binding_kind, node_index),
     };
   case data::pak::physics::ShapeType::kHeightField:
     return physics::HeightFieldShape {
-      .cooked_payload = ResolveCookedShapePayload(shape_desc,
+      .cooked_payload = ResolveCookedShapePayload(shape_desc.cooked_shape_ref,
         data::pak::physics::ShapePayloadType::kHeightField, binding_kind,
         node_index),
     };
@@ -775,12 +766,23 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
       = Vec3(params.limits_max[0], params.limits_max[1], params.limits_max[2]),
     };
   }
-  case data::pak::physics::ShapeType::kCompound:
-    return physics::CompoundShape {
-      .cooked_payload = ResolveCookedShapePayload(shape_desc,
-        data::pak::physics::ShapePayloadType::kCompound, binding_kind,
-        node_index),
-    };
+  case data::pak::physics::ShapeType::kCompound: {
+    ensure_no_cooked_ref();
+    auto compound = physics::CompoundShape {};
+    compound.children.reserve(shape.children.size());
+    for (const auto& child : shape.children) {
+      compound.children.push_back(physics::CompoundShapeChild {
+        .shape = BuildCompoundChildShape(child, binding_kind, node_index),
+        .local_position = Vec3(child.local_position[0], child.local_position[1],
+          child.local_position[2]),
+        .local_rotation = Quat(child.local_rotation[3], child.local_rotation[0],
+          child.local_rotation[1], child.local_rotation[2]),
+        .local_scale = Vec3(
+          child.local_scale[0], child.local_scale[1], child.local_scale[2]),
+      });
+    }
+    return compound;
+  }
   default:
     throw std::runtime_error(
       std::string("OXY-SHAPE-001: unsupported shape_type in ")
@@ -790,8 +792,95 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   }
 }
 
+auto SceneLoaderService::BuildCompoundChildShape(
+  const data::pak::physics::CompoundShapeChildDesc& child,
+  const std::string_view binding_kind, const uint32_t node_index)
+  -> physics::CompoundChildShape
+{
+  // The child carries the same parameters as a descriptor; build it the same
+  // way, then take the alternative a compound child holds.
+  using data::pak::physics::ShapePayloadType;
+  using data::pak::physics::ShapeType;
+  auto shape = content::CollisionShapeData {};
+  auto& desc = shape.descriptor;
+  desc.shape_type = static_cast<ShapeType>(child.shape_type);
+  desc.collision_own_layer = 1ULL;
+  auto& params = desc.shape_params;
+  switch (desc.shape_type) {
+  case ShapeType::kSphere:
+    params.sphere.radius = child.radius;
+    break;
+  case ShapeType::kCapsule:
+    params.capsule.radius = child.radius;
+    params.capsule.half_height = child.half_height;
+    break;
+  case ShapeType::kCylinder:
+    params.cylinder.radius = child.radius;
+    params.cylinder.half_height = child.half_height;
+    break;
+  case ShapeType::kCone:
+    params.cone.radius = child.radius;
+    params.cone.half_height = child.half_height;
+    break;
+  case ShapeType::kBox:
+    std::ranges::copy(child.half_extents, std::begin(params.box.half_extents));
+    break;
+  case ShapeType::kPlane:
+    std::ranges::copy(child.normal, std::begin(params.plane.normal));
+    params.plane.distance = child.distance;
+    break;
+  case ShapeType::kWorldBoundary:
+    params.world_boundary.boundary_mode = child.boundary_mode;
+    std::ranges::copy(
+      child.limits_min, std::begin(params.world_boundary.limits_min));
+    std::ranges::copy(
+      child.limits_max, std::begin(params.world_boundary.limits_max));
+    break;
+  case ShapeType::kConvexHull:
+    desc.cooked_shape_ref = {
+      .payload_asset_key = child.payload_asset_key,
+      .payload_type = ShapePayloadType::kConvex,
+    };
+    break;
+  case ShapeType::kTriangleMesh:
+    desc.cooked_shape_ref = {
+      .payload_asset_key = child.payload_asset_key,
+      .payload_type = ShapePayloadType::kMesh,
+    };
+    break;
+  case ShapeType::kHeightField:
+    desc.cooked_shape_ref = {
+      .payload_asset_key = child.payload_asset_key,
+      .payload_type = ShapePayloadType::kHeightField,
+    };
+    break;
+  case ShapeType::kCompound:
+  case ShapeType::kInvalid:
+  default:
+    throw std::runtime_error(
+      std::string("OXY-SHAPE-001: invalid compound child shape_type in ")
+      + std::string(binding_kind)
+      + " binding (node_index=" + std::to_string(node_index) + ")");
+  }
+  auto built
+    = BuildCollisionShapeFromDescriptor(shape, binding_kind, node_index);
+  return std::visit(
+    [&](auto&& value) -> physics::CompoundChildShape {
+      using T = std::decay_t<decltype(value)>;
+      if constexpr (std::is_same_v<T, physics::CompoundShape>) {
+        throw std::runtime_error(
+          std::string("OXY-SHAPE-001: compound child is a compound in ")
+          + std::string(binding_kind)
+          + " binding (node_index=" + std::to_string(node_index) + ")");
+      } else {
+        return std::forward<decltype(value)>(value);
+      }
+    },
+    std::move(built));
+}
+
 auto SceneLoaderService::ResolveCookedShapePayload(
-  const data::pak::physics::CollisionShapeAssetDesc& shape_desc,
+  const data::pak::physics::CookedShapePayloadRef& cooked_ref,
   const data::pak::physics::ShapePayloadType expected_payload_type,
   const std::string_view binding_kind, const uint32_t node_index) const
   -> physics::CookedShapePayload
@@ -801,7 +890,6 @@ auto SceneLoaderService::ResolveCookedShapePayload(
       + " cooked_shape_ref requires active physics asset context (node_index="
       + std::to_string(node_index) + ")");
   }
-  const auto& cooked_ref = shape_desc.cooked_shape_ref;
   if (cooked_ref.payload_asset_key.IsNil()) {
     throw std::runtime_error(
       std::string(
@@ -1013,10 +1101,11 @@ void SceneLoaderService::HydrateColliderBindings(
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
     if (!record.shape_asset_key.IsNil()) {
-      const auto shape_desc = ResolveCollisionShapeAsset(
+      const auto shape = ResolveCollisionShapeAsset(
         record.shape_asset_key, "collider", record.node_index);
+      const auto& shape_desc = shape.descriptor;
       desc.shape = BuildCollisionShapeFromDescriptor(
-        shape_desc, "collider", record.node_index);
+        shape, "collider", record.node_index);
       desc.shape_local_position = Vec3(shape_desc.local_position[0],
         shape_desc.local_position[1], shape_desc.local_position[2]);
       desc.shape_local_rotation
@@ -1120,8 +1209,9 @@ void SceneLoaderService::HydrateRigidBodyBindings(
     std::optional<data::pak::physics::CollisionShapeAssetDesc>
       shape_desc_opt {};
     if (!record.shape_asset_key.IsNil()) {
-      const auto shape_desc = ResolveCollisionShapeAsset(
+      const auto shape = ResolveCollisionShapeAsset(
         record.shape_asset_key, "rigid-body", record.node_index);
+      const auto& shape_desc = shape.descriptor;
       if (desc.type == physics::body::BodyType::kDynamic
         && (shape_desc.shape_type
             == data::pak::physics::ShapeType::kTriangleMesh
@@ -1140,7 +1230,7 @@ void SceneLoaderService::HydrateRigidBodyBindings(
       shape_desc_opt = shape_desc;
       is_sensor = is_sensor || shape_desc.is_sensor != 0U;
       desc.shape = BuildCollisionShapeFromDescriptor(
-        shape_desc, "rigid-body", record.node_index);
+        shape, "rigid-body", record.node_index);
       desc.shape_local_position = Vec3(shape_desc.local_position[0],
         shape_desc.local_position[1], shape_desc.local_position[2]);
       desc.shape_local_rotation
@@ -1228,10 +1318,11 @@ void SceneLoaderService::HydrateCharacterBindings(
     desc.collision_mask
       = physics::CollisionMask { static_cast<uint32_t>(record.collision_mask) };
     if (!record.shape_asset_key.IsNil()) {
-      const auto shape_desc = ResolveCollisionShapeAsset(
+      const auto shape = ResolveCollisionShapeAsset(
         record.shape_asset_key, "character", record.node_index);
+      const auto& shape_desc = shape.descriptor;
       desc.shape = BuildCollisionShapeFromDescriptor(
-        shape_desc, "character", record.node_index);
+        shape, "character", record.node_index);
       desc.shape_local_position = Vec3(shape_desc.local_position[0],
         shape_desc.local_position[1], shape_desc.local_position[2]);
       desc.shape_local_rotation
@@ -2109,10 +2200,16 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   auto collect_payload_ref = [&](const data::AssetKey& shape_asset_key,
                                const std::string_view binding_kind,
                                const uint32_t node_index) -> void {
-    const auto shape_desc
+    const auto shape
       = ResolveCollisionShapeAsset(shape_asset_key, binding_kind, node_index);
-    if (!shape_desc.cooked_shape_ref.payload_asset_key.IsNil()) {
-      payload_asset_keys.insert(shape_desc.cooked_shape_ref.payload_asset_key);
+    if (!shape.descriptor.cooked_shape_ref.payload_asset_key.IsNil()) {
+      payload_asset_keys.insert(
+        shape.descriptor.cooked_shape_ref.payload_asset_key);
+    }
+    for (const auto& child : shape.children) {
+      if (!child.payload_asset_key.IsNil()) {
+        payload_asset_keys.insert(child.payload_asset_key);
+      }
     }
   };
   auto collect_constraint_asset_key

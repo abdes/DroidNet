@@ -10,6 +10,7 @@
 #include <optional>
 #include <vector>
 
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_physics.h>
@@ -20,7 +21,7 @@ class IContentSource;
 
 struct BoundPhysicsShape final {
   data::AssetKey key;
-  data::pak::physics::CollisionShapeAssetDesc descriptor {};
+  CollisionShapeData shape {};
 };
 
 struct BoundPhysicsMaterial final {

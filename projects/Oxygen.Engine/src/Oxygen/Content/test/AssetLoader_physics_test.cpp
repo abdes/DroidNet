@@ -173,13 +173,14 @@ namespace {
         co_return co::kJoin;
       }
       const auto first_shape
-        = loader.ReadCollisionShapeAssetDescForAsset(*first, kShape);
+        = loader.ReadCollisionShapeForAsset(*first, kShape);
       if (!first_shape) {
         ADD_FAILURE() << "Missing first_shape";
         loader.Stop();
         co_return co::kJoin;
       }
-      EXPECT_EQ(first_shape->cooked_shape_ref.payload_asset_key, kPayload);
+      EXPECT_EQ(
+        first_shape->descriptor.cooked_shape_ref.payload_asset_key, kPayload);
       const auto first_key
         = loader.MakePhysicsResourceKeyForAsset(*first, kPayload);
       if (!first_key) {

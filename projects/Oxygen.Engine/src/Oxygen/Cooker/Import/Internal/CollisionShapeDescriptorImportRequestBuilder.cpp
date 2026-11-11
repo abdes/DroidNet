@@ -12,9 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/CollisionShapeDescriptorImportSettings.h>
@@ -39,9 +36,9 @@ auto BuildCollisionShapeDescriptorRequest(
   if (!document.has_value()) {
     return std::nullopt;
   }
-  const auto descriptor_doc = PrepareCollisionShapeDescriptor(
+  const auto shape = PrepareCollisionShapeDescriptor(
     document->text, descriptor_path, diagnostics);
-  if (!descriptor_doc.has_value()) {
+  if (!shape.has_value()) {
     return std::nullopt;
   }
 
@@ -58,10 +55,8 @@ auto BuildCollisionShapeDescriptorRequest(
     return std::nullopt;
   }
 
-  ApplyJobName(settings.job_name.empty()
-      ? descriptor_doc->value("name", std::string {})
-      : settings.job_name,
-    *request);
+  ApplyJobName(
+    settings.job_name.empty() ? shape->name : settings.job_name, *request);
   request->collision_shape_descriptor
     = ImportRequest::CollisionShapeDescriptorPayload {
         .descriptor_json = std::move(document->text),

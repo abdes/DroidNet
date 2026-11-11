@@ -12,9 +12,6 @@
 #include <utility>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
@@ -39,9 +36,9 @@ auto BuildPhysicsMaterialDescriptorRequest(
   if (!document.has_value()) {
     return std::nullopt;
   }
-  const auto descriptor_doc = PreparePhysicsMaterialDescriptor(
+  const auto material = PreparePhysicsMaterialDescriptor(
     document->text, descriptor_path, diagnostics);
-  if (!descriptor_doc.has_value()) {
+  if (!material.has_value()) {
     return std::nullopt;
   }
 
@@ -58,10 +55,8 @@ auto BuildPhysicsMaterialDescriptorRequest(
     return std::nullopt;
   }
 
-  ApplyJobName(settings.job_name.empty()
-      ? descriptor_doc->value("name", std::string {})
-      : settings.job_name,
-    *request);
+  ApplyJobName(
+    settings.job_name.empty() ? material->name : settings.job_name, *request);
   request->physics_material_descriptor
     = ImportRequest::PhysicsMaterialDescriptorPayload {
         .descriptor_json = std::move(document->text),

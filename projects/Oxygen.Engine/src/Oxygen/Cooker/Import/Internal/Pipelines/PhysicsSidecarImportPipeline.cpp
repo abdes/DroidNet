@@ -20,12 +20,10 @@
 #include <ios>
 #include <limits>
 #include <map>
-#include <mutex>
 #include <numeric>
 #include <optional>
 #include <span>
 #include <sstream>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -36,7 +34,6 @@
 
 #include <Jolt/Core/Core.h>
 #include <Jolt/Core/LinearCurve.h>
-#include <Jolt/Core/Memory.h>
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Math/Float3.h>
@@ -80,27 +77,24 @@
 #include <Oxygen/Cooker/Import/Internal/Emitters/PhysicsResourceEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
+#include <Oxygen/Cooker/Import/Internal/JoltShapeCook.h>
 #include <Oxygen/Cooker/Import/Internal/PhysicsSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/CookedMeshSurface.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorHash.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/Serio/ByteReader.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -228,26 +222,10 @@ namespace {
     return "unknown";
   }
 
-  using AssetRecordMap
-    = std::unordered_map<data::AssetKey, const cooked::CookedAsset*>;
-
-  auto BuildAssetRecordMap(const cooked::CookedContent& content)
-    -> AssetRecordMap
-  {
-    auto out = AssetRecordMap {};
-    const auto assets = content.Assets();
-    out.reserve(assets.size());
-    for (const auto& asset : assets) {
-      out.insert_or_assign(asset.key, &asset);
-    }
-    return out;
-  }
-
   struct BindingValidationContext final {
     observer_ptr<ImportSession> session;
     observer_ptr<const ImportRequest> request;
     std::span<const internal::MountedCookedSource> mounts;
-    observer_ptr<const AssetRecordMap> target_assets;
     uint32_t node_count = 0;
   };
 
@@ -270,44 +248,38 @@ namespace {
         *ctx.request, text, reference.error(), location.to_string()));
       return std::nullopt;
     }
-    const auto named
-      = "'" + reference->written + "' resolves to " + reference->resolved;
-
+    // Any mounted cooked root may provide what a binding names; the session
+    // records the requirement on another mount when it finalizes.
     const auto found = internal::LookupReference(
-      ctx.mounts, *ctx.request, *reference, std::nullopt);
-    if (!found.has_value()) {
-      if (found.error().reason == internal::AssetReferenceRefusal::kUnmounted) {
-        ctx.session->AddDiagnostic(internal::RefuseUnmountedReference(
-          *ctx.request, *reference, location.to_string()));
-      } else {
-        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-          std::string(codes.unresolved),
-          "Reference was not found: "
-            + internal::DescribeLookup(*reference, found.error()),
-          location);
-      }
-      return std::nullopt;
+      ctx.mounts, *ctx.request, *reference, expected_type);
+    if (found.has_value()) {
+      return found->key;
     }
-
-    // The bindings complete the target scene: what they name is in the cooked
-    // root that holds it.
-    const auto target_it = ctx.target_assets->find(found->key);
-    if (target_it == ctx.target_assets->end()) {
+    const auto& refused = found.error();
+    switch (refused.reason) {
+    case internal::AssetReferenceRefusal::kUnmounted:
+      ctx.session->AddDiagnostic(internal::RefuseUnmountedReference(
+        *ctx.request, *reference, location.to_string()));
+      break;
+    case internal::AssetReferenceRefusal::kMissing:
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-        std::string(import_codes::kPhysicsSidecarReferenceSourceMismatch),
-        "Resolved reference is not in the target scene source domain: " + named,
+        std::string(codes.unresolved),
+        "Reference was not found: "
+          + internal::DescribeLookup(*reference, refused),
         location);
-      return std::nullopt;
-    }
-
-    if (target_it->second->type != expected_type) {
+      break;
+    case internal::AssetReferenceRefusal::kTypeMismatch:
       AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
         std::string(codes.wrong_type),
-        "Resolved reference has unexpected asset type: " + named, location);
-      return std::nullopt;
+        "Reference names a "
+          + std::string(data::to_string(
+            refused.found_type.value_or(data::AssetType::kUnknown)))
+          + " asset, expected a " + std::string(data::to_string(expected_type))
+          + ": " + internal::DescribeLookup(*reference, refused),
+        location);
+      break;
     }
-
-    return found->key;
+    return std::nullopt;
   }
 
   auto ValidateNodeIndex(const uint32_t node_index, const uint32_t node_count,
@@ -492,16 +464,6 @@ namespace {
         continue;
       }
       records.at(i).source_mesh_asset_key = *source_mesh_key;
-      const auto source_mesh_entry = ctx.target_assets->find(*source_mesh_key);
-      if (source_mesh_entry == ctx.target_assets->end()) {
-        AddDiagnosticAtPath(*ctx.session, *ctx.request, ImportSeverity::kError,
-          std::string(import_codes::kPhysicsSidecarSourceMeshRefUnresolved),
-          "Resolved source mesh has no descriptor in target cooked root",
-          base_path / "source_mesh_ref");
-        continue;
-      }
-      records.at(i).source_mesh_references
-        = source_mesh_entry->second->references;
 
       const auto& collision_mesh_ref = records.at(i).collision_mesh_ref;
       if (collision_mesh_ref) {
@@ -642,12 +604,6 @@ namespace {
     -> PhysicsBackend
   {
     return request.options.physics.backend;
-  }
-
-  auto EnsureJoltAllocatorReady() -> void
-  {
-    static std::once_flag once {};
-    std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
   }
 
   [[nodiscard]] auto JsonFloatOr(
@@ -988,7 +944,7 @@ namespace {
   auto CookJoltJointBlob(const JointBindingSource& source,
     std::vector<std::byte>& out_blob, std::string& error) -> bool
   {
-    EnsureJoltAllocatorReady();
+    internal::EnsureJoltAllocatorReady();
     switch (source.settings.type) {
     case JointConstraintType::kFixed:
       return SerializeJoltJoint<JPH::FixedConstraintSettings>(
@@ -1049,491 +1005,29 @@ namespace {
     std::string reason;
   };
 
-  struct SoftBodyGeometryTopologyInput final {
-    enum class Kind : uint8_t {
-      kStandard,
-      kProcedural,
-    };
-
-    Kind kind = Kind::kStandard;
-    data::pak::core::ResourceIndexT vertex_buffer
-      = data::pak::core::kNoResourceIndex;
-    data::pak::core::ResourceIndexT index_buffer
-      = data::pak::core::kNoResourceIndex;
-    std::string procedural_name;
-    std::vector<std::byte> procedural_params;
-    std::vector<data::pak::geometry::MeshViewDesc> mesh_views;
-  };
-
-  auto ParseGeometryTopologyInput(std::span<const std::byte> descriptor_bytes,
-    const data::AssetReferences& references, SoftBodyGeometryTopologyInput& out,
-    std::string& error) -> bool
-  {
-    using data::MeshType;
-    using data::pak::geometry::GeometryAssetDesc;
-    using data::pak::geometry::MeshDesc;
-    using data::pak::geometry::MeshViewDesc;
-    using data::pak::geometry::SubMeshDesc;
-
-    const auto asset_desc_read
-      = serio::CopyAt<GeometryAssetDesc>(descriptor_bytes);
-    if (!asset_desc_read) {
-      error = "geometry descriptor is too small for GeometryAssetDesc";
-      return false;
-    }
-    const auto& asset_desc = *asset_desc_read;
-    if (asset_desc.lod_count == 0U) {
-      error = "geometry descriptor has lod_count=0";
-      return false;
-    }
-
-    auto offset = sizeof(GeometryAssetDesc);
-    const auto mesh_desc_read
-      = serio::CopyAt<MeshDesc>(descriptor_bytes, serio::ByteOffset { offset });
-    if (!mesh_desc_read) {
-      error = "geometry descriptor is too small for MeshDesc";
-      return false;
-    }
-    const auto& mesh_desc = *mesh_desc_read;
-    const auto reserves_zero = data::pak::geometry::HasZeroReserves(mesh_desc);
-    if (!reserves_zero) {
-      error = "geometry descriptor mesh reserved bytes are not zero";
-      return false;
-    }
-    offset += sizeof(MeshDesc);
-
-    const auto mesh_type = static_cast<MeshType>(mesh_desc.mesh_type);
-    if (mesh_type == MeshType::kStandard) {
-      out.kind = SoftBodyGeometryTopologyInput::Kind::kStandard;
-      const auto vertex = references.ResolveResource(
-        mesh_desc.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
-      const auto index = references.ResolveResource(
-        mesh_desc.info.standard.index_buffer, data::ResourceKind::kBuffer);
-      if (!vertex || !index) {
-        error = "Soft-body geometry has invalid resource references";
-        return false;
-      }
-      out.vertex_buffer = vertex->value_or(data::pak::core::kNoResourceIndex);
-      out.index_buffer = index->value_or(data::pak::core::kNoResourceIndex);
-    } else if (mesh_type == MeshType::kProcedural) {
-      out.kind = SoftBodyGeometryTopologyInput::Kind::kProcedural;
-      try {
-        out.procedural_name = std::string {
-          data::DescriptorStrings::FromDescriptor(
-            descriptor_bytes, asset_desc.header.strings)
-            .Get(mesh_desc.name_offset),
-        };
-      } catch (const std::invalid_argument&) {
-        error = "geometry descriptor procedural mesh name is invalid";
-        return false;
-      }
-      const auto params_size
-        = static_cast<size_t>(mesh_desc.info.procedural.params_size);
-      if (offset > descriptor_bytes.size()
-        || descriptor_bytes.size() - offset < params_size) {
-        error = "geometry descriptor procedural params exceed descriptor size";
-        return false;
-      }
-      const auto params = descriptor_bytes.subspan(offset, params_size);
-      out.procedural_params.assign(params.begin(), params.end());
-      offset += params_size;
-    } else {
-      error = "soft-body source mesh must be standard or procedural geometry";
-      return false;
-    }
-
-    out.mesh_views.clear();
-    for (uint32_t submesh_index = 0; submesh_index < mesh_desc.submesh_count;
-      ++submesh_index) {
-      const auto submesh_desc_read = serio::CopyAt<SubMeshDesc>(
-        descriptor_bytes, serio::ByteOffset { offset });
-      if (!submesh_desc_read) {
-        error = "geometry descriptor submesh table exceeds descriptor size";
-        return false;
-      }
-      const auto& submesh_desc = *submesh_desc_read;
-      offset += sizeof(SubMeshDesc);
-
-      for (uint32_t view_index = 0; view_index < submesh_desc.mesh_view_count;
-        ++view_index) {
-        const auto view_desc = serio::CopyAt<MeshViewDesc>(
-          descriptor_bytes, serio::ByteOffset { offset });
-        if (!view_desc) {
-          error = "geometry descriptor mesh view table exceeds descriptor size";
-          return false;
-        }
-        offset += sizeof(MeshViewDesc);
-        out.mesh_views.push_back(*view_desc);
-      }
-    }
-
-    if (out.mesh_views.empty()) {
-      error = "soft-body source mesh has no mesh views";
-      return false;
-    }
-    return true;
-  }
-
-  //! Reads row `index` of `buffers` and its payload.
-  auto ReadBufferPayload(const cooked::CookedResourceTable& buffers,
-    const data::pak::core::ResourceIndexT index,
-    data::pak::core::BufferResourceDesc& descriptor,
-    std::vector<std::byte>& payload, std::string& error) -> bool
-  {
-    if (index == data::pak::core::kNoResourceIndex) {
-      error = "geometry references kNoResourceIndex buffer";
-      return false;
-    }
-    if (index.get() >= buffers.RowCount()) {
-      error = "geometry references out-of-range buffer resource index";
-      return false;
-    }
-
-    try {
-      descriptor = buffers.Row<data::pak::core::BufferResourceDesc>(index);
-      payload = buffers.Payload(index);
-    } catch (const std::out_of_range&) {
-      error = "buffer payload range exceeds the buffers data";
-      return false;
-    } catch (const std::exception& ex) {
-      error = std::string("buffer resource cannot be read: ") + ex.what();
-      return false;
-    }
-    return true;
-  }
-
-  auto DecodeVertexPositions(
-    const data::pak::core::BufferResourceDesc& descriptor,
-    const std::span<const std::byte> payload,
-    std::vector<JPH::Float3>& vertices, std::string& error) -> bool
-  {
-    if (descriptor.element_format != static_cast<uint8_t>(Format::kUnknown)) {
-      error = "vertex buffer must be structured (element_format=unknown)";
-      return false;
-    }
-    if (descriptor.element_stride < sizeof(float) * 3U) {
-      error = "vertex buffer element_stride is too small for position xyz";
-      return false;
-    }
-    const auto stride = static_cast<size_t>(descriptor.element_stride);
-    if (payload.size() % stride != 0U) {
-      error = "vertex buffer payload size is not aligned to element_stride";
-      return false;
-    }
-
-    const auto count = payload.size() / stride;
-    vertices.clear();
-    vertices.reserve(count);
-    for (size_t i = 0; i < count; ++i) {
-      auto record = serio::ByteReader { payload.subspan(i * stride, stride) };
-      const auto x = record.Read<float>();
-      const auto y = record.Read<float>();
-      const auto z = record.Read<float>();
-      if (!x || !y || !z) {
-        error = "vertex buffer element_stride is too small for position xyz";
-        return false;
-      }
-      if (!std::isfinite(*x) || !std::isfinite(*y) || !std::isfinite(*z)) {
-        error = "vertex buffer contains non-finite positions";
-        return false;
-      }
-      vertices.emplace_back(*x, *y, *z);
-    }
-
-    if (vertices.empty()) {
-      error = "vertex buffer payload is empty";
-      return false;
-    }
-    return true;
-  }
-
-  auto DecodeIndexBuffer(const data::pak::core::BufferResourceDesc& descriptor,
-    const std::span<const std::byte> payload, std::vector<uint32_t>& indices,
-    std::string& error) -> bool
-  {
-    size_t element_size = 0U;
-    const auto element_format = static_cast<Format>(descriptor.element_format);
-    if (element_format == Format::kR32UInt) {
-      element_size = sizeof(uint32_t);
-    } else if (element_format == Format::kR16UInt) {
-      element_size = sizeof(uint16_t);
-    } else if (element_format == Format::kUnknown
-      && (descriptor.element_stride == sizeof(uint32_t)
-        || descriptor.element_stride == sizeof(uint16_t))) {
-      element_size = static_cast<size_t>(descriptor.element_stride);
-    } else {
-      error = "index buffer must be uint16 or uint32";
-      return false;
-    }
-
-    if (payload.size() % element_size != 0U) {
-      error = "index buffer payload size is not aligned to element size";
-      return false;
-    }
-
-    const auto count = payload.size() / element_size;
-    indices.clear();
-    indices.reserve(count);
-    auto reader = serio::ByteReader { payload };
-    for (size_t i = 0; i < count; ++i) {
-      if (element_size == sizeof(uint32_t)) {
-        const auto value = reader.Read<uint32_t>();
-        if (!value) {
-          error = "index buffer payload size is not aligned to element size";
-          return false;
-        }
-        indices.push_back(*value);
-      } else {
-        const auto value = reader.Read<uint16_t>();
-        if (!value) {
-          error = "index buffer payload size is not aligned to element size";
-          return false;
-        }
-        indices.push_back(static_cast<uint32_t>(*value));
-      }
-    }
-
-    if (indices.empty()) {
-      error = "index buffer payload is empty";
-      return false;
-    }
-    return true;
-  }
-
-  [[nodiscard]] auto IsFiniteFloat3Cook(const JPH::Float3& value) noexcept
-    -> bool
-  {
-    return std::isfinite(value.x) && std::isfinite(value.y)
-      && std::isfinite(value.z);
-  }
-
-  [[nodiscard]] auto EdgeLengthSquared(
-    const JPH::Float3& a, const JPH::Float3& b) noexcept -> float
-  {
-    const auto dx = a.x - b.x;
-    const auto dy = a.y - b.y;
-    const auto dz = a.z - b.z;
-    return (dx * dx) + (dy * dy) + (dz * dz);
-  }
-
-  [[nodiscard]] auto TriangleDoubleAreaSquared(const JPH::Float3& a,
-    const JPH::Float3& b, const JPH::Float3& c) noexcept -> float
-  {
-    const auto abx = b.x - a.x;
-    const auto aby = b.y - a.y;
-    const auto abz = b.z - a.z;
-    const auto acx = c.x - a.x;
-    const auto acy = c.y - a.y;
-    const auto acz = c.z - a.z;
-    const auto cx = (aby * acz) - (abz * acy);
-    const auto cy = (abz * acx) - (abx * acz);
-    const auto cz = (abx * acy) - (aby * acx);
-    return (cx * cx) + (cy * cy) + (cz * cz);
-  }
-
-  auto BuildFacesFromMeshViews(const std::vector<uint32_t>& indices,
-    std::span<const data::pak::geometry::MeshViewDesc> mesh_views,
-    std::span<const JPH::Float3> vertices,
-    std::vector<JPH::SoftBodySharedSettings::Face>& faces, std::string& error)
-    -> bool
-  {
-    if (vertices.empty()) {
-      error = "mesh has no vertices";
-      return false;
-    }
-    auto bounds_min = vertices.front();
-    auto bounds_max = vertices.front();
-    for (const auto& v : vertices) {
-      if (!IsFiniteFloat3Cook(v)) {
-        error = "mesh contains non-finite vertex positions";
-        return false;
-      }
-      bounds_min.x = std::min(bounds_min.x, v.x);
-      bounds_min.y = std::min(bounds_min.y, v.y);
-      bounds_min.z = std::min(bounds_min.z, v.z);
-      bounds_max.x = std::max(bounds_max.x, v.x);
-      bounds_max.y = std::max(bounds_max.y, v.y);
-      bounds_max.z = std::max(bounds_max.z, v.z);
-    }
-
-    const auto max_extent = std::max({
-      bounds_max.x - bounds_min.x,
-      bounds_max.y - bounds_min.y,
-      bounds_max.z - bounds_min.z,
-    });
-    const auto min_edge_length = std::max(max_extent * 1.0e-6F, 1.0e-8F);
-    const auto min_edge_length_sq = min_edge_length * min_edge_length;
-    const auto min_area2_sq = min_edge_length_sq * min_edge_length_sq;
-    const auto vertex_count = vertices.size();
-
-    faces.clear();
-    auto rejected_degenerate_faces = size_t { 0 };
-    for (const auto& view : mesh_views) {
-      const auto first_index = static_cast<size_t>(view.first_index);
-      const auto index_count = static_cast<size_t>(view.index_count);
-      const auto first_vertex = static_cast<uint32_t>(view.first_vertex);
-      const auto view_vertex_count = static_cast<uint32_t>(view.vertex_count);
-
-      if (index_count == 0U) {
-        continue;
-      }
-      if (index_count % 3U != 0U) {
-        error = "mesh view index_count is not divisible by 3";
-        return false;
-      }
-      if (first_index > indices.size()
-        || indices.size() - first_index < index_count) {
-        error = "mesh view index span exceeds decoded index buffer";
-        return false;
-      }
-      if (first_vertex > vertex_count
-        || static_cast<size_t>(first_vertex) + view_vertex_count
-          > vertex_count) {
-        error = "mesh view vertex span exceeds decoded vertex buffer";
-        return false;
-      }
-
-      for (size_t i = 0; i < index_count; i += 3U) {
-        const auto local0 = indices.at(first_index + i + 0U);
-        const auto local1 = indices.at(first_index + i + 1U);
-        const auto local2 = indices.at(first_index + i + 2U);
-
-        if (local0 >= view_vertex_count || local1 >= view_vertex_count
-          || local2 >= view_vertex_count) {
-          error = "mesh view contains index outside its vertex range";
-          return false;
-        }
-
-        const auto v0 = first_vertex + local0;
-        const auto v1 = first_vertex + local1;
-        const auto v2 = first_vertex + local2;
-        if (v0 >= vertex_count || v1 >= vertex_count || v2 >= vertex_count) {
-          error = "mesh view index resolves outside decoded vertex buffer";
-          return false;
-        }
-
-        const auto& p0 = oxygen::base::CheckedAt(vertices, v0);
-        const auto& p1 = oxygen::base::CheckedAt(vertices, v1);
-        const auto& p2 = oxygen::base::CheckedAt(vertices, v2);
-        const auto e01 = EdgeLengthSquared(p0, p1);
-        const auto e12 = EdgeLengthSquared(p1, p2);
-        const auto e20 = EdgeLengthSquared(p2, p0);
-        if (e01 <= min_edge_length_sq || e12 <= min_edge_length_sq
-          || e20 <= min_edge_length_sq
-          || TriangleDoubleAreaSquared(p0, p1, p2) <= min_area2_sq) {
-          ++rejected_degenerate_faces;
-          continue;
-        }
-
-        faces.emplace_back(v0, v1, v2, 0U);
-      }
-    }
-
-    if (faces.empty()) {
-      if (rejected_degenerate_faces > 0U) {
-        error = "mesh yielded only degenerate triangles after sanitation";
-      } else {
-        error = "mesh did not yield any triangle faces";
-      }
-      return false;
-    }
-    if (rejected_degenerate_faces > 0U) {
-      DLOG_F(1,
-        "Soft-body source mesh sanitation dropped {} degenerate triangles",
-        rejected_degenerate_faces);
-    }
-    return true;
-  }
-
-  auto BuildSurfaceMeshFromProcedural(
-    const SoftBodyGeometryTopologyInput& topology, SoftBodySurfaceMesh& out,
-    std::string& error) -> bool
-  {
-    const auto generated = data::GenerateMeshBuffers(topology.procedural_name,
-      std::span<const std::byte>(
-        topology.procedural_params.data(), topology.procedural_params.size()));
-    if (!generated.has_value()) {
-      error = "failed generating procedural geometry source mesh";
-      return false;
-    }
-
-    const auto& source_vertices = generated->first;
-    const auto& source_indices = generated->second;
-    out.vertices.clear();
-    out.vertices.reserve(source_vertices.size());
-    for (const auto& v : source_vertices) {
-      out.vertices.emplace_back(v.position.x, v.position.y, v.position.z);
-    }
-
-    return BuildFacesFromMeshViews(
-      source_indices, topology.mesh_views, out.vertices, out.faces, error);
-  }
-
-  auto BuildSurfaceMeshFromStandard(
-    const SoftBodyGeometryTopologyInput& topology,
-    const cooked::CookedContent& content, SoftBodySurfaceMesh& out,
-    std::string& error) -> bool
-  {
-    const auto& buffers = content.ResourceTable(data::ResourceKind::kBuffer);
-    auto vertex_descriptor = data::pak::core::BufferResourceDesc {};
-    auto index_descriptor = data::pak::core::BufferResourceDesc {};
-    auto vertex_payload = std::vector<std::byte> {};
-    auto index_payload = std::vector<std::byte> {};
-
-    if (!ReadBufferPayload(buffers, topology.vertex_buffer, vertex_descriptor,
-          vertex_payload, error)) {
-      return false;
-    }
-    if (!ReadBufferPayload(buffers, topology.index_buffer, index_descriptor,
-          index_payload, error)) {
-      return false;
-    }
-
-    auto decoded_indices = std::vector<uint32_t> {};
-    if (!DecodeVertexPositions(
-          vertex_descriptor, vertex_payload, out.vertices, error)) {
-      return false;
-    }
-    if (!DecodeIndexBuffer(
-          index_descriptor, index_payload, decoded_indices, error)) {
-      return false;
-    }
-    if (!BuildFacesFromMeshViews(decoded_indices, topology.mesh_views,
-          out.vertices, out.faces, error)) {
-      return false;
-    }
-    return true;
-  }
-
+  //! Reads the source mesh surface of a soft body from the cooked root that
+  //! provides it.
   auto BuildSoftBodySurfaceMesh(const SoftBodyBindingSource& source,
-    const cooked::CookedContent& target_content, SoftBodySurfaceMesh& out,
+    const cooked::CookedContent& source_content, SoftBodySurfaceMesh& out,
     std::string& error) -> bool
   {
-    auto descriptor_bytes = std::vector<std::byte> {};
-    try {
-      descriptor_bytes
-        = target_content.Descriptor(source.source_mesh_asset_key);
-    } catch (const std::exception& ex) {
-      error = std::string("soft-body source mesh descriptor cannot be read: ")
-        + ex.what();
+    auto surface = internal::ReadCookedMeshSurface(
+      source_content, source.source_mesh_asset_key);
+    if (!surface) {
+      error = "soft-body source mesh: " + surface.error();
       return false;
     }
-
-    auto topology = SoftBodyGeometryTopologyInput {};
-    if (!ParseGeometryTopologyInput(
-          descriptor_bytes, source.source_mesh_references, topology, error)) {
-      return false;
+    out.vertices.clear();
+    out.vertices.reserve(surface->positions.size());
+    for (const auto& p : surface->positions) {
+      out.vertices.emplace_back(p[0], p[1], p[2]);
     }
-
-    switch (topology.kind) {
-    case SoftBodyGeometryTopologyInput::Kind::kStandard:
-      return BuildSurfaceMeshFromStandard(topology, target_content, out, error);
-    case SoftBodyGeometryTopologyInput::Kind::kProcedural:
-      return BuildSurfaceMeshFromProcedural(topology, out, error);
+    out.faces.clear();
+    out.faces.reserve(surface->triangles.size());
+    for (const auto& t : surface->triangles) {
+      out.faces.emplace_back(t[0], t[1], t[2], 0U);
     }
-
-    error = "soft-body source mesh kind is unsupported";
-    return false;
+    return true;
   }
 
   //! Welds the surface by position: vertices at the same position (with -0
@@ -1729,14 +1223,14 @@ namespace {
   }
 
   auto CookJoltSoftBodyBlob(const SoftBodyBindingSource& source,
-    const cooked::CookedContent& target_content,
+    const cooked::CookedContent& source_content,
     std::vector<std::byte>& out_blob, SoftBodyCookError& error) -> bool
   {
-    EnsureJoltAllocatorReady();
+    internal::EnsureJoltAllocatorReady();
 
     auto surface_mesh = SoftBodySurfaceMesh {};
     if (!BuildSoftBodySurfaceMesh(
-          source, target_content, surface_mesh, error.reason)) {
+          source, source_content, surface_mesh, error.reason)) {
       return false;
     }
     WeldSurfaceMesh(surface_mesh);
@@ -1850,7 +1344,7 @@ namespace {
   auto CookJoltVehicleBlob(const VehicleBindingSource& source,
     std::vector<std::byte>& out_blob, std::string& error) -> bool
   {
-    EnsureJoltAllocatorReady();
+    internal::EnsureJoltAllocatorReady();
     const auto wheel_count = source.wheels.size();
     if (wheel_count < 2U) {
       error = "vehicle must resolve at least two wheels before blob cooking";
@@ -2010,12 +1504,12 @@ namespace {
   }
 
   auto CookSoftBodyTopologyBlob(const SoftBodyBindingSource& source,
-    const cooked::CookedContent& target_content,
+    const cooked::CookedContent& source_content,
     std::vector<std::byte>& out_blob, SoftBodyCookError& error) -> bool
   {
     switch (source.record.topology_format) {
     case phys::PhysicsResourceFormat::kJoltSoftBodySharedSettingsBinary:
-      return CookJoltSoftBodyBlob(source, target_content, out_blob, error);
+      return CookJoltSoftBodyBlob(source, source_content, out_blob, error);
     case phys::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary:
       error.reason = "physx soft-body cooking is not implemented";
       return false;
@@ -2098,15 +1592,20 @@ namespace {
   //! emitting any; reports each failure.
   auto CookBindingBlobs(const PhysicsSidecarDocument& parsed,
     ImportSession& session, const ImportRequest& request,
-    const cooked::CookedContent& target_content)
+    const std::span<const internal::MountedCookedSource> mounts)
     -> std::optional<CookedBindingBlobs>
   {
     auto blobs = CookedBindingBlobs {};
     for (size_t i = 0; i < parsed.soft_bodies.size(); ++i) {
       const auto& source = parsed.soft_bodies.at(i);
+      // The resolution found the source mesh in one of the mounted roots.
+      const auto* const source_content
+        = internal::FindListingContent(mounts, source.source_mesh_asset_key);
+      CHECK_NOTNULL_F(source_content, "resolved source mesh is not mounted");
       auto blob = std::vector<std::byte> {};
       auto cook_error = SoftBodyCookError {};
-      if (!CookSoftBodyTopologyBlob(source, target_content, blob, cook_error)) {
+      if (!CookSoftBodyTopologyBlob(
+            source, *source_content, blob, cook_error)) {
         LOG_F(ERROR,
           "PhysicsSidecarImportPipeline: soft-body topology cooking failed "
           "(source_mesh_ref='{}' code='{}' reason='{}')",
@@ -2451,18 +1950,15 @@ namespace {
   }
 
   auto ResolveAndValidateBindings(PhysicsSidecarDocument& parsed,
-    const cooked::CookedContent& target_content,
     const SidecarResolvedSceneState& resolved_scene_state,
     std::span<const internal::MountedCookedSource> mounts,
     ImportSession& session, const ImportRequest& request) -> bool
   {
-    const auto target_assets = BuildAssetRecordMap(target_content);
     const auto requested_backend = ResolveRequestedPhysicsBackend(request);
     auto validation_ctx = BindingValidationContext {
       .session = observer_ptr { &session },
       .request = observer_ptr { &request },
       .mounts = mounts,
-      .target_assets = observer_ptr { &target_assets },
       .node_count = resolved_scene_state.node_count,
     };
 
@@ -2854,22 +2350,20 @@ auto PhysicsSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  const auto* target_content
-    = detail::FindSceneContent(mounts, resolved_scene_state->scene_key);
-  if (target_content == nullptr) {
+  if (detail::FindSceneContent(mounts, resolved_scene_state->scene_key)
+    == nullptr) {
     AddDiagnostic(*session, request, ImportSeverity::kError,
       std::string(import_codes::kPhysicsSidecarTargetSceneMissing),
       "Resolved target scene key is not present in cooked scene context");
     co_return false;
   }
-  if (!ResolveAndValidateBindings(*parsed, *target_content,
-        *resolved_scene_state, mounts, *session, request)) {
+  if (!ResolveAndValidateBindings(
+        *parsed, *resolved_scene_state, mounts, *session, request)) {
     co_return false;
   }
 
   // Every blob cooks before any is emitted, so a failing binding emits none.
-  const auto blobs
-    = CookBindingBlobs(*parsed, *session, request, *target_content);
+  const auto blobs = CookBindingBlobs(*parsed, *session, request, mounts);
   if (!blobs.has_value()
     || !EmitBindingBlobs(*parsed, *blobs, *session, request)) {
     co_return false;

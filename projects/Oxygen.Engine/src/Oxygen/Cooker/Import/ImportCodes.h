@@ -293,19 +293,35 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsMaterialRequestInvalidJson = "physics.material.request_invalid_json";
   inline constexpr std::string_view kPhysicsMaterialSchemaValidationFailed = "physics.material.schema_validation_failed";
   inline constexpr std::string_view kPhysicsMaterialSchemaValidatorFailure = "physics.material.schema_validator_failure";
+  //! A material value a 32-bit float cannot hold.
+  inline constexpr std::string_view kPhysicsMaterialValueOutOfRange = "physics.material.value_out_of_range";
   inline constexpr std::string_view kPhysicsRequestInvalidImportKind = "physics.request.invalid_import_kind";
   inline constexpr std::string_view kPhysicsRequestMissingSettings = "physics.request.missing_settings";
   inline constexpr std::string_view kPhysicsRequestTargetSceneVirtualPathMissing = "physics.request.target_scene_virtual_path_missing";
+  //! The physics backend refused to build a shape from its geometry.
+  inline constexpr std::string_view kPhysicsShapeCookFailed = "physics.shape.cook_failed";
+  inline constexpr std::string_view kPhysicsShapeGeometryRefNotGeometry = "physics.shape.geometry_ref_not_geometry";
+  inline constexpr std::string_view kPhysicsShapeGeometryRefUnresolved = "physics.shape.geometry_ref_unresolved";
+  //! A cooked geometry gives no triangle surface.
+  inline constexpr std::string_view kPhysicsShapeGeometryUnreadable = "physics.shape.geometry_unreadable";
+  //! Height samples that do not make a sample_count grid with a solid sample.
+  inline constexpr std::string_view kPhysicsShapeHeightFieldInvalid = "physics.shape.height_field_invalid";
   inline constexpr std::string_view kPhysicsShapeMaterialRefNotPhysicsMaterial = "physics.shape.material_ref_not_physics_material";
   inline constexpr std::string_view kPhysicsShapeMaterialRefUnresolved = "physics.shape.material_ref_unresolved";
+  //! A member the shape's type does not use.
+  inline constexpr std::string_view kPhysicsShapeMemberNotApplicable = "physics.shape.member_not_applicable";
+  //! collision_own_layer is not a single layer bit.
+  inline constexpr std::string_view kPhysicsShapeOwnLayerInvalid = "physics.shape.own_layer_invalid";
   inline constexpr std::string_view kPhysicsShapePayloadEmitFailed = "physics.shape.payload_emit_failed";
-  inline constexpr std::string_view kPhysicsShapePrimarySourceMissing = "physics.shape.primary_source_missing";
-  inline constexpr std::string_view kPhysicsShapeReferenceSourceMismatch = "physics.shape.reference_source_mismatch";
   inline constexpr std::string_view kPhysicsShapeRequestInvalid = "physics.shape.request_invalid";
   inline constexpr std::string_view kPhysicsShapeRequestInvalidJson = "physics.shape.request_invalid_json";
+  //! A non-uniform local_scale on a shape the runtime scales uniformly.
+  inline constexpr std::string_view kPhysicsShapeScaleNotUniform = "physics.shape.scale_not_uniform";
   inline constexpr std::string_view kPhysicsShapeSchemaContractMismatch = "physics.shape.schema_contract_mismatch";
   inline constexpr std::string_view kPhysicsShapeSchemaValidationFailed = "physics.shape.schema_validation_failed";
   inline constexpr std::string_view kPhysicsShapeSchemaValidatorFailure = "physics.shape.schema_validator_failure";
+  //! A shape value a 32-bit float cannot hold, or outside its domain.
+  inline constexpr std::string_view kPhysicsShapeValueOutOfRange = "physics.shape.value_out_of_range";
   inline constexpr std::string_view kPhysicsShapeWorldBoundaryLimitsInvalid = "physics.shape.world_boundary_limits_invalid";
   inline constexpr std::string_view kPhysicsSidecarBackendMismatch = "physics.sidecar.backend_mismatch";
   inline constexpr std::string_view kPhysicsSidecarBackendUnsupported = "physics.sidecar.backend_unsupported";
@@ -331,7 +347,6 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kPhysicsSidecarPayloadParseFailed = "physics.sidecar.payload_parse_failed";
   inline constexpr std::string_view kPhysicsSidecarPipelineException = "physics.sidecar.pipeline_exception";
   inline constexpr std::string_view kPhysicsSidecarReaderUnavailable = "physics.sidecar.reader_unavailable";
-  inline constexpr std::string_view kPhysicsSidecarReferenceSourceMismatch = "physics.sidecar.reference_source_mismatch";
   inline constexpr std::string_view kPhysicsSidecarResourceEmitFailed = "physics.sidecar.resource_emit_failed";
   inline constexpr std::string_view kPhysicsSidecarResourceSerializeFailed = "physics.sidecar.resource_serialize_failed";
   inline constexpr std::string_view kPhysicsSidecarSchemaContractMismatch = "physics.sidecar.schema_contract_mismatch";

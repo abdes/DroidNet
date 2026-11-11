@@ -84,6 +84,12 @@ struct AssetReferenceRefused final {
   std::optional<data::AssetType> expected_type)
   -> std::expected<ResolvedAssetReference, AssetReferenceRefused>;
 
+//! The content of the mounted cooked root of the highest precedence that
+//! lists `key`, the one a lookup of it finds; null when none does.
+OXGN_COOK_NDAPI auto FindListingContent(
+  std::span<const MountedCookedSource> mounts, const data::AssetKey& key)
+  -> const cooked::CookedContent*;
+
 //! What `references` require of mounts other than `own_mount`: each asset
 //! or texture they name that a mounted cooked root of another mount provides,
 //! found from the highest precedence down, once.

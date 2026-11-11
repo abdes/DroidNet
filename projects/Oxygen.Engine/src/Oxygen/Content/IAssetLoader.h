@@ -23,6 +23,7 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/CollisionShapeData.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/DependencyRequirementError.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -703,11 +704,12 @@ public:
   [[nodiscard]] virtual auto MakePhysicsResourceKeyForAsset(
     const data::Asset& context_asset, const data::AssetKey& resource_asset_key)
     -> std::optional<ResourceKey> = 0;
-  //! Read a collision shape descriptor frozen in the context asset's bindings.
-  [[nodiscard]] virtual auto ReadCollisionShapeAssetDescForAsset(
+  //! Read a collision shape, with its compound children, frozen in the
+  //! context asset's bindings.
+  [[nodiscard]] virtual auto ReadCollisionShapeForAsset(
     const data::Asset& context_asset,
     const data::AssetKey& shape_asset_key) const
-    -> std::optional<data::pak::physics::CollisionShapeAssetDesc> = 0;
+    -> std::optional<CollisionShapeData> = 0;
   //! Read a physics material descriptor frozen in the context asset's bindings.
   [[nodiscard]] virtual auto ReadPhysicsMaterialAssetDescForAsset(
     const data::Asset& context_asset,

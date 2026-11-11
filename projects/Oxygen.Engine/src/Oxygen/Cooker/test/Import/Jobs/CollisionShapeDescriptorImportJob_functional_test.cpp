@@ -251,45 +251,6 @@ namespace {
   }
 
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
-    PayloadBackedShapeEmitsInlineCookedPayload)
-  {
-    const auto cooked_root = TempDir() / "payload_shape_inline_emission";
-    std::filesystem::create_directories(cooked_root);
-    const auto source_root = cooked_root.parent_path() / "source_data";
-
-    const auto material_report = Import(
-      MakeMaterialRequest({ .source = source_root, .cooked = cooked_root }));
-    ASSERT_HAS_VALUE(material_report);
-    ASSERT_TRUE(material_report->success);
-
-    auto shape = MakeShape("/Cooked/Physics/Shapes/hull_inline.ocshape",
-      "convex_hull_inline_payload");
-    shape.Set("/shape_type", "convex_hull").Remove("/half_extents");
-
-    const auto report = Import(MakeCollisionShapeRequest(
-      { .source = source_root, .cooked = cooked_root }, shape));
-    ASSERT_HAS_VALUE(report);
-    EXPECT_TRUE(report->success);
-
-    constexpr auto kShapeRelPath
-      = std::string_view { "Physics/Shapes/hull_inline.ocshape" };
-    ASSERT_TRUE(
-      oxygen::cooker::test::HasCookedFile(cooked_root, kShapeRelPath));
-    const auto bytes
-      = ReadBytes(oxygen::cooker::test::CookedFile(cooked_root, kShapeRelPath));
-    const auto descriptor = ReadCollisionShapeAssetDesc(bytes);
-    ASSERT_HAS_VALUE(descriptor);
-    EXPECT_EQ(descriptor->shape_type, phys::ShapeType::kConvexHull);
-    EXPECT_EQ(descriptor->cooked_shape_ref.payload_type,
-      phys::ShapePayloadType::kConvex);
-    EXPECT_FALSE(descriptor->cooked_shape_ref.payload_asset_key.IsNil());
-    EXPECT_TRUE(oxygen::cooker::test::HasCookedFile(
-      cooked_root, "Physics/Resources/physics.table"));
-    EXPECT_TRUE(std::filesystem::exists(
-      cooked_root / std::filesystem::path("Physics/Resources/physics.data")));
-  }
-
-  NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
     CompoundShapeSerializesTrailingChildDescriptors)
   {
     const auto cooked_root = TempDir() / "compound_children";
@@ -361,7 +322,7 @@ namespace {
   }
 
   NOLINT_TEST_F(CollisionShapeDescriptorImportJobTest,
-    CompoundNonAnalyticChildRejectedBySchema)
+    CompoundHullChildWithoutGeometryRejectedBySchema)
   {
     const auto cooked_root = TempDir() / "compound_child_payload_missing";
     std::filesystem::create_directories(cooked_root);

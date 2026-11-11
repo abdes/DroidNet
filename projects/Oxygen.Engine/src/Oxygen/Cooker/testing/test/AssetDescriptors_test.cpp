@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include <glm/common.hpp>
@@ -38,6 +41,7 @@
 namespace {
 
 using oxygen::cooker::testing::CollisionShapeDescriptor;
+using oxygen::cooker::testing::CompoundShapeDescriptor;
 using oxygen::cooker::testing::GeometryBuilder;
 using oxygen::cooker::testing::InputActionDescriptor;
 using oxygen::cooker::testing::InputContextBuilder;
@@ -102,8 +106,75 @@ NOLINT_TEST(AssetDescriptorsTest, CollisionShapeReferencesItsMaterialAndPayload)
   const auto read = Read(
     shape.bytes, shape.references, loaders::LoadCollisionShapeDescriptor);
 
-  EXPECT_EQ(read.material_asset_key, Key("/Game/Wood.opmat"));
+  EXPECT_EQ(read.descriptor.material_asset_key, Key("/Game/Wood.opmat"));
+  EXPECT_TRUE(read.children.empty());
   EXPECT_EQ(shape.references.Keys().size(), 2U);
+}
+
+//! A compound child of a payload kind, `type` with the payload `payload`.
+auto Child(const physics::ShapeType type,
+  const oxygen::data::AssetKey& payload = {}) -> physics::CompoundShapeChildDesc
+{
+  auto child = physics::CompoundShapeChildDesc {};
+  child.shape_type = static_cast<uint32_t>(type);
+  child.radius = 0.5F;
+  child.payload_asset_key = payload;
+  return child;
+}
+
+auto CompoundRecord() -> physics::CollisionShapeAssetDesc
+{
+  auto record = physics::CollisionShapeAssetDesc {};
+  record.material_asset_key = Key("/Game/Wood.opmat");
+  return record;
+}
+
+//! A compound reads back with its children, and references the cooked
+//! payload of each child that has one.
+NOLINT_TEST(AssetDescriptorsTest, CompoundShapeReadsBackItsChildren)
+{
+  const auto children = std::array {
+    Child(physics::ShapeType::kConvexHull, Key("/Game/Rock.ophys")),
+    Child(physics::ShapeType::kSphere),
+  };
+
+  const auto shape
+    = CompoundShapeDescriptor("Pile", CompoundRecord(), children);
+  const auto read = Read(
+    shape.bytes, shape.references, loaders::LoadCollisionShapeDescriptor);
+
+  ASSERT_EQ(read.children.size(), 2U);
+  EXPECT_EQ(read.children[0].payload_asset_key, Key("/Game/Rock.ophys"));
+  EXPECT_FLOAT_EQ(read.children[1].radius, 0.5F);
+  EXPECT_EQ(shape.references.Keys().size(), 2U);
+}
+
+//! The loader refuses a compound without children, a child of no shape kind
+//! or of the compound kind, and a child whose payload is not its kind's.
+NOLINT_TEST(AssetDescriptorsTest, CompoundShapeDefectsAreRefused)
+{
+  const auto refuses
+    = [](const std::span<const physics::CompoundShapeChildDesc> children,
+        const std::string_view reason) -> void {
+    try {
+      static_cast<void>(
+        CompoundShapeDescriptor("Pile", CompoundRecord(), children));
+      ADD_FAILURE() << "accepted a compound that " << reason;
+    } catch (const std::logic_error& refused) {
+      EXPECT_THAT(refused.what(), ::testing::HasSubstr(reason));
+    }
+  };
+
+  refuses({}, "Compound shape has no children");
+  refuses(std::array { Child(physics::ShapeType::kCompound) },
+    "Compound child kind is invalid");
+  refuses(std::array { Child(physics::ShapeType::kInvalid) },
+    "Compound child kind is invalid");
+  refuses(std::array { Child(physics::ShapeType::kConvexHull) },
+    "Compound child payload does not match its kind");
+  refuses(
+    std::array { Child(physics::ShapeType::kSphere, Key("/Game/Stray.ophys")) },
+    "Compound child payload does not match its kind");
 }
 
 //! A shape the product refuses, such as one without a material, fails where

@@ -1,0 +1,28 @@
+{
+  "name": "hull_rock",
+  "lods": [
+    {
+      "name": "hull_rock_lod0",
+      "mesh_type": "procedural",
+      "procedural": {
+        "generator": "IcoSphere",
+        "mesh_name": "HullRock",
+        "params": {
+          "subdivision_level": 1
+        }
+      },
+      "submeshes": [
+        {
+          "name": "hull_rock_surface",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "stack_yellow.omat",
+          "views": [
+            {
+              "view_ref": "__all__"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

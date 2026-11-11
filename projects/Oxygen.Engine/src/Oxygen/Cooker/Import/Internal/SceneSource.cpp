@@ -10,7 +10,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <limits>
 #include <optional>
 #include <set>
 #include <span>
@@ -34,6 +33,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/NodeReferenceJson.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/CookedNumbers.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
@@ -246,7 +246,7 @@ namespace {
       DCHECK_EQ_F(found->size(), out.size());
       auto elements_valid = true;
       for (size_t i = 0; i < out.size(); ++i) {
-        if (!ToFloat(found->at(i).get<double>()).has_value()) {
+        if (!ToCookedFloat(found->at(i).get<double>()).has_value()) {
           Reject(key, PathOf(key) / i);
           elements_valid = false;
         }
@@ -260,17 +260,6 @@ namespace {
     }
 
   private:
-    //! A value narrowed to float, or nothing for one a float cannot hold.
-    [[nodiscard]] static auto ToFloat(const double value)
-      -> std::optional<float>
-    {
-      if (!std::isfinite(value)
-        || std::abs(value) > std::numeric_limits<float>::max()) {
-        return std::nullopt;
-      }
-      return static_cast<float>(value);
-    }
-
     //! The value of `field` of `component` that `document` holds, by the
     //! field's value type, or nothing when the field would not hold it.
     [[nodiscard]] static auto ToFieldValue(const json& document,
@@ -295,7 +284,7 @@ namespace {
         return static_cast<std::int32_t>(value);
       }
       case data::schema::FieldType::kFloat: {
-        const auto value = ToFloat(document.get<double>());
+        const auto value = ToCookedFloat(document.get<double>());
         if (!value.has_value()
           || !data::schema::IsValidFieldValue(component, field, *value)) {
           return std::nullopt;
