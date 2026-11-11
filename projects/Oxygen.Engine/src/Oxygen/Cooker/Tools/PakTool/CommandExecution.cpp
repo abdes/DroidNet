@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -153,14 +154,6 @@ namespace {
       message.append(" manifest=not_requested");
     }
 
-    if (publication_result.report.has_value()) {
-      message.append(" report=")
-        .append(
-          publication_result.report->published ? "written" : "not_written");
-    } else {
-      message.append(" report=not_requested");
-    }
-
     if (publication_result.publish_duration.has_value()) {
       message.append(" duration_us=")
         .append(std::to_string(publication_result.publish_duration->count()));
@@ -173,21 +166,17 @@ namespace {
     }
   }
 
-  auto MarkReportIntent(ArtifactPublicationResult& publication_result,
-    const ArtifactPublicationPlan& publication_plan) -> void
+  //! The command's own failure, which the builder's diagnostics do not hold.
+  [[nodiscard]] auto CommandError(const PakToolCommandResult& command_result)
+    -> std::optional<PakToolCommandError>
   {
-    if (!publication_plan.report.has_value()) {
-      return;
+    if (command_result.error_code.empty()) {
+      return std::nullopt;
     }
-
-    publication_result.report = ArtifactPublicationState {
-      .final_path = publication_plan.report->final_path,
-      .staged_path = publication_plan.report->staged_path,
-      .publish_requested = true,
-      .published = true,
-      .cleaned_staged = true,
-      .removed_stale_final = false,
-      .restored_backup = false,
+    return PakToolCommandError {
+      .code = command_result.error_code,
+      .message = command_result.error_message,
+      .path = command_result.error_path,
     };
   }
 
@@ -197,11 +186,10 @@ namespace {
     cooked::CookerStorage& storage, PakToolCommandResult& command_result)
     -> void
   {
-    if (!publication_plan.report.has_value()) {
+    if (!publication_plan.report_path.has_value()) {
       return;
     }
-
-    MarkReportIntent(command_result.publication_result, publication_plan);
+    const auto& report_path = *publication_plan.report_path;
 
     const auto report_input = PakToolBuildReportInput {
       .tool_version = tool_version,
@@ -211,17 +199,15 @@ namespace {
       .publication_plan = publication_plan,
       .publication_result = command_result.publication_result,
       .build_result = command_result.build_result,
+      .error = CommandError(command_result),
       .exit_code = static_cast<int>(command_result.exit_code),
       .success = command_result.exit_code == PakToolExitCode::kSuccess,
     };
 
-    command_result.report_write_result = WriteReportFile(
-      storage, publication_plan.report->final_path, report_input);
+    command_result.report_write_result
+      = WriteReportFile(storage, report_path, report_input);
     if (!command_result.report_write_result.success) {
-      if (command_result.publication_result.report.has_value()) {
-        command_result.publication_result.report->published = false;
-      }
-      command_result.error_path = publication_plan.report->final_path;
+      command_result.error_path = report_path;
       if (command_result.exit_code == PakToolExitCode::kSuccess
         || command_result.exit_code == PakToolExitCode::kBuildFailure) {
         command_result.exit_code = PakToolExitCode::kRuntimeFailure;
@@ -233,32 +219,27 @@ namespace {
       LogErrorMessage("PakTool report write failed ["
         + command_result.report_write_result.error_code
         + "]: " + command_result.report_write_result.error_message + " path='"
-        + PathForLog(publication_plan.report->final_path) + "'");
+        + PathForLog(report_path) + "'");
       return;
     }
 
-    if (command_result.publication_result.report.has_value()) {
-      command_result.publication_result.report->published = true;
-    }
     LogInfoMessage("PakTool diagnostics report written: path='"
-      + PathForLog(publication_plan.report->final_path) + "'");
+      + PathForLog(report_path) + "'");
   }
 
+  //! Removes what a failed build staged; the earlier release stays whole.
   auto CleanupFailedBuildArtifacts(
     const ArtifactPublicationPlan& publication_plan,
     cooked::CookerStorage& storage,
     ArtifactPublicationResult& publication_result) -> void
   {
-    auto cleanup_intent = ArtifactPublicationIntent {
+    constexpr auto kPublishNothing = ArtifactPublicationIntent {
       .publish_pak = false,
       .publish_catalog = false,
       .publish_manifest = false,
-      .publish_report = false,
-      .suppress_stale_catalog_on_skip = true,
-      .suppress_stale_manifest_on_skip = true,
     };
     publication_result
-      = PublishArtifacts(publication_plan, cleanup_intent, storage);
+      = PublishArtifacts(publication_plan, kPublishNothing, storage);
   }
 
 } // namespace
@@ -311,6 +292,8 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
     command_result.error_path = !sealed_request.error().descriptor_path.empty()
       ? sealed_request.error().descriptor_path
       : sealed_request.error().source_path;
+    EmitReport(tool_version, command, command_line, request.request_snapshot,
+      request.publication_plan, storage, command_result);
     return command_result;
   }
 
@@ -398,19 +381,18 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
       + PathForLog(request.publication_plan.catalog.staged_path) + "'");
   }
 
-  auto publish_intent = ArtifactPublicationIntent {
+  // A failed build publishes nothing, and leaves the earlier release whole.
+  const auto publish_intent = ArtifactPublicationIntent {
     .publish_pak = build_success,
     .publish_catalog = build_success,
     .publish_manifest = build_success
       && request.publication_plan.manifest.has_value()
       && command_result.build_result.patch_manifest.has_value(),
-    .publish_report = false,
-    .suppress_stale_catalog_on_skip = !build_success,
-    .suppress_stale_manifest_on_skip = !build_success,
   };
 
   command_result.publication_result
     = PublishArtifacts(request.publication_plan, publish_intent, storage);
+  LogPublicationResult(command_result.publication_result);
   if (!command_result.publication_result.success) {
     command_result.exit_code = PakToolExitCode::kRuntimeFailure;
     command_result.error_code = command_result.publication_result.error_code;
@@ -423,7 +405,6 @@ auto ExecutePakToolCommand(const pak::BuildMode mode,
       request.publication_plan, storage, command_result);
     return command_result;
   }
-  LogPublicationResult(command_result.publication_result);
 
   command_result.exit_code = build_success ? PakToolExitCode::kSuccess
                                            : PakToolExitCode::kBuildFailure;

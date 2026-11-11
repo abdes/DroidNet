@@ -1310,11 +1310,11 @@ protected:
       });
     }
     for (const auto& required : recipe.value("requirements", json::array())) {
-      const auto path = required.at("path").get<std::string>();
+      const auto required_path = required.at("path").get<std::string>();
       entries.front().requirements.push_back({
         .mount = required.at("mount").get<std::string>(),
         .kind = oxygen::data::KeyReferenceKind::kAsset,
-        .key = oxygen::data::AssetKey::FromVirtualPath(path),
+        .key = oxygen::data::AssetKey::FromVirtualPath(required_path),
         .type = ParseAssetType(required.at("type").get<std::string>()),
       });
     }

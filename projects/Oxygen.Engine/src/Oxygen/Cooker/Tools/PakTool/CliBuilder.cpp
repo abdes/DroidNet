@@ -172,15 +172,6 @@ namespace {
         .StoreTo(&options.source_key)
         .Build());
 
-    group->Add(Option::WithKey("non-deterministic")
-        .About("Disable deterministic pak build behavior")
-        .Long("non-deterministic")
-        .WithValue<bool>()
-        .DefaultValue(true, "true")
-        .ImplicitValue(false, "false")
-        .StoreTo(&options.deterministic)
-        .Build());
-
     group->Add(Option::WithKey("no-crc32")
         .About("Disable pak CRC32 computation")
         .Long("no-crc32")

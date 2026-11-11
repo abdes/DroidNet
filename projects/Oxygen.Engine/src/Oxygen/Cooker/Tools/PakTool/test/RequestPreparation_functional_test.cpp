@@ -89,7 +89,6 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
     = TempDir() / "release" / "game.pakcatalog.json";
   options.build.manifest_output = TempDir() / "release" / "game.manifest.json";
   options.output.diagnostics_file = TempDir() / "release" / "game.report.json";
-  options.request.deterministic = false;
   options.request.compute_crc32 = false;
   options.request.fail_on_warnings = true;
 
@@ -112,7 +111,6 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
   EXPECT_EQ(prepared->build_request.output_manifest_path,
     prepared->publication_plan.manifest->staged_path);
   EXPECT_TRUE(prepared->build_request.options.emit_manifest_in_full);
-  EXPECT_FALSE(prepared->build_request.options.deterministic);
   EXPECT_FALSE(prepared->build_request.options.compute_crc32);
   EXPECT_TRUE(prepared->build_request.options.fail_on_warnings);
   // Preparation only plans: the outputs' folders are created when the
@@ -367,6 +365,26 @@ NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)
   ASSERT_FALSE(prepared.has_value());
   EXPECT_EQ(prepared.error().error_code, "paktool.prepare.path_conflict");
   EXPECT_EQ(prepared.error().path, shared_output);
+}
+
+//! A relative path and the absolute path it names in the working directory
+//! are one file: the report would overwrite the pak.
+NOLINT_TEST_F(
+  PakToolRequestPreparationTest, RejectsRelativeAndAbsoluteSpellingsOfOneFile)
+{
+  auto options = MakeOptions();
+  const auto relative = std::filesystem::path("paktool_alias_test.pak");
+  const auto absolute = std::filesystem::current_path() / relative;
+  options.request.output_pak = relative;
+  options.output.diagnostics_file = absolute;
+
+  const auto& storage = RealCookerStorage();
+  const auto prepared
+    = PreparePakToolRequest(BuildMode::kFull, options, storage);
+
+  ASSERT_FALSE(prepared.has_value());
+  EXPECT_EQ(prepared.error().error_code, "paktool.prepare.path_conflict");
+  EXPECT_FALSE(std::filesystem::exists(absolute));
 }
 
 //! An output whose parent is a file is refused before anything is built; a

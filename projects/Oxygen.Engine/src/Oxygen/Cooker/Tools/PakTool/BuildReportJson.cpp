@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestSnapshot.h>
 #include <Oxygen/Data/CookedSource.h>
@@ -158,7 +159,6 @@ namespace {
       {
         "options",
         ordered_json {
-          { "deterministic", snapshot.request.options.deterministic },
           { "compute_crc32", snapshot.request.options.compute_crc32 },
           { "fail_on_warnings", snapshot.request.options.fail_on_warnings },
           {
@@ -182,14 +182,10 @@ namespace {
       = input.publication_result.manifest.has_value()
       && input.publication_result.manifest->published;
     const auto manifest_emitted = input.build_result.patch_manifest.has_value();
-    const auto report_final_path = input.publication_plan.report.has_value()
-      ? input.publication_plan.report->final_path.string()
+    const auto report_final_path
+      = input.publication_plan.report_path.has_value()
+      ? input.publication_plan.report_path->string()
       : std::string {};
-    const auto report_staged_path = input.publication_plan.report.has_value()
-      ? ordered_json(input.publication_plan.report->staged_path.string())
-      : ordered_json(nullptr);
-    const auto report_published = input.publication_result.report.has_value()
-      && input.publication_result.report->published;
 
     return ordered_json {
       {
@@ -256,8 +252,6 @@ namespace {
         "report",
         ordered_json {
           { "final_path", report_final_path },
-          { "staged_path", report_staged_path },
-          { "published", report_published },
         },
       },
     };
@@ -339,6 +333,37 @@ namespace {
     return json;
   }
 
+  [[nodiscard]] auto BuildPublicationIssuesJson(
+    const std::vector<ArtifactPublicationIssue>& issues) -> ordered_json
+  {
+    auto json = ordered_json::array();
+    for (const auto& issue : issues) {
+      json.push_back(ordered_json {
+        { "code", issue.code },
+        { "message", issue.message },
+      });
+    }
+    return json;
+  }
+
+  [[nodiscard]] auto BuildErrorJson(
+    const std::optional<PakToolCommandError>& error) -> ordered_json
+  {
+    if (!error.has_value()) {
+      // Not `{ nullptr }`: a braced list builds the array `[null]`.
+      return nullptr;
+    }
+    return ordered_json {
+      { "code", error->code },
+      { "message", error->message },
+      {
+        "path",
+        error->path.empty() ? ordered_json(nullptr)
+                            : ordered_json(error->path.string()),
+      },
+    };
+  }
+
 } // namespace
 
 auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
@@ -355,6 +380,11 @@ auto ToReportJson(const PakToolBuildReportInput& input) -> ordered_json
     { "summary", BuildSummaryJson(input.build_result.summary) },
     { "telemetry", BuildTelemetryJson(input) },
     { "diagnostics", BuildDiagnosticsJson(input.build_result.diagnostics) },
+    {
+      "publication_issues",
+      BuildPublicationIssuesJson(input.publication_result.issues),
+    },
+    { "error", BuildErrorJson(input.error) },
     { "exit_code", input.exit_code },
     { "success", input.success },
   };

@@ -58,7 +58,7 @@ schema states the version it describes.
 | `oxygen.import-report`           | ImportTool `--report`                     |
 | `oxygen.source-analysis`         | ImportTool source analysis                |
 | `oxygen.scene-source-inspection` | ImportTool `inspect-source`               |
-| `oxygen.pak-build-report`        | PakTool `--report`                        |
+| `oxygen.pak-build-report`        | PakTool `--diagnostics-file`              |
 | `oxygen.cooked-inventory`        | Inspector `inventory`                     |
 | `oxygen.cooked-dependencies`     | Inspector `dependencies`                  |
 | `oxygen.cooked-scenes`           | Inspector `scenes`                        |

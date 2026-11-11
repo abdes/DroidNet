@@ -10,9 +10,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <iterator>
-#include <stdexcept>
 #include <string>
-#include <string_view>
 
 #include "RequestSnapshot.h"
 #include <nlohmann/json.hpp>
@@ -49,6 +47,7 @@ using oxygen::content::pak::PakDiagnosticSeverity;
 using oxygen::content::pak::tool::ArtifactPublicationIntent;
 using oxygen::content::pak::tool::MakeArtifactPublicationPlan;
 using oxygen::content::pak::tool::PakToolBuildReportInput;
+using oxygen::content::pak::tool::PakToolCommandError;
 using oxygen::content::pak::tool::PakToolRequestSnapshot;
 using oxygen::content::pak::tool::PublishArtifacts;
 using oxygen::content::pak::tool::ToCanonicalJsonString;
@@ -70,29 +69,19 @@ protected:
     return schema;
   }
 
-  [[nodiscard]] static auto MakeSourceKey() -> oxygen::data::SourceKey
+  void SetUp() override { MakeSuccessfulInput(); }
+
+  //! The report input of a patch build that published its pak, catalog and
+  //! manifest, into `input_`.
+  auto MakeSuccessfulInput() -> void
   {
-    const auto parsed = oxygen::data::SourceKey::FromString(
+    const auto source_key = oxygen::data::SourceKey::FromString(
       "01234567-89ab-7def-8123-456789abcdef");
-    if (!parsed.has_value()) {
-      throw std::runtime_error("invalid source key literal");
-    }
-    return parsed.value();
-  }
+    ASSERT_HAS_VALUE(source_key);
+    const auto asset_key = oxygen::data::AssetKey::FromString(
+      "11111111-2222-3333-4444-555555555555");
+    ASSERT_HAS_VALUE(asset_key);
 
-  [[nodiscard]] static auto MakeAssetKey(const std::string_view text)
-    -> oxygen::data::AssetKey
-  {
-    const auto parsed = oxygen::data::AssetKey::FromString(text);
-    if (!parsed.has_value()) {
-      throw std::runtime_error(
-        "invalid asset key literal: " + std::string(text));
-    }
-    return parsed.value();
-  }
-
-  [[nodiscard]] auto MakeSuccessfulInput() -> PakToolBuildReportInput
-  {
     auto request = PakBuildRequest {};
     request.mode = BuildMode::kPatch;
     request.sources = {
@@ -106,27 +95,26 @@ protected:
       },
     };
     request.content_version = 42;
-    request.source_key = MakeSourceKey();
+    request.source_key = *source_key;
     request.output_pak_path = Root() / "release" / "game.pak";
     request.output_manifest_path = Root() / "release" / "game.manifest.json";
 
-    const auto plan = MakeArtifactPublicationPlan(request.output_pak_path,
-      Root() / "release" / "game.catalog.json", request.output_manifest_path,
-      Root() / "release" / "game.report.json");
-    if (!plan.manifest.has_value() || !plan.report.has_value()) {
-      throw std::runtime_error("publication plan is missing sidecars");
-    }
+    const auto plan = MakeArtifactPublicationPlan({
+      .pak = request.output_pak_path,
+      .catalog = Root() / "release" / "game.catalog.json",
+      .manifest = request.output_manifest_path,
+      .report = Root() / "release" / "game.report.json",
+    });
+    ASSERT_HAS_VALUE(plan.manifest);
 
     storage_.AddFile(plan.pak.staged_path, "pak-data");
     storage_.AddFile(plan.catalog.staged_path, "catalog-data");
     storage_.AddFile(plan.manifest->staged_path, "manifest-data");
-    storage_.AddFile(plan.report->staged_path, "report-staged");
 
     auto intent = ArtifactPublicationIntent {
       .publish_pak = true,
       .publish_catalog = true,
       .publish_manifest = true,
-      .publish_report = true,
     };
     auto publication_result = PublishArtifacts(plan, intent, storage_);
     EXPECT_TRUE(publication_result.success);
@@ -144,7 +132,7 @@ protected:
       .mount = "Content",
       .entries = {
         oxygen::data::PakCatalogEntry {
-          .asset_key = MakeAssetKey("11111111-2222-3333-4444-555555555555"),
+          .asset_key = *asset_key,
           .asset_type = oxygen::data::AssetType::kMaterial,
           .descriptor_digest = {
             0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa,
@@ -195,7 +183,7 @@ protected:
       .total_duration = std::chrono::microseconds { 5000 },
     };
 
-    return PakToolBuildReportInput {
+    input_ = PakToolBuildReportInput {
       .tool_version = "0.1.0",
       .command = "patch",
       .command_line
@@ -214,12 +202,14 @@ protected:
 
   //! Holds the staged artifacts and the reports the tests publish.
   MemoryFileSystem storage_;
+  //! The report input of a successful patch build.
+  PakToolBuildReportInput input_ {};
 };
 
 NOLINT_TEST_F(PakToolBuildReportJsonTest,
   CanonicalReportJsonIsDeterministicAndMatchesSchema)
 {
-  const auto input = MakeSuccessfulInput();
+  const auto& input = input_;
 
   const auto first = ToCanonicalJsonString(input);
   const auto second = ToCanonicalJsonString(input);
@@ -235,7 +225,7 @@ NOLINT_TEST_F(PakToolBuildReportJsonTest,
 NOLINT_TEST_F(PakToolBuildReportJsonTest,
   WriteReportFilePublishesFailureReportThatMatchesSchema)
 {
-  auto input = MakeSuccessfulInput();
+  auto input = input_;
   input.success = false;
   input.exit_code = 3;
   input.request_snapshot.request.options.compute_crc32 = false;
@@ -247,12 +237,10 @@ NOLINT_TEST_F(PakToolBuildReportJsonTest,
   input.build_result.file_size = 0;
   input.build_result.patch_manifest.reset();
   ASSERT_HAS_VALUE(input.publication_result.manifest);
-  ASSERT_HAS_VALUE(input.publication_result.report);
   input.publication_result.pak.published = false;
   input.publication_result.catalog.published = false;
   input.publication_result.manifest->published = false;
   input.publication_result.manifest->publish_requested = false;
-  input.publication_result.report->published = false;
   input.build_result.diagnostics.push_back(PakDiagnostic {
     .severity = PakDiagnosticSeverity::kError,
     .phase = PakBuildPhase::kFinalize,
@@ -277,11 +265,52 @@ NOLINT_TEST_F(PakToolBuildReportJsonTest,
   EXPECT_FALSE(parsed.at("success"));
 }
 
+//! A publication that fails and cannot roll back says what each final file
+//! holds, why it failed and which rollback step failed.
+NOLINT_TEST_F(PakToolBuildReportJsonTest,
+  ReportOfFailedPublicationStatesFinalFilesErrorAndIssues)
+{
+  auto input = input_;
+  const auto& plan = input.publication_plan;
+  storage_.AddFile(plan.pak.staged_path, "pak-new");
+  storage_.AddFile(plan.catalog.staged_path, "catalog-new");
+  storage_.FailMoving(plan.catalog.staged_path);
+  storage_.FailMoving(plan.pak.backup_path);
+  input.publication_result = PublishArtifacts(plan,
+    ArtifactPublicationIntent {
+      .publish_pak = true,
+      .publish_catalog = true,
+      .publish_manifest = false,
+    },
+    storage_);
+  ASSERT_FALSE(input.publication_result.success);
+  input.error = PakToolCommandError {
+    .code = input.publication_result.error_code,
+    .message = input.publication_result.error_message,
+    .path = {},
+  };
+  input.exit_code = 4;
+  input.success = false;
+
+  const auto parsed = json::parse(ToCanonicalJsonString(input));
+
+  EXPECT_THAT(
+    oxygen::cooker::test::ValidateJson(Schema(), parsed), ::testing::IsEmpty());
+  // The new pak stays: its backup could not be put back.
+  EXPECT_TRUE(parsed.at("artifacts").at("pak").at("published"));
+  EXPECT_FALSE(parsed.at("artifacts").at("catalog").at("published"));
+  EXPECT_EQ(parsed.at("error").at("code"), "paktool.publish.rename_failed");
+  EXPECT_TRUE(parsed.at("error").at("path").is_null());
+  ASSERT_EQ(parsed.at("publication_issues").size(), 1U);
+  EXPECT_EQ(parsed.at("publication_issues").at(0).at("code"),
+    "paktool.publish.restore_failed");
+}
+
 //! A report that cannot be published says so with its own code.
 NOLINT_TEST_F(
   PakToolBuildReportJsonTest, WriteReportFileReportsUnpublishableDestination)
 {
-  const auto input = MakeSuccessfulInput();
+  const auto& input = input_;
   const auto output_path = Root() / "reports" / "locked.report.json";
   storage_.FailPublishing(output_path);
 

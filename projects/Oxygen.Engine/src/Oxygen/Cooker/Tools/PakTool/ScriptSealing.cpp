@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -32,6 +31,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Cooked/CookedContent.h>
 #include <Oxygen/Cooker/Cooked/CookerStorage.h>
@@ -242,14 +242,14 @@ namespace {
     size_t source_index = 0;
   };
 
+  //! A staged root no other build shares: PakTools building beside each other
+  //! into one folder stage there at the same time.
   [[nodiscard]] auto MakeStagedLooseRoot(const StagedLooseRootRequest& request)
     -> std::filesystem::path
   {
     const auto& original_root = request.original_root;
     const auto& staging_parent = request.staging_parent;
     const auto source_index = request.source_index;
-    static auto counter = std::atomic_uint64_t { 0 };
-    const auto id = counter.fetch_add(1, std::memory_order_relaxed);
 
     auto name = original_root.filename().string();
     if (name.empty()) {
@@ -263,8 +263,8 @@ namespace {
     }
 
     return staging_parent / kSealedSourcesDirName
-      / (name + "-source-" + std::to_string(source_index) + "-case-"
-        + std::to_string(id));
+      / (name + "-source-" + std::to_string(source_index) + "-"
+        + Uuid::Generate().ToString());
   }
 
   [[nodiscard]] auto LoadScriptTables(const SealingStorage& io,

@@ -59,7 +59,6 @@ Common options:
 | `--content-version <u16>`   | Pak content version                        |
 | `--source-key <uuidv7>`     | Canonical lowercase UUIDv7 source identity |
 | `--diagnostics-file <path>` | Optional structured build report           |
-| `--non-deterministic`       | Disable deterministic build behavior       |
 | `--no-crc32`                | Disable pak CRC output                     |
 | `--fail-on-warnings`        | Escalate warnings to build failure         |
 | `--mount <Name>=<dir>`      | Repeatable source mount for script sealing |
@@ -129,6 +128,23 @@ no dependency pak resolves is `pak.plan.asset_reference_missing` or
 - pak catalog sidecar JSON
 - patch/full manifest JSON when requested
 - structured build report JSON when `--diagnostics-file` is requested
+
+Every build is deterministic: the same request gives a byte-identical pak.
+
+The pak, its catalog and its manifest are staged beside their final paths, then
+published together: each replaces its final file, which stays as a
+`.previous` backup until all are published. When one fails, the earlier ones
+are rolled back. A backup that cannot be restored is kept, never deleted: the
+report lists that step under `publication_issues`. A failed build publishes
+nothing and leaves the earlier pak, catalog and manifest as they were. Paths
+that name one file, however spelled, are refused before anything is built
+(`paktool.prepare.path_conflict`).
+
+The report is written last, and says what each final file now holds
+(`published`), the command's own failure (`error`, null when the builder's
+diagnostics explain it or nothing failed) and the failed rollback steps.
+Preparation failures (exit code `2`) before the output paths are known write no
+report; a script sealing failure does.
 
 The catalog sidecar is the authoritative patch input artifact. The build report
 is informative only.

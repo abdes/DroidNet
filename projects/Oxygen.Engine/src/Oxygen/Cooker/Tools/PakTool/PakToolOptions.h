@@ -37,7 +37,6 @@ struct PakToolRequestOptions {
   std::filesystem::path catalog_output;
   uint16_t content_version = 0;
   std::string source_key;
-  bool deterministic = true;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;
 };

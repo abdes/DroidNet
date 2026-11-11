@@ -10,7 +10,6 @@
 #include <filesystem>
 
 #include "PakToolOptions.h"
-#include "RequestPreparation.h"
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -78,7 +77,6 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
     kSourceKey,
     "--manifest-out",
     "C:/Build/game.manifest.json",
-    "--non-deterministic",
     "--no-crc32",
     "--fail-on-warnings",
     "--diagnostics-file",
@@ -107,7 +105,6 @@ NOLINT_TEST(PakToolCliTest, BuildCommandParsesCommonAndFullBuildOptions)
     std::filesystem::path("C:/Build/game.pakcatalog.json"));
   EXPECT_EQ(options.request.content_version, 42);
   EXPECT_EQ(options.request.source_key, kSourceKey);
-  EXPECT_FALSE(options.request.deterministic);
   EXPECT_FALSE(options.request.compute_crc32);
   EXPECT_TRUE(options.request.fail_on_warnings);
   EXPECT_EQ(options.build.manifest_output,

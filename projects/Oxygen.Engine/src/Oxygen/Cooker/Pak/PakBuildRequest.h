@@ -29,8 +29,8 @@ enum class BuildMode : uint8_t {
 
 OXGN_COOK_NDAPI auto to_string(BuildMode value) noexcept -> std::string_view;
 
+//! A build is always deterministic: the same request gives the same bytes.
 struct PakBuildOptions {
-  bool deterministic = true;
   bool emit_manifest_in_full = false;
   bool compute_crc32 = true;
   bool fail_on_warnings = false;

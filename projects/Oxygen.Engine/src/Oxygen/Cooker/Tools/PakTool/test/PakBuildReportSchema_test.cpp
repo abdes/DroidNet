@@ -43,7 +43,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "AcceptsCanonicalPatchReportDocument",
       R"({
     "$schema": "https://oxygen-engine.dev/schemas/oxygen.pak-build-report.schema.json",
-    "schema_version": 5,
+    "schema_version": 6,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -68,7 +68,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       ],
       "dependency_paks": [],
       "options": {
-        "deterministic": true,
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false
@@ -96,9 +95,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
         "published": true
       },
       "report": {
-        "final_path": "F:/Build/game_patch.report.json",
-        "staged_path": "F:/Build/game_patch.report.json.tmp",
-        "published": true
+        "final_path": "F:/Build/game_patch.report.json"
       }
     },
     "summary": {
@@ -132,6 +129,8 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
         "offset": 128
       }
     ],
+    "publication_issues": [],
+    "error": null,
     "exit_code": 0,
     "success": true
   })",
@@ -139,9 +138,9 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "",
     },
     SchemaCase {
-      "AcceptsFailureReportWithSuppressedManifestPublication",
+      "AcceptsBuildFailureReportThatPublishesNothing",
       R"({
-    "schema_version": 5,
+    "schema_version": 6,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "build",
@@ -155,7 +154,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
       "base_paks": [],
       "dependency_paks": [],
       "options": {
-        "deterministic": true,
         "compute_crc32": false,
         "fail_on_warnings": true,
         "emit_manifest_in_full": false
@@ -183,9 +181,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
         "published": false
       },
       "report": {
-        "final_path": "F:/Build/game_full.report.json",
-        "staged_path": null,
-        "published": true
+        "final_path": "F:/Build/game_full.report.json"
       }
     },
     "summary": {
@@ -222,7 +218,94 @@ INSTANTIATE_TEST_SUITE_P(Cases, PakBuildReportSchemaCaseTest,
         "message": "fail_on_warnings=true and at least one warning was emitted."
       }
     ],
+    "publication_issues": [],
+    "error": null,
     "exit_code": 3,
+    "success": false
+  })",
+      true,
+      "",
+    },
+    SchemaCase {
+      "AcceptsPublicationFailureReportWithItsErrorAndIssues",
+      R"({
+    "schema_version": 6,
+    "tool_name": "Oxygen.Cooker.PakTool",
+    "tool_version": "0.1.0",
+    "command": "build",
+    "command_line": "Oxygen.Cooker.PakTool build --out game.pak --catalog-out game.catalog.json --diagnostics-file game.report.json",
+    "request": {
+      "mode": "full",
+      "source_key": "01234567-89ab-7def-8123-456789abcdef",
+      "content_version": 7,
+      "sources": [],
+      "source_mounts": {},
+      "base_paks": [],
+      "dependency_paks": [],
+      "options": {
+        "compute_crc32": true,
+        "fail_on_warnings": false,
+        "emit_manifest_in_full": false
+      }
+    },
+    "artifacts": {
+      "pak": {
+        "final_path": "F:/Build/game.pak",
+        "staged_path": "F:/Build/game.pak.staged",
+        "published": true,
+        "size_bytes": 4096,
+        "crc32": 1
+      },
+      "catalog": {
+        "final_path": "F:/Build/game.catalog.json",
+        "staged_path": "F:/Build/game.catalog.json.staged",
+        "published": false,
+        "catalog_digest": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "manifest": {
+        "requested": false,
+        "emitted": false,
+        "final_path": null,
+        "staged_path": null,
+        "published": false
+      },
+      "report": {
+        "final_path": "F:/Build/game.report.json"
+      }
+    },
+    "summary": {
+      "diagnostics_info": 0,
+      "diagnostics_warning": 0,
+      "diagnostics_error": 0,
+      "assets_processed": 1,
+      "resources_processed": 0,
+      "patch_created": 0,
+      "patch_replaced": 0,
+      "patch_deleted": 0,
+      "patch_unchanged": 0,
+      "patch_deleted_textures": 0,
+      "crc_computed": true
+    },
+    "telemetry": {
+      "time_ms_planning": 1.0,
+      "time_ms_writing": 1.0,
+      "time_ms_manifest": null,
+      "time_ms_publish": 0.1,
+      "time_ms_total": 2.1
+    },
+    "diagnostics": [],
+    "publication_issues": [
+      {
+        "code": "paktool.publish.restore_failed",
+        "message": "Failed to restore the backup of the pak artifact: access denied"
+      }
+    ],
+    "error": {
+      "code": "paktool.publish.rename_failed",
+      "message": "Failed to publish staged catalog artifact.",
+      "path": null
+    },
+    "exit_code": 4,
     "success": false
   })",
       true,
@@ -234,7 +317,7 @@ NOLINT_TEST(PakBuildReportSchemaTest,
   RejectsNonCanonicalRequestFieldsAndUnexpectedProperties)
 {
   const auto doc = json::parse(R"({
-    "schema_version": 5,
+    "schema_version": 6,
     "tool_name": "Oxygen.Cooker.PakTool",
     "tool_version": "0.1.0",
     "command": "patch",
@@ -253,7 +336,6 @@ NOLINT_TEST(PakBuildReportSchemaTest,
       "base_paks": [],
       "dependency_paks": [],
       "options": {
-        "deterministic": true,
         "compute_crc32": true,
         "fail_on_warnings": false,
         "emit_manifest_in_full": false
@@ -282,8 +364,6 @@ NOLINT_TEST(PakBuildReportSchemaTest,
       },
       "report": {
         "final_path": "F:/Build/out.report.json",
-        "staged_path": "F:/Build/out.report.json.tmp",
-        "published": true,
         "unexpected": true
       }
     },
@@ -308,6 +388,8 @@ NOLINT_TEST(PakBuildReportSchemaTest,
       "time_ms_total": 5.0
     },
     "diagnostics": [],
+    "publication_issues": [],
+    "error": null,
     "exit_code": 0,
     "success": true
   })");

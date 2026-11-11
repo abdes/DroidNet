@@ -7,8 +7,8 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
-#include <vector>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -23,7 +23,15 @@ namespace oxygen::content::pak::tool {
 using nlohmann::ordered_json;
 
 //! Version of the `oxygen.pak-build-report` report.
-inline constexpr int kBuildReportSchemaVersion = 5;
+inline constexpr int kBuildReportSchemaVersion = 6;
+
+//! Why a command failed outside the builder's diagnostics: its preparation,
+//! its sealing, a write or a publication.
+struct PakToolCommandError {
+  std::string code;
+  std::string message;
+  std::filesystem::path path;
+};
 
 struct PakToolBuildReportInput {
   std::string tool_version;
@@ -33,6 +41,7 @@ struct PakToolBuildReportInput {
   ArtifactPublicationPlan publication_plan {};
   ArtifactPublicationResult publication_result {};
   pak::PakBuildResult build_result {};
+  std::optional<PakToolCommandError> error;
   int exit_code = 0;
   bool success = false;
 };

@@ -220,7 +220,7 @@ Every new persisted JSON artifact introduced here must have:
 
 ### 5.5 Deterministic Behavior
 
-When `PakBuildOptions::deterministic` is enabled, the tool must preserve:
+Every build is deterministic; no option turns it off. The tool preserves:
 
 - CLI source ordering into `PakBuildRequest`,
 - deterministic catalog/report serialization,
@@ -251,8 +251,11 @@ Release-grade consequence:
 - builder-facing output paths for pak/manifest should be temporary sibling paths
   in the destination directory,
 - the final publish step must happen only after the build result is known,
-- failed builds must not publish catalog/manifest artifacts as authoritative
-  final outputs,
+- a failed build publishes nothing and leaves the earlier pak, catalog and
+  manifest whole, so the final files always form one release,
+- a publication that fails rolls back what it replaced; a backup it cannot
+  restore is kept and reported, never deleted,
+- paths that name one file, relative or absolute, are refused before building,
 - the optional diagnostics/build report is written last, after publication
   outcome is known,
 - best-effort cleanup of temporary files and staged source roots is required.
@@ -325,7 +328,6 @@ CLI option design rule:
 - `--source-key <uuid>` required Parsed through `Uuid::FromString`; must be
   canonical lowercase UUIDv7 text and is persisted in canonical lowercase UUIDv7
   format.
-- `--non-deterministic` Sets `PakBuildOptions::deterministic = false`.
 - `--no-crc32`
 - `--fail-on-warnings`
 - `--quiet`
@@ -498,10 +500,13 @@ Minimum payload:
   - pak path / size / crc information
   - catalog path / catalog digest
   - manifest path when emitted
-  - publication status flags
+  - whether each final file holds the artifact this run staged
 - `summary`
 - `telemetry`
 - `diagnostics`
+- `publication_issues`: the rollback and cleanup steps that failed
+- `error`: the command's own failure (preparation, sealing, a write or the
+  publication), or null
 - `exit_code`
 - `success`
 
@@ -534,10 +539,11 @@ Required flow:
 4. Invoke `PakBuilder` using staged pak/manifest paths and sealed staged source
    roots when present.
 5. Persist the staged catalog output.
-6. If the build result contains errors, do not publish catalog/manifest as final
-   authoritative outputs.
-7. If publication succeeds, replace or publish final targets in a deterministic
-   order.
+6. If the build result contains errors, publish nothing: the final pak, catalog
+   and manifest stay those of the earlier release.
+7. Otherwise replace the final targets in a deterministic order, each final
+   file kept as a backup until all are published; when one fails, restore the
+   backups, and keep and report any backup that cannot be restored.
 8. Emit the optional diagnostics/build report after publication outcome is
    known.
 9. Best-effort delete staged files and staged source roots after success or
@@ -545,8 +551,9 @@ Required flow:
 
 Release blocker:
 
-- The implementation is not production-ready if a failed run can silently leave
-  final catalog/manifest outputs that appear authoritative.
+- The implementation is not production-ready if a run can leave final files of
+  two releases side by side without the report saying so, or delete the only
+  copy of an earlier release.
 
 ## 10. Console UX Contract
 
@@ -686,7 +693,7 @@ Before the task can be called complete:
 3. Run `PakTool patch` using the ordered base PAK inputs.
 4. Verify the emitted catalog and manifest are reusable by subsequent patch
    runs.
-5. Verify failed runs do not publish misleading final sidecars.
+5. Verify failed runs leave the earlier release whole.
 6. Verify mounted patch precedence works both when all sources are mounted
    before load and when a patch is mounted after the base content has already
    been loaded once.
@@ -774,7 +781,7 @@ descriptor decoder.
 ### Ordered layers and patch baselines
 
 Sources are supplied in increasing priority: the last definition of an AssetKey
-wins. Deterministic mode preserves this order and canonicalizes output, never
+wins. Every build preserves this order and canonicalizes output, never
 input priority. Reject duplicate definitions within a layer and incompatible
 asset-type replacements. Resolve logical asset and keyed physics dependencies
 against the effective layers; relocate numeric resource bindings only within the

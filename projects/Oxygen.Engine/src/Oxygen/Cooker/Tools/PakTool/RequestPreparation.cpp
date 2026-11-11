@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -191,10 +192,21 @@ namespace {
     return Result<void, RequestPreparationError>::Ok();
   }
 
+  //! The file `path` names, whatever the spelling: relative to the working
+  //! directory or absolute, through any link to a folder that exists.
   [[nodiscard]] auto NormalizePathKey(const std::filesystem::path& path)
     -> std::string
   {
-    auto key = path.lexically_normal().generic_string();
+    // A relative path stays relative through `weakly_canonical` when none of
+    // it exists: it is made absolute first.
+    auto error = std::error_code {};
+    auto resolved = std::filesystem::absolute(path, error);
+    if (error) {
+      resolved = path;
+    }
+    auto canonical = std::filesystem::weakly_canonical(resolved, error);
+    resolved = error ? resolved.lexically_normal() : std::move(canonical);
+    auto key = resolved.generic_string();
 #ifdef _WIN32
     std::ranges::transform(
       key, key.begin(), [](const unsigned char ch) -> char {
@@ -442,13 +454,16 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       dependency_paks.error());
   }
 
-  const auto publication_plan = MakeArtifactPublicationPlan(
-    options.request.output_pak, options.request.catalog_output,
-    manifest_requested ? std::optional<std::filesystem::path>(manifest_output)
-                       : std::nullopt,
-    options.output.diagnostics_file.empty()
+  const auto publication_plan = MakeArtifactPublicationPlan({
+    .pak = options.request.output_pak,
+    .catalog = options.request.catalog_output,
+    .manifest = manifest_requested
+      ? std::optional<std::filesystem::path>(manifest_output)
+      : std::nullopt,
+    .report = options.output.diagnostics_file.empty()
       ? std::nullopt
-      : std::optional<std::filesystem::path>(options.output.diagnostics_file));
+      : std::optional<std::filesystem::path>(options.output.diagnostics_file),
+  });
 
   auto distinct_paths = std::vector<NamedPath> {};
   distinct_paths.reserve(options.request.sources.size() + base_pak_paths.size()
@@ -511,18 +526,10 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       .path = publication_plan.manifest->backup_path,
     });
   }
-  if (publication_plan.report.has_value()) {
+  if (publication_plan.report_path.has_value()) {
     distinct_paths.push_back(NamedPath {
       .label = "diagnostics-file",
-      .path = publication_plan.report->final_path,
-    });
-    distinct_paths.push_back(NamedPath {
-      .label = "diagnostics-file.staged",
-      .path = publication_plan.report->staged_path,
-    });
-    distinct_paths.push_back(NamedPath {
-      .label = "diagnostics-file.backup",
-      .path = publication_plan.report->backup_path,
+      .path = *publication_plan.report_path,
     });
   }
   if (const auto validated = ValidateDistinctPaths(distinct_paths);
@@ -551,7 +558,6 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     build_request.base_texture_keys.push_back(std::move(base.texture_keys));
   }
   build_request.dependencies = std::move(*dependency_paks);
-  build_request.options.deterministic = options.request.deterministic;
   build_request.options.compute_crc32 = options.request.compute_crc32;
   build_request.options.fail_on_warnings = options.request.fail_on_warnings;
   build_request.options.emit_manifest_in_full

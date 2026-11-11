@@ -192,37 +192,26 @@ namespace {
   }
 
   [[nodiscard]] auto PublicationStateToString(
-    const ArtifactPublicationState& state, const bool is_report)
-    -> std::string_view
+    const ArtifactPublicationState& state) -> std::string_view
   {
-    if (state.publish_requested) {
-      if (state.published) {
-        return is_report ? "written" : "published";
-      }
-      return "failed";
+    if (state.published) {
+      return "published";
     }
-    if (state.removed_stale_final) {
-      return "suppressed";
+    if (state.restored_backup) {
+      return "rolled_back";
     }
-    return "skipped";
+    return state.publish_requested ? "failed" : "skipped";
   }
 
   [[nodiscard]] auto FormatPublicationSummary(
     const ArtifactPublicationResult& publication_result) -> std::string
   {
     auto out = std::ostringstream {};
-    out << "pak=" << PublicationStateToString(publication_result.pak, false)
-        << " catalog="
-        << PublicationStateToString(publication_result.catalog, false)
+    out << "pak=" << PublicationStateToString(publication_result.pak)
+        << " catalog=" << PublicationStateToString(publication_result.catalog)
         << " manifest=";
     if (publication_result.manifest.has_value()) {
-      out << PublicationStateToString(*publication_result.manifest, false);
-    } else {
-      out << "not_requested";
-    }
-    out << " report=";
-    if (publication_result.report.has_value()) {
-      out << PublicationStateToString(*publication_result.report, true);
+      out << PublicationStateToString(*publication_result.manifest);
     } else {
       out << "not_requested";
     }
@@ -295,6 +284,9 @@ namespace {
     writer.Report("paktool.timing_ms", FormatTelemetry(result));
     writer.Report("paktool.publication",
       FormatPublicationSummary(result.publication_result));
+    for (const auto& issue : result.publication_result.issues) {
+      writer.Warning(issue.code, issue.message);
+    }
 
     auto result_summary = std::ostringstream {};
     result_summary << "build=" << BuildOutcomeName(result.exit_code)

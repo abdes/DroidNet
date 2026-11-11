@@ -10,7 +10,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 5
+      "const": 6
     },
     "tool_name": {
       "type": "string",
@@ -46,6 +46,16 @@
         "$ref": "#/definitions/diagnostic"
       }
     },
+    "publication_issues": {
+      "description": "The rollback and cleanup steps of the publication that failed, in order.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/publication_issue"
+      }
+    },
+    "error": {
+      "$ref": "#/definitions/command_error"
+    },
     "exit_code": {
       "type": "integer",
       "minimum": 0,
@@ -66,6 +76,8 @@
     "summary",
     "telemetry",
     "diagnostics",
+    "publication_issues",
+    "error",
     "exit_code",
     "success"
   ],
@@ -89,22 +101,39 @@
       "type": ["number", "null"],
       "minimum": 0
     },
-    "publishable_artifact": {
+    "publication_issue": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "final_path": {
+        "code": {
           "type": "string",
           "minLength": 1
         },
-        "staged_path": {
-          "$ref": "#/definitions/path_or_null"
-        },
-        "published": {
-          "type": "boolean"
+        "message": {
+          "type": "string",
+          "minLength": 1
         }
       },
-      "required": ["final_path", "staged_path", "published"]
+      "required": ["code", "message"]
+    },
+    "command_error": {
+      "description": "Why the command failed outside the builder's diagnostics: its preparation, its sealing, a write or the publication; null when it did not.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "$ref": "#/definitions/path_or_null"
+        }
+      },
+      "required": ["code", "message", "path"]
     },
     "request_source": {
       "type": "object",
@@ -125,9 +154,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "deterministic": {
-          "type": "boolean"
-        },
         "compute_crc32": {
           "type": "boolean"
         },
@@ -138,12 +164,7 @@
           "type": "boolean"
         }
       },
-      "required": [
-        "deterministic",
-        "compute_crc32",
-        "fail_on_warnings",
-        "emit_manifest_in_full"
-      ]
+      "required": ["compute_crc32", "fail_on_warnings", "emit_manifest_in_full"]
     },
     "request": {
       "type": "object",
@@ -286,7 +307,16 @@
       ]
     },
     "report_artifact": {
-      "$ref": "#/definitions/publishable_artifact"
+      "description": "The report itself, written after the other artifacts are published.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "final_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["final_path"]
     },
     "artifacts": {
       "type": "object",
