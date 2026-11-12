@@ -24,7 +24,8 @@ anything.
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | R1 to R9, R11, R12, R16                | Remediated, from their commits. R1, R2 and R7 have no written record of which findings closed, and findings were not rechecked one by one.        |
 | R15                                    | Prompt issued; no report or remediation found.                                                                                                    |
-| R13, R10, R14, R17                     | Not reviewed.                                                                                                                                     |
+| R13                                    | Remediated: 43c5aadeb, a64cf7359, b929df861. Deferred: #132 to #137.                                                                              |
+| R10, R14, R17                          | Not reviewed.                                                                                                                                     |
 | Texture slots S1 to S4                 | Committed. #113 and #107 close at the merge to `master`.                                                                                          |
 | Portable references S0 to S13          | Committed. S7 to S9 listed failures owned by later slices.                                                                                        |
 | Portable references S14, S15           | Committed, not proven. Their window lanes have not run, and Retarget has not been confirmed in the editor.                                        |
