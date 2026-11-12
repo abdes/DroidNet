@@ -51,6 +51,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneScripts.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -480,6 +481,12 @@ auto WorkDispatcher::EmitScenePayload(ScenePipeline::WorkResult result) -> bool
   AddDiagnostics(session_, std::move(result.diagnostics));
 
   auto& cooked = *result.cooked;
+  // The scene keeps the scripts its scripting sidecars gave the scene it
+  // replaces.
+  if (!internal::KeepListedSceneScripts(session_, cooked.scene_key,
+        result.source_id, cooked.descriptor_bytes, cooked.references)) {
+    return false;
+  }
   auto& emitter = session_.AssetEmitter();
   try {
     const auto emit_start = std::chrono::steady_clock::now();

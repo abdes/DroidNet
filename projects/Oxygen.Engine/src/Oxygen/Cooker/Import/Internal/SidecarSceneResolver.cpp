@@ -69,15 +69,12 @@ namespace {
       return std::nullopt;
     }
 
-    const auto environment_offset = descriptor_bytes.size()
-      - scene_asset->GetEnvironmentBlockHeader().byte_size;
     auto state = ResolvedSceneState {
       .scene_key = scene_key,
       .scene_virtual_path = std::move(scene_virtual_path),
       .scene_descriptor_relpath = std::move(scene_descriptor_relpath),
       .source_scene_descriptor = std::move(descriptor_bytes),
       .references = std::move(references),
-      .environment_offset = environment_offset,
       .node_count = static_cast<uint32_t>(scene_asset->GetNodes().size()),
       .node_layout_hash = data::ComputeNodeLayoutHash(scene_asset->GetNodes()),
       .existing_scripting_components = {},

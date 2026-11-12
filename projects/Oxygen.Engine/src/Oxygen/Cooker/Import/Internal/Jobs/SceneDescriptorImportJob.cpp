@@ -43,6 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/ScenePhysicsFollowers.h>
+#include <Oxygen/Cooker/Import/Internal/SceneScripts.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
@@ -1241,6 +1242,15 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto& cooked = *result.cooked;
+  // The scene keeps the scripts its scripting sidecars gave the scene it
+  // replaces.
+  if (!internal::KeepListedSceneScripts(session, cooked.scene_key,
+        Request().source_path.string(), cooked.descriptor_bytes,
+        cooked.references)) {
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Scene descriptor import failed");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
   const auto in_flight = ImportRequest::InflightSceneContext {
     .scene_key = cooked.scene_key,
     .virtual_path = cooked.virtual_path,
@@ -1310,7 +1320,9 @@ auto SceneDescriptorImportJob::CookPhysicsFollowers(ImportSession& session,
     if (Request().source_mounts != nullptr) {
       located = Request().source_mounts->LocateSource(
         CommittedPath {
-          .text = follower.source_mount_path, .json_pointer = {} },
+          .text = follower.source_mount_path,
+          .json_pointer = {},
+        },
         findings);
     }
     if (!located.has_value()) {

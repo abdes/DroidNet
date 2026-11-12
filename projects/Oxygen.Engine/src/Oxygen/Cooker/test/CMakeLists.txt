@@ -245,6 +245,7 @@ oxygen_cooker_test(
     "Import/Jobs/PhysicsSidecarImportJob_functional_test.cpp"
     "Import/Jobs/SceneDescriptorImportJob_functional_test.cpp"
     "Import/Jobs/ScenePhysicsFollow_functional_test.cpp"
+    "Import/Jobs/SceneScriptsFollow_functional_test.cpp"
     "Import/Jobs/ScriptAssetImportJob_functional_test.cpp"
     "Import/Jobs/ScriptImportTestSupport.h"
     "Import/Jobs/ScriptingSidecarImportJob_binding_functional_test.cpp"

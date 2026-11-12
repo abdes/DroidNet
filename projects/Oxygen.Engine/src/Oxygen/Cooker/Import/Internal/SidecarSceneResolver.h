@@ -46,7 +46,6 @@ struct ResolvedSceneState final {
   std::string scene_descriptor_relpath;
   std::vector<std::byte> source_scene_descriptor;
   data::AssetReferences references;
-  size_t environment_offset = 0;
   uint32_t node_count = 0;
   //! The layout hash of its nodes (`data::ComputeNodeLayoutHash`).
   data::pak::core::ContentHashDigest node_layout_hash {};

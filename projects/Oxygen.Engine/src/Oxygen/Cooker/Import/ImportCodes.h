@@ -438,6 +438,12 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kScenePruningReparentSkipped = "scene.pruning.reparent_skipped";
   inline constexpr std::string_view kScenePruningSingular = "scene.pruning.singular";
   inline constexpr std::string_view kSceneRequestMissing = "scene.request_missing";
+  //! A re-cooked scene keeps the scripts of the scene it replaces on the same
+  //! nodes; these name what it cannot keep, and a failure to keep them.
+  inline constexpr std::string_view kSceneScriptsCarryFailed = "scene.scripts.carry_failed";
+  inline constexpr std::string_view kSceneScriptsChangeNodeMissing = "scene.scripts.change_node_missing";
+  inline constexpr std::string_view kSceneScriptsNodeMissing = "scene.scripts.node_missing";
+  inline constexpr std::string_view kSceneScriptsNodeValueMissing = "scene.scripts.node_value_missing";
   inline constexpr std::string_view kSceneSerializeFailed = "scene.serialize_failed";
   inline constexpr std::string_view kSceneStageFailed = "scene.stage_failed";
   inline constexpr std::string_view kSceneStartingCameraNotACamera = "scene.starting_camera.not_a_camera";

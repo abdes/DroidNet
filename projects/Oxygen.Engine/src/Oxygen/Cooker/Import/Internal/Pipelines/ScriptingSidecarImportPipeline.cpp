@@ -14,7 +14,6 @@
 #include <exception>
 #include <expected>
 #include <filesystem>
-#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
@@ -45,8 +44,8 @@
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
-#include <Oxygen/Cooker/Import/Internal/NodePathTable.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneScripts.h>
 #include <Oxygen/Cooker/Import/Internal/ScriptingSidecarSource.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
@@ -54,7 +53,6 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -123,17 +121,9 @@ namespace {
   using SidecarBindingRow = ScriptingSidecarBindingRow;
   using SidecarInstanceRow = ScriptingSidecarInstanceRow;
   using SidecarDocument = ScriptingSidecarDocument;
-
-  //! One change of a script parameter of an instanced node.
-  struct InstanceParamChange final {
-    uint32_t node_index = 0;
-    std::vector<data::NodeId> node_path;
-    data::ScriptSlotId slot_id;
-    SidecarParam param;
-    //! The sidecar location its diagnostics name; empty for a change the
-    //! scene already holds.
-    std::string json_pointer;
-  };
+  using internal::InstanceParamChange;
+  using internal::SceneScriptData;
+  using internal::SlotWithParams;
 
   //! Cooked scenes by key.
   using SceneMap = std::unordered_map<data::AssetKey,
@@ -143,441 +133,6 @@ namespace {
   //! an instanced scene runs.
   using ScriptDeclarationMap
     = std::map<data::AssetKey, std::vector<SidecarParam>>;
-
-  struct SlotWithParams final {
-    data::pak::scripting::ScriptSlotRecord slot = {};
-    std::vector<SidecarParam> params;
-  };
-
-  struct SceneScriptData final {
-    std::vector<script::ScriptingComponentRecord> components;
-    std::vector<data::pak::scripting::ScriptSlotRecord> slots;
-    std::vector<SidecarParam> params;
-    //! Sorted by node, path, slot and key.
-    std::vector<InstanceParamChange> instance_changes;
-  };
-
-  //! Decodes a cooked record with the string table of its descriptor, and the
-  //! path of a node value of `scene`, when the record belongs to one.
-  /*!
-   @return The parameter, or nullopt when its key or value is not in the table.
-  */
-  auto DecodeParam(const data::pak::scripting::ScriptParamRecord& record,
-    const data::DescriptorStrings& strings,
-    const data::SceneAsset* scene = nullptr) -> std::optional<SidecarParam>
-  {
-    const auto key = data::TryGetScriptParamKey(record, strings);
-    if (!key) {
-      return std::nullopt;
-    }
-    auto param = SidecarParam { .record = record, .key = std::string { *key } };
-    if (scene != nullptr
-      && record.type == data::pak::scripting::ScriptParamType::kNode
-      && record.value.as_node.node_index != script::kUnsetNodeParam) {
-      param.node_path = scene->GetNodePath(record.value.as_node);
-    }
-    if (record.type == data::pak::scripting::ScriptParamType::kString) {
-      const auto value = strings.TryGet(record.value.as_string_offset);
-      if (!value) {
-        return std::nullopt;
-      }
-      param.string_value = std::string { *value };
-    }
-    return param;
-  }
-
-  class SceneDescriptorPatcher final {
-  public:
-    SceneDescriptorPatcher(const SidecarResolvedSceneState& scene_state,
-      const data::SceneAsset& scene, const SceneScriptData& scripts)
-      : source_descriptor_(scene_state.source_scene_descriptor)
-      , scripts_(&scripts)
-      , scene_(&scene)
-      , environment_offset_(scene_state.environment_offset)
-    {
-    }
-
-    auto Patch(std::vector<std::byte>& patched_descriptor, std::string& error)
-      -> bool
-    {
-      if (!ValidateAndParseSource(error)) {
-        return false;
-      }
-      if (!CollectExistingComponentPayloads(error)) {
-        return false;
-      }
-      AppendScriptingComponentPayload();
-      CaptureTrailingBytes();
-      return SerializePatchedDescriptor(patched_descriptor, error);
-    }
-
-  private:
-    struct ComponentPayload final {
-      uint32_t component_type = 0;
-      uint32_t entry_size = 0;
-      std::vector<std::byte> bytes;
-    };
-
-    [[nodiscard]] auto RangeOk(const uint64_t offset, const uint64_t size) const
-      -> bool
-    {
-      return offset <= source_descriptor_.size()
-        && size <= (source_descriptor_.size() - offset);
-    }
-
-    auto ValidateAndParseSource(std::string& error) -> bool
-    {
-      using world::SceneAssetDesc;
-
-      if (source_descriptor_.size() < sizeof(SceneAssetDesc)) {
-        error = "Scene descriptor is smaller than SceneAssetDesc";
-        return false;
-      }
-
-      std::memcpy(
-        &source_desc_, source_descriptor_.data(), sizeof(source_desc_));
-
-      node_table_size_ = static_cast<uint64_t>(source_desc_.nodes.count)
-        * static_cast<uint64_t>(source_desc_.nodes.entry_size);
-      if (!RangeOk(source_desc_.nodes.offset, node_table_size_)) {
-        error = "Scene node table range is invalid";
-        return false;
-      }
-
-      try {
-        source_strings_ = data::DescriptorStrings::FromDescriptor(
-          source_descriptor_, source_desc_.header.strings);
-      } catch (const std::invalid_argument&) {
-        error = "Scene string table range is invalid";
-        return false;
-      }
-
-      payload_end_ = static_cast<uint64_t>(sizeof(SceneAssetDesc));
-      payload_end_ = (std::max)(payload_end_,
-        source_desc_.nodes.offset + node_table_size_);
-      payload_end_ = (std::max)(payload_end_,
-        uint64_t { source_desc_.header.strings.offset }
-          + source_desc_.header.strings.size);
-      return true;
-    }
-
-    auto CollectExistingComponentPayloads(std::string& error) -> bool
-    {
-      using data::ComponentType;
-      using world::SceneComponentTableDesc;
-
-      if (source_desc_.component_table_count == 0U) {
-        return true;
-      }
-
-      const auto directory_size
-        = static_cast<uint64_t>(source_desc_.component_table_count)
-        * sizeof(SceneComponentTableDesc);
-      if (!RangeOk(
-            source_desc_.component_table_directory_offset, directory_size)) {
-        error = "Scene component directory range is invalid";
-        return false;
-      }
-
-      payload_end_ = (std::max)(payload_end_,
-        source_desc_.component_table_directory_offset + directory_size);
-
-      for (uint32_t i = 0; i < source_desc_.component_table_count; ++i) {
-        const auto dir_offset
-          = static_cast<size_t>(source_desc_.component_table_directory_offset)
-          + (static_cast<size_t>(i) * sizeof(SceneComponentTableDesc));
-        auto entry = SceneComponentTableDesc {};
-        std::memcpy(
-          &entry, source_descriptor_.subspan(dir_offset).data(), sizeof(entry));
-
-        if (entry.table.count == 0U) {
-          continue;
-        }
-
-        const auto table_size = static_cast<uint64_t>(entry.table.count)
-          * static_cast<uint64_t>(entry.table.entry_size);
-        if (!RangeOk(entry.table.offset, table_size)) {
-          error = "Scene component table range is invalid";
-          return false;
-        }
-        payload_end_
-          = (std::max)(payload_end_, entry.table.offset + table_size);
-
-        // The patch writes the scripting tables and the node paths again,
-        // with only the paths something still names.
-        const auto component_type
-          = static_cast<ComponentType>(entry.component_type);
-        if (component_type == ComponentType::kScripting
-          || component_type == ComponentType::kScriptParamOverride
-          || component_type == ComponentType::kNodePath
-          || component_type == ComponentType::kNodePathElement) {
-          continue;
-        }
-        if (component_type == ComponentType::kOverride) {
-          AppendOverridePayload();
-          continue;
-        }
-
-        auto payload = ComponentPayload {
-          .component_type = entry.component_type,
-          .entry_size = entry.table.entry_size,
-          .bytes = {},
-        };
-        payload.bytes.resize(static_cast<size_t>(table_size));
-        std::memcpy(payload.bytes.data(),
-          source_descriptor_.subspan(static_cast<size_t>(entry.table.offset))
-            .data(),
-          payload.bytes.size());
-        component_payloads_.push_back(std::move(payload));
-      }
-
-      return true;
-    }
-
-    auto AppendScriptingComponentPayload() -> void
-    {
-      using data::ComponentType;
-      if (scripts_->components.empty()) {
-        return;
-      }
-
-      auto payload = ComponentPayload {
-        .component_type = static_cast<uint32_t>(ComponentType::kScripting),
-        .entry_size = sizeof(script::ScriptingComponentRecord),
-        .bytes = {},
-      };
-      payload.bytes.resize(
-        scripts_->components.size() * sizeof(script::ScriptingComponentRecord));
-      std::memcpy(payload.bytes.data(), scripts_->components.data(),
-        payload.bytes.size());
-      component_payloads_.push_back(std::move(payload));
-    }
-
-    //! The scene's overrides, naming their node paths in the patch's table
-    //! and ordered as the scene requires.
-    auto AppendOverridePayload() -> void
-    {
-      const auto source = scene_->GetComponents<world::OverrideRecord>();
-      auto overrides
-        = std::vector<world::OverrideRecord>(source.begin(), source.end());
-      for (auto& record : overrides) {
-        if (record.target.node_path != world::kNoNodePath) {
-          record.target.node_path
-            = node_paths_.Intern(scene_->GetNodePath(record.target));
-        }
-      }
-      std::ranges::sort(
-        overrides, {}, [](const world::OverrideRecord& record) -> auto {
-          return std::tie(record.target, record.override_id, record.part_id);
-        });
-      AppendPayload(data::ComponentType::kOverride,
-        std::span<const world::OverrideRecord>(overrides));
-    }
-
-    template <typename Record>
-    auto AppendPayload(
-      const data::ComponentType type, std::span<const Record> records) -> void
-    {
-      if (records.empty()) {
-        return;
-      }
-      const auto bytes = std::as_bytes(records);
-      component_payloads_.push_back({
-        .component_type = static_cast<uint32_t>(type),
-        .entry_size = sizeof(Record),
-        .bytes = { bytes.begin(), bytes.end() },
-      });
-    }
-
-    //! The record of `param` with its strings in `strings` and its node path
-    //! in the scene's paths.
-    auto WriteParam(const SidecarParam& param,
-      data::DescriptorStringsBuilder& strings) -> script::ScriptParamRecord
-    {
-      auto record = param.record;
-      record.key_offset = strings.Add(param.key);
-      if (record.type == script::ScriptParamType::kString) {
-        record.value.as_string_offset = strings.Add(param.string_value);
-      }
-      if (record.type == script::ScriptParamType::kNode
-        && !param.node_path.empty()) {
-        record.value.as_node.node_path = node_paths_.Intern(param.node_path);
-      }
-      return record;
-    }
-
-    auto CaptureTrailingBytes() -> void
-    {
-      const auto trailing = source_descriptor_.subspan(environment_offset_);
-      trailing_bytes_.assign(trailing.begin(), trailing.end());
-    }
-
-    auto SerializePatchedDescriptor(
-      std::vector<std::byte>& patched_descriptor, std::string& error) -> bool
-    {
-      using world::SceneComponentTableDesc;
-
-      auto out = std::vector<std::byte> {};
-      out.resize(sizeof(world::SceneAssetDesc));
-
-      auto desc = source_desc_;
-      desc.nodes.offset = sizeof(world::SceneAssetDesc);
-      const auto scene_strings_offset
-        = uint64_t { desc.nodes.offset } + node_table_size_;
-      if (scene_strings_offset
-        > std::numeric_limits<data::pak::core::StringTableOffsetT>::max()) {
-        error = "Scene string table offset overflow";
-        return false;
-      }
-
-      // The slot parameters' strings join the scene's string table; existing
-      // strings keep their offsets.
-      auto strings = data::DescriptorStringsBuilder { source_strings_ };
-      auto params = std::vector<script::ScriptParamRecord> {};
-      params.reserve(scripts_->params.size());
-      //! A written change, with its key text for ordering.
-      struct KeyedChange final {
-        script::ScriptParamOverrideRecord record;
-        std::string_view key;
-      };
-      auto keyed = std::vector<KeyedChange> {};
-      keyed.reserve(scripts_->instance_changes.size());
-      try {
-        for (const auto& param : scripts_->params) {
-          params.push_back(WriteParam(param, strings));
-        }
-        for (const auto& change : scripts_->instance_changes) {
-          keyed.push_back({
-            .record = {
-              .target = {
-                .node_index = change.node_index,
-                .node_path = node_paths_.Intern(change.node_path),
-              },
-              .slot_id = change.slot_id,
-              .param = WriteParam(change.param, strings),
-            },
-            .key = change.param.key,
-          });
-        }
-      } catch (const std::length_error& limit) {
-        error = std::string { "Scene tables exceed the format limit: " }
-          + limit.what();
-        return false;
-      }
-      // The scene orders changes by node reference, slot and key; a path's
-      // index is known only once it is interned.
-      std::ranges::sort(keyed, {}, [](const KeyedChange& change) -> auto {
-        return std::tie(
-          change.record.target, change.record.slot_id, change.key);
-      });
-      auto changes = std::vector<script::ScriptParamOverrideRecord> {};
-      changes.reserve(keyed.size());
-      for (const auto& change : keyed) {
-        changes.push_back(change.record);
-      }
-      AppendPayload(data::ComponentType::kScriptParamOverride,
-        std::span<const script::ScriptParamOverrideRecord>(changes));
-      if (desc.starting_camera.node_path != world::kNoNodePath) {
-        desc.starting_camera.node_path
-          = node_paths_.Intern(scene_->GetNodePath(desc.starting_camera));
-      }
-      AppendPayload(data::ComponentType::kNodePath, node_paths_.Records());
-      AppendPayload(
-        data::ComponentType::kNodePathElement, node_paths_.Elements());
-      std::ranges::sort(component_payloads_,
-        [](const ComponentPayload& lhs, const ComponentPayload& rhs) -> bool {
-          return lhs.component_type < rhs.component_type;
-        });
-      desc.header.strings = {
-        .offset = static_cast<data::pak::core::StringTableOffsetT>(
-          scene_strings_offset),
-        .size = strings.Size(),
-      };
-      desc.component_table_directory_offset = 0;
-      desc.component_table_count = 0;
-
-      const auto append_bytes = [&](std::span<const std::byte> bytes) -> void {
-        out.insert(out.end(), bytes.begin(), bytes.end());
-      };
-
-      const auto source = source_descriptor_;
-      append_bytes(
-        source.subspan(static_cast<size_t>(source_desc_.nodes.offset),
-          static_cast<size_t>(node_table_size_)));
-      append_bytes(strings.Bytes());
-
-      if (!component_payloads_.empty()) {
-        desc.component_table_directory_offset = out.size();
-        desc.component_table_count
-          = static_cast<uint32_t>(component_payloads_.size());
-
-        const auto directory_size
-          = component_payloads_.size() * sizeof(SceneComponentTableDesc);
-        const auto directory_offset = out.size();
-        out.resize(out.size() + directory_size);
-
-        auto directory = std::vector<SceneComponentTableDesc> {};
-        directory.resize(component_payloads_.size());
-        for (size_t i = 0; i < component_payloads_.size(); ++i) {
-          auto& entry = directory.at(i);
-          entry.component_type = component_payloads_.at(i).component_type;
-          entry.table.entry_size = component_payloads_.at(i).entry_size;
-          entry.table.count
-            = static_cast<uint32_t>(component_payloads_.at(i).entry_size == 0U
-                ? 0U
-                : component_payloads_.at(i).bytes.size()
-                  / component_payloads_.at(i).entry_size);
-          entry.table.offset = out.size();
-          append_bytes(component_payloads_.at(i).bytes);
-        }
-
-        std::memcpy(std::span(out).subspan(directory_offset).data(),
-          directory.data(), directory_size);
-      }
-
-      desc.script_slots = {};
-      if (!scripts_->slots.empty()) {
-        if (scripts_->slots.size() > std::numeric_limits<uint32_t>::max()) {
-          error = "Scene script slot count exceeds the format limit";
-          return false;
-        }
-        desc.script_slots = {
-          .offset = out.size(),
-          .count = static_cast<uint32_t>(scripts_->slots.size()),
-          .entry_size = sizeof(script::ScriptSlotRecord),
-        };
-        auto slots = scripts_->slots;
-        const auto parameter_base
-          = out.size() + (slots.size() * sizeof(script::ScriptSlotRecord));
-        for (auto& slot : slots) {
-          if (slot.params_count != 0U) {
-            slot.params_array_offset += parameter_base;
-          } else {
-            slot.params_array_offset = 0;
-          }
-        }
-        append_bytes(std::as_bytes(std::span(slots)));
-        append_bytes(std::as_bytes(std::span(params)));
-      }
-      append_bytes(trailing_bytes_);
-
-      std::memcpy(out.data(), &desc, sizeof(desc));
-      patched_descriptor = std::move(out);
-      return true;
-    }
-
-    std::span<const std::byte> source_descriptor_;
-    observer_ptr<const SceneScriptData> scripts_;
-    observer_ptr<const data::SceneAsset> scene_;
-    size_t environment_offset_;
-    world::SceneAssetDesc source_desc_ {};
-    data::DescriptorStrings source_strings_;
-    uint64_t node_table_size_ = 0;
-    uint64_t payload_end_ = 0;
-    std::vector<ComponentPayload> component_payloads_;
-    std::vector<std::byte> trailing_bytes_;
-    internal::NodePathTable node_paths_;
-  };
 
   struct MountedAsset final {
     observer_ptr<const internal::MountedCookedSource> context;
@@ -643,7 +198,7 @@ namespace {
       records.size() * sizeof(script::ScriptParamRecord));
     declarations.reserve(records.size());
     for (const auto& record : records) {
-      auto declaration = DecodeParam(record, strings);
+      auto declaration = internal::DecodeScriptParam(record, strings);
       if (!declaration) {
         return std::nullopt;
       }
@@ -785,123 +340,6 @@ namespace {
     }
   }
 
-  auto BuildBindingsByNodeFromComponents(const data::SceneAsset& scene)
-    -> std::map<uint32_t, std::vector<SlotWithParams>>
-  {
-    std::map<uint32_t, std::vector<SlotWithParams>> bindings;
-    for (const auto& component :
-      scene.GetComponents<script::ScriptingComponentRecord>()) {
-      auto& slots = bindings[component.node_index];
-      for (const auto& slot : scene.ReadScriptSlots(
-             component.slot_start_index, component.slot_count)) {
-        auto params = std::vector<SidecarParam> {};
-        for (const auto& record : scene.ReadScriptParameters(slot)) {
-          auto param = DecodeParam(record, scene.GetStrings(), &scene);
-          if (!param) {
-            throw std::runtime_error(
-              "scene script parameter has an invalid key or value");
-          }
-          params.push_back(std::move(*param));
-        }
-        slots.push_back({
-          .slot = slot,
-          .params = std::move(params),
-        });
-      }
-    }
-    return bindings;
-  }
-
-  //! The scene's changes of the script parameters of instanced nodes.
-  auto CollectInstanceChanges(const data::SceneAsset& scene)
-    -> std::vector<InstanceParamChange>
-  {
-    auto changes = std::vector<InstanceParamChange> {};
-    for (const auto& record :
-      scene.GetComponents<script::ScriptParamOverrideRecord>()) {
-      auto param = DecodeParam(record.param, scene.GetStrings(), &scene);
-      if (!param) {
-        throw std::runtime_error(
-          "scene script parameter change has an invalid key or value");
-      }
-      changes.push_back({
-        .node_index = record.target.node_index,
-        .node_path = scene.GetNodePath(record.target),
-        .slot_id = record.slot_id,
-        .param = std::move(*param),
-      });
-    }
-    return changes;
-  }
-
-  auto SerializeBindingsByNode(ImportSession& session,
-    const ImportRequest& request,
-    const std::map<uint32_t, std::vector<SlotWithParams>>& bindings)
-    -> std::optional<SceneScriptData>
-  {
-    using data::pak::core::OffsetT;
-
-    auto serialized = SceneScriptData {};
-    for (const auto& [node_index, slots] : bindings) {
-      if (slots.empty()) {
-        continue;
-      }
-      if (serialized.slots.size() > std::numeric_limits<uint32_t>::max()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(import_codes::kScriptSidecarSlotCountOverflow),
-          "Scripting slot count exceeded uint32 limits");
-        return std::nullopt;
-      }
-      if (slots.size() > std::numeric_limits<uint32_t>::max()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(import_codes::kScriptSidecarSlotCountOverflow),
-          "One scene node has too many script slots");
-        return std::nullopt;
-      }
-
-      if (slots.size()
-        > std::numeric_limits<uint32_t>::max() - serialized.slots.size()) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          std::string(import_codes::kScriptSidecarSlotCountOverflow),
-          "Scene has too many script slots");
-        return std::nullopt;
-      }
-      serialized.components.push_back({
-        .node_index = node_index,
-        .flags = script::ScriptingComponentFlags::kNone,
-        .slot_start_index = static_cast<uint32_t>(serialized.slots.size()),
-        .slot_count = static_cast<uint32_t>(slots.size()),
-      });
-
-      for (const auto& slot_payload : slots) {
-        auto slot = slot_payload.slot;
-        const auto param_offset = uint64_t { serialized.params.size() }
-          * sizeof(script::ScriptParamRecord);
-        if (param_offset > std::numeric_limits<OffsetT>::max()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            std::string(import_codes::kScriptSidecarParamOffsetOverflow),
-            "Script param offset exceeded OffsetT limits");
-          return std::nullopt;
-        }
-        if (slot_payload.params.size() > std::numeric_limits<uint32_t>::max()) {
-          AddDiagnostic(session, request, ImportSeverity::kError,
-            std::string(import_codes::kScriptSidecarParamCountOverflow),
-            "Script param count exceeded uint32 limits");
-          return std::nullopt;
-        }
-        slot.params_array_offset = slot_payload.params.empty()
-          ? 0U
-          : static_cast<OffsetT>(param_offset);
-        slot.params_count = static_cast<uint32_t>(slot_payload.params.size());
-        serialized.slots.push_back(slot);
-        serialized.params.insert(serialized.params.end(),
-          slot_payload.params.begin(), slot_payload.params.end());
-      }
-    }
-
-    return serialized;
-  }
-
   class SceneScriptBuilder final {
   public:
     SceneScriptBuilder(ImportSession& session, const ImportRequest& request,
@@ -924,7 +362,7 @@ namespace {
     {
       using data::pak::core::OffsetT;
 
-      auto merged_bindings = BuildBindingsByNodeFromComponents(*scene_);
+      auto merged_bindings = internal::ReadSceneScriptBindings(*scene_);
 
       auto incoming_bindings
         = std::map<uint32_t, std::vector<SlotWithParams>> {};
@@ -1000,12 +438,15 @@ namespace {
       if (!changes) {
         return std::nullopt;
       }
-      auto serialized
-        = SerializeBindingsByNode(*session_, *request_, merged_bindings);
-      if (serialized) {
-        serialized->instance_changes = std::move(*changes);
+      auto serialized = internal::SerializeSceneScriptBindings(merged_bindings);
+      if (!serialized.has_value()) {
+        AddDiagnostic(*session_, *request_, ImportSeverity::kError,
+          std::string(serialized.error().code),
+          std::move(serialized.error().message));
+        return std::nullopt;
       }
-      return serialized;
+      serialized->instance_changes = std::move(*changes);
+      return std::move(*serialized);
     }
 
   private:
@@ -1052,7 +493,7 @@ namespace {
       for (const auto& row : parsed_->instance_rows) {
         roots.insert(row.node_index);
       }
-      for (auto& change : CollectInstanceChanges(*scene_)) {
+      for (auto& change : internal::ReadSceneInstanceChanges(*scene_)) {
         if (!roots.contains(change.node_index)) {
           changes.push_back(std::move(change));
         }
@@ -1424,17 +865,15 @@ namespace {
     const data::SceneAsset& scene, const SceneScriptData& scripts)
     -> std::optional<std::vector<std::byte>>
   {
-    auto patched_scene_bytes = std::vector<std::byte> {};
-    auto patch_error = std::string {};
-    auto patcher = SceneDescriptorPatcher(scene_state, scene, scripts);
-    if (!patcher.Patch(patched_scene_bytes, patch_error)) {
+    auto patched = internal::PatchSceneScripts(
+      scene_state.source_scene_descriptor, scene, scripts);
+    if (!patched.has_value()) {
       AddDiagnostic(session, request, ImportSeverity::kError,
         std::string(import_codes::kScriptSidecarScenePatchFailed),
-        std::move(patch_error));
+        std::move(patched.error()));
       return std::nullopt;
     }
-
-    return patched_scene_bytes;
+    return std::move(*patched);
   }
 
   //! Asset keys the scene's previous script slots contributed, other than
@@ -1466,14 +905,14 @@ namespace {
     }
 
     auto keys = std::set<data::AssetKey> {};
-    for (const auto& change : CollectInstanceChanges(scene)) {
+    for (const auto& change : internal::ReadSceneInstanceChanges(scene)) {
       if (change.param.record.type == script::ScriptParamType::kAsset
         && !component_keys.contains(change.param.record.value.as_asset.key)) {
         keys.insert(change.param.record.value.as_asset.key);
       }
     }
     for (const auto& slots :
-      BuildBindingsByNodeFromComponents(scene) | std::views::values) {
+      internal::ReadSceneScriptBindings(scene) | std::views::values) {
       for (const auto& slot : slots) {
         for (const auto& param : slot.params) {
           if (param.record.type == script::ScriptParamType::kAsset
@@ -1502,20 +941,7 @@ namespace {
             || (reference.expected_type != data::AssetType::kScript
               && !previous_param_keys.contains(reference.key));
         });
-      for (const auto& slot : scripts.slots) {
-        references.AddAsset(slot.script_asset_key, data::AssetType::kScript);
-      }
-      const auto add_asset = [&references](const SidecarParam& param) -> void {
-        const auto& value = param.record.value;
-        if (param.record.type == script::ScriptParamType::kAsset
-          && !value.as_asset.key.IsNil()) {
-          references.AddAsset(value.as_asset.key, value.as_asset.asset_type);
-        }
-      };
-      std::ranges::for_each(scripts.params, add_asset);
-      for (const auto& change : scripts.instance_changes) {
-        add_asset(change.param);
-      }
+      internal::AddSceneScriptReferences(references, scripts);
       co_await session.AssetEmitter().EmitSync(scene_state.scene_key,
         AssetType::kScene, scene_state.scene_virtual_path,
         scene_state.scene_descriptor_relpath, patched_scene_bytes,

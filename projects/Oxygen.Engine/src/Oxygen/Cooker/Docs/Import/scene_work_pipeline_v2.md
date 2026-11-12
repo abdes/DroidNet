@@ -455,6 +455,33 @@ order. A scene cooked with the same nodes keeps its sidecar as it is, whatever
 else changed: transforms, components, the environment, or the scripts a
 scripting sidecar adds.
 
+### Scripts That Follow Their Scene
+
+A scripting sidecar writes its scripts into the cooked scene descriptor; the
+scene source does not hold them. So every scene cook, from a scene descriptor
+or a model, keeps the scripts of the scene the cooked root lists at its
+identity (`KeepListedSceneScripts` in `SceneScripts.h`) before it emits:
+
+- Script slots, their parameters and the changes of instanced nodes' script
+  parameters move to the same nodes, matched by ID, whatever their index now.
+  A node value names the same node.
+- Scripts of a node the scene no longer holds are dropped, as are changes of
+  such a node; a node value naming such a node is unset. Each is a warning, and
+  the scene cooks:
+
+| Code                                | What the re-cooked scene drops                |
+| ----------------------------------- | --------------------------------------------- |
+| `scene.scripts.node_missing`        | the scripts of a node it no longer holds      |
+| `scene.scripts.change_node_missing` | a change of a node it no longer holds         |
+| `scene.scripts.node_value_missing`  | a node value naming a node it no longer holds |
+
+- A listed scene that cannot be read, or scripts that cannot be written, fail
+  the import with `scene.scripts.carry_failed`.
+
+A sidecar applied again replaces the scripts of each node it binds, so a batch
+that cooks a scene and its scripting sidecar together ends with the sidecar's
+scripts.
+
 ---
 
 ## Separation of Concerns
