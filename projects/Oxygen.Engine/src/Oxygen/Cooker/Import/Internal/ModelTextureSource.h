@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -92,6 +93,17 @@ namespace oxygen::content::import::adapters {
                            : std::move(fallbacks.front());
 }
 
+//! An image whose value a texture takes as its alpha: a model's opacity map
+//! given apart from its base colour.
+struct ModelTextureCoverage final {
+  std::string external_texture_id;
+  const void* source_key = nullptr;
+  std::filesystem::path source_path;
+  bool embedded = false;
+  //! How the image's value becomes the alpha.
+  CoverageMapping mapping {};
+};
+
 //! One texture use, before reading its external file or decoding embedded
 //! bytes.
 struct ModelTextureSource final {
@@ -120,6 +132,9 @@ struct ModelTextureSource final {
     = TexturePipeline::OutputFormatPolicy::kMaterialPreset;
   TexturePipeline::FailurePolicy failure_policy
     = TexturePipeline::FailurePolicy::kStrict;
+  //! The image the texture takes its alpha from, when the model gives it
+  //! apart.
+  std::optional<ModelTextureCoverage> coverage;
 };
 
 struct ModelTexturePreparation final {

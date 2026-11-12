@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -26,6 +27,29 @@ enum class TextureChannel : uint8_t {
   kGreen = 1,
   kBlue = 2,
   kAlpha = 3,
+};
+
+//! How the value of an opacity map becomes the alpha of a texture.
+/*!
+ A map of opacity gives its value as it is. A map of transparency, such as a
+ classic FBX material's, gives one minus its value scaled by the
+ transparency factor beside it. The value is the map's alpha when the map
+ has one, else its red, which holds a grey mask.
+*/
+struct CoverageMapping final {
+  //! What scales the map's value.
+  float factor = 1.0F;
+  //! Whether the map holds transparency, whose complement is the alpha.
+  bool inverted = false;
+
+  auto operator==(const CoverageMapping&) const -> bool = default;
+
+  //! The alpha of the map value `value`, both in [0, 1].
+  [[nodiscard]] constexpr auto Alpha(const float value) const noexcept -> float
+  {
+    const auto scaled = factor * value;
+    return std::clamp(inverted ? 1.0F - scaled : scaled, 0.0F, 1.0F);
+  }
 };
 
 //! Content-semantic intent for texture import.

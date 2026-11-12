@@ -2,6 +2,7 @@
 
 **Status:** Aligned Design (Phase 5)
 **Date:** 2026-01-15
+**Last updated:** 2026-11-12
 **Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
@@ -99,6 +100,7 @@ struct WorkItem {
   uint32_t cubemap_face_size = 0; // Required when equirect_to_cubemap = true
   CubeMapImageLayout cubemap_layout = CubeMapImageLayout::kUnknown;
   SourceContent source;
+  std::optional<CoverageSource> coverage; // Alpha from a second image
 
   // Optional callbacks invoked on the import thread when a worker begins and
   // ends processing this item. Useful for telemetry and tests.
@@ -129,6 +131,17 @@ Notes:
 - `cubemap_layout` enables layout extraction from a single image (auto/strip/
   cross). `kUnknown` disables layout extraction. If both equirect and layout
   flags are set, equirect conversion takes precedence.
+- `coverage` names a second image, such as the opacity map a model gives apart
+  from its base colour, whose value replaces the alpha of a single encoded
+  source: its alpha when a texel of it is not opaque, else its red, which
+  holds a grey mask, turned into alpha by `mapping` (as it is, or one minus
+  it for a transparency map, scaled). It is read like the source, decoded as
+  linear data, and must match the source in size as a single 2D image. The
+  coverage is optional: one that cannot be read, is over the source limit,
+  does not decode, differs in size or accompanies another kind of source warns
+  `import.texture.coverage_unused`, and the texture keeps its own alpha. A
+  model gives such a texture an identity of both images and the mapping, so
+  it cooks apart from the source alone.
 - `output_format_policy` separates three distinct choices:
   - `kPreserveSource`: keep decoded storage format; disable BC7 conversion.
   - `kMaterialPreset`: glTF/FBX role presets choose LDR storage (BC7 sRGB for

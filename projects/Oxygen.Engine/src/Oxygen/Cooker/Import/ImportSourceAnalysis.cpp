@@ -331,14 +331,20 @@ namespace {
     for (const auto& texture : textures.sources) {
       output(product(texture.name, data::kTextureDescriptorExtension),
         Kind::kTexture, false);
-      if (!texture.embedded && !texture.source_path.empty()) {
-        report.files.push_back(
-          { .path = texture.source_path, .required = false });
+      const auto add_file = [&](const std::filesystem::path& path) -> void {
+        report.files.push_back({ .path = path, .required = false });
         for (auto& fallback :
-          adapters::TextureFallbackPaths(input.request, texture.source_path)) {
+          adapters::TextureFallbackPaths(input.request, path)) {
           report.files.push_back(
             { .path = std::move(fallback), .required = false });
         }
+      };
+      if (!texture.embedded && !texture.source_path.empty()) {
+        add_file(texture.source_path);
+      }
+      if (texture.coverage.has_value() && !texture.coverage->embedded
+        && !texture.coverage->source_path.empty()) {
+        add_file(texture.coverage->source_path);
       }
     }
     if constexpr (std::is_same_v<Adapter, adapters::GltfAdapter>) {

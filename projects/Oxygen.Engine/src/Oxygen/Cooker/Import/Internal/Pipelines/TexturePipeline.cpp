@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -30,6 +31,7 @@
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
@@ -42,6 +44,7 @@
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/OxCo/Co.h>
@@ -326,7 +329,68 @@ namespace {
   struct CookOutcome {
     Result<CookedTexturePayload, TextureImportError> cooked;
     std::optional<std::chrono::microseconds> decode_duration;
+    //! What the cook reports besides its result, such as a coverage image it
+    //! could not use.
+    std::vector<ImportDiagnostic> diagnostics;
   };
+
+  //! Reports that the coverage image of the texture `source_id` is not used,
+  //! and why.
+  auto CoverageUnused(const TexturePipeline::CoverageSource& coverage,
+    const std::string_view source_id, const std::string_view why)
+    -> ImportDiagnostic
+  {
+    return MakeWarningDiagnostic(
+      std::string(import_codes::kTextureCoverageUnused),
+      "The coverage image '" + coverage.source_id + "' " + std::string(why)
+        + "; the texture keeps its own alpha",
+      source_id, coverage.source_path.string());
+  }
+
+  //! Replaces the alpha of the decoded `image` with the coverage `coverage`
+  //! holds.
+  /*!
+   The coverage decodes as linear data, whatever the image's colour space.
+   A coverage image that is missing, does not decode or differs in size
+   leaves the image as it is, with a warning in `diagnostics`.
+
+   @return The image in its working format, or why it cannot be converted.
+  */
+  auto ApplyCoverage(ScratchImage&& image,
+    const TexturePipeline::CoverageSource& coverage,
+    const TextureImportDesc& desc, std::vector<ImportDiagnostic>& diagnostics)
+    -> Result<ScratchImage, TextureImportError>
+  {
+    auto working = detail::ConvertToWorkingFormat(std::move(image), desc);
+    if (!working) {
+      return working;
+    }
+    if (coverage.source.bytes.empty()) {
+      diagnostics.push_back(
+        CoverageUnused(coverage, desc.source_id, "cannot be read"));
+      return working;
+    }
+    auto coverage_desc = desc;
+    coverage_desc.source_id = coverage.source_id;
+    coverage_desc.intent = TextureIntent::kOpacity;
+    coverage_desc.source_color_space = ColorSpace::kLinear;
+    coverage_desc.value_channel.reset();
+    auto decoded = detail::DecodeSource(coverage.source.bytes, coverage_desc);
+    if (decoded) {
+      decoded
+        = detail::ConvertToWorkingFormat(std::move(*decoded), coverage_desc);
+    }
+    if (!decoded) {
+      diagnostics.push_back(
+        CoverageUnused(coverage, desc.source_id, "does not decode"));
+      return working;
+    }
+    if (!image::content::ReplaceAlpha(*working, *decoded, coverage.mapping)) {
+      diagnostics.push_back(CoverageUnused(
+        coverage, desc.source_id, "differs from the texture in size"));
+    }
+    return working;
+  }
 
   //! Resolve storage policy after decoding, then apply the existing cooker.
   [[nodiscard]] auto CookDecodedImage(ScratchImage&& image,
@@ -764,14 +828,67 @@ namespace {
       output_format_policy, decode_accum);
   }
 
+  //! Decodes `source`, gives it the alpha `coverage` holds, and cooks it.
+  [[nodiscard]] auto CookWithCoverage(
+    const TexturePipeline::SourceBytes& source,
+    const TexturePipeline::CoverageSource& coverage,
+    const TextureImportDesc& desc, const ITexturePackingPolicy& policy,
+    const TexturePipeline::OutputFormatPolicy output_format_policy)
+    -> CookOutcome
+  {
+    if (source.bytes.empty()) {
+      return {
+        .cooked = Err(TextureImportError::kFileNotFound),
+        .decode_duration = {},
+      };
+    }
+    const auto decode_start = std::chrono::steady_clock::now();
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    auto decoded = detail::DecodeSource(source.bytes, desc);
+    if (decoded) {
+      decoded = ApplyCoverage(std::move(*decoded), coverage, desc, diagnostics);
+    }
+    const auto decode_duration
+      = std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::steady_clock::now() - decode_start);
+    if (!decoded) {
+      return {
+        .cooked = Err(decoded.error()),
+        .decode_duration = decode_duration,
+        .diagnostics = std::move(diagnostics),
+      };
+    }
+    auto outcome = CookDecodedImage(
+      std::move(*decoded), desc, policy, output_format_policy, decode_duration);
+    outcome.diagnostics = std::move(diagnostics);
+    return outcome;
+  }
+
   [[nodiscard]] auto CookFromSourceContent(
-    TexturePipeline::SourceContent source, TextureImportDesc desc,
-    const ITexturePackingPolicy& policy,
+    TexturePipeline::SourceContent source,
+    const std::optional<TexturePipeline::CoverageSource>& coverage,
+    TextureImportDesc desc, const ITexturePackingPolicy& policy,
     const TexturePipeline::OutputFormatPolicy output_format_policy,
     const bool equirect_to_cubemap, const uint32_t cubemap_face_size,
     const CubeMapImageLayout cubemap_layout) -> CookOutcome
   {
     DLOG_F(1, "Cook source content");
+    if (coverage.has_value()) {
+      const auto* bytes = std::get_if<TexturePipeline::SourceBytes>(&source);
+      const auto single_image = bytes != nullptr && !equirect_to_cubemap
+        && cubemap_layout == CubeMapImageLayout::kUnknown;
+      if (single_image) {
+        return CookWithCoverage(
+          *bytes, *coverage, desc, policy, output_format_policy);
+      }
+      const auto source_id = desc.source_id;
+      auto outcome = CookFromSourceContent(std::move(source), std::nullopt,
+        std::move(desc), policy, output_format_policy, equirect_to_cubemap,
+        cubemap_face_size, cubemap_layout);
+      outcome.diagnostics.push_back(CoverageUnused(*coverage, source_id,
+        "applies only to a texture of one encoded image"));
+      return outcome;
+    }
     return std::visit(
       [&](auto& value) -> CookOutcome {
         using ValueT = std::decay_t<decltype(value)>;
@@ -797,8 +914,12 @@ namespace {
     bool too_large = false;
   };
 
-  auto LoadSourceBytesIfNeeded(TexturePipeline::WorkItem& item,
-    const observer_ptr<IAsyncFileReader> reader,
+  //! Reads `path` into `target`, or the first of `fallbacks` that exists
+  //! when it is missing; the texture `source_id` names the diagnostics.
+  auto ReadSourceBytes(TexturePipeline::SourceBytes& target,
+    const std::filesystem::path& path,
+    const std::span<const std::filesystem::path> fallbacks,
+    const std::string& source_id, const observer_ptr<IAsyncFileReader> reader,
     const std::function<void(std::chrono::microseconds)>& on_io_duration)
     -> co::Co<SourceLoad>
   {
@@ -812,28 +933,21 @@ namespace {
     auto load = SourceLoad {};
     auto& diagnostics = load.diagnostics;
 
-    auto* source_bytes
-      = std::get_if<TexturePipeline::SourceBytes>(&item.source);
-    if (source_bytes == nullptr || !source_bytes->bytes.empty()
-      || item.source_path.empty()) {
-      co_return load;
-    }
-
-    const auto source_path_string = item.source_path.string();
+    const auto source_path_string = path.string();
     if (reader == nullptr) {
       diagnostics.push_back(
         MakeErrorDiagnosticMessage(std::string(import_codes::kFileReader),
-          "Import session has no async file reader", item.source_id,
+          "Import session has no async file reader", source_id,
           source_path_string));
       co_return load;
     }
 
     const auto read_start = std::chrono::steady_clock::now();
-    auto read_result = co_await reader.get()->ReadFile(item.source_path);
+    auto read_result = co_await reader.get()->ReadFile(path);
     // An oversized source is not missing: no file found by name stands in.
     if (!read_result.has_value()) {
       if (auto too_large = detail::SourceTooLargeDiagnostic(
-            read_result.error(), item.source_path, reader->SourceLimit())) {
+            read_result.error(), path, reader->SourceLimit())) {
         diagnostics.push_back(std::move(*too_large));
         load.too_large = true;
         co_return load;
@@ -841,14 +955,14 @@ namespace {
     }
     if (!read_result.has_value()
       && read_result.error() != std::errc::operation_canceled) {
-      for (const auto& fallback_path : item.fallback_source_paths) {
+      for (const auto& fallback_path : fallbacks) {
         auto fallback = co_await reader.get()->ReadFile(fallback_path);
         if (fallback.has_value()) {
           diagnostics.push_back(MakeWarningDiagnostic(
             std::string(import_codes::kTextureFoundByName),
             "Texture file is missing; using '" + fallback_path.string()
               + "' instead",
-            item.source_id, source_path_string));
+            source_id, source_path_string));
           read_result = std::move(fallback);
           break;
         }
@@ -863,21 +977,66 @@ namespace {
         + "': " + read_result.error().message();
       diagnostics.push_back(
         MakeWarningDiagnostic(std::string(import_codes::kTextureLoadFailed),
-          message, item.source_id, source_path_string));
+          message, source_id, source_path_string));
       LOG_F(INFO,
         "TexturePipeline::Worker read failed: source_id='{}' path='{}'",
-        item.source_id, source_path_string);
+        source_id, source_path_string);
       co_return load;
     }
 
     auto bytes
       = std::make_shared<serio::ByteBuffer>(std::move(read_result.value()));
-    source_bytes->bytes = std::as_const(*bytes).Bytes();
-    source_bytes->owner = std::static_pointer_cast<const void>(bytes);
+    target.bytes = std::as_const(*bytes).Bytes();
+    target.owner = std::static_pointer_cast<const void>(bytes);
     LOG_F(INFO,
       "TexturePipeline::Worker read ok: source_id='{}' path='{}' bytes={}",
-      item.source_id, source_path_string, bytes->Size().get());
+      source_id, source_path_string, bytes->Size().get());
     co_return load;
+  }
+
+  auto LoadSourceBytesIfNeeded(TexturePipeline::WorkItem& item,
+    const observer_ptr<IAsyncFileReader> reader,
+    const std::function<void(std::chrono::microseconds)>& on_io_duration)
+    -> co::Co<SourceLoad>
+  {
+    auto* source_bytes
+      = std::get_if<TexturePipeline::SourceBytes>(&item.source);
+    if (source_bytes == nullptr || !source_bytes->bytes.empty()
+      || item.source_path.empty()) {
+      co_return SourceLoad {};
+    }
+    co_return co_await ReadSourceBytes(*source_bytes, item.source_path,
+      item.fallback_source_paths, item.source_id, reader, on_io_duration);
+  }
+
+  //! Reads the coverage image of `item`, if it has one to read.
+  /*!
+   The coverage is optional: an image that cannot be read, too large ones
+   included, only costs the texture its coverage, with a warning; it never
+   fails the texture.
+  */
+  auto LoadCoverageBytesIfNeeded(TexturePipeline::WorkItem& item,
+    const observer_ptr<IAsyncFileReader> reader,
+    const std::function<void(std::chrono::microseconds)>& on_io_duration)
+    -> co::Co<std::vector<ImportDiagnostic>>
+  {
+    if (!item.coverage.has_value() || !item.coverage->source.bytes.empty()
+      || item.coverage->source_path.empty()) {
+      co_return std::vector<ImportDiagnostic> {};
+    }
+    auto& coverage = *item.coverage;
+    auto load = co_await ReadSourceBytes(coverage.source, coverage.source_path,
+      coverage.fallback_source_paths, item.source_id, reader, on_io_duration);
+    if (!coverage.source.bytes.empty()) {
+      co_return std::move(load.diagnostics);
+    }
+    // The too-large error is the texture's only when the texture is too large.
+    auto diagnostics = load.too_large ? std::vector<ImportDiagnostic> {}
+                                      : std::move(load.diagnostics);
+    diagnostics.push_back(CoverageUnused(coverage, item.source_id,
+      load.too_large ? "is larger than the source limit" : "cannot be read"));
+    item.coverage.reset();
+    co_return diagnostics;
   }
 
   auto RunCookTaskForItem(TexturePipeline::WorkItem& item,
@@ -891,8 +1050,8 @@ namespace {
     auto source_ptr = std::make_shared<TexturePipeline::SourceContent>(
       std::move(item.source));
     co_return co_await thread_pool.Run(
-      [source_ptr, desc = std::move(desc), policy = &policy,
-        output_format_policy = item.output_format_policy,
+      [source_ptr, coverage = std::move(item.coverage), desc = std::move(desc),
+        policy = &policy, output_format_policy = item.output_format_policy,
         equirect_to_cubemap = item.equirect_to_cubemap,
         cubemap_face_size = item.cubemap_face_size,
         cubemap_layout = item.cubemap_layout, stop_token = item.stop_token](
@@ -904,8 +1063,8 @@ namespace {
             .decode_duration = {},
           };
         }
-        return CookFromSourceContent(std::move(*source_ptr), desc, *policy,
-          output_format_policy, equirect_to_cubemap, cubemap_face_size,
+        return CookFromSourceContent(std::move(*source_ptr), coverage, desc,
+          *policy, output_format_policy, equirect_to_cubemap, cubemap_face_size,
           cubemap_layout);
       });
   }
@@ -955,6 +1114,9 @@ namespace {
         std::make_move_iterator(read_diagnostics.begin()),
         std::make_move_iterator(read_diagnostics.end()));
     }
+    finalized.output.diagnostics.insert(finalized.output.diagnostics.end(),
+      std::make_move_iterator(cooked.diagnostics.begin()),
+      std::make_move_iterator(cooked.diagnostics.end()));
 
     finalized.output.telemetry.decode_duration = cooked.decode_duration;
     finalized.output.telemetry.cook_duration
@@ -1150,6 +1312,11 @@ auto TexturePipeline::Worker() -> co::Co<>
 
     auto load = co_await LoadSourceBytesIfNeeded(
       item, config_.file_reader, config_.on_io_duration);
+    auto coverage_diagnostics = co_await LoadCoverageBytesIfNeeded(
+      item, config_.file_reader, config_.on_io_duration);
+    load.diagnostics.insert(load.diagnostics.end(),
+      std::make_move_iterator(coverage_diagnostics.begin()),
+      std::make_move_iterator(coverage_diagnostics.end()));
 
     const auto& policy = ResolvePackingPolicy(item.packing_policy_id);
     const bool unknown_policy = item.packing_policy_id != policy.Id();

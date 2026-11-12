@@ -48,6 +48,7 @@ oxygen_cooker_test(
     "Import/DdsDecode_test.cpp"
     "Import/DroppedSourceFeatures_test.cpp"
     "Import/EngineContent_test.cpp"
+    "Import/FbxShadingModel_test.cpp"
     "Import/GeometrySource_test.cpp"
     "Import/LodGeneration_test.cpp"
     "Import/MeshOptimization_test.cpp"
@@ -138,6 +139,7 @@ endif()
 # Match Cooker's private vendor ABI without exposing it to engine consumers.
 set_source_files_properties(
   "Import/DroppedSourceFeatures_test.cpp"
+  "Import/FbxShadingModel_test.cpp"
   PROPERTIES
     COMPILE_DEFINITIONS
       UFBX_REAL_IS_FLOAT

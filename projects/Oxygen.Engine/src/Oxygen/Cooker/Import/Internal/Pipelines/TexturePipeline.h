@@ -107,6 +107,27 @@ public:
   using SourceContent
     = std::variant<SourceBytes, TextureSourceSet, ScratchImage>;
 
+  //! A second image whose value becomes a texture's alpha, such as the
+  //! opacity map a model gives apart from its base colour.
+  struct CoverageSource {
+    //! Diagnostic ID of the image.
+    std::string source_id;
+
+    //! External source path, read on the import thread when `source` is
+    //! empty.
+    std::filesystem::path source_path {};
+
+    //! Where the image is looked for, in order, when `source_path` is
+    //! missing.
+    std::vector<std::filesystem::path> fallback_source_paths;
+
+    //! The image's encoded bytes, when they are already in memory.
+    SourceBytes source {};
+
+    //! How the image's value becomes the texture's alpha.
+    CoverageMapping mapping {};
+  };
+
   //! Work submission item.
   struct WorkItem {
     //! Diagnostic ID and decode extension hint.
@@ -153,6 +174,11 @@ public:
 
     //! Source content (bytes, multi-source set, or decoded image).
     SourceContent source;
+
+    //! The image whose channel replaces the alpha of an encoded single
+    //! source; one that cannot be read or does not match the source in size
+    //! is a warning, and the texture keeps its own alpha.
+    std::optional<CoverageSource> coverage;
 
     //! Callback fired when a worker starts processing this item.
     std::function<void()> on_started;

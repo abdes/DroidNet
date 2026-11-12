@@ -173,11 +173,13 @@ NOLINT_TEST(
 }
 
 //! A texture no slot imports is reported once, at its first channel, however
-//! many channels bind it.
+//! many channels bind it: here an opacity map with no base colour map to
+//! become the alpha of, which its legacy channel restates.
 NOLINT_TEST(DroppedSourceFeaturesTest, AnUnimportedTextureIsReportedOnce)
 {
   auto opacity = FileTexture("Cutout");
   auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_3DS_MAX_PHYSICAL_MATERIAL;
   Bind(material.pbr.opacity, opacity);
   Bind(material.fbx.transparency_factor, opacity);
 
@@ -233,6 +235,153 @@ NOLINT_TEST(DroppedSourceFeaturesTest, PhongSpecularIsReported)
       .specular.Texture(),
     nullptr);
   EXPECT_EQ(Naming(Report(material), "Highlight"), 1);
+}
+
+//! Gives a classic material the transparency factor 1, as Maya writes it, so
+//! its transparency map takes away all it holds.
+auto FullyWeighted(ufbx_material& material) -> void
+{
+  material.fbx.transparency_factor.has_value = true;
+  material.fbx.transparency_factor.value_real = 1.0F;
+}
+
+//! A classic FBX material's transparency map, which ufbx also gives as its
+//! transmission, is the coverage of its base colour: imported as that, never
+//! as transmission, and reported when there is no base colour map to carry
+//! it.
+NOLINT_TEST(DroppedSourceFeaturesTest, ClassicTransparencyMapIsCoverage)
+{
+  auto colour = FileTexture("Colour");
+  auto mask = FileTexture("Mask");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_FBX_PHONG;
+  material.features.transmission.enabled = true;
+  FullyWeighted(material);
+  Bind(material.fbx.transparency_color, mask);
+  Bind(material.pbr.transmission_color, mask);
+  const auto uncovered
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+  const auto uncovered_report = Report(material);
+
+  Bind(material.fbx.diffuse_color, colour);
+  Bind(material.pbr.base_color, colour);
+  const auto covered
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+
+  EXPECT_EQ(uncovered.coverage.Texture(), nullptr);
+  EXPECT_EQ(uncovered.transmission.Texture(), nullptr);
+  EXPECT_EQ(Naming(uncovered_report, "Mask"), 1);
+  EXPECT_EQ(covered.coverage.Texture(), &mask);
+  EXPECT_EQ(covered.transmission.Texture(), nullptr);
+  EXPECT_EQ(Naming(Report(material), "Mask"), 0);
+}
+
+//! A classic material's factor map beside its colour map takes away more than
+//! the coverage, made of the colour map, can: the factor map is reported,
+//! even when it is the same texture.
+NOLINT_TEST(
+  DroppedSourceFeaturesTest, ClassicFactorMapBesideColourMapIsReported)
+{
+  auto colour = FileTexture("Colour");
+  auto mask = FileTexture("Mask");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_FBX_PHONG;
+  FullyWeighted(material);
+  Bind(material.fbx.diffuse_color, colour);
+  Bind(material.fbx.transparency_color, mask);
+  Bind(material.pbr.transmission_color, mask);
+  Bind(material.fbx.transparency_factor, mask);
+  Bind(material.pbr.transmission_factor, mask);
+
+  const auto mapped
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+
+  EXPECT_EQ(mapped.coverage.Texture(), &mask);
+  EXPECT_EQ(Naming(Report(material), "Mask"), 1);
+}
+
+//! A classic transparency map with no factor takes nothing away: it is
+//! reported once, for its factor, never as a channel without a slot.
+NOLINT_TEST(DroppedSourceFeaturesTest, UnscaledClassicMapIsReportedForItsFactor)
+{
+  auto colour = FileTexture("Colour");
+  auto mask = FileTexture("Mask");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_FBX_PHONG;
+  Bind(material.fbx.diffuse_color, colour);
+  Bind(material.fbx.transparency_color, mask);
+  Bind(material.pbr.transmission_color, mask);
+
+  const auto diagnostics = Report(material);
+
+  EXPECT_EQ(Naming(diagnostics, "Mask"), 1);
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> bool {
+    return issue.message.contains("transparency factor of 0");
+  }));
+}
+
+//! An opacity map sampled unlike the base colour map, here with another
+//! wrap, cannot become its alpha: it is not imported, and is reported as
+//! such.
+NOLINT_TEST(
+  DroppedSourceFeaturesTest, OpacityMapSampledUnlikeTheColourIsReported)
+{
+  auto colour = FileTexture("Colour");
+  auto mask = FileTexture("Mask");
+  mask.wrap_u = UFBX_WRAP_CLAMP;
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_3DS_MAX_PHYSICAL_MATERIAL;
+  Bind(material.pbr.base_color, colour);
+  Bind(material.pbr.opacity, mask);
+
+  const auto mapped
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+  const auto diagnostics = Report(material);
+
+  EXPECT_EQ(mapped.coverage.Texture(), nullptr);
+  EXPECT_EQ(Naming(diagnostics, "Mask"), 1);
+  EXPECT_TRUE(std::ranges::any_of(diagnostics, [](const auto& issue) -> bool {
+    return issue.message.contains("sampled alike");
+  }));
+}
+
+//! A base colour map that is also the opacity map still gives its coverage:
+//! one image, two channels, baked like any other pair.
+NOLINT_TEST(DroppedSourceFeaturesTest, ColourMapThatIsAlsoTheOpacityMapCovers)
+{
+  auto colour = FileTexture("Colour");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_3DS_MAX_PHYSICAL_MATERIAL;
+  Bind(material.pbr.base_color, colour);
+  Bind(material.pbr.opacity, colour);
+
+  const auto mapped
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+
+  EXPECT_EQ(mapped.coverage.Texture(), &colour);
+  EXPECT_EQ(Naming(Report(material), "Colour"), 0);
+}
+
+//! A PBR shader's opacity map, such as the cut-out map of a 3ds Max
+//! Physical Material, is the coverage of its base colour; the shader's own
+//! transmission stays transmission, even when it reads the same map.
+NOLINT_TEST(DroppedSourceFeaturesTest, PbrOpacityMapIsCoverage)
+{
+  auto colour = FileTexture("Colour");
+  auto mask = FileTexture("Mask");
+  auto material = ufbx_material {};
+  material.shader_type = UFBX_SHADER_3DS_MAX_PHYSICAL_MATERIAL;
+  material.features.transmission.enabled = true;
+  Bind(material.pbr.base_color, colour);
+  Bind(material.pbr.opacity, mask);
+  Bind(material.pbr.transmission_factor, mask);
+
+  const auto mapped
+    = oxygen::content::import::adapters::FbxMaterialTextures::From(material);
+
+  EXPECT_EQ(mapped.coverage.Texture(), &mask);
+  EXPECT_EQ(mapped.transmission.Texture(), &mask);
+  EXPECT_EQ(Naming(Report(material), "Mask"), 0);
 }
 
 //! A material feature the material does not use imports none of its

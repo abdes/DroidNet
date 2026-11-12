@@ -88,6 +88,9 @@ namespace oxygen::content::import::import_codes {
   inline constexpr std::string_view kSourceRelocationCandidate = "import.source_relocation_candidate";
   inline constexpr std::string_view kSourceTooLarge = "import.source_too_large";
   inline constexpr std::string_view kSourceUnsupportedFormat = "import.source.unsupported_format";
+  //! A texture's coverage image cannot be used: it is missing, does not
+  //! decode or differs in size; the texture keeps its own alpha.
+  inline constexpr std::string_view kTextureCoverageUnused = "import.texture.coverage_unused";
   inline constexpr std::string_view kTextureFoundByName = "import.texture.found_by_name";
   inline constexpr std::string_view kTextureLoadFailed = "import.texture.load_failed";
   //! What source analysis found.

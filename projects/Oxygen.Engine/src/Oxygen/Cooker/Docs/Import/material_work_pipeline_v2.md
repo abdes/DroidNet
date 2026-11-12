@@ -359,7 +359,37 @@ Importer/orchestrator responsibilities:
     specular shapes a highlight, so it is not imported and its texture is
     reported
   - Shininess/glossiness → `roughness` (invert and clamp to [0,1])
-  - Transparency → `alpha_mode` + `alpha_cutoff` when masked
+  - Opacity → `kAlphaBlended` with the opacity as base colour alpha. The
+    material's shading model (`FbxShadingModel::Opacity`) states it:
+    - A classic material (Lambert, Phong, or a shader ufbx reads as Phong)
+      states how much of its surface is missing with `TransparentColor` T and
+      `TransparencyFactor` f, which ufbx also gives as transmission: its
+      opacity is 1 − f × T, never transmission. A map on either replaces that
+      value and the other scales it, so its alpha is one minus the map,
+      scaled; a map that nothing scales (factor 0, stated or by default)
+      takes nothing away and is reported for that reason. A
+      `TransparentColor` map is transparency, white where the surface is
+      missing, as FBX defines it, though some exporters write an opacity map
+      there.
+    - A PBR shader states its own opacity, such as 3ds Max's cut-out map, and
+      a map holds the alpha as it is. A PBR shader that states none is
+      opaque, whatever legacy FBX transparency it also carries. Its
+      transmission stays transmission, unless it passes light straight
+      through (IOR 1, no roughness, no depth): that is transparency, as 3ds
+      Max's glTF export states it, so it scales the opacity (1 − factor ×
+      colour), or its map becomes the opacity map when there is no other.
+    - Blender's FBX reads an alpha map on `TransparencyFactor` or
+      `TransparentColor` as it is.
+  - An opacity map becomes the alpha of the base colour map, cooked from both
+    images as one texture (`TexturePipeline::CoverageSource`) whose identity
+    names both images and the mapping, and blends the material; the material's
+    opacity value scales it. An opacity value of 0 warns
+    `fbx.material_fully_transparent` and is taken as 1, since exporters write
+    it for opaque materials as often as for invisible ones; an opacity map
+    still applies. Without a base colour map sampled alike (same UV
+    set, UV transform and wrap) it is reported as dropped. A transparency map
+    the coverage cannot also apply, such as a classic factor map beside a
+    colour map, is reported as dropped
 
 ---
 

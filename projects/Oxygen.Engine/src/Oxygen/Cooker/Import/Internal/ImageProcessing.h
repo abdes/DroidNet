@@ -228,6 +228,28 @@ namespace image::content {
   OXGN_COOK_API void MoveValueToRed(
     ScratchImage& image, TextureChannel channel);
 
+  //! The channel of the opacity map `coverage` that holds its value: its
+  //! alpha when a texel is not opaque, else its red, which holds a grey mask.
+  OXGN_COOK_NDAPI auto CoverageChannel(const ScratchImage& coverage)
+    -> TextureChannel;
+
+  //! Replaces the alpha of `image` with the coverage `coverage` holds.
+  /*!
+    Gives a colour image the coverage another image holds, such as the
+    opacity map a model gives apart from its base colour: `mapping` turns
+    the value of its `CoverageChannel` into alpha. Both are single 2D RGBA8
+    or RGBA32Float images of the same size; the colour channels of `image`
+    are kept.
+
+    @param image Colour image (modified in-place)
+    @param coverage The image that holds the coverage
+    @param mapping How the coverage value becomes alpha
+    @return False, leaving `image` unchanged, when the images differ in size
+      or either is not a single 2D RGBA8 or RGBA32Float image.
+  */
+  OXGN_COOK_NDAPI auto ReplaceAlpha(ScratchImage& image,
+    const ScratchImage& coverage, const CoverageMapping& mapping) -> bool;
+
 } // namespace image::content
 
 } // namespace oxygen::content::import

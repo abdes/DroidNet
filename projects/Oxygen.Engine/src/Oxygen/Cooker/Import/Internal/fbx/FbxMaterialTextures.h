@@ -13,73 +13,21 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxShadingModel.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxTextureSlot.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 
 namespace oxygen::content::import::adapters {
-
-//! One native texture semantic with its native FBX property alternative.
-struct FbxTextureSlot final {
-  const ufbx_material_map* primary = nullptr;
-  const ufbx_material_map* fallback = nullptr;
-  //! The material feature the slot belongs to; a disabled one imports none.
-  const ufbx_material_feature_info* feature = nullptr;
-
-  [[nodiscard]] static auto Active(const ufbx_material_map& map) noexcept
-    -> bool
-  {
-    return !map.feature_disabled && map.texture_enabled
-      && map.texture != nullptr;
-  }
-
-  [[nodiscard]] auto Texture() const noexcept -> const ufbx_texture*
-  {
-    if (feature != nullptr && !feature->enabled) {
-      return nullptr;
-    }
-    // A disabled primary binding must not be resurrected by its legacy alias.
-    if (primary != nullptr
-      && (primary->texture != nullptr || primary->feature_disabled)) {
-      return Active(*primary) ? primary->texture : nullptr;
-    }
-    return fallback != nullptr && Active(*fallback) ? fallback->texture
-                                                    : nullptr;
-  }
-};
-
-//! What a material's specular means, which its shader decides.
-enum class FbxSpecular : uint8_t {
-  //! The shape and strength of a highlight (FBX Phong or Lambert, or an
-  //! unknown shader): not a reflectance, so not imported.
-  kHighlight,
-  //! Blender's specular level, the format's own measure.
-  kLevel,
-  //! A PBR shader's specular weight: 1.0 is the default reflectance.
-  kWeight,
-};
-
-//! What `material`'s specular means.
-[[nodiscard]] inline auto SpecularOf(const ufbx_material& material) noexcept
-  -> FbxSpecular
-{
-  switch (material.shader_type) {
-  case UFBX_SHADER_BLENDER_PHONG:
-    return FbxSpecular::kLevel;
-  case UFBX_SHADER_UNKNOWN:
-  case UFBX_SHADER_FBX_LAMBERT:
-  case UFBX_SHADER_FBX_PHONG:
-    return FbxSpecular::kHighlight;
-  default:
-    return FbxSpecular::kWeight;
-  }
-}
 
 //! Every texture the FBX adapter imports into a material slot.
 /*!
  The adapter binds and cooks these, and the dropped-feature report names any
  other texture a material uses, so the three agree. A slot reads the ufbx map
  of its own meaning first; transmission falls back to the colour map a file
- may use instead. Specular reads the map its shader's specular means
- (`SpecularOf`), and none for a highlight.
+ may use instead. Specular, transmission and coverage read the maps the
+ material's shader means by them (`ShadingModelOf`); coverage, the opacity
+ map, becomes the alpha of the base colour map.
 */
 struct FbxMaterialTextures final {
   FbxTextureSlot base_color {};
@@ -93,11 +41,17 @@ struct FbxMaterialTextures final {
   FbxTextureSlot clearcoat {};
   FbxTextureSlot clearcoat_normal {};
   FbxTextureSlot transmission {};
+  //! The opacity map, which becomes the alpha of the base colour map; none
+  //! when there is no base colour map or the two sample unlike.
+  FbxTextureSlot coverage {};
+  //! How the opacity map's value becomes that alpha.
+  CoverageMapping coverage_mapping {};
 
   [[nodiscard]] static auto From(const ufbx_material& material) noexcept
     -> FbxMaterialTextures
   {
-    return {
+    const auto& model = ShadingModelOf(material);
+    auto textures = FbxMaterialTextures {
       .base_color = { .primary=&material.pbr.base_color, .fallback=&material.fbx.diffuse_color },
       .normal = { .primary=&material.pbr.normal_map, .fallback=&material.fbx.normal_map },
       .metallic = { .primary=&material.pbr.metalness, .fallback=nullptr },
@@ -111,7 +65,7 @@ struct FbxMaterialTextures final {
       .occlusion = { .primary=&material.pbr.ambient_occlusion, .fallback=nullptr },
       .emissive
       = { .primary=&material.pbr.emission_color, .fallback=&material.fbx.emission_color },
-      .specular = SpecularSlot(material),
+      .specular = model.SpecularSlot(material),
       .sheen_color = {
         .primary = &material.pbr.sheen_color,
         .fallback = nullptr,
@@ -127,38 +81,48 @@ struct FbxMaterialTextures final {
         .fallback = nullptr,
         .feature = &material.features.coat,
       },
-      .transmission = {
-        .primary = &material.pbr.transmission_factor,
-        .fallback = &material.pbr.transmission_color,
-        .feature = &material.features.transmission,
-      },
+      .transmission = model.TransmissionSlot(material),
     };
-  }
-
-  //! The map holding `material`'s specular, by what its specular means.
-  [[nodiscard]] static auto SpecularSlot(const ufbx_material& material) noexcept
-    -> FbxTextureSlot
-  {
-    switch (SpecularOf(material)) {
-    case FbxSpecular::kLevel:
-      return {
-        .primary = &material.fbx.specular_factor,
-        .fallback = nullptr,
-        .feature = nullptr,
-      };
-    case FbxSpecular::kWeight:
-      return {
-        .primary = &material.pbr.specular_factor,
-        .fallback = nullptr,
-        .feature = &material.features.specular,
-      };
-    case FbxSpecular::kHighlight:
-      break;
+    // The coverage becomes the alpha of the base colour map's texels: it
+    // needs one, sampled alike.
+    const auto opacity = model.Opacity(material);
+    const auto* base = textures.base_color.Texture();
+    const auto* coverage = opacity.map.Texture();
+    if (base != nullptr && coverage != nullptr
+      && SamplesAlike(*base, *coverage)) {
+      textures.coverage = opacity.map;
+      textures.coverage_mapping = opacity.mapping;
     }
-    return {};
+    return textures;
   }
 
-  [[nodiscard]] auto Slots() const noexcept -> std::array<FbxTextureSlot, 11>
+  //! Whether `first` and `second` read the same texel of a surface point:
+  //! one UV set, one UV transform, one wrap.
+  [[nodiscard]] static auto SamplesAlike(
+    const ufbx_texture& first, const ufbx_texture& second) noexcept -> bool
+  {
+    const auto same_vec3 = [](const ufbx_vec3& a, const ufbx_vec3& b) -> bool {
+      return a.x == b.x && a.y == b.y && a.z == b.z;
+    };
+    const auto& one = first.uv_transform;
+    const auto& two = second.uv_transform;
+    const auto same_transform
+      = first.has_uv_transform == second.has_uv_transform
+      && (!first.has_uv_transform
+        || (same_vec3(one.translation, two.translation)
+          && same_vec3(one.scale, two.scale) && one.rotation.x == two.rotation.x
+          && one.rotation.y == two.rotation.y
+          && one.rotation.z == two.rotation.z
+          && one.rotation.w == two.rotation.w));
+    const auto same_set
+      = std::string_view(first.uv_set.data, first.uv_set.length)
+      == std::string_view(second.uv_set.data, second.uv_set.length);
+    const auto same_wrap
+      = first.wrap_u == second.wrap_u && first.wrap_v == second.wrap_v;
+    return same_set && same_transform && same_wrap;
+  }
+
+  [[nodiscard]] auto Slots() const noexcept -> std::array<FbxTextureSlot, 12>
   {
     return {
       base_color,
@@ -172,6 +136,7 @@ struct FbxMaterialTextures final {
       clearcoat,
       clearcoat_normal,
       transmission,
+      coverage,
     };
   }
 

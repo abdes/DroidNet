@@ -22,14 +22,18 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
+#include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/ModelMaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/ModelTextureSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
+#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -636,6 +640,199 @@ namespace {
     EXPECT_TRUE(normal.bake_hdr_to_ldr);
     EXPECT_FALSE(normal.renormalize_normals_in_mips);
   }
+
+  //! How a decal's material states its opacity map `mask.png`.
+  struct DecalMaterial final {
+    //! The test name suffix.
+    std::string_view name;
+    std::string_view shading_model;
+    //! Properties70 lines the material adds.
+    std::string_view properties;
+    //! The material property the mask connects to.
+    std::string_view mask_property;
+    //! How the mask's value becomes the alpha of the base colour.
+    CoverageMapping mapping;
+    //! The alpha factor of the base colour.
+    float alpha;
+  };
+
+  //! A classic Phong decal, as Maya writes one: its mask on
+  //! `TransparentColor`, white where the surface is missing, fully weighted.
+  constexpr auto kClassicDecal = DecalMaterial {
+    .name = "Classic",
+    .shading_model = "phong",
+    .properties
+    = "            P: \"TransparencyFactor\", \"Number\", \"\", \"A\",1\n",
+    .mask_property = "TransparentColor",
+    .mapping = { .factor = 1.0F, .inverted = true },
+    .alpha = 1.0F,
+  };
+
+  //! A 3ds Max Physical Material decal, as Sponza's: its mask on the cut-out
+  //! map, beside a legacy transparency the shader does not mean and a
+  //! transparency that passes light straight through (IOR 1), which leaves
+  //! 0.35 of the surface.
+  constexpr auto kPhysicalDecal = DecalMaterial {
+    .name = "Physical",
+    .shading_model = "unknown",
+    .properties
+    = "            P: \"3dsMax|ClassIDa\", \"int\", \"Integer\", "
+      "\"\",1030429932\n"
+      "            P: \"3dsMax|ClassIDb\", \"int\", \"Integer\", "
+      "\"\",-559038463\n"
+      "            P: \"3dsMax|Parameters|cutout_map_on\", \"Bool\", \"\", "
+      "\"\",1\n"
+      "            P: \"3dsMax|Parameters|transparency\", \"Float\", \"\", "
+      "\"A\",0.65\n"
+      "            P: \"3dsMax|Parameters|trans_ior\", \"Float\", \"\", "
+      "\"A\",1\n"
+      "            P: \"TransparencyFactor\", \"Number\", \"\", \"A\",0.39\n",
+    .mask_property = "3dsMax|Parameters|cutout_map",
+    .mapping = { .factor = 1.0F, .inverted = false },
+    .alpha = 0.35F,
+  };
+
+  //! A 3ds Max Physical Material decal whose straight-through transparency
+  //! is 1, which states no opacity at all: the value is taken as 1, yet the
+  //! cut-out map still gives the decal its shape.
+  constexpr auto kFullyTransparentPhysicalDecal = DecalMaterial {
+    .name = "FullyTransparentPhysical",
+    .shading_model = "unknown",
+    .properties
+    = "            P: \"3dsMax|ClassIDa\", \"int\", \"Integer\", "
+      "\"\",1030429932\n"
+      "            P: \"3dsMax|ClassIDb\", \"int\", \"Integer\", "
+      "\"\",-559038463\n"
+      "            P: \"3dsMax|Parameters|cutout_map_on\", \"Bool\", \"\", "
+      "\"\",1\n"
+      "            P: \"3dsMax|Parameters|transparency\", \"Float\", \"\", "
+      "\"A\",1\n"
+      "            P: \"3dsMax|Parameters|trans_ior\", \"Float\", \"\", "
+      "\"A\",1\n",
+    .mask_property = "3dsMax|Parameters|cutout_map",
+    .mapping = { .factor = 1.0F, .inverted = false },
+    .alpha = 1.0F,
+  };
+
+  //! The textured triangle whose material also has the opacity map
+  //! `mask.png`, stated as `GetParam()` states it, parsed from a folder of
+  //! its own.
+  class FbxOpacityMapTest : public ::testing::TestWithParam<DecalMaterial> {
+  protected:
+    void SetUp() override
+    {
+      const auto& decal = GetParam();
+      auto text = oxygen::cooker::test::ReadText(
+        oxygen::cooker::test::ModelPath("static_textured_triangle.fbx"));
+      const auto insert_after
+        = [&text](const std::string_view after, const std::string_view insert) {
+            const auto at = text.find(after);
+            ASSERT_NE(at, std::string::npos) << "fixture changed: " << after;
+            text.insert(at + after.size(), insert);
+          };
+      constexpr auto kPhong = std::string_view { "ShadingModel: \"phong\"" };
+      const auto shading = text.find(kPhong);
+      ASSERT_NE(shading, std::string::npos) << "fixture changed: " << kPhong;
+      text.replace(shading, kPhong.size(),
+        "ShadingModel: \"" + std::string(decal.shading_model) + "\"");
+      insert_after(
+        "            P: \"DiffuseFactor\", \"Number\", \"\", \"A\",1\n",
+        decal.properties);
+      insert_after("        Cropping: 0,0,0,0\n    }\n",
+        "    Video: 1006, \"Video::Mask\", \"Clip\" {\n"
+        "        Type: \"Clip\"\n"
+        "        Filename: \"mask.png\"\n"
+        "        RelativeFilename: \"mask.png\"\n"
+        "    }\n"
+        "    Texture: 1007, \"Texture::Mask\", \"TextureVideoClip\" {\n"
+        "        Type: \"TextureVideoClip\"\n"
+        "        Version: 202\n"
+        "        TextureName: \"Texture::Mask\"\n"
+        "        Media: \"Video::Mask\"\n"
+        "        FileName: \"mask.png\"\n"
+        "        RelativeFilename: \"mask.png\"\n"
+        "    }\n");
+      insert_after("    C: \"OP\",1005,1003,\"DiffuseColor\"\n",
+        "    C: \"OO\",1006,1007\n"
+        "    C: \"OP\",1007,1003,\""
+          + std::string(decal.mask_property) + "\"\n");
+      path_ = dir_.Path() / "decal.fbx";
+      oxygen::cooker::test::WriteText(path_, text);
+      source_id_ = path_.string();
+      input_.source_id_prefix = source_id_;
+      input_.request.source_path = path_;
+      input_.naming_service = observer_ptr { &naming_ };
+      ASSERT_TRUE(adapter_.Parse(path_, input_).success);
+    }
+
+    oxygen::testing::ScopedTempDir dir_;
+    NamingService naming_;
+    std::filesystem::path path_;
+    //! The source ID the adapter input names; it outlives the input.
+    std::string source_id_;
+    adapters::AdapterInput input_;
+    adapters::FbxAdapter adapter_;
+  };
+
+  //! The opacity map becomes the alpha of the base colour, as its shader
+  //! means it: one texture cooked from both images, apart from the colour map
+  //! alone.
+  NOLINT_TEST_P(FbxOpacityMapTest, OpacityMapCoversTheBaseColor)
+  {
+    const auto& expected = GetParam().mapping;
+    const auto prepared = adapter_.PrepareTextures(input_);
+    auto sink = TextureSink {};
+    const auto streamed
+      = adapter_.BuildWorkItems(adapters::TextureWorkTag {}, sink, input_);
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto external
+      = adapter_.CollectExternalTextureSources(input_, diagnostics);
+
+    ASSERT_TRUE(prepared.success);
+    ASSERT_EQ(prepared.sources.size(), 1U);
+    const auto& base = prepared.sources.front();
+    EXPECT_EQ(base.usage, "base_color");
+    ASSERT_HAS_VALUE(base.coverage);
+    EXPECT_EQ(base.coverage->mapping.factor, expected.factor);
+    EXPECT_EQ(base.coverage->mapping.inverted, expected.inverted);
+    EXPECT_EQ(base.coverage->source_path.filename(), "mask.png");
+    EXPECT_TRUE(base.source_id.contains("+coverage:"));
+    ASSERT_TRUE(streamed.success);
+    ASSERT_EQ(sink.items.size(), 1U);
+    const auto& item_coverage = sink.items.front().coverage;
+    ASSERT_HAS_VALUE(item_coverage);
+    EXPECT_EQ(item_coverage->source_path.filename(), "mask.png");
+    EXPECT_EQ(item_coverage->mapping.inverted, expected.inverted);
+    EXPECT_EQ(external.size(), 2U);
+  }
+
+  //! A material whose opacity map covers its base colour binds the covered
+  //! texture and blends, its alpha factor what its shader states whatever
+  //! legacy transparency it also carries, and transmits nothing.
+  NOLINT_TEST_P(FbxOpacityMapTest, CoveredMaterialBlendsWithoutTransmission)
+  {
+    const auto textures = adapter_.PrepareTextures(input_);
+    const auto materials = adapter_.PrepareMaterials(input_);
+
+    ASSERT_TRUE(textures.success);
+    ASSERT_EQ(textures.sources.size(), 1U);
+    ASSERT_TRUE(materials.success);
+    ASSERT_EQ(materials.sources.size(), 1U);
+    const auto& material = materials.sources.front().material;
+    EXPECT_EQ(material.textures.base_color.source_id,
+      textures.sources.front().source_id);
+    EXPECT_EQ(material.alpha_mode, MaterialAlphaMode::kBlended);
+    EXPECT_FLOAT_EQ(material.inputs.base_color[3], GetParam().alpha);
+    EXPECT_FALSE(material.textures.transmission.assigned);
+    EXPECT_EQ(material.inputs.transmission_factor, 0.0F);
+  }
+
+  INSTANTIATE_TEST_SUITE_P(Decals, FbxOpacityMapTest,
+    ::testing::Values(
+      kClassicDecal, kPhysicalDecal, kFullyTransparentPhysicalDecal),
+    [](const ::testing::TestParamInfo<DecalMaterial>& info) -> std::string {
+      return std::string(info.param.name);
+    });
 
   //! Two images of one name take different texture names, and the import says
   //! so.

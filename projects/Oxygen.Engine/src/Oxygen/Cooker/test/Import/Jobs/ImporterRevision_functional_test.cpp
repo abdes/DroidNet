@@ -107,35 +107,35 @@ namespace {
     {
       .importer = Importer::kFbx,
       .scenario = "",
-      .revision = 16,
+      .revision = 17,
       .digest
       = "450a2089ac35b2bca7100de6055dbc7bd45fc90781e70ec74ec46547feb9e52b",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "textured",
-      .revision = 16,
+      .revision = 17,
       .digest
       = "bb763427510ad6d4a991402e4f547ec491afbbd414cf34a5b2bf6512bc03c12c",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "skinned",
-      .revision = 16,
+      .revision = 17,
       .digest
       = "9b1081413fab6dc6ab334649bb6f58edfc5dff7014a075d4f53b1504c96602fc",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "lights",
-      .revision = 16,
+      .revision = 17,
       .digest
       = "1196f90371b38d9e4fc4906015791f1e79b3713f3c7cad675f759ec1a15a9268",
     },
     {
       .importer = Importer::kFbx,
       .scenario = "tuned",
-      .revision = 16,
+      .revision = 17,
       .digest
       = "171d372f368b1e8306add9bd3264910e43b75304bae1bf9f4a964402d685fe35",
     },

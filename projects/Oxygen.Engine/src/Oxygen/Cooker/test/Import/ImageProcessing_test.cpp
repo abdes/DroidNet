@@ -8,6 +8,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -16,14 +18,18 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using oxygen::ColorSpace;
 using oxygen::Format;
+using oxygen::TextureType;
+using oxygen::content::import::CoverageMapping;
 using oxygen::content::import::MipFilter;
 using oxygen::content::import::ScratchImage;
+using oxygen::content::import::ScratchImageMeta;
 using oxygen::content::import::TextureChannel;
 
 namespace color = oxygen::content::import::image::color;
@@ -318,6 +324,107 @@ NOLINT_TEST(
     EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 2]), 77U);
     EXPECT_EQ(std::to_integer<unsigned>(view.pixels[offset + 3]), 255U);
   }
+}
+
+//! A single RGBA8 texel.
+auto Texel8(const uint8_t r, const uint8_t g, const uint8_t b, const uint8_t a)
+  -> ScratchImage
+{
+  return ScratchImage::CreateFromData(1, 1, Format::kRGBA8UNorm, 4,
+    { std::byte { r }, std::byte { g }, std::byte { b }, std::byte { a } });
+}
+
+//! The alpha of the single texel of `image`.
+auto AlphaOf(const ScratchImage& image) -> unsigned
+{
+  return std::to_integer<unsigned>(image.GetImage(0, 0).pixels[3]);
+}
+
+//! An opacity map holds its value in its alpha when it has one, else in its
+//! red, as a grey mask does.
+NOLINT_TEST(ContentProcessingTest, CoverageIsInAlphaWhenTheMapHasOne)
+{
+  EXPECT_EQ(
+    content::CoverageChannel(Texel8(9, 9, 9, 255)), TextureChannel::kRed);
+  EXPECT_EQ(
+    content::CoverageChannel(Texel8(9, 9, 9, 254)), TextureChannel::kAlpha);
+}
+
+//! A transparency map gives one minus its value scaled by its factor; an
+//! opacity map its value scaled.
+NOLINT_TEST(ContentProcessingTest, ReplaceAlphaAppliesTheMapping)
+{
+  auto transparent = Texel8(10, 20, 30, 255);
+  auto opaque = Texel8(10, 20, 30, 255);
+  const auto mask = Texel8(204, 0, 0, 255); // 0.8 in red
+
+  ASSERT_TRUE(content::ReplaceAlpha(
+    transparent, mask, CoverageMapping { .factor = 0.5F, .inverted = true }));
+  ASSERT_TRUE(content::ReplaceAlpha(
+    opaque, mask, CoverageMapping { .factor = 0.5F, .inverted = false }));
+
+  EXPECT_EQ(AlphaOf(transparent), 153U); // (1 - 0.5 x 0.8) x 255
+  EXPECT_EQ(AlphaOf(opaque), 102U); // 0.5 x 0.8 x 255
+}
+
+//! A volume is no single 2D image: `ReplaceAlpha` refuses it and leaves the
+//! colour image as it was.
+NOLINT_TEST(ContentProcessingTest, ReplaceAlphaRefusesAVolumeUnchanged)
+{
+  auto colour = Texel8(10, 20, 30, 77);
+  auto volume = ScratchImage::Create(ScratchImageMeta {
+    .texture_type = TextureType::kTexture3D,
+    .width = 1,
+    .height = 1,
+    .depth = 2,
+    .array_layers = 1,
+    .mip_levels = 1,
+    .format = Format::kRGBA8UNorm,
+  });
+  ASSERT_TRUE(volume.IsValid());
+
+  EXPECT_FALSE(content::ReplaceAlpha(colour, volume, CoverageMapping {}));
+  EXPECT_FALSE(content::ReplaceAlpha(volume, colour, CoverageMapping {}));
+  EXPECT_EQ(AlphaOf(colour), 77U);
+}
+
+//! `ReplaceAlpha` writes the coverage into alpha, scaled from its format's
+//! range, keeps the colour, and refuses a coverage of another size, leaving
+//! the image as it was.
+NOLINT_TEST(ContentProcessingTest, ReplaceAlphaTakesTheCoverageChannel)
+{
+  auto colour = ScratchImage::CreateFromData(1, 1, Format::kRGBA8UNorm, 4,
+    {
+      std::byte { 10 },
+      std::byte { 20 },
+      std::byte { 30 },
+      std::byte { 255 },
+    });
+  const auto half = std::array { 0.5F, 0.0F, 0.0F, 1.0F };
+  auto coverage_bytes = std::vector<std::byte>(sizeof(half));
+  std::memcpy(coverage_bytes.data(), half.data(), sizeof(half));
+  const auto coverage = ScratchImage::CreateFromData(
+    1, 1, Format::kRGBA32Float, sizeof(half), std::move(coverage_bytes));
+  const auto larger = ScratchImage::CreateFromData(
+    2, 1, Format::kRGBA8UNorm, 8, std::vector<std::byte>(8));
+  ASSERT_TRUE(colour.IsValid());
+  ASSERT_TRUE(coverage.IsValid());
+  ASSERT_TRUE(larger.IsValid());
+
+  const auto refused
+    = content::ReplaceAlpha(colour, larger, CoverageMapping {});
+  const auto unchanged = AlphaOf(colour);
+  const auto applied
+    = content::ReplaceAlpha(colour, coverage, CoverageMapping {});
+
+  EXPECT_FALSE(refused);
+  EXPECT_EQ(unchanged, 255U);
+  EXPECT_TRUE(applied);
+  const auto view = colour.GetImage(0, 0);
+  EXPECT_EQ(std::to_integer<unsigned>(view.pixels[0]), 10U);
+  EXPECT_EQ(std::to_integer<unsigned>(view.pixels[1]), 20U);
+  EXPECT_EQ(std::to_integer<unsigned>(view.pixels[2]), 30U);
+  EXPECT_EQ(std::to_integer<unsigned>(view.pixels[3]), 128U);
 }
 
 } // namespace

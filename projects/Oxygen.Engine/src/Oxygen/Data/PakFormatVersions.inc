@@ -35,7 +35,7 @@ OXDAT_FORMAT_VERSION(kExposureExtensionVersion, exposure_extension, uint32_t, 2)
 // The importer is the enumerator of `content::import::Importer`; its spec name
 // is how the ImportTool reports it.
 OXDAT_IMPORTER_REVISION(kGltf, gltf, 16)
-OXDAT_IMPORTER_REVISION(kFbx, fbx, 16)
+OXDAT_IMPORTER_REVISION(kFbx, fbx, 17)
 OXDAT_IMPORTER_REVISION(kTexture, texture, 6)
 OXDAT_IMPORTER_REVISION(kBufferContainer, buffer_container, 4)
 OXDAT_IMPORTER_REVISION(kMaterialDescriptor, material_descriptor, 6)

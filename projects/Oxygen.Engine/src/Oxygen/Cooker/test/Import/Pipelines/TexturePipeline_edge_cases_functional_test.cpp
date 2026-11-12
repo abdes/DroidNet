@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -16,7 +17,10 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportCodes.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
@@ -25,6 +29,7 @@
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/test/Support/TestImages.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
@@ -34,7 +39,9 @@
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Serio/ByteBuffer.h>
 #include <Oxygen/Serio/ByteReader.h>
+#include <Oxygen/Serio/Types.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Testing/ScopedTempDir.h>
 
 using oxygen::Format;
 using oxygen::TextureType;
@@ -56,6 +63,7 @@ namespace {
 //===---------------------------------------------------------//
 
 using oxygen::cooker::test::MakeBmp;
+using oxygen::cooker::test::MakeWebp;
 
 //! A buffer holding a copy of `bytes`.
 [[nodiscard]] auto ToBuffer(const std::span<const std::byte> bytes)
@@ -314,6 +322,146 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectUnknownPackingPolicyWarns)
   ASSERT_EQ(result.diagnostics.size(), 1U);
   EXPECT_EQ(result.diagnostics.at(0).code,
     oxygen::content::import::import_codes::kTexturePackingPolicyUnknown);
+}
+
+//! A texture of one opaque 1x1 BMP texel, B=10 G=20 R=30, cooked to RGBA8
+//! without mips, given the coverage image `coverage`.
+[[nodiscard]] auto CoveredItem(TexturePipeline::CoverageSource coverage)
+  -> TexturePipeline::WorkItem
+{
+  TextureImportDesc desc;
+  desc.source_id = "base.bmp";
+  desc.output_format = Format::kRGBA8UNorm;
+  desc.bc7_quality = Bc7Quality::kNone;
+  desc.mip_policy = MipPolicy::kNone;
+  auto item = MakeWorkItem(desc, "base.bmp", MakeSourceBytes(MakeBmp(1, 1)),
+    std::string(TightPackedPolicy::Instance().Id()));
+  coverage.source_id = "mask.webp";
+  item.coverage = std::move(coverage);
+  return item;
+}
+
+//! The first texel of a cooked RGBA8 texture.
+[[nodiscard]] auto FirstTexel(const TexturePipeline::WorkResult& result)
+  -> std::array<uint8_t, 4>
+{
+  auto texel = std::array<uint8_t, 4> {};
+  if (!result.cooked.has_value() || result.cooked->layouts.empty()) {
+    ADD_FAILURE() << "the texture did not cook";
+    return texel;
+  }
+  const auto header
+    = oxygen::serio::CopyAt<oxygen::data::pak::render::TexturePayloadHeader>(
+      result.cooked->payload.Bytes());
+  if (!header) {
+    ADD_FAILURE() << "the payload has no header";
+    return texel;
+  }
+  const auto offset
+    = header->data_offset_bytes + result.cooked->layouts.front().offset_bytes;
+  std::memcpy(texel.data(),
+    result.cooked->payload.Bytes().subspan(offset, texel.size()).data(),
+    texel.size());
+  return texel;
+}
+
+//! A coverage image gives the texture its alpha from its red channel, and
+//! the texture keeps its colour.
+NOLINT_TEST_F(TexturePipelineEdgeTest, CoverageGivesTheTextureItsAlpha)
+{
+  constexpr auto kCoverage = uint8_t { 128 };
+  const auto mask = std::array {
+    std::byte { kCoverage },
+    std::byte { 0 },
+    std::byte { 0 },
+    std::byte { 255 },
+  };
+
+  const auto result
+    = RunOnce(CoveredItem({ .source = MakeSourceBytes(MakeWebp(1, 1, mask)) }));
+
+  ASSERT_TRUE(result.success);
+  EXPECT_TRUE(result.diagnostics.empty());
+  EXPECT_EQ(
+    FirstTexel(result), (std::array<uint8_t, 4> { 30, 20, 10, kCoverage }));
+}
+
+//! A coverage image that cannot be read, or differs from the texture in
+//! size, is a warning, and the texture keeps its own alpha.
+NOLINT_TEST_F(TexturePipelineEdgeTest, UnusableCoverageKeepsTheTextureAlpha)
+{
+  const auto missing = RunOnce(CoveredItem({}));
+  const auto other_size
+    = RunOnce(CoveredItem({ .source = MakeSourceBytes(MakeBmp(2, 2)) }));
+
+  for (const auto* result : { &missing, &other_size }) {
+    ASSERT_TRUE(result->success);
+    ASSERT_EQ(result->diagnostics.size(), 1U);
+    EXPECT_EQ(result->diagnostics.front().code,
+      oxygen::content::import::import_codes::kTextureCoverageUnused);
+    EXPECT_EQ(
+      FirstTexel(*result), (std::array<uint8_t, 4> { 30, 20, 10, 255 }));
+  }
+}
+
+//! A coverage image is optional: one over the source limit costs the texture
+//! only its coverage, with a warning, never the limit's error.
+NOLINT_TEST_F(TexturePipelineEdgeTest, OversizedCoverageOnlyWarns)
+{
+  const auto dir = oxygen::testing::ScopedTempDir {};
+  const auto mask = dir.Path() / "mask.bmp";
+  const auto mask_bytes = MakeBmp(8, 8);
+  oxygen::cooker::test::WriteBytes(mask, mask_bytes);
+  const auto reader = oxygen::content::import::CreateAsyncFileReader(
+    loop_.Driver(), oxygen::serio::ByteCount { mask_bytes.size() - 1U });
+
+  const auto result = oxygen::cooker::test::RunPipelineOnce<TexturePipeline>(
+    loop_, CoveredItem({ .source_path = mask }), pool_,
+    TexturePipeline::Config {
+      .queue_capacity = 4,
+      .worker_count = 1,
+      .file_reader = oxygen::observer_ptr { reader.get() },
+      .on_io_duration = {},
+    });
+
+  ASSERT_TRUE(result.success);
+  ASSERT_EQ(result.diagnostics.size(), 1U);
+  EXPECT_EQ(result.diagnostics.front().code,
+    oxygen::content::import::import_codes::kTextureCoverageUnused);
+  EXPECT_EQ(result.diagnostics.front().severity,
+    oxygen::content::import::ImportSeverity::kWarning);
+  EXPECT_EQ(FirstTexel(result), (std::array<uint8_t, 4> { 30, 20, 10, 255 }));
+}
+
+//! A transparency map gives one minus its value, scaled; a mask whose alpha
+//! is not opaque holds its value there.
+NOLINT_TEST_F(TexturePipelineEdgeTest, CoverageTakesItsMapping)
+{
+  constexpr auto kHalf = uint8_t { 128 };
+  const auto grey = std::array {
+    std::byte { kHalf },
+    std::byte { kHalf },
+    std::byte { kHalf },
+    std::byte { 255 },
+  };
+  const auto cutout = std::array {
+    std::byte { 0 },
+    std::byte { 0 },
+    std::byte { 0 },
+    std::byte { 64 },
+  };
+
+  const auto transparency = RunOnce(CoveredItem({
+    .source = MakeSourceBytes(MakeWebp(1, 1, grey)),
+    .mapping = { .factor = 1.0F, .inverted = true },
+  }));
+  const auto in_alpha = RunOnce(
+    CoveredItem({ .source = MakeSourceBytes(MakeWebp(1, 1, cutout)) }));
+
+  ASSERT_TRUE(transparency.success);
+  ASSERT_TRUE(in_alpha.success);
+  EXPECT_EQ(FirstTexel(transparency).back(), 127U);
+  EXPECT_EQ(FirstTexel(in_alpha).back(), 64U);
 }
 
 } // namespace

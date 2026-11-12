@@ -690,6 +690,71 @@ namespace image::content {
     });
   }
 
+  // A model never says which channel of its opacity map holds the value, so
+  // the image decides: any alpha below opaque means the alpha holds it (a
+  // cut-out PNG, or a base colour map that is also its own opacity map),
+  // else the red holds a grey mask. A mask whose alpha holds something else,
+  // even one stray translucent texel, is read from that alpha instead. The
+  // check scans the whole map once per cook, stopping at the first
+  // translucent texel.
+  auto CoverageChannel(const ScratchImage& coverage) -> TextureChannel
+  {
+    const auto& meta = coverage.Meta();
+    const auto opaque = ChannelMax(meta.format);
+    const auto view = coverage.GetImage(0, 0);
+    for (uint32_t y = 0; y < view.height; ++y) {
+      for (uint32_t x = 0; x < view.width; ++x) {
+        const auto texel = ReadTexel(view.pixels, meta.format,
+          TexelOffset(meta.format, view.row_pitch_bytes, x, y));
+        if (texel.at(3) < opaque) {
+          return TextureChannel::kAlpha;
+        }
+      }
+    }
+    return TextureChannel::kRed;
+  }
+
+  auto ReplaceAlpha(ScratchImage& image, const ScratchImage& coverage,
+    const CoverageMapping& mapping) -> bool
+  {
+    const auto& meta = image.Meta();
+    const auto& coverage_meta = coverage.Meta();
+    const auto supported = [](const Format format) -> bool {
+      return format == Format::kRGBA8UNorm || format == Format::kRGBA32Float;
+    };
+    const auto same_extent = meta.width == coverage_meta.width
+      && meta.height == coverage_meta.height;
+    const auto single_image = meta.depth == 1U && meta.array_layers == 1U
+      && meta.mip_levels == 1U && coverage_meta.depth == 1U
+      && coverage_meta.array_layers == 1U && coverage_meta.mip_levels == 1U;
+    if (!image.IsValid() || !coverage.IsValid() || !supported(meta.format)
+      || !supported(coverage_meta.format) || !same_extent || !single_image) {
+      return false;
+    }
+
+    const auto image_max = ChannelMax(meta.format);
+    const auto coverage_max = ChannelMax(coverage_meta.format);
+    const auto source = static_cast<size_t>(CoverageChannel(coverage));
+    const auto view = image.GetImage(0, 0);
+    const auto pixels = image.GetMutablePixels(0, 0);
+    const auto coverage_view = coverage.GetImage(0, 0);
+    for (uint32_t y = 0; y < view.height; ++y) {
+      for (uint32_t x = 0; x < view.width; ++x) {
+        const auto offset
+          = TexelOffset(meta.format, view.row_pitch_bytes, x, y);
+        auto texel = ReadTexel(pixels, meta.format, offset);
+        const auto covered
+          = ReadTexel(coverage_view.pixels, coverage_meta.format,
+            TexelOffset(
+              coverage_meta.format, coverage_view.row_pitch_bytes, x, y));
+        texel.at(3)
+          = mapping.Alpha(covered.at(source) / coverage_max) * image_max;
+        WriteTexel(pixels, meta.format, offset, texel);
+      }
+    }
+    return true;
+  }
+
 } // namespace image::content
 
 } // namespace oxygen::content::import

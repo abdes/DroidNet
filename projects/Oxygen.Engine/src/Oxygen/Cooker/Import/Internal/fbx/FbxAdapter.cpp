@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <format>
 #include <limits>
 #include <map>
 #include <memory>
@@ -71,6 +72,7 @@
 #include <Oxygen/Cooker/Import/Internal/fbx/CoordTransform.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxShadingModel.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>
@@ -379,28 +381,6 @@ namespace {
       .source_path = std::string(source_id),
       .object_path = std::string(object_path),
     };
-  }
-
-  //! How opaque an FBX material says it is, in [0, 1].
-  /*!
-   A shader with its own opacity states it. A classic FBX material states
-   transparency as a factor of a colour, each of which defaults like the FBX
-   material template: factor 0, white. So Maya's factor 1 of black is opaque.
-  */
-  [[nodiscard]] auto MaterialOpacity(const ufbx_material& material) -> float
-  {
-    if (material.pbr.opacity.has_value) {
-      return Clamp01(static_cast<float>(material.pbr.opacity.value_real));
-    }
-    const auto& factor = material.fbx.transparency_factor;
-    const auto& color = material.fbx.transparency_color;
-    const auto amount
-      = factor.has_value ? static_cast<float>(factor.value_real) : 0.0F;
-    const auto tint = color.has_value
-      ? static_cast<float>(
-          (color.value_vec3.x + color.value_vec3.y + color.value_vec3.z) / 3.0)
-      : 1.0F;
-    return Clamp01(1.0F - (amount * tint));
   }
 
   [[nodiscard]] auto ToVec3(const ufbx_vec3 v) -> glm::vec3
@@ -1241,6 +1221,17 @@ namespace {
     return id;
   }
 
+  //! The identity of the base colour map `texture_id` with the alpha
+  //! `mapping` makes of the opacity map `coverage_id`: both images and the
+  //! mapping, so it cooks apart from the map alone and from another mapping.
+  [[nodiscard]] auto CoveredTextureId(const std::string_view texture_id,
+    const std::string_view coverage_id, const CoverageMapping& mapping)
+    -> std::string
+  {
+    return std::format("{}+coverage:{}{}:{}", texture_id,
+      mapping.inverted ? "1-" : "", mapping.factor, coverage_id);
+  }
+
   struct TextureIdentity final {
     std::string texture_id;
     const ufbx_texture* file_texture = nullptr;
@@ -1453,40 +1444,6 @@ namespace {
     auto placeholder = make_placeholder();
     placeholder.source_path = identity.resolved_path;
     return placeholder;
-  }
-
-  //! The material's specular level: F0 = 0.08 x level, 0.5 by default.
-  /*!
-   With a specular texture, the level is the factor times the texture, so the
-   factor scales the texture's meaning into the level.
-  */
-  [[nodiscard]] auto SpecularLevel(
-    const ufbx_material& material, const bool textured) -> float
-  {
-    constexpr auto kDefaultLevel = 0.5F;
-    switch (SpecularOf(material)) {
-    case FbxSpecular::kLevel:
-      // Blender's level; a texture holds it whole.
-      if (textured) {
-        return 1.0F;
-      }
-      return material.fbx.specular_factor.has_value
-        ? Clamp01(static_cast<float>(material.fbx.specular_factor.value_real))
-        : kDefaultLevel;
-    case FbxSpecular::kWeight: {
-      if (!material.features.specular.enabled) {
-        return kDefaultLevel;
-      }
-      // A weight of 1.0 is the default reflectance, the level's 0.5.
-      const auto weight = material.pbr.specular_factor.has_value
-        ? static_cast<float>(material.pbr.specular_factor.value_real)
-        : 1.0F;
-      return Clamp01(kDefaultLevel * weight);
-    }
-    case FbxSpecular::kHighlight:
-      break;
-    }
-    return kDefaultLevel;
   }
 
   [[nodiscard]] auto HasMaterialTextures(const ufbx_material* material) -> bool
@@ -2889,6 +2846,26 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     apply_sampling(binding, material, *texture);
   };
 
+  // A base colour map with an opacity map apart names the texture cooked from
+  // both.
+  auto apply_base_color_binding
+    = [&](MaterialTextureBinding& binding, const ufbx_material& material,
+        const FbxMaterialTextures& textures) -> void {
+    const auto* texture = textures.base_color.Texture();
+    const auto texture_id = resolve_texture_id(texture);
+    const auto coverage_id = resolve_texture_id(textures.coverage.Texture());
+    if (!texture_id.has_value() || !coverage_id.has_value()) {
+      apply_binding(binding, material, texture, TextureUsage::kBaseColor);
+      return;
+    }
+    binding.assigned = true;
+    binding.source_id = BuildTextureSourceId(input.source_id_prefix,
+      CoveredTextureId(*texture_id, *coverage_id, textures.coverage_mapping),
+      TextureUsage::kBaseColor);
+    binding.index = 0;
+    apply_sampling(binding, material, *texture);
+  };
+
   const auto material_count = static_cast<uint32_t>(scene.materials.count);
   result.sources.reserve(material_count == 0U ? 1U : material_count);
   if (material_count == 0) {
@@ -2957,6 +2934,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       const auto* roughness_tex = textures.roughness.Texture();
       const auto* ao_tex = textures.occlusion.Texture();
       const auto* emissive_tex = textures.emissive.Texture();
+      const auto* coverage_tex = textures.coverage.Texture();
 
       auto base = glm::vec4 { 1.0F };
       if (base_color_tex == nullptr) {
@@ -2980,15 +2958,24 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       item.material.inputs.base_color[0] = Clamp01(base.x * base_factor);
       item.material.inputs.base_color[1] = Clamp01(base.y * base_factor);
       item.material.inputs.base_color[2] = Clamp01(base.z * base_factor);
-      const auto opacity = MaterialOpacity(*material);
+      // The opacity value scales the opacity map's alpha, if any.
+      auto opacity = ShadingModelOf(*material).Opacity(*material).value;
       if (opacity <= 0.0F) {
         // Exporters state an opaque material this way as often as an invisible
-        // one, and an invisible model is the worse guess.
+        // one, and an invisible model is the worse guess: the value is taken
+        // as 1. Only the value is distrusted; an opacity map still covers the
+        // base colour, so a cut-out keeps its shape (a 3ds Max Physical
+        // Material of transparency 1 with a cut-out map, for one, would
+        // otherwise lose its mask).
         result.diagnostics.push_back(MakeWarningDiagnostic(
           std::string(import_codes::kFbxMaterialFullyTransparent),
-          "FBX material states no opacity at all; it imports opaque",
+          "FBX material states no opacity at all; its opacity value is taken "
+          "as 1, so only an opacity map, if any, makes it partly transparent",
           input.source_id_prefix, material_name));
-      } else if (opacity < 1.0F) {
+        opacity = 1.0F;
+      }
+      if (opacity < 1.0F || coverage_tex != nullptr) {
+        // An opacity map makes the material as partly there as a factor does.
         item.material.inputs.base_color[3] = opacity;
         item.material.alpha_mode = MaterialAlphaMode::kBlended;
         item.material.domain = data::MaterialDomain::kAlphaBlended;
@@ -3107,8 +3094,8 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
           roughness_tex, TextureUsage::kRoughness);
       }
 
-      apply_binding(item.material.textures.base_color, *material,
-        base_color_tex, TextureUsage::kBaseColor);
+      apply_base_color_binding(
+        item.material.textures.base_color, *material, textures);
       apply_binding(item.material.textures.normal, *material, normal_tex,
         TextureUsage::kNormal);
       if (!orm_packed
@@ -3131,7 +3118,8 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         textures.transmission.Texture(), TextureUsage::kTransmission);
 
       item.material.inputs.specular_factor
-        = SpecularLevel(*material, textures.specular.Texture() != nullptr);
+        = ShadingModelOf(*material).SpecularLevel(
+          *material, textures.specular.Texture() != nullptr);
 
       if (material->features.sheen.enabled
         && material->pbr.sheen_color.has_value) {
@@ -3152,7 +3140,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         }
       }
 
-      if (material->features.transmission.enabled) {
+      if (ShadingModelOf(*material).HasTransmission(*material)) {
         if (material->pbr.transmission_factor.has_value) {
           item.material.inputs.transmission_factor
             = static_cast<float>(material->pbr.transmission_factor.value_real);
@@ -3265,6 +3253,27 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     return identity;
   };
 
+  auto make_source
+    = [&](const TextureIdentity& identity, const TextureUsage usage,
+        const std::string& tex_source_id) -> ModelTextureSource {
+    auto desc = MakeDescFromPreset(PresetForUsage(usage));
+    desc.source_id = tex_source_id;
+    desc.stop_token = input.stop_token;
+    ModelTextureSource item {};
+    item.source_id = tex_source_id;
+    item.external_texture_id = identity.texture_id;
+    item.source_key = identity.file_texture;
+    item.desc = std::move(desc);
+    item.source_path = AdmittedTexturePath(
+      input.request, identity.resolved_path, tex_source_id, result.diagnostics);
+    item.embedded = identity.embedded;
+    item.image_key = identity.texture_id;
+    item.ordinal = identity.file_texture->typed_id;
+    item.usage = UsageLabel(usage);
+    item.authored_name = TextureAuthoredName(*identity.file_texture);
+    return item;
+  };
+
   auto register_texture
     = [&](const ufbx_texture* texture, const TextureUsage usage) -> void {
     if (texture == nullptr) {
@@ -3281,23 +3290,43 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     if (work_items.contains(tex_source_id)) {
       return;
     }
+    work_items.emplace(
+      tex_source_id, make_source(*identity, usage, tex_source_id));
+  };
 
-    auto desc = MakeDescFromPreset(PresetForUsage(usage));
-    desc.source_id = tex_source_id;
-    desc.stop_token = input.stop_token;
-    ModelTextureSource item {};
-    item.source_id = tex_source_id;
-    item.external_texture_id = identity->texture_id;
-    item.source_key = identity->file_texture;
-    item.desc = std::move(desc);
-    item.source_path = AdmittedTexturePath(input.request,
-      identity->resolved_path, tex_source_id, result.diagnostics);
-    item.embedded = identity->embedded;
-    item.image_key = identity->texture_id;
-    item.ordinal = identity->file_texture->typed_id;
-    item.usage = UsageLabel(usage);
-    item.authored_name = TextureAuthoredName(*identity->file_texture);
-
+  // A base colour map with an opacity map apart cooks from both, as a texture
+  // of its own; the map alone, used elsewhere, stays another texture.
+  auto register_base_color = [&](const FbxMaterialTextures& textures) -> void {
+    const auto* texture = textures.base_color.Texture();
+    const auto* coverage = textures.coverage.Texture();
+    const auto coverage_identity
+      = coverage != nullptr ? get_identity(coverage) : std::nullopt;
+    if (!coverage_identity.has_value()) {
+      register_texture(texture, TextureUsage::kBaseColor);
+      return;
+    }
+    const auto identity
+      = texture != nullptr ? get_identity(texture) : std::nullopt;
+    if (!identity.has_value()) {
+      return;
+    }
+    const auto covered_id = CoveredTextureId(identity->texture_id,
+      coverage_identity->texture_id, textures.coverage_mapping);
+    const auto tex_source_id = BuildTextureSourceId(
+      input.source_id_prefix, covered_id, TextureUsage::kBaseColor);
+    if (work_items.contains(tex_source_id)) {
+      return;
+    }
+    auto item = make_source(*identity, TextureUsage::kBaseColor, tex_source_id);
+    item.image_key = covered_id;
+    item.coverage = ModelTextureCoverage {
+      .external_texture_id = coverage_identity->texture_id,
+      .source_key = coverage_identity->file_texture,
+      .source_path = AdmittedTexturePath(input.request,
+        coverage_identity->resolved_path, tex_source_id, result.diagnostics),
+      .embedded = coverage_identity->embedded,
+      .mapping = textures.coverage_mapping,
+    };
     work_items.emplace(tex_source_id, std::move(item));
   };
 
@@ -3316,7 +3345,6 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     }
 
     const auto textures = FbxMaterialTextures::From(*material);
-    const auto* base_color_tex = textures.base_color.Texture();
     const auto* normal_tex = textures.normal.Texture();
     const auto* metallic_tex = textures.metallic.Texture();
     const auto* roughness_tex = textures.roughness.Texture();
@@ -3328,7 +3356,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     const bool orm_packed
       = metallic_file != nullptr && metallic_file == roughness_file;
 
-    register_texture(base_color_tex, TextureUsage::kBaseColor);
+    register_base_color(textures);
     register_texture(normal_tex, TextureUsage::kNormal);
     register_texture(emissive_tex, TextureUsage::kEmissive);
 
@@ -3421,6 +3449,27 @@ auto FbxAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
     item.source_path = std::move(resolved->source_path);
     item.fallback_source_paths
       = TextureFallbackPaths(input.request, item.source_path);
+    if (source.coverage.has_value()) {
+      const auto& coverage = *source.coverage;
+      auto coverage_source = ResolveTextureSourceBytes(
+        TextureIdentity {
+          .texture_id = coverage.external_texture_id,
+          .file_texture = static_cast<const ufbx_texture*>(coverage.source_key),
+          .resolved_path = coverage.source_path,
+          .embedded = coverage.embedded,
+        },
+        item.source_id, impl_->source.scene, result.diagnostics,
+        input.external_texture_bytes);
+      auto& covered = item.coverage.emplace();
+      covered.source_id = coverage.external_texture_id;
+      covered.mapping = coverage.mapping;
+      if (coverage_source.has_value()) {
+        covered.source = coverage_source->bytes;
+        covered.source_path = std::move(coverage_source->source_path);
+        covered.fallback_source_paths
+          = TextureFallbackPaths(input.request, covered.source_path);
+      }
+    }
     item.stop_token = input.stop_token;
     if (!sink.Consume(std::move(item))) {
       return result;
@@ -3446,6 +3495,14 @@ auto FbxAdapter::CollectExternalTextureSources(
       sources.push_back({
         .texture_id = std::move(source.external_texture_id),
         .resolved_path = std::move(source.source_path),
+      });
+    }
+    if (source.coverage.has_value() && !source.coverage->embedded
+      && !source.coverage->source_path.empty()
+      && seen_ids.insert(source.coverage->external_texture_id).second) {
+      sources.push_back({
+        .texture_id = std::move(source.coverage->external_texture_id),
+        .resolved_path = std::move(source.coverage->source_path),
       });
     }
   }

@@ -22,6 +22,8 @@
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/DroppedSourceFeatures.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxMaterialTextures.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxShadingModel.h>
+#include <Oxygen/Cooker/Import/Internal/fbx/FbxTextureSlot.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/ufbx.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/cgltf.h>
 
@@ -363,16 +365,58 @@ auto ReportDroppedSourceFeatures(const ufbx_scene& source,
     const auto material_name = NameOf(material->name);
     const auto& pbr = material->pbr;
     const auto mapped = adapters::FbxMaterialTextures::From(*material);
-    // ufbx derives a PBR channel from a legacy FBX one, so a legacy channel
-    // whose texture a slot imports loses nothing. A PBR channel no slot reads
-    // loses its use of the texture even if a slot imports that texture for
-    // another: each is reported, and a texture no channel carries once.
+    const auto& model = adapters::ShadingModelOf(*material);
+    // An opacity map becomes the alpha of the base colour map, which it needs,
+    // sampled alike.
+    const auto opacity = model.Opacity(*material);
+    const auto* stated_coverage = opacity.map.Texture();
     auto reported = std::set<const ufbx_texture*> {};
+    if (stated_coverage != nullptr && mapped.coverage.Texture() == nullptr) {
+      reported.insert(stated_coverage);
+      Drop(true,
+        "Opacity map '"
+          + std::string(
+            stated_coverage->name.data, stated_coverage->name.length)
+          + "' has no base colour map sampled alike (same UV set, transform "
+            "and wrap) to become the alpha of; the material imports "
+            "without it.",
+        source_path, path, diagnostics, material_name);
+    }
+    // A transparency map scaled by nothing takes nothing away; the reason is
+    // its factor, not a missing slot, so the report says so.
+    const auto* unscaled = opacity.unscaled_map.Texture();
+    if (unscaled != nullptr) {
+      reported.insert(unscaled);
+      Drop(true,
+        "Transparency map '"
+          + std::string(unscaled->name.data, unscaled->name.length)
+          + "' is scaled by a transparency factor of 0, stated or by default, "
+            "so it takes nothing away; the material imports opaque without "
+            "it.",
+        source_path, path, diagnostics, material_name);
+    }
+    // The opacity's own maps, under whatever meaning ufbx also gives them;
+    // each is reported above when unused.
+    const auto states_opacity = [&](const ufbx_material_map& map) -> bool {
+      const auto in = [&](const adapters::FbxTextureSlot& slot) -> bool {
+        const auto* texture = slot.Texture();
+        return texture != nullptr && map.texture == texture
+          && (&map == slot.primary || &map == slot.fallback);
+      };
+      return in(opacity.map) || in(opacity.unscaled_map);
+    };
+    // ufbx derives a PBR channel from a legacy FBX one, so a legacy channel
+    // whose texture a slot imports loses nothing, nor does a channel restating
+    // one a slot reads. Any other PBR channel no slot reads loses its use of
+    // the texture even if a slot imports that texture for another: each is
+    // reported, and a texture no channel carries once.
     const auto report_maps
       = [&](const auto& maps, const std::string_view group) -> auto {
       for (const auto& [slot_index, map] :
         std::views::enumerate(std::span(maps))) {
-        if (!adapters::FbxTextureSlot::Active(map) || mapped.Reads(map)) {
+        const auto& own = *model.Restated(*material, map);
+        if (!adapters::FbxTextureSlot::Active(map) || mapped.Reads(own)
+          || states_opacity(own)) {
           continue;
         }
         const auto is_derived_alias = group == "fbx"
